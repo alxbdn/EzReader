@@ -1,0 +1,162 @@
+name: Bump & Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      bump:
+        description: Version bump
+        required: true
+        default: patch
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Compute next version
+        id: version
+        shell: bash
+        run: |
+          LATEST=$(git tag --list 'v*.*.*' --sort=-version:refname | head -1)
+          LATEST=${LATEST:-v0.0.0}
+          VERSION="${LATEST#v}"
+          MAJOR=$(echo "$VERSION" | cut -d. -f1)
+          MINOR=$(echo "$VERSION" | cut -d. -f2)
+          PATCH=$(echo "$VERSION" | cut -d. -f3)
+          case "${{ inputs.bump }}" in
+            major) MAJOR=$((MAJOR+1)); MINOR=0; PATCH=0 ;;
+            minor) MINOR=$((MINOR+1)); PATCH=0 ;;
+            patch) PATCH=$((PATCH+1)) ;;
+          esac
+          NEXT="${MAJOR}.${MINOR}.${PATCH}"
+          echo "version=$NEXT" >> $GITHUB_OUTPUT
+          echo "tag=v${NEXT}" >> $GITHUB_OUTPUT
+          echo "Next: v${NEXT}"
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: Update version in tauri.conf.json
+        shell: pwsh
+        run: |
+          (Get-Content src-tauri/tauri.conf.json) `
+            -replace '"version": "[^"]*"', '"version": "${{ steps.version.outputs.version }}"' |
+            Set-Content src-tauri/tauri.conf.json
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Build Tauri app
+        run: npm run tauri build
+
+      - name: Build MSIX package
+        shell: pwsh
+        run: |
+          .\build-msix.ps1 -SkipBuild -Version "${{ steps.version.outputs.version }}"
+
+      - name: Stage artifacts
+        shell: bash
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          cp "src-tauri/target/release/pdf-rider-portable.exe" \
+             "pdf-rider-portable-${VERSION}-win-x64.exe"
+          cp "src-tauri/target/release/bundle/nsis/PDF Rider_${VERSION}_x64-setup.exe" \
+             "pdf-rider-${VERSION}-win-x64-setup.exe"
+          cp "msix-output/PDFRider_${VERSION}.0_x64.msix" \
+             "pdf-rider-${VERSION}-win-x64.msix"
+
+      - name: Check pre-release
+        id: prerelease
+        shell: bash
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          if [[ "$VERSION" == *"-alpha"* ]] || [[ "$VERSION" == *"-beta"* ]] || [[ "$VERSION" == *"-rc"* ]]; then
+            echo "is_prerelease=true" >> $GITHUB_OUTPUT
+          else
+            echo "is_prerelease=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Push tag
+        shell: bash
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag ${{ steps.version.outputs.tag }}
+          git push origin ${{ steps.version.outputs.tag }}
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.version.outputs.tag }}
+          name: ${{ steps.version.outputs.tag }}
+          generate_release_notes: true
+          prerelease: ${{ steps.prerelease.outputs.is_prerelease == 'true' }}
+          files: |
+            pdf-rider-portable-${{ steps.version.outputs.version }}-win-x64.exe
+            pdf-rider-${{ steps.version.outputs.version }}-win-x64-setup.exe
+            pdf-rider-${{ steps.version.outputs.version }}-win-x64.msix
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Install Microsoft Store Developer CLI
+        shell: pwsh
+        run: |
+          $release = Invoke-RestMethod "https://api.github.com/repos/microsoft/msstore-cli/releases/latest"
+          $asset = $release.assets | Where-Object { $_.name -match "win-x64\.zip$" } | Select-Object -First 1
+          Invoke-WebRequest $asset.browser_download_url -OutFile msstore.zip
+          Expand-Archive msstore.zip -DestinationPath "$env:LOCALAPPDATA\msstore-cli"
+          echo "$env:LOCALAPPDATA\msstore-cli" >> $env:GITHUB_PATH
+
+      - name: Configure and submit to Microsoft Store
+        shell: pwsh
+        env:
+          MICROSOFT_STORE_TENANT_ID: ${{ secrets.MICROSOFT_STORE_TENANT_ID }}
+          MICROSOFT_STORE_CLIENT_ID: ${{ secrets.MICROSOFT_STORE_CLIENT_ID }}
+          MICROSOFT_STORE_CLIENT_SECRET: ${{ secrets.MICROSOFT_STORE_CLIENT_SECRET }}
+        run: |
+          # Write config.json (no ClientSecret - it goes to Credential Manager)
+          $configDir = "$env:LOCALAPPDATA\Microsoft\MSStore.CLI"
+          New-Item -ItemType Directory -Path $configDir -Force | Out-Null
+          $config = @{
+            TenantId = $env:MICROSOFT_STORE_TENANT_ID
+            SellerId = 92945690
+            ClientId = $env:MICROSOFT_STORE_CLIENT_ID
+          } | ConvertTo-Json
+          $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+          $configPath = Join-Path $configDir "settings.json"
+          [System.IO.File]::WriteAllText($configPath, $config, $utf8NoBom)
+
+          # Store ClientSecret in Windows Credential Manager (keyed by ClientId)
+          $clientId = $env:MICROSOFT_STORE_CLIENT_ID
+          $secret = $env:MICROSOFT_STORE_CLIENT_SECRET
+          cmdkey /generic:$clientId /user:$clientId /pass:$secret
+
+          # Submit
+          $version = "${{ steps.version.outputs.version }}"
+          $msixFile = "pdf-rider-${version}-win-x64.msix"
+          Write-Host "Submitting $msixFile to Microsoft Store..."
+          msstore publish $msixFile --appId 9NJD0V2MC740
