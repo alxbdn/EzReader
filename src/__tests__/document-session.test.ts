@@ -9,6 +9,7 @@ function makeSession() {
     rotation: 0,
   };
   const saveAnnotated = vi.fn(async () => {});
+  const redact = vi.fn(async () => {});
   let n = 0;
   const session = new DocumentSession(
     {
@@ -16,9 +17,9 @@ function makeSession() {
       formFields: () => state.formFields,
       rotation: () => state.rotation,
     },
-    { saveAnnotated, tempPath: async (suffix) => `/tmp/${++n}-${suffix}` },
+    { saveAnnotated, redact, tempPath: async (suffix) => `/tmp/${++n}-${suffix}` },
   );
-  return { session, state, saveAnnotated };
+  return { session, state, saveAnnotated, redact };
 }
 
 const rect = { kind: "rect", page: 1 } as unknown as Annotation;
@@ -129,5 +130,38 @@ describe("uniqueTempName", () => {
     expect(a).not.toBe(b);
     expect(a.startsWith("C:\\Temp\\ezreader-")).toBe(true);
     expect(uniqueTempName("/tmp", "x.pdf").startsWith("/tmp/ezreader-")).toBe(true);
+  });
+});
+
+describe("DocumentSession redaction", () => {
+  const blackout = { kind: "redact", page: 2, x: 10, y: 20, width: 30, height: 40 } as Annotation;
+
+  it("redacts the base first, then writes the other edits on top, never storing the redaction", async () => {
+    const { session, state, saveAnnotated, redact } = makeSession();
+    session.opened("/docs/a.pdf", null);
+    state.annotations = [rect, blackout];
+    expect(session.hasRedactions()).toBe(true);
+
+    await session.saveTo("/docs/a.pdf");
+
+    expect(redact).toHaveBeenCalledWith("/docs/a.pdf", "/tmp/1-redacted.pdf", [blackout]);
+    expect(saveAnnotated).toHaveBeenCalledWith("/tmp/1-redacted.pdf", "/docs/a.pdf", [rect], 0, []);
+  });
+
+  it("applies redactions to exported copies too", async () => {
+    const { session, state, redact } = makeSession();
+    session.opened("/docs/a.pdf", null);
+    state.annotations = [blackout];
+    await session.materialize();
+    expect(redact).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not redact when there is nothing to black out", async () => {
+    const { session, state, redact } = makeSession();
+    session.opened("/docs/a.pdf", null);
+    state.annotations = [rect];
+    expect(session.hasRedactions()).toBe(false);
+    await session.saveTo("/docs/b.pdf");
+    expect(redact).not.toHaveBeenCalled();
   });
 });
