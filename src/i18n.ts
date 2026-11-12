@@ -193,6 +193,36 @@ export interface Translations {
   settingsZoomFitPage?: string;
   msgRedactTitle?: string;
   msgRedactConfirm?: string;
+  // Page thumbnails sidebar (optional, English fallback)
+  menuPageSidebar?: string;
+  ttPageSidebar?: string;
+  sbTitle?: string;
+  sbSelectAll?: string;
+  sbSelectPage?: string;
+  sbClear?: string;
+  sbExport?: string;
+  sbExportHint?: string;
+  sbDelete?: string;
+  sbDeleteHint?: string;
+  sbSelectedOne?: string;
+  sbSelectedMany?: string;
+  msgPagesDeleted?: string;
+  msgPagesExported?: string;
+  msgExportFailed?: string;
+  msgCannotDeleteAll?: string;
+  sbAddBlank?: string;
+  sbInsertPdf?: string;
+  sbRotateHint?: string;
+  sbMovingOne?: string;
+  sbMovingMany?: string;
+  sbSave?: string;
+  sbAppendPdf?: string;
+  sbAppendPdfHint?: string;
+  sbSearchPlaceholder?: string;
+  sbSearchPrev?: string;
+  sbSearchNext?: string;
+  sbSearchNone?: string;
+  sbSearching?: string;
 }
 
 // ── English ───────────────────────────────────────────────────────────────────
@@ -377,6 +407,35 @@ const EN: Translations = {
   settingsZoomFitPage:  "Fit page",
   msgRedactTitle:       "Apply redactions",
   msgRedactConfirm:     "Saving permanently removes everything under the black boxes. The redacted pages become images and their text can no longer be selected. This cannot be undone. Continue?",
+  menuPageSidebar: "Page thumbnails",
+  ttPageSidebar: "Show or hide the page thumbnails",
+  sbTitle: "Pages",
+  sbSelectAll: "Select all",
+  sbSelectPage: "Select page (Ctrl+click)",
+  sbClear: "Clear",
+  sbExport: "Export",
+  sbExportHint: "Save the selected pages as a new PDF",
+  sbDelete: "Delete",
+  sbDeleteHint: "Delete the selected pages",
+  sbSelectedOne: "1 page selected",
+  sbSelectedMany: "{n} pages selected",
+  msgPagesDeleted: "{n} page(s) deleted",
+  msgPagesExported: "{n} page(s) exported",
+  msgExportFailed: "Export failed: {err}",
+  msgCannotDeleteAll: "A PDF needs at least one page: keep at least one.",
+  sbAddBlank: "Blank page",
+  sbInsertPdf: "Insert PDF",
+  sbRotateHint: "Rotate the selected pages",
+  sbMovingOne: "Page {p}",
+  sbMovingMany: "{n} pages",
+  sbSave: "Save changes (Ctrl+S)",
+  sbAppendPdf: "Add a PDF",
+  sbAppendPdfHint: "Add the pages of another PDF at the end (to merge them)",
+  sbSearchPlaceholder: "Search in the document…",
+  sbSearchPrev: "Previous match (Shift+Enter)",
+  sbSearchNext: "Next match (Enter)",
+  sbSearchNone: "No results",
+  sbSearching: "Searching…",
 };
 
 // ── French ────────────────────────────────────────────────────────────────────
@@ -561,6 +620,35 @@ const FR: Translations = {
   settingsZoomFitPage:  "Page entière",
   msgRedactTitle:       "Appliquer le caviardage",
   msgRedactConfirm:     "L'enregistrement supprime définitivement tout ce qui se trouve sous les zones noires. Les pages caviardées deviennent des images et leur texte ne pourra plus être sélectionné. Cette action est irréversible. Continuer ?",
+  menuPageSidebar: "Miniatures des pages",
+  ttPageSidebar: "Afficher ou masquer les miniatures des pages",
+  sbTitle: "Pages",
+  sbSelectAll: "Tout sélectionner",
+  sbSelectPage: "Sélectionner la page (Ctrl+clic)",
+  sbClear: "Effacer",
+  sbExport: "Exporter",
+  sbExportHint: "Enregistrer les pages sélectionnées dans un nouveau PDF",
+  sbDelete: "Supprimer",
+  sbDeleteHint: "Supprimer les pages sélectionnées",
+  sbSelectedOne: "1 page sélectionnée",
+  sbSelectedMany: "{n} pages sélectionnées",
+  msgPagesDeleted: "{n} page(s) supprimée(s)",
+  msgPagesExported: "{n} page(s) exportée(s)",
+  msgExportFailed: "Échec de l'export : {err}",
+  msgCannotDeleteAll: "Un PDF doit garder au moins une page.",
+  sbAddBlank: "Page blanche",
+  sbInsertPdf: "Insérer PDF",
+  sbRotateHint: "Tourner les pages sélectionnées",
+  sbMovingOne: "Page {p}",
+  sbMovingMany: "{n} pages",
+  sbSave: "Enregistrer les modifications (Ctrl+S)",
+  sbAppendPdf: "Ajouter un PDF",
+  sbAppendPdfHint: "Ajouter les pages d'un autre PDF à la fin (pour les fusionner)",
+  sbSearchPlaceholder: "Rechercher dans le document…",
+  sbSearchPrev: "Résultat précédent (Maj+Entrée)",
+  sbSearchNext: "Résultat suivant (Entrée)",
+  sbSearchNone: "Aucun résultat",
+  sbSearching: "Recherche…",
 };
 
 // ── Chinese (Mandarin) ────────────────────────────────────────────────────────

@@ -5,8 +5,10 @@ import { PrintModal } from "./print-modal";
 import { SignatureModal } from "./signature-modal";
 import { SignatureStore } from "./signature-store";
 import { SettingsModal } from "./settings";
-import { PageManagerModal } from "./page-manager";
-import { isUnchangedLayout } from "./page-order";
+import { PageSidebar } from "./page-sidebar";
+import { DocSearch, type SearchMatch } from "./doc-search";
+import { moveItems } from "./page-order";
+import type { PageSlot } from "./tauri-bridge";
 import { SplitModal } from "./split-modal";
 import { getTranslations, applyTranslationsToDOM, fmt, type Translations } from "./i18n";
 import { DocumentSession, uniqueTempName, isMicrosoftPrintToPdf } from "./document-session";
@@ -23,6 +25,7 @@ import {
 } from "./models";
 import {
   openPdfDialog,
+  getPageCount,
   savePdfDialog,
   saveAnnotatedPdf,
   stripAnnotationStreams,
@@ -79,8 +82,9 @@ const printModal         = new PrintModal();
 const sigStore           = new SignatureStore();
 const sigModal           = new SignatureModal(sigStore);
 const settingsModal      = new SettingsModal();
-const pageManagerModal   = new PageManagerModal();
 const splitModal         = new SplitModal();
+const pageSidebar        = new PageSidebar(document.getElementById("page-sidebar")!);
+const docSearch          = new DocSearch();
 
 async function newTempPath(suffix: string): Promise<string> {
   return uniqueTempName(await tempDir(), suffix);
@@ -216,6 +220,7 @@ viewer.onLayoutChanged((pageViews) => {
 document.getElementById("viewer-scroll")!.addEventListener("focused-page-changed", (e: Event) => {
   const { page } = (e as CustomEvent<{ page: number }>).detail;
   toolbar.updatePageInfo(page, viewer.pageCount);
+  pageSidebar.setCurrentPage(page);
 });
 
 // ── Translations ──────────────────────────────────────────────────────────────
@@ -224,7 +229,7 @@ document.getElementById("viewer-scroll")!.addEventListener("focused-page-changed
   const t = getTranslations(settingsModal.getSettings().language);
   toolbar.applyTranslations(t);
   compressModal.applyTranslations(t);
-  pageManagerModal.applyTranslations(t);
+  pageSidebar.applyTranslations(t);
   printModal.applyTranslations(t);
   splitModal.applyTranslations(t);
   applyTranslationsToDOM(t);
@@ -233,7 +238,7 @@ settingsModal.onChange(s => {
   const t = getTranslations(s.language);
   toolbar.applyTranslations(t);
   compressModal.applyTranslations(t);
-  pageManagerModal.applyTranslations(t);
+  pageSidebar.applyTranslations(t);
   printModal.applyTranslations(t);
   splitModal.applyTranslations(t);
   applyTranslationsToDOM(t);
@@ -274,6 +279,7 @@ function setDirty(val: boolean): void {
   session.markDirty(val);
   const target = session.saveTarget;
   toolbar.setDocTitle(target ? target.split(/[\\/]/).pop() ?? target : null, val);
+  pageSidebar.setDirty(val);
   if (val) { void registerCloseGuard(); }
   else      { unregisterCloseGuard(); }
 }
@@ -347,6 +353,7 @@ async function promptPassword(fp: string): Promise<void> {
     for (const ann of saved) store.add(ann);
 
     await viewer.loadWithPassword(fp, pw);
+    showThumbnails();
     session.opened(fp, null);
     history.clear();
     setDirty(false);
@@ -358,6 +365,70 @@ async function promptPassword(fp: string): Promise<void> {
     showToast(msg("msgWrongPassword"), true);
   }
 }
+
+/** Fills the thumbnails sidebar from the document the viewer just opened. */
+function showThumbnails(): void {
+  if (!viewer.document) return;
+  pageSidebar.load(viewer.document, viewer.pageDimensions, viewer.rotation);
+  pageSidebar.setCurrentPage(viewer.currentPage);
+  // The text changed: search again (without jumping) if a term is entered.
+  docSearch.reset(viewer.document);
+  void runSearch(pageSidebar.searchQuery, false);
+}
+
+// ── Search in the document ───────────────────────────────────────────────────
+
+let searchMatches: SearchMatch[] = [];
+let searchIndex = -1;
+
+function searchText(key: "sbSearchNone" | "sbSearching", fallback: string): string {
+  return getTranslations(settingsModal.getSettings().language)[key] ?? fallback;
+}
+
+/** Finds `query` in the whole document and highlights it; `jump` shows the first match from the current page on. */
+async function runSearch(query: string, jump = true): Promise<void> {
+  if (!query) {
+    docSearch.reset(viewer.document);
+    searchMatches = [];
+    searchIndex = -1;
+    viewer.setSearch("");
+    pageSidebar.setHits(new Map());
+    pageSidebar.setSearchStatus("");
+    return;
+  }
+  pageSidebar.setSearchStatus(searchText("sbSearching", "Searching…"));
+  const found = await docSearch.find(query, (done, total) =>
+    pageSidebar.setSearchStatus(`${Math.round((done / total) * 100)}%`));
+  if (!found) return; // superseded by a newer search
+  searchMatches = found;
+  const hits = new Map<number, number>();
+  for (const m of found) hits.set(m.page, (hits.get(m.page) ?? 0) + 1);
+  pageSidebar.setHits(hits);
+  if (found.length === 0) {
+    searchIndex = -1;
+    viewer.setSearch(query);
+    pageSidebar.setSearchStatus(searchText("sbSearchNone", "No results"), true);
+    return;
+  }
+  const from = found.findIndex((m) => m.page >= viewer.currentPage);
+  searchIndex = from === -1 ? 0 : from;
+  showSearchMatch(jump);
+}
+
+function showSearchMatch(scroll: boolean): void {
+  const m = searchMatches[searchIndex];
+  if (!m) return;
+  viewer.setSearch(pageSidebar.searchQuery, m.page, m.index, scroll);
+  pageSidebar.setSearchStatus(`${searchIndex + 1} / ${searchMatches.length}`);
+}
+
+pageSidebar.onSearch((query) => void runSearch(query));
+pageSidebar.onSearchStep((dir) => {
+  if (searchMatches.length === 0) return;
+  searchIndex = (searchIndex + dir + searchMatches.length) % searchMatches.length;
+  showSearchMatch(true);
+});
+pageSidebar.onSave(() => void saveFile(false));
 
 function setWelcomeVisible(visible: boolean): void {
   const el = document.getElementById("welcome-screen");
@@ -385,6 +456,7 @@ async function showInViewer(path: string): Promise<string | null> {
   }
 
   await viewer.load(workingCopy ?? path);
+  showThumbnails();
 
   history.clear();
   setWelcomeVisible(false);
@@ -480,12 +552,15 @@ compressModal.onConfirm(async (level) => {
   }
 });
 
-// ── Page manager handler ─────────────────────────────────────────────────────
+// ── Page panel (thumbnails sidebar) ──────────────────────────────────────────
 
-pageManagerModal.onConfirm(async (slots) => {
+/**
+ * Replaces the open document's pages with `slots` and shows the result.
+ * Returns false when it failed (a toast says why).
+ */
+async function applyPageLayout(slots: PageSlot[], keepPage = 1, select: number[] = []): Promise<boolean> {
   const source = session.sourcePath;
-  if (!source) return;
-  if (isUnchangedLayout(slots, viewer.pageCount)) return;
+  if (!source) return false;
   try {
     // Burn pending edits first (no-op when there are none: the viewed file is
     // used as is), then apply the new page layout as an incremental update.
@@ -496,12 +571,118 @@ pageManagerModal.onConfirm(async (slots) => {
     const workingCopy = await showInViewer(tmpPath);
     session.replacedWorkingCopy(workingCopy ?? tmpPath);
     setDirty(true);
-    showToast(msg("msgPagesUpdated"));
+    if (keepPage > 1) viewer.goToPage(keepPage, "instant");
+    pageSidebar.setSelection(select);
+    return true;
   } catch (err) {
     showToast(msg("msgPagesFailed", { err: String(err) }), true);
+    return false;
+  }
+}
+
+/** Runs a page edit from the panel, with the panel locked meanwhile. */
+async function editPages(slots: PageSlot[], keepPage: number, select: number[] = []): Promise<boolean> {
+  if (!session.isOpen || !viewer.isLoaded()) return false;
+  pageSidebar.setBusy(true);
+  try {
+    return await applyPageLayout(slots, keepPage, select);
+  } finally {
+    pageSidebar.setBusy(false);
+  }
+}
+
+/** The document's pages unchanged, as slots to edit. */
+function currentSlots(): PageSlot[] {
+  return Array.from({ length: viewer.pageCount }, (_, i): PageSlot => ({ kind: "original", page: i + 1, rotation: 0 }));
+}
+
+/** Slots with `inserted` placed after page `after` (0 = at the start). */
+async function insertSlots(after: number, inserted: PageSlot[]): Promise<void> {
+  const slots = currentSlots();
+  slots.splice(after, 0, ...inserted);
+  const first = after + 1;
+  const select = inserted.map((_, i) => first + i);
+  if (await editPages(slots, first, select)) showToast(msg("msgPagesUpdated"));
+}
+
+pageSidebar.onGoTo((page) => viewer.goToPage(page));
+
+pageSidebar.onVisibilityChange((visible) => toolbar.updateSidebar(visible));
+toolbar.updateSidebar(pageSidebar.visible);
+
+pageSidebar.onDelete(async (pages) => {
+  if (!viewer.isLoaded()) return;
+  const doomed = new Set(pages);
+  if (doomed.size >= viewer.pageCount) {
+    showToast(msg("msgCannotDeleteAll"), true);
+    return;
+  }
+  const slots: PageSlot[] = [];
+  for (let p = 1; p <= viewer.pageCount; p++) {
+    if (!doomed.has(p)) slots.push({ kind: "original", page: p, rotation: 0 });
+  }
+  // Stay on the page that was shown (or the one that took its place).
+  const current = viewer.currentPage;
+  const before  = pages.filter((p) => p < current).length;
+  const keep    = Math.max(1, Math.min(current - before, slots.length));
+  if (await editPages(slots, keep)) showToast(msg("msgPagesDeleted", { n: pages.length }));
+});
+
+pageSidebar.onRotate(async (pages) => {
+  const turn = new Set(pages);
+  const slots = currentSlots().map((s) => (s.kind === "original" && turn.has(s.page) ? { ...s, rotation: 90 } : s));
+  await editPages(slots, viewer.currentPage, pages);
+});
+
+pageSidebar.onMove(async (pages, insertAt) => {
+  const order = moveItems(
+    Array.from({ length: viewer.pageCount }, (_, i) => i + 1),
+    pages.map((p) => p - 1),
+    insertAt,
+  );
+  const moved = new Set(pages);
+  const select = order.flatMap((p, i) => (moved.has(p) ? [i + 1] : []));
+  // Follow the page that was shown to wherever it ends up.
+  const keep = order.indexOf(viewer.currentPage) + 1;
+  await editPages(order.map((page): PageSlot => ({ kind: "original", page, rotation: 0 })), keep, select);
+});
+
+pageSidebar.onInsertBlank(async (after) => {
+  // Same size as the page it follows (or the first page).
+  const ref = viewer.pageDimensions[Math.max(0, after - 1)] ?? { width: 595.28, height: 841.89 };
+  await insertSlots(after, [{ kind: "blank", width: ref.width, height: ref.height, rotation: 0 }]);
+});
+
+pageSidebar.onInsertPdf(async (after) => {
+  const path = await openPdfDialog();
+  if (!path) return;
+  let count: number;
+  try {
+    count = await getPageCount(path);
+  } catch (err) {
+    showToast(msg("msgPagesFailed", { err: String(err) }), true);
+    return;
+  }
+  if (count < 1) return;
+  await insertSlots(after, Array.from({ length: count }, (_, i): PageSlot => ({ kind: "imported", path, page: i + 1, rotation: 0 })));
+});
+
+pageSidebar.onExport(async (pages) => {
+  const source = session.sourcePath;
+  if (!source || !viewer.isLoaded()) return;
+  const name = (await basename(source)).replace(/\.pdf$/i, "");
+  const out  = await savePdfDialog(`${name} (pages).pdf`);
+  if (!out) return;
+  pageSidebar.setBusy(true);
+  try {
+    await extractPdfPages(await session.materialize(), out, pages);
+    showToast(msg("msgPagesExported", { n: pages.length }));
+  } catch (err) {
+    showToast(msg("msgExportFailed", { err: String(err) }), true);
+  } finally {
+    pageSidebar.setBusy(false);
   }
 });
-pageManagerModal.onError((message) => showToast(message, true));
 
 splitModal.onConfirm(async (req) => {
   const source = session.sourcePath;
@@ -574,14 +755,19 @@ toolbar.on(async (e) => {
     case "rotate":
       if (viewer.isLoaded()) {
         await viewer.rotate();
+        pageSidebar.setRotation(viewer.rotation, viewer.pageDimensions);
         setDirty(true);
       }
       break;
 
     case "pages":
       if (viewer.isLoaded() && viewer.document) {
-        pageManagerModal.open(viewer.document, viewer.pageCount);
+        pageSidebar.focus();
       }
+      break;
+
+    case "toggle-sidebar":
+      if (viewer.isLoaded()) pageSidebar.toggle();
       break;
 
     case "split":
@@ -748,6 +934,11 @@ document.addEventListener("keydown", async (e) => {
   if (ctrl && !shift && e.key === "p") {
     e.preventDefault();
     if (viewer.isLoaded()) printModal.open(viewer.pageCount, viewer.currentPage, { w: viewer.pageWidthPt, h: viewer.pageHeightPt });
+    return;
+  }
+  if (ctrl && !shift && e.key.toLowerCase() === "f") {
+    e.preventDefault();
+    if (viewer.isLoaded()) pageSidebar.focusSearch();
     return;
   }
   if (ctrl && shift && e.key === "E") {
