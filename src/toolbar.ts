@@ -22,6 +22,10 @@ import {
   ICON_ALIGN_RIGHT,
   ICON_FIT_WIDTH,
   ICON_FIT_HEIGHT,
+  ICON_PEN,
+  ICON_BRING_FRONT,
+  ICON_SEND_BACK,
+  ICON_STROKE_WIDTH,
 } from "./icons";
 
 type ToolbarEvent =
@@ -77,6 +81,8 @@ export class Toolbar {
   private dropdowns = new Map<string, HTMLElement>();
   private menuButtons = new Map<string, HTMLButtonElement>();
   private docMenuEntries: HTMLButtonElement[] = [];
+  private docTitleEl!: HTMLElement;
+  private docTitleName!: HTMLElement;
 
   // Context toolbar elements
   private annotationSection!: HTMLElement;
@@ -155,6 +161,13 @@ export class Toolbar {
     }
   }
 
+  /** Shows the open file's name in the menu bar, with a dot while it has unsaved changes. */
+  setDocTitle(name: string | null, dirty: boolean): void {
+    this.docTitleName.textContent = name ?? "";
+    this.docTitleEl.classList.toggle("dirty", !!name && dirty);
+    document.title = name ? `${dirty ? "\u2022 " : ""}${name} \u2013 EzReader` : "EzReader";
+  }
+
   setLoaded(loaded: boolean): void {
     this.contextEl.style.display = loaded ? "flex" : "none";
     for (const btn of this.docMenuEntries) {
@@ -205,6 +218,13 @@ export class Toolbar {
   private sep(): HTMLElement {
     const d = document.createElement("div");
     d.className = "toolbar-sep";
+    return d;
+  }
+
+  private segment(...children: HTMLElement[]): HTMLElement {
+    const d = document.createElement("div");
+    d.className = "toolbar-segment";
+    d.append(...children);
     return d;
   }
 
@@ -327,6 +347,15 @@ export class Toolbar {
       wrapper.append(menuBtn, dropdown);
       this.menuBarEl.append(wrapper);
     }
+
+    this.docTitleEl = document.createElement("div");
+    this.docTitleEl.className = "doc-title";
+    this.docTitleName = document.createElement("span");
+    this.docTitleName.className = "doc-title-name";
+    const dirtyDot = document.createElement("span");
+    dirtyDot.className = "doc-title-dirty";
+    this.docTitleEl.append(this.docTitleName, dirtyDot);
+    this.menuBarEl.append(this.docTitleEl);
   }
 
   private setupMenuInteraction(): void {
@@ -460,12 +489,13 @@ export class Toolbar {
     nextBtn.addEventListener("click", () => this.emit({ type: "page-next" }));
 
     const navWrapper = document.createElement("div");
-    navWrapper.className = "page-nav";
+    navWrapper.className = "page-nav toolbar-segment";
     navWrapper.append(prevBtn, this.pageInput, this.pageTotal, nextBtn);
 
     this.pageNavSection = document.createElement("div");
-    this.pageNavSection.style.cssText = "display:none;align-items:center;gap:4px;";
-    this.pageNavSection.append(navWrapper, this.sep());
+    this.pageNavSection.className = "toolbar-group";
+    this.pageNavSection.style.display = "none";
+    this.pageNavSection.append(navWrapper);
     ctx.append(this.pageNavSection);
 
     // Zoom
@@ -504,21 +534,34 @@ export class Toolbar {
     this.reg(this.fitHeightBtn, undefined, "ttFitHeight");
     this.fitHeightBtn.addEventListener("click", () => this.emit({ type: "fit-height" }));
 
-    ctx.append(zoomOut, this.zoomInput, zoomIn, this.fitWidthBtn, this.fitHeightBtn, this.sep());
+    const zoomSegment = document.createElement("div");
+    zoomSegment.className = "toolbar-segment";
+    zoomSegment.append(zoomOut, this.zoomInput, zoomIn);
+    const fitGroup = document.createElement("div");
+    fitGroup.className = "toolbar-group";
+    fitGroup.append(this.fitWidthBtn, this.fitHeightBtn);
+    ctx.append(zoomSegment, fitGroup, this.sep());
 
     // Annotation mode toggle
-    this.modeBtn = this.btn("Annotate", "Annotation mode");
-    this.reg(this.modeBtn, "btnAnnotate", "ttAnnotate");
+    this.modeBtn = this.btn(ICON_PEN, "Annotation mode", "btn btn-ghost");
+    const modeLabel = document.createElement("span");
+    modeLabel.textContent = "Annotate";
+    this.modeBtn.append(modeLabel);
+    this.reg(modeLabel, "btnAnnotate");
+    this.reg(this.modeBtn, undefined, "ttAnnotate");
     this.modeBtn.addEventListener("click", () => this.toggleMode());
     ctx.append(this.modeBtn);
 
     // Annotation-only section (hidden in read mode)
     this.annotationSection = document.createElement("div");
-    this.annotationSection.style.cssText = "display:none;align-items:center;gap:4px;";
+    this.annotationSection.className = "toolbar-group";
+    this.annotationSection.style.cssText = "display:none;gap:6px;";
     ctx.append(this.annotationSection);
     const ann = this.annotationSection;
 
-    ann.append(this.sep());
+    const toolSegment = document.createElement("div");
+    toolSegment.className = "toolbar-segment";
+    ann.append(toolSegment);
 
     // Drawing tools
     const tools: [ToolKind, string, string, keyof Translations][] = [
@@ -539,7 +582,7 @@ export class Toolbar {
         this.setActiveTool(kind);
       });
       this.toolBtns[kind] = b;
-      ann.append(b);
+      toolSegment.append(b);
     }
 
     // Contextual style sections (hidden by default)
@@ -549,7 +592,8 @@ export class Toolbar {
 
   private buildTextStyleSection(container: HTMLElement): void {
     this.textStyleSection = document.createElement("div");
-    this.textStyleSection.style.cssText = "display:none;align-items:center;gap:4px;";
+    this.textStyleSection.className = "toolbar-group";
+    this.textStyleSection.style.cssText = "display:none;gap:4px;";
 
     this.textStyleSection.append(this.sep());
 
@@ -602,7 +646,7 @@ export class Toolbar {
         this.emitStyleChange();
       });
     });
-    this.textStyleSection.append(this.boldBtn, this.italicBtn, this.underlineBtn);
+    this.textStyleSection.append(this.segment(this.boldBtn, this.italicBtn, this.underlineBtn));
 
     // Alignment
     const alignDefs: [TextAlignmentValue, string, string, keyof Translations][] = [
@@ -623,11 +667,11 @@ export class Toolbar {
       });
       return b;
     });
-    this.textStyleSection.append(...this.alignBtns);
+    this.textStyleSection.append(this.segment(...this.alignBtns));
 
     // Layer order
-    const frontBtn = this.btn("\u2191", "Bring to front", "icon-btn");
-    const backBtn  = this.btn("\u2193", "Send to back",   "icon-btn");
+    const frontBtn = this.btn(ICON_BRING_FRONT, "Bring to front", "icon-btn");
+    const backBtn  = this.btn(ICON_SEND_BACK,   "Send to back",   "icon-btn");
     this.reg(frontBtn, undefined, "ttBringFront");
     this.reg(backBtn,  undefined, "ttSendBack");
     frontBtn.addEventListener("click", () => this.emit({ type: "layer-change", dir: "front" }));
@@ -639,7 +683,8 @@ export class Toolbar {
 
   private buildShapeStyleSection(container: HTMLElement): void {
     this.shapeStyleSection = document.createElement("div");
-    this.shapeStyleSection.style.cssText = "display:none;align-items:center;gap:4px;";
+    this.shapeStyleSection.className = "toolbar-group";
+    this.shapeStyleSection.style.cssText = "display:none;gap:4px;";
 
     this.shapeStyleSection.append(this.sep());
 
@@ -658,8 +703,8 @@ export class Toolbar {
 
     // Stroke width
     const strokeLabel = document.createElement("span");
-    strokeLabel.textContent = "w:";
-    strokeLabel.style.cssText = "color:#aaa;font-size:11px;";
+    strokeLabel.className = "toolbar-label";
+    strokeLabel.innerHTML = ICON_STROKE_WIDTH;
 
     this.shapeStrokeInput = document.createElement("input");
     this.shapeStrokeInput.type = "number";
@@ -676,8 +721,8 @@ export class Toolbar {
     this.shapeStyleSection.append(strokeLabel, this.shapeStrokeInput);
 
     // Layer order
-    const frontBtn = this.btn("\u2191", "Bring to front", "icon-btn");
-    const backBtn  = this.btn("\u2193", "Send to back",   "icon-btn");
+    const frontBtn = this.btn(ICON_BRING_FRONT, "Bring to front", "icon-btn");
+    const backBtn  = this.btn(ICON_SEND_BACK,   "Send to back",   "icon-btn");
     this.reg(frontBtn, undefined, "ttBringFront");
     this.reg(backBtn,  undefined, "ttSendBack");
     frontBtn.addEventListener("click", () => this.emit({ type: "layer-change", dir: "front" }));

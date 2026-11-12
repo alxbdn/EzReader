@@ -9,14 +9,27 @@ import { getTranslations } from "./i18n";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
+export type ThemePref = "system" | "light" | "dark";
+
 export interface AppSettings {
   language: string; // BCP-47 code, e.g. "fr"
+  theme: ThemePref;
 }
 
 // ── Persistence ───────────────────────────────────────────────────────────────
 
 const STORAGE_KEY = "pdf-rider-settings";
-const DEFAULTS: AppSettings = { language: "fr" };
+const DEFAULTS: AppSettings = { language: "fr", theme: "system" };
+
+// ── Theme ─────────────────────────────────────────────────────────────────────
+
+const darkQuery = window.matchMedia("(prefers-color-scheme: dark)");
+
+/** Sets the resolved theme ("light" or "dark") on <html data-theme>. */
+export function applyTheme(pref: ThemePref): void {
+  const dark = pref === "dark" || (pref === "system" && darkQuery.matches);
+  document.documentElement.dataset["theme"] = dark ? "dark" : "light";
+}
 
 export function loadSettings(): AppSettings {
   try {
@@ -66,6 +79,8 @@ export class SettingsModal {
 
   constructor() {
     this.settings = loadSettings();
+    applyTheme(this.settings.theme);
+    darkQuery.addEventListener("change", () => applyTheme(this.settings.theme));
     this.backdrop = document.getElementById("settings-modal")!;
     this.populateLangSelect();
     this.bind();
@@ -137,6 +152,15 @@ export class SettingsModal {
     langSelect.value = this.settings.language;
     langSelect.addEventListener("change", () => {
       this.set("language", langSelect.value);
+    });
+
+    // Theme selector
+    const themeSelect = document.getElementById("settings-theme") as HTMLSelectElement;
+    themeSelect.value = this.settings.theme;
+    themeSelect.addEventListener("change", () => {
+      const theme = themeSelect.value as ThemePref;
+      applyTheme(theme);
+      this.set("theme", theme);
     });
 
     // Default app button

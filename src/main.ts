@@ -248,6 +248,8 @@ function showToast(msg: string, isError = false): void {
 
 function setDirty(val: boolean): void {
   session.markDirty(val);
+  const target = session.saveTarget;
+  toolbar.setDocTitle(target ? target.split(/[\\/]/).pop() ?? target : null, val);
   if (val) { void registerCloseGuard(); }
   else      { unregisterCloseGuard(); }
 }
