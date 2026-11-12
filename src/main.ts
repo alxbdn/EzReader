@@ -7,7 +7,8 @@ import { SignatureStore } from "./signature-store";
 import { SettingsModal } from "./settings";
 import { PageManagerModal } from "./page-manager";
 import { SplitModal } from "./split-modal";
-import { getTranslations, applyTranslationsToDOM } from "./i18n";
+import { getTranslations, applyTranslationsToDOM, fmt, type Translations } from "./i18n";
+import { DocumentSession, uniqueTempName, isMicrosoftPrintToPdf } from "./document-session";
 import { AnnotationStore } from "./annotation-store";
 import { AnnotationHistory } from "./annotation-history";
 import {
@@ -58,10 +59,6 @@ let unlistenClose: (() => void) | null = null;
 
 const formValues = new Map<string, string>();
 
-let filePath: string | null = null;
-let outputPath: string | null = null;
-let displayFilePath: string | null = null;
-let isDirty = false;
 let guardRegistering = false;
 let fitMode: "none" | "fit-width" | "fit-height" = "none";
 let pendingSignature: string | null = null;
@@ -82,6 +79,28 @@ const sigModal           = new SignatureModal(sigStore);
 const settingsModal      = new SettingsModal();
 const pageManagerModal   = new PageManagerModal();
 const splitModal         = new SplitModal();
+
+async function newTempPath(suffix: string): Promise<string> {
+  return uniqueTempName(await tempDir(), suffix);
+}
+
+/** The open document: paths, dirty flag and the edits not yet written to disk. */
+const session = new DocumentSession(
+  {
+    annotations: () => store.getAll(),
+    formFields:  () => [...formValues.entries()].map(([name, value]): FormFieldValue => ({ name, value })),
+    rotation:    () => viewer.rotation,
+  },
+  { saveAnnotated: saveAnnotatedPdf, tempPath: newTempPath },
+);
+
+type MessageKey = Extract<keyof Translations, `msg${string}`>;
+
+/** Translated message for the current UI language, with `{name}` placeholders filled. */
+function msg(key: MessageKey, vars: Record<string, string | number> = {}): string {
+  const t = getTranslations(settingsModal.getSettings().language);
+  return fmt(t[key] ?? key, vars);
+}
 
 async function applyFitMode(): Promise<void> {
   if (!viewer.isLoaded() || fitMode === "none") return;
@@ -206,8 +225,8 @@ settingsModal.onChange(s => {
         document.getElementById("toolbar-container")!.style.display = "none";
         document.getElementById("welcome-screen")!.classList.add("hidden");
         await loadPdf(startup.filePath);
-        const pages = await viewer.renderAllPagesForPrint(200);
-        await printPages(pages);
+        const all = Array.from({ length: viewer.pageCount }, (_, i) => i + 1);
+        await printPages(await renderForPrint(all));
         await appWindow.close();
       } else {
         await loadPdf(startup.filePath);
@@ -228,7 +247,7 @@ function showToast(msg: string, isError = false): void {
 }
 
 function setDirty(val: boolean): void {
-  isDirty = val;
+  session.markDirty(val);
   if (val) { void registerCloseGuard(); }
   else      { unregisterCloseGuard(); }
 }
@@ -242,7 +261,7 @@ async function registerCloseGuard(): Promise<void> {
   guardRegistering = true;
   try {
     unlistenClose = await appWindow.onCloseRequested(async (event) => {
-      if (!isDirty) { return; }
+      if (!session.isDirty) { return; }
       // If the dialog is already open (e.g. user clicked close twice), force-close.
       if (closeGuardBusy) {
         setDirty(false);
@@ -252,7 +271,7 @@ async function registerCloseGuard(): Promise<void> {
       event.preventDefault();
       closeGuardBusy = true;
       try {
-        const ok = await ask("Close without saving?", { title: "Unsaved changes", kind: "warning" });
+        const ok = await ask(msg("msgCloseWithoutSaving"), { title: msg("msgUnsavedTitle"), kind: "warning" });
         if (ok) {
           setDirty(false);
           await appWindow.destroy();
@@ -286,14 +305,14 @@ function syncAllPageOverlays(): void {
 }
 
 async function confirmUnsaved(): Promise<boolean> {
-  if (!isDirty) return true;
-  return ask("Discard unsaved changes and continue?", { title: "Unsaved changes", kind: "warning" });
+  if (!session.isDirty) return true;
+  return ask(msg("msgDiscardChanges"), { title: msg("msgUnsavedTitle"), kind: "warning" });
 }
 
 // ── Load / Save ───────────────────────────────────────────────────────────────
 
 async function promptPassword(fp: string): Promise<void> {
-  const pw = window.prompt("This PDF is password-protected. Enter password:");
+  const pw = window.prompt(msg("msgPasswordPrompt"));
   if (pw === null) return;
   try {
     store.clear();
@@ -302,9 +321,7 @@ async function promptPassword(fp: string): Promise<void> {
     for (const ann of saved) store.add(ann);
 
     await viewer.loadWithPassword(fp, pw);
-    filePath = fp;
-    outputPath = null;
-    displayFilePath = null;
+    session.opened(fp, null);
     history.clear();
     setDirty(false);
     setWelcomeVisible(false);
@@ -312,7 +329,7 @@ async function promptPassword(fp: string): Promise<void> {
     toolbar.updatePageInfo(1, viewer.pageCount);
     toolbar.updateZoom(viewer.scale);
   } catch {
-    showToast("Wrong password or could not open file.", true);
+    showToast(msg("msgWrongPassword"), true);
   }
 }
 
@@ -321,44 +338,47 @@ function setWelcomeVisible(visible: boolean): void {
   if (el) el.classList.toggle("hidden", !visible);
 }
 
+/**
+ * Loads `path` into the viewer with its saved annotations. Returns the
+ * working copy actually displayed, or null when `path` itself is shown.
+ */
+async function showInViewer(path: string): Promise<string | null> {
+  store.clear();
+  formValues.clear();
+
+  // Read annotations BEFORE viewer.load() so IntersectionObserver finds them populated
+  const saved = await readAnnotations(path);
+  for (const ann of saved) store.add(ann);
+
+  // A file with saved annotations is shown from a copy whose burned layer
+  // is stripped, so the overlay can draw the annotations editable.
+  let workingCopy: string | null = null;
+  if (saved.length > 0) {
+    workingCopy = await newTempPath(`display-${await basename(path)}`);
+    await stripAnnotationStreams(path, workingCopy);
+  }
+
+  await viewer.load(workingCopy ?? path);
+
+  history.clear();
+  setWelcomeVisible(false);
+  toolbar.setLoaded(true);
+  toolbar.updatePageInfo(1, viewer.pageCount);
+  toolbar.updateZoom(viewer.scale);
+  return workingCopy;
+}
+
 async function loadPdf(path: string): Promise<void> {
   try {
-    store.clear();
-    formValues.clear();
-
-    // Read annotations BEFORE viewer.load() so IntersectionObserver finds them populated
-    const saved = await readAnnotations(path);
-    for (const ann of saved) store.add(ann);
-
-    let loadPath = path;
-    if (saved.length > 0) {
-      const tmp  = await tempDir();
-      const base = await basename(path);
-      const dp   = `${tmp}pdf-rider-display-${base}`;
-      await stripAnnotationStreams(path, dp);
-      displayFilePath = dp;
-      loadPath = dp;
-    } else {
-      displayFilePath = null;
-    }
-
-    filePath = path;
-    outputPath = null;
-
-    await viewer.load(loadPath);
-
-    history.clear();
+    const workingCopy = await showInViewer(path);
+    session.opened(path, workingCopy);
     setDirty(false);
-    setWelcomeVisible(false);
-    toolbar.setLoaded(true);
-    toolbar.updatePageInfo(1, viewer.pageCount);
-    toolbar.updateZoom(viewer.scale);
   } catch (err: unknown) {
-    const msg = String(err);
-    if (msg.includes("PasswordException") || msg.includes("password")) {
+    const errText = String(err);
+    if (errText.includes("PasswordException") || errText.includes("password")) {
       await promptPassword(path);
     } else {
-      showToast(`Could not open file: ${msg}`, true);
+      showToast(msg("msgOpenFailed", { err: errText }), true);
     }
   }
 }
@@ -370,89 +390,90 @@ async function openFile(): Promise<void> {
 }
 
 async function saveFile(forceDialog: boolean): Promise<void> {
-  if (!filePath) return;
-  let target: string;
+  const current = session.saveTarget;
+  if (!current) return;
+  let target = current;
   if (forceDialog) {
-    const picked = await savePdfDialog(filePath);
+    const picked = await savePdfDialog(current);
     if (!picked) return;
-    outputPath = picked;
     target = picked;
-  } else {
-    target = outputPath ?? filePath;
   }
   try {
-    const fv: FormFieldValue[] = [...formValues.entries()].map(([name, value]) => ({ name, value }));
-    await saveAnnotatedPdf(displayFilePath ?? filePath, target, store.getAll(), viewer.rotation, fv);
-    filePath = target;
+    await session.saveTo(target);
     setDirty(false);
-    showToast("Saved.");
+    showToast(msg("msgSaved"));
   } catch (err: unknown) {
-    showToast(`Save failed: ${err}`, true);
+    showToast(msg("msgSaveFailed", { err: String(err) }), true);
   }
+}
+
+/**
+ * Rasterises pages for printing exactly as the user sees them, including
+ * annotations, form values and rotation that are not saved yet.
+ */
+async function renderForPrint(pages: number[]): Promise<string[]> {
+  if (!session.hasPendingEdits()) {
+    // What the viewer shows (its document plus view rotation) is exactly the
+    // base file, so render from it directly. This also works for
+    // password-protected files, which the viewer already has open.
+    return viewer.renderPagesForPrint(pages, 200);
+  }
+  return viewer.renderFileForPrint(await session.materialize(), pages, 200);
 }
 
 // ── Compress handler ──────────────────────────────────────────────────────────
 
 compressModal.onConfirm(async (level) => {
-  if (!filePath) return;
-  const out = await savePdfDialog(filePath);
+  const source = session.sourcePath;
+  if (!source) return;
+  const out = await savePdfDialog(source);
   if (!out) return;
   try {
-    const result = await compressPdf(filePath, out, level);
+    const result = await compressPdf(await session.materialize(), out, level);
     const fromMB = (result.originalBytes   / 1_048_576).toFixed(1);
     const toMB   = (result.compressedBytes / 1_048_576).toFixed(1);
     const pct    = result.originalBytes > 0
       ? Math.round((1 - result.compressedBytes / result.originalBytes) * 100)
       : 0;
-    showToast(`Compressed: ${fromMB} MB \u2192 ${toMB} MB (${pct}% smaller)`);
+    showToast(msg("msgCompressed", { from: fromMB, to: toMB, pct }));
   } catch (err) {
-    showToast(`Compression failed: ${err}`, true);
+    showToast(msg("msgCompressFailed", { err: String(err) }), true);
   }
 });
 
 // ── Page manager handler ─────────────────────────────────────────────────────
 
 pageManagerModal.onConfirm(async (operations) => {
-  if (!filePath) return;
+  const source = session.sourcePath;
+  if (!source) return;
   const hasChanges = operations.some(op => op.delete || op.rotation !== 0);
   if (!hasChanges) return;
   try {
-    const originalPath = filePath;
-    const tmp  = await tempDir();
-    const base = await basename(filePath);
-    const tmpPath = `${tmp}pdf-rider-pages-${base}`;
-
-    const fv: FormFieldValue[] = [...formValues.entries()].map(([name, value]) => ({ name, value }));
-    // Skip the annotation-burn pass when there's nothing to burn. lopdf 0.39's
-    // full-rewrite save mangles content streams of PDFs that use object streams
-    // (iLovePDF / Acrobat output), so we feed modifyPages straight from the
-    // source file in that case. modifyPages uses incremental updates and is safe.
-    const hasMutations = store.getAll().length > 0 || viewer.rotation !== 0 || fv.length > 0;
-    if (hasMutations) {
-      await saveAnnotatedPdf(displayFilePath ?? filePath, tmpPath, store.getAll(), viewer.rotation, fv);
-      await modifyPages(tmpPath, tmpPath, operations);
-    } else {
-      await modifyPages(displayFilePath ?? filePath, tmpPath, operations);
-    }
-    await loadPdf(tmpPath);
-    filePath = originalPath;
-    if (!displayFilePath) displayFilePath = tmpPath;
+    // Burn pending edits first (no-op when there are none: the viewed file is
+    // used as is), then apply the page operations as an incremental update.
+    const input   = await session.materialize();
+    const tmpPath = await newTempPath(`pages-${await basename(source)}`);
+    await modifyPages(input, tmpPath, operations);
+    // Still the same document: Save keeps writing to the source / Save As target.
+    const workingCopy = await showInViewer(tmpPath);
+    session.replacedWorkingCopy(workingCopy ?? tmpPath);
     setDirty(true);
-    showToast("Pages updated.");
+    showToast(msg("msgPagesUpdated"));
   } catch (err) {
-    showToast(`Page modification failed: ${err}`, true);
+    showToast(msg("msgPagesFailed", { err: String(err) }), true);
   }
 });
 
 splitModal.onConfirm(async (req) => {
-  if (!filePath) return;
+  const source = session.sourcePath;
+  if (!source) return;
   const t = getTranslations(settingsModal.getSettings().language);
   try {
     const dir = await pickDirectoryDialog();
     if (!dir) return;
-    const fullName = await basename(filePath);
+    const fullName = await basename(source);
     const stem = fullName.replace(/\.pdf$/i, "");
-    const created = await splitPdf(filePath, dir, stem, req.ranges);
+    const created = await splitPdf(await session.materialize(), dir, stem, req.ranges);
     const tmpl = t.splitDoneToast ?? "Split into {n} file(s) in {dir}";
     showToast(tmpl.replace("{n}", String(created.length)).replace("{dir}", dir));
   } catch (err) {
@@ -462,24 +483,26 @@ splitModal.onConfirm(async (req) => {
 });
 
 printModal.onConfirm(async (settings) => {
-  if (!viewer.isLoaded() || !filePath) return;
-  const isPdfPrinter = /print to pdf|pdf/i.test(settings.printerName);
+  const source = session.sourcePath;
+  if (!viewer.isLoaded() || !source) return;
   try {
-    if (isPdfPrinter) {
-      const out = await savePdfDialog(filePath);
+    if (isMicrosoftPrintToPdf(settings.printerName)) {
+      // Write the selected pages as a real (vector) PDF rather than a
+      // rasterised one.
+      const out = await savePdfDialog(source);
       if (!out) return;
-      await extractPdfPages(filePath, out, settings.pageRange);
-      showToast("PDF saved.");
+      await extractPdfPages(await session.materialize(), out, settings.pageRange);
+      showToast(msg("msgPdfSaved"));
     } else {
       // Rasterise and print in-process: handing the file to the shell's
       // "printto" verb fails when the default PDF app (e.g. Edge, the
       // Windows 10 default) registers no print verbs.
-      const pages = await viewer.renderPagesForPrint(settings.pageRange, 200);
+      const pages = await renderForPrint(settings.pageRange);
       await printPages(pages, settings.printerName, settings.copies, settings.orientation, settings.fitMode);
-      showToast("Sent to printer.");
+      showToast(msg("msgSentToPrinter"));
     }
   } catch (err) {
-    showToast(`Print failed: ${err}`, true);
+    showToast(msg("msgPrintFailed", { err: String(err) }), true);
   }
 });
 
@@ -506,7 +529,7 @@ toolbar.on(async (e) => {
       break;
 
     case "compress":
-      if (filePath) compressModal.open();
+      if (session.isOpen) compressModal.open();
       break;
 
     case "rotate":
@@ -523,7 +546,7 @@ toolbar.on(async (e) => {
       break;
 
     case "split":
-      if (viewer.isLoaded() && filePath) {
+      if (viewer.isLoaded() && session.isOpen) {
         splitModal.open(viewer.pageCount);
       }
       break;
@@ -686,7 +709,7 @@ document.addEventListener("keydown", async (e) => {
   }
   if (ctrl && shift && e.key === "E") {
     e.preventDefault();
-    if (filePath) compressModal.open();
+    if (session.isOpen) compressModal.open();
     return;
   }
   if (ctrl && (e.key === "+" || e.key === "=")) {
@@ -741,7 +764,7 @@ sigModal.onSignatureReady((imageData: string) => {
   pendingSignature = imageData;
   showSigPreview(imageData);
   document.getElementById("viewer-scroll")!.style.cursor = "none";
-  showToast("Click on the page to place your signature. Press Esc to cancel.");
+  showToast(msg("msgPlaceSignature"));
 });
 
 // Click on a page wrapper to place signature
@@ -809,7 +832,7 @@ window.addEventListener("keydown", async (e: KeyboardEvent) => {
     pendingSignature = null;
     hideSigPreview();
     document.getElementById("viewer-scroll")!.style.cursor = "";
-    showToast("Signature placement cancelled.");
+    showToast(msg("msgSignatureCancelled"));
   } else if (toolState.tool !== "select") {
     toolState.tool = "select";
     for (const pv of viewer.pageViews) pv.overlay.setTool("select");
@@ -846,7 +869,7 @@ document.getElementById("viewer-scroll")!.addEventListener("wheel", async (e: Wh
         if (pdfPath) {
           if (await confirmUnsaved()) void loadPdf(pdfPath);
         } else if (event.payload.paths.length > 0) {
-          showToast("Only PDF files can be opened.", true);
+          showToast(msg("msgOnlyPdf"), true);
         }
       }
     });

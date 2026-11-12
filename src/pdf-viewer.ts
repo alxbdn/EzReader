@@ -835,28 +835,23 @@ export class PdfViewer {
 
   // ── Print (T027 — unchanged logic) ──────────────────────────────────────────
 
-  async renderAllPagesForPrint(dpi = 200): Promise<string[]> {
-    if (!this.pdfDoc) return [];
-    const pages = Array.from({ length: this._pageCount }, (_, i) => i + 1);
-    return this.renderPagesForPrint(pages, dpi);
-  }
-
+  /** Rasterises pages of the document currently shown, applying the view rotation. */
   async renderPagesForPrint(pageNumbers: number[], dpi = 200): Promise<string[]> {
     if (!this.pdfDoc) return [];
-    const scale   = dpi / 72;
-    const results: string[] = [];
-    for (const i of pageNumbers) {
-      if (i < 1 || i > this._pageCount) continue;
-      const page     = await this.pdfDoc.getPage(i);
-      const viewport = page.getViewport({ scale, rotation: (page.rotate + this._rotation) % 360 });
-      const canvas   = document.createElement("canvas");
-      canvas.width   = viewport.width;
-      canvas.height  = viewport.height;
-      const ctx = canvas.getContext("2d")!;
-      await page.render({ canvasContext: ctx, viewport }).promise;
-      results.push(canvas.toDataURL("image/jpeg", 0.92).split(",")[1]);
+    return renderDocPages(this.pdfDoc, pageNumbers, dpi, this._rotation);
+  }
+
+  /**
+   * Rasterises pages of another PDF file (typically a temp copy with the
+   * user's pending annotations burned in) without touching the open view.
+   */
+  async renderFileForPrint(filePath: string, pageNumbers: number[], dpi = 200): Promise<string[]> {
+    const doc = await pdfjs.getDocument({ url: convertFileSrc(filePath) + `?t=${Date.now()}` }).promise;
+    try {
+      return await renderDocPages(doc, pageNumbers, dpi, 0);
+    } finally {
+      await doc.destroy();
     }
-    return results;
   }
 
   // ── Lifecycle ────────────────────────────────────────────────────────────────
@@ -897,4 +892,30 @@ export class PdfViewer {
   async getPageLinkAnnotations(): Promise<Array<{ url: string; rect: [number, number, number, number] }>> {
     return [];
   }
+}
+
+/** Renders the given 1-based pages to base64 JPEG strings (no data: prefix). */
+async function renderDocPages(
+  doc: PDFDocumentProxy,
+  pageNumbers: number[],
+  dpi: number,
+  extraRotation: number,
+): Promise<string[]> {
+  const scale   = dpi / 72;
+  const results: string[] = [];
+  for (const i of pageNumbers) {
+    if (i < 1 || i > doc.numPages) continue;
+    const page     = await doc.getPage(i);
+    const viewport = page.getViewport({ scale, rotation: (page.rotate + extraRotation) % 360 });
+    const canvas   = document.createElement("canvas");
+    canvas.width   = viewport.width;
+    canvas.height  = viewport.height;
+    const ctx = canvas.getContext("2d")!;
+    await page.render({ canvasContext: ctx, viewport }).promise;
+    results.push(canvas.toDataURL("image/jpeg", 0.92).split(",")[1]);
+    // Free the bitmap right away; long documents otherwise pile up canvases.
+    canvas.width = canvas.height = 0;
+    page.cleanup();
+  }
+  return results;
 }
