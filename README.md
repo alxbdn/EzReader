@@ -9,8 +9,6 @@ Read, annotate, sign, fill forms, and compress — all in a single 5.5 MB portab
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue?style=flat-square)](LICENSE)
 [![Built with Rust](https://img.shields.io/badge/built%20with-Rust-orange?style=flat-square)](https://www.rust-lang.org/)
 
-![EzReader main view](docs/screenshots/main-page.png)
-
 </div>
 
 > EzReader is a fork of [PDF Rider](https://github.com/pleymor/pdf-rider) by pleymor.
