@@ -27,8 +27,15 @@ export class SignatureStore {
     return this.signatures.slice().sort((a, b) => b.lastUsedAt - a.lastUsedAt);
   }
 
+  /** At most this many signatures are kept; a new one replaces the least recently used. */
+  static readonly MAX = 3;
+
   /** Save a new signature and return the created entry. */
   add(imageDataUrl: string): SavedSignature | null {
+    while (this.signatures.length >= SignatureStore.MAX) {
+      const oldest = this.signatures.reduce((a, b) => (a.lastUsedAt <= b.lastUsedAt ? a : b));
+      this.signatures = this.signatures.filter((s) => s !== oldest);
+    }
     const sig: SavedSignature = {
       id: crypto.randomUUID(),
       imageDataUrl,

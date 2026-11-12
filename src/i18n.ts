@@ -289,6 +289,50 @@ export interface Translations {
   msgRenameFailed?: string;
   msgRenameExists?: string;
   msgRenameInvalid?: string;
+  // Annotate tools (optional, English fallback)
+  toolText?: string;
+  toolPencil?: string;
+  toolShapes?: string;
+  toolNote?: string;
+  toolHighlight?: string;
+  toolSign?: string;
+  styleFreeform?: string;
+  styleStraight?: string;
+  shapeRect?: string;
+  shapeEllipse?: string;
+  shapeArrow?: string;
+  optFont?: string;
+  optSize?: string;
+  optTextColor?: string;
+  optBackground?: string;
+  optNoBackground?: string;
+  optOutline?: string;
+  optColor?: string;
+  optCustomColor?: string;
+  optThickness?: string;
+  optOpacity?: string;
+  colBlack?: string;
+  colRed?: string;
+  colBlue?: string;
+  colGreen?: string;
+  colYellow?: string;
+  colWhite?: string;
+  colPink?: string;
+  colOrange?: string;
+  sigNew?: string;
+  sigUse?: string;
+  sigSavedCount?: string;
+  ttValidate?: string;
+  ttDiscard?: string;
+  hintText?: string;
+  hintPencil?: string;
+  hintShapes?: string;
+  hintNote?: string;
+  hintHighlight?: string;
+  hintSign?: string;
+  hintRedact?: string;
+  hintPending?: string;
+  hintPick?: string;
 }
 
 // ── English ───────────────────────────────────────────────────────────────────
@@ -567,6 +611,49 @@ const EN: Translations = {
   msgRenameFailed: "Rename failed: {err}",
   msgRenameExists: "A file with that name already exists.",
   msgRenameInvalid: "That name can't be used.",
+  toolText: "Text",
+  toolPencil: "Pencil",
+  toolShapes: "Shapes",
+  toolNote: "Sticky note",
+  toolHighlight: "Highlighter",
+  toolSign: "Sign",
+  styleFreeform: "Freeform",
+  styleStraight: "Straight",
+  shapeRect: "Rectangle",
+  shapeEllipse: "Ellipse",
+  shapeArrow: "Arrow",
+  optFont: "Font",
+  optSize: "Size",
+  optTextColor: "Text color",
+  optBackground: "Background",
+  optNoBackground: "No background",
+  optOutline: "Outline color",
+  optColor: "Color",
+  optCustomColor: "Custom color",
+  optThickness: "Thickness",
+  optOpacity: "Opacity",
+  colBlack: "Black",
+  colRed: "Red",
+  colBlue: "Blue",
+  colGreen: "Green",
+  colYellow: "Yellow",
+  colWhite: "White",
+  colPink: "Pink",
+  colOrange: "Orange",
+  sigNew: "+ New signature",
+  sigUse: "Place this signature",
+  sigSavedCount: "{n}/3 saved",
+  ttValidate: "Validate (Enter)",
+  ttDiscard: "Discard (Esc)",
+  hintText: "Click on the page to type. Enter places the text, Shift+Enter starts a new line.",
+  hintPencil: "Draw on the page.",
+  hintShapes: "Drag on the page to draw.",
+  hintNote: "Click on the page to stick a note.",
+  hintHighlight: "Select text to highlight it. Select it again to remove the highlight.",
+  hintSign: "Pick a signature, then click where it goes.",
+  hintRedact: "Drag over what must disappear.",
+  hintPending: "Validate or discard your changes to continue.",
+  hintPick: "Pick a tool.",
 };
 
 // ── French ────────────────────────────────────────────────────────────────────
@@ -845,6 +932,49 @@ const FR: Translations = {
   msgRenameFailed: "Échec du renommage : {err}",
   msgRenameExists: "Un fichier porte déjà ce nom.",
   msgRenameInvalid: "Ce nom n'est pas valide.",
+  toolText: "Texte",
+  toolPencil: "Crayon",
+  toolShapes: "Formes",
+  toolNote: "Post-it",
+  toolHighlight: "Surligneur",
+  toolSign: "Signer",
+  styleFreeform: "Libre",
+  styleStraight: "Droit",
+  shapeRect: "Rectangle",
+  shapeEllipse: "Ellipse",
+  shapeArrow: "Flèche",
+  optFont: "Police",
+  optSize: "Taille",
+  optTextColor: "Couleur du texte",
+  optBackground: "Fond",
+  optNoBackground: "Sans fond",
+  optOutline: "Couleur du contour",
+  optColor: "Couleur",
+  optCustomColor: "Couleur personnalisée",
+  optThickness: "Épaisseur",
+  optOpacity: "Opacité",
+  colBlack: "Noir",
+  colRed: "Rouge",
+  colBlue: "Bleu",
+  colGreen: "Vert",
+  colYellow: "Jaune",
+  colWhite: "Blanc",
+  colPink: "Rose",
+  colOrange: "Orange",
+  sigNew: "+ Nouvelle signature",
+  sigUse: "Placer cette signature",
+  sigSavedCount: "{n}/3 enregistrées",
+  ttValidate: "Valider (Entrée)",
+  ttDiscard: "Annuler (Échap)",
+  hintText: "Cliquez sur la page pour écrire. Entrée place le texte, Maj+Entrée passe à la ligne.",
+  hintPencil: "Dessinez sur la page.",
+  hintShapes: "Faites glisser sur la page pour dessiner.",
+  hintNote: "Cliquez sur la page pour coller un post-it.",
+  hintHighlight: "Sélectionnez du texte pour le surligner. Resélectionnez-le pour retirer le surlignage.",
+  hintSign: "Choisissez une signature, puis cliquez où la placer.",
+  hintRedact: "Faites glisser sur ce qui doit disparaître.",
+  hintPending: "Validez ou annulez vos modifications pour continuer.",
+  hintPick: "Choisissez un outil.",
 };
 
 // ── Chinese (Mandarin) ────────────────────────────────────────────────────────

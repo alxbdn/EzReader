@@ -18,12 +18,11 @@ import { AnnotationHistory } from "./annotation-history";
 import {
   defaultToolState,
   type Annotation,
-  type CircleAnnotation,
   type FormFieldValue,
-  type RectAnnotation,
   type TextAnnotation,
   CSS_UNITS,
 } from "./models";
+import type { ShapeAnnotation } from "./canvas-overlay";
 import {
   openPdfDialog,
   getPageCount,
@@ -72,7 +71,7 @@ let guardRegistering = false;
 let fitMode: "none" | "fit-width" | "fit-height" = "none";
 let pendingSignature: string | null = null;
 let editingTextAnn:  TextAnnotation | null = null;
-let editingShapeAnn: RectAnnotation | CircleAnnotation | null = null;
+let editingShapeAnn: ShapeAnnotation | null = null;
 
 // ── Instances ─────────────────────────────────────────────────────────────────
 
@@ -163,13 +162,12 @@ function wirePageOverlay(pv: PdfPageView): void {
   const ov = pv.overlay;
 
   ov.onAnnotationCreated((ann: Annotation) => {
-    history.push(store.getAll());
+    beginChange();
     store.add(ann);
     setDirty(true);
-    toolbar.clearActiveTool();
   });
 
-  ov.onBeforeModify(() => history.push(store.getAll()));
+  ov.onBeforeModify(() => beginChange());
 
   ov.onAnnotationMoved(() => setDirty(true));
 
@@ -189,18 +187,18 @@ function wirePageOverlay(pv: PdfPageView): void {
       editingShapeAnn = null;
       toolbar.showTextStyles(ann);
       toolbar.hideShapeStyles();
-    } else if (ov.currentTool !== "text") {
+    } else {
       toolbar.hideTextStyles();
     }
   });
 
-  ov.onShapeAnnotationSelected((ann: RectAnnotation | CircleAnnotation | null) => {
+  ov.onShapeAnnotationSelected((ann: ShapeAnnotation | null) => {
     editingShapeAnn = ann;
     if (ann) {
       editingTextAnn = null;
-      toolbar.showShapeStyles(ann);
+      toolbar.showShapeStyles(ann, ann.kind === "ink" && !ann.arrow ? "pencil" : "shapes");
       toolbar.hideTextStyles();
-    } else if (ov.currentTool !== "rect" && ov.currentTool !== "circle") {
+    } else {
       toolbar.hideShapeStyles();
     }
   });
@@ -327,6 +325,43 @@ function setDirty(val: boolean): void {
   toolbar.setDocTitle(displayName(), val);
   if (val) { void registerCloseGuard(); }
   else      { unregisterCloseGuard(); }
+}
+
+// ── Changes waiting for ✓ / ✕ ───────────────────────────────────────────────
+
+/** Annotations (and dirty flag) as they were before the pending changes. */
+let draft: { annotations: string; dirty: boolean } | null = null;
+
+/** Call before any annotation change: records undo history and opens a draft. */
+function beginChange(): void {
+  history.push(store.getAll());
+  if (!draft && toolbar.currentMode !== "read") {
+    draft = { annotations: JSON.stringify(store.getAll()), dirty: session.isDirty };
+    toolbar.setPending(true);
+  }
+}
+
+/** ✓: the pending changes are kept. */
+function applyDraft(): void {
+  if (!draft) return;
+  draft = null;
+  toolbar.setPending(false);
+}
+
+/** ✕: the pending changes are thrown away. */
+function discardDraft(): void {
+  if (!draft) return;
+  history.push(store.getAll()); // Ctrl+Z brings them back
+  store.replaceAll(JSON.parse(draft.annotations) as Annotation[]);
+  const dirty = draft.dirty || pendingRename !== null;
+  draft = null;
+  toolbar.setPending(false);
+  editingTextAnn = null;
+  editingShapeAnn = null;
+  toolbar.hideTextStyles();
+  toolbar.hideShapeStyles();
+  syncAllPageOverlays();
+  setDirty(dirty);
 }
 
 let closeGuardBusy = false;
@@ -510,6 +545,8 @@ async function showInViewer(path: string): Promise<string | null> {
 
 async function loadPdf(path: string): Promise<void> {
   pendingRename = null;
+  draft = null;
+  toolbar.setPending(false);
   try {
     const workingCopy = await showInViewer(path);
     session.opened(path, workingCopy);
@@ -702,6 +739,7 @@ async function applyPageLayout(slots: PageSlot[], keepPage = 1, select: number[]
 /** Runs a page edit from the panel, with the panel locked meanwhile. */
 async function editPages(slots: PageSlot[], keepPage: number, select: number[] = []): Promise<boolean> {
   if (!session.isOpen || !viewer.isLoaded()) return false;
+  if (!toolbar.allowed()) return false;
   pageSidebar.setBusy(true);
   try {
     return await applyPageLayout(slots, keepPage, select);
@@ -1005,16 +1043,7 @@ toolbar.on(async (e) => {
       for (const pv of viewer.pageViews) pv.overlay.setTool(e.tool);
       editingTextAnn  = null;
       editingShapeAnn = null;
-      if (e.tool === "text") {
-        toolbar.showTextStyles(toolState);
-        toolbar.hideShapeStyles();
-      } else if (e.tool === "rect" || e.tool === "circle") {
-        toolbar.showShapeStyles({ color: toolState.shapeColor, strokeWidth: toolState.strokeWidth, fillColor: toolState.fillColor });
-        toolbar.hideTextStyles();
-      } else {
-        toolbar.hideTextStyles();
-        toolbar.hideShapeStyles();
-      }
+      if (e.tool !== "signature") cancelSignaturePlacement();
       break;
 
     case "style-change":
@@ -1026,7 +1055,7 @@ toolbar.on(async (e) => {
         setDirty(true);
       } else if (editingShapeAnn) {
         const pv = viewer.pageViews.find(p => p.pageNum === editingShapeAnn!.page);
-        pv?.overlay.applyShapeAnnotationStyle(editingShapeAnn, e.style.shapeColor, e.style.strokeWidth, e.style.fillColor);
+        pv?.overlay.applyShapeAnnotationStyle(editingShapeAnn, e.style.shapeColor, e.style.strokeWidth, e.style.fillColor, e.style.opacity);
         setDirty(true);
       }
       break;
@@ -1043,6 +1072,29 @@ toolbar.on(async (e) => {
 
     case "signature":
       sigModal.open();
+      break;
+
+    case "signature-use": {
+      const sig = sigStore.getAll().find((x) => x.id === e.id);
+      if (sig) {
+        sigStore.touch(sig.id);
+        startSignaturePlacement(sig.imageDataUrl.split(",")[1] ?? sig.imageDataUrl);
+        refreshSignatures();
+      }
+      break;
+    }
+
+    case "signature-delete":
+      sigStore.delete(e.id);
+      refreshSignatures();
+      break;
+
+    case "draft-apply":
+      applyDraft();
+      break;
+
+    case "draft-discard":
+      discardDraft();
       break;
 
     case "print":
@@ -1091,21 +1143,25 @@ document.addEventListener("keydown", async (e) => {
   }
   if (ctrl && !shift && e.key === "o") {
     e.preventDefault();
+    if (!toolbar.allowed()) return;
     if (await confirmUnsaved()) await openFile();
     return;
   }
   if (ctrl && shift && e.key === "S") {
     e.preventDefault();
+    if (!toolbar.allowed()) return;
     await saveFile(true);
     return;
   }
   if (ctrl && !shift && e.key === "s") {
     e.preventDefault();
+    if (!toolbar.allowed()) return;
     await saveFile(false);
     return;
   }
   if (ctrl && !shift && e.key === "p") {
     e.preventDefault();
+    if (!toolbar.allowed()) return;
     if (viewer.isLoaded()) printModal.open(viewer.pageCount, viewer.currentPage, { w: viewer.pageWidthPt, h: viewer.pageHeightPt });
     return;
   }
@@ -1116,6 +1172,7 @@ document.addEventListener("keydown", async (e) => {
   }
   if (ctrl && shift && e.key === "E") {
     e.preventDefault();
+    if (!toolbar.allowed()) return;
     if (session.isOpen) compressModal.open();
     return;
   }
@@ -1167,12 +1224,31 @@ document.addEventListener("mousemove", (e: MouseEvent) => {
   sigPreview.style.top  = `${e.clientY}px`;
 });
 
-sigModal.onSignatureReady((imageData: string) => {
+function startSignaturePlacement(imageData: string): void {
   pendingSignature = imageData;
   showSigPreview(imageData);
   document.getElementById("viewer-scroll")!.style.cursor = "none";
   updateHandMode();
   showToast(msg("msgPlaceSignature"));
+}
+
+function cancelSignaturePlacement(): void {
+  if (!pendingSignature) return;
+  pendingSignature = null;
+  hideSigPreview();
+  document.getElementById("viewer-scroll")!.style.cursor = "";
+  updateHandMode();
+}
+
+/** Saved signatures, shown in the Sign options. */
+function refreshSignatures(): void {
+  toolbar.setSignatures(sigStore.getAll().map((s) => ({ id: s.id, dataUrl: s.imageDataUrl })));
+}
+refreshSignatures();
+
+sigModal.onSignatureReady((imageData: string) => {
+  refreshSignatures();
+  startSignaturePlacement(imageData);
 });
 
 // Click on a page wrapper to place signature
@@ -1189,16 +1265,11 @@ document.getElementById("viewer-scroll")!.addEventListener("click", (e: MouseEve
   const x = e.clientX - rect.left;
   const y = e.clientY - rect.top;
 
-  history.push(store.getAll());
+  beginChange();
   const ann = pv.overlay.placeSignature(x, y, pendingSignature, 150, 60);
   store.add(ann);
   setDirty(true);
-
-  pendingSignature = null;
-  hideSigPreview();
-  document.getElementById("viewer-scroll")!.style.cursor = "";
-  toolbar.clearActiveTool();
-  updateHandMode();
+  cancelSignaturePlacement();
 });
 
 // ── Context menu ──────────────────────────────────────────────────────────────
@@ -1236,22 +1307,68 @@ window.addEventListener("keydown", async (e: KeyboardEvent) => {
     toolbar.updateZoom(viewer.scale);
     return;
   }
+  const active = document.activeElement as HTMLElement | null;
+  const typing = !!active && (active.tagName === "INPUT" || active.tagName === "TEXTAREA" || active.tagName === "SELECT" || active.isContentEditable);
+  if (typing) return;
+  if (e.key === "Enter" && toolbar.isPending) {
+    // Enter validates the pending changes (✓).
+    e.preventDefault();
+    applyDraft();
+    return;
+  }
   if (e.key !== "Escape") return;
   if (pendingSignature) {
-    pendingSignature = null;
-    hideSigPreview();
-    document.getElementById("viewer-scroll")!.style.cursor = "";
+    cancelSignaturePlacement();
     showToast(msg("msgSignatureCancelled"));
-    updateHandMode();
+  } else if (toolbar.isPending) {
+    // Escape discards them (✕).
+    discardDraft();
   } else if (toolState.tool !== "select") {
-    toolState.tool = "select";
-    for (const pv of viewer.pageViews) pv.overlay.setTool("select");
     toolbar.clearActiveTool();
-    editingTextAnn  = null;
-    editingShapeAnn = null;
-    toolbar.hideTextStyles();
-    toolbar.hideShapeStyles();
   }
+});
+
+// ── Highlighter: applies to the text selected while it is on ─────────────────
+
+document.getElementById("viewer-scroll")!.addEventListener("mouseup", () => {
+  if (toolState.tool !== "highlight") return;
+  // Let the browser finish the selection first.
+  setTimeout(() => {
+    const sel = window.getSelection();
+    if (!sel || sel.isCollapsed || sel.rangeCount === 0) return;
+    const rects: DOMRect[] = [];
+    for (let i = 0; i < sel.rangeCount; i++) rects.push(...Array.from(sel.getRangeAt(i).getClientRects()));
+    sel.removeAllRanges();
+    const byPage = new Map<typeof viewer.pageViews[number], { left: number; top: number; right: number; bottom: number }[]>();
+    const seen = new Set<string>();
+    for (const r of rects) {
+      if (r.width < 1 || r.height < 1) continue;
+      const key = `${Math.round(r.left)},${Math.round(r.top)},${Math.round(r.width)},${Math.round(r.height)}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      const cx = r.left + r.width / 2, cy = r.top + r.height / 2;
+      const pv = viewer.pageViews.find((p) => {
+        const b = p.overlay.screenRect;
+        return cx >= b.left && cx <= b.right && cy >= b.top && cy <= b.bottom;
+      });
+      if (!pv) continue;
+      const b = pv.overlay.screenRect;
+      const list = byPage.get(pv) ?? [];
+      const next = { left: r.left - b.left, top: r.top - b.top, right: r.right - b.left, bottom: r.bottom - b.top };
+      // A span inside the selection reports its box and its text's box: merge
+      // what sits on the same line so overlaps don't darken twice.
+      const same = list.find((o) => {
+        const v = Math.min(o.bottom, next.bottom) - Math.max(o.top, next.top);
+        return v > 0.5 * Math.min(o.bottom - o.top, next.bottom - next.top) && next.left <= o.right + 1 && next.right >= o.left - 1;
+      });
+      if (same) {
+        same.left = Math.min(same.left, next.left); same.right = Math.max(same.right, next.right);
+        same.top = Math.min(same.top, next.top); same.bottom = Math.max(same.bottom, next.bottom);
+      } else list.push(next);
+      byPage.set(pv, list);
+    }
+    for (const [pv, list] of byPage) pv.overlay.applyHighlight(list, toolState.highlightColor, toolState.highlightOpacity);
+  }, 0);
 });
 
 // ── Ctrl+wheel zoom ───────────────────────────────────────────────────────────
