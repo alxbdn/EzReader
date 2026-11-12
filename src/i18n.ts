@@ -215,6 +215,14 @@ export interface Translations {
   sbRotateHint?: string;
   sbMovingOne?: string;
   sbMovingMany?: string;
+  sbSave?: string;
+  sbAppendPdf?: string;
+  sbAppendPdfHint?: string;
+  sbSearchPlaceholder?: string;
+  sbSearchPrev?: string;
+  sbSearchNext?: string;
+  sbSearchNone?: string;
+  sbSearching?: string;
 }
 
 // ── English ───────────────────────────────────────────────────────────────────
@@ -420,6 +428,14 @@ const EN: Translations = {
   sbRotateHint: "Rotate the selected pages",
   sbMovingOne: "Page {p}",
   sbMovingMany: "{n} pages",
+  sbSave: "Save changes (Ctrl+S)",
+  sbAppendPdf: "Add a PDF",
+  sbAppendPdfHint: "Add the pages of another PDF at the end (to merge them)",
+  sbSearchPlaceholder: "Search in the document…",
+  sbSearchPrev: "Previous match (Shift+Enter)",
+  sbSearchNext: "Next match (Enter)",
+  sbSearchNone: "No results",
+  sbSearching: "Searching…",
 };
 
 // ── French ────────────────────────────────────────────────────────────────────
@@ -625,6 +641,14 @@ const FR: Translations = {
   sbRotateHint: "Tourner les pages sélectionnées",
   sbMovingOne: "Page {p}",
   sbMovingMany: "{n} pages",
+  sbSave: "Enregistrer les modifications (Ctrl+S)",
+  sbAppendPdf: "Ajouter un PDF",
+  sbAppendPdfHint: "Ajouter les pages d'un autre PDF à la fin (pour les fusionner)",
+  sbSearchPlaceholder: "Rechercher dans le document…",
+  sbSearchPrev: "Résultat précédent (Maj+Entrée)",
+  sbSearchNext: "Résultat suivant (Entrée)",
+  sbSearchNone: "Aucun résultat",
+  sbSearching: "Recherche…",
 };
 
 // ── Chinese (Mandarin) ────────────────────────────────────────────────────────

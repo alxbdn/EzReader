@@ -6,6 +6,7 @@ import { SignatureModal } from "./signature-modal";
 import { SignatureStore } from "./signature-store";
 import { SettingsModal } from "./settings";
 import { PageSidebar } from "./page-sidebar";
+import { DocSearch, type SearchMatch } from "./doc-search";
 import { moveItems } from "./page-order";
 import type { PageSlot } from "./tauri-bridge";
 import { SplitModal } from "./split-modal";
@@ -83,6 +84,7 @@ const sigModal           = new SignatureModal(sigStore);
 const settingsModal      = new SettingsModal();
 const splitModal         = new SplitModal();
 const pageSidebar        = new PageSidebar(document.getElementById("page-sidebar")!);
+const docSearch          = new DocSearch();
 
 async function newTempPath(suffix: string): Promise<string> {
   return uniqueTempName(await tempDir(), suffix);
@@ -277,6 +279,7 @@ function setDirty(val: boolean): void {
   session.markDirty(val);
   const target = session.saveTarget;
   toolbar.setDocTitle(target ? target.split(/[\\/]/).pop() ?? target : null, val);
+  pageSidebar.setDirty(val);
   if (val) { void registerCloseGuard(); }
   else      { unregisterCloseGuard(); }
 }
@@ -368,7 +371,64 @@ function showThumbnails(): void {
   if (!viewer.document) return;
   pageSidebar.load(viewer.document, viewer.pageDimensions, viewer.rotation);
   pageSidebar.setCurrentPage(viewer.currentPage);
+  // The text changed: search again (without jumping) if a term is entered.
+  docSearch.reset(viewer.document);
+  void runSearch(pageSidebar.searchQuery, false);
 }
+
+// ── Search in the document ───────────────────────────────────────────────────
+
+let searchMatches: SearchMatch[] = [];
+let searchIndex = -1;
+
+function searchText(key: "sbSearchNone" | "sbSearching", fallback: string): string {
+  return getTranslations(settingsModal.getSettings().language)[key] ?? fallback;
+}
+
+/** Finds `query` in the whole document and highlights it; `jump` shows the first match from the current page on. */
+async function runSearch(query: string, jump = true): Promise<void> {
+  if (!query) {
+    docSearch.reset(viewer.document);
+    searchMatches = [];
+    searchIndex = -1;
+    viewer.setSearch("");
+    pageSidebar.setHits(new Map());
+    pageSidebar.setSearchStatus("");
+    return;
+  }
+  pageSidebar.setSearchStatus(searchText("sbSearching", "Searching…"));
+  const found = await docSearch.find(query, (done, total) =>
+    pageSidebar.setSearchStatus(`${Math.round((done / total) * 100)}%`));
+  if (!found) return; // superseded by a newer search
+  searchMatches = found;
+  const hits = new Map<number, number>();
+  for (const m of found) hits.set(m.page, (hits.get(m.page) ?? 0) + 1);
+  pageSidebar.setHits(hits);
+  if (found.length === 0) {
+    searchIndex = -1;
+    viewer.setSearch(query);
+    pageSidebar.setSearchStatus(searchText("sbSearchNone", "No results"), true);
+    return;
+  }
+  const from = found.findIndex((m) => m.page >= viewer.currentPage);
+  searchIndex = from === -1 ? 0 : from;
+  showSearchMatch(jump);
+}
+
+function showSearchMatch(scroll: boolean): void {
+  const m = searchMatches[searchIndex];
+  if (!m) return;
+  viewer.setSearch(pageSidebar.searchQuery, m.page, m.index, scroll);
+  pageSidebar.setSearchStatus(`${searchIndex + 1} / ${searchMatches.length}`);
+}
+
+pageSidebar.onSearch((query) => void runSearch(query));
+pageSidebar.onSearchStep((dir) => {
+  if (searchMatches.length === 0) return;
+  searchIndex = (searchIndex + dir + searchMatches.length) % searchMatches.length;
+  showSearchMatch(true);
+});
+pageSidebar.onSave(() => void saveFile(false));
 
 function setWelcomeVisible(visible: boolean): void {
   const el = document.getElementById("welcome-screen");
@@ -874,6 +934,11 @@ document.addEventListener("keydown", async (e) => {
   if (ctrl && !shift && e.key === "p") {
     e.preventDefault();
     if (viewer.isLoaded()) printModal.open(viewer.pageCount, viewer.currentPage, { w: viewer.pageWidthPt, h: viewer.pageHeightPt });
+    return;
+  }
+  if (ctrl && !shift && e.key.toLowerCase() === "f") {
+    e.preventDefault();
+    if (viewer.isLoaded()) pageSidebar.focusSearch();
     return;
   }
   if (ctrl && shift && e.key === "E") {

@@ -13,10 +13,15 @@ const AUTOSCROLL_STEP_PX = 14;
 
 const svg = (body: string, size = 12, stroke = 2.5): string =>
   `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="${stroke}" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${body}</svg>`;
-const ICON_CHECK  = svg(`<path d="M20 6 9 17l-5-5"/>`, 12, 3);
 const ICON_X      = svg(`<path d="M18 6 6 18"/><path d="m6 6 12 12"/>`);
 const ICON_ROTATE = svg(`<path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/>`);
 const ICON_PLUS   = svg(`<path d="M12 5v14"/><path d="M5 12h14"/>`, 14, 2);
+const ICON_PLUS_LG = svg(`<path d="M12 5v14"/><path d="M5 12h14"/>`, 22, 2);
+const ICON_SAVE   = svg(`<path d="M20 6 9 17l-5-5"/>`, 16, 2.5);
+const ICON_SEARCH = svg(`<circle cx="11" cy="11" r="7"/><path d="m20 20-4.3-4.3"/>`, 14, 2);
+const ICON_UP     = svg(`<path d="m18 15-6-6-6 6"/>`, 14, 2);
+const ICON_DOWN   = svg(`<path d="m6 9 6 6 6-6"/>`, 14, 2);
+const SEARCH_DEBOUNCE_MS = 250;
 
 interface Thumb {
   page: number;
@@ -70,6 +75,7 @@ export class PageSidebar {
   private translations: Translations | null = null;
   private i18nText = new Map<HTMLElement, [keyof Translations, string]>();
   private i18nTitle = new Map<HTMLElement, [keyof Translations, string]>();
+  private placeholders = new Map<HTMLInputElement, [keyof Translations, string]>();
   private goToHandlers: ((page: number) => void)[] = [];
   private deleteHandlers: PagesHandler[] = [];
   private exportHandlers: PagesHandler[] = [];
@@ -78,6 +84,14 @@ export class PageSidebar {
   private insertBlankHandlers: ((after: number) => void)[] = [];
   private insertPdfHandlers: ((after: number) => void)[] = [];
   private visibilityHandlers: ((visible: boolean) => void)[] = [];
+  private saveHandlers: (() => void)[] = [];
+  private searchHandlers: ((query: string) => void)[] = [];
+  private searchStepHandlers: ((dir: 1 | -1) => void)[] = [];
+  private searchInput!: HTMLInputElement;
+  private searchStatus!: HTMLElement;
+  private searchTimer: ReturnType<typeof setTimeout> | null = null;
+  private saveBtn!: HTMLButtonElement;
+  private addCard!: HTMLElement;
   private onPointerMove = (e: PointerEvent) => this.handlePointerMove(e);
   private onPointerUp = (e: PointerEvent) => this.handlePointerUp(e);
 
@@ -97,7 +111,18 @@ export class PageSidebar {
     selectAll.className = "btn btn-ghost btn-sm";
     this.text(selectAll, "sbSelectAll", "Select all");
     selectAll.addEventListener("click", () => this.selectAll());
-    titleRow.append(title, selectAll);
+    this.saveBtn = document.createElement("button");
+    this.saveBtn.className = "icon-btn page-sidebar-save";
+    this.saveBtn.innerHTML = ICON_SAVE;
+    this.title(this.saveBtn, "sbSave", "Save changes (Ctrl+S)");
+    this.saveBtn.disabled = true;
+    this.saveBtn.addEventListener("click", () => {
+      if (!this.busy) for (const cb of this.saveHandlers) cb();
+    });
+    const titleActions = document.createElement("div");
+    titleActions.className = "page-sidebar-title-actions";
+    titleActions.append(selectAll, this.saveBtn);
+    titleRow.append(title, titleActions);
 
     const insertRow = document.createElement("div");
     insertRow.className = "page-sidebar-insert-row";
@@ -110,7 +135,7 @@ export class PageSidebar {
       if (this.canAct()) for (const cb of this.insertPdfHandlers) cb(this.insertionPoint());
     });
     insertRow.append(addBlank, addPdf);
-    header.append(titleRow, insertRow);
+    header.append(this.buildSearchBar(), titleRow, insertRow);
 
     // Thumbnails
     this.list = document.createElement("div");
@@ -122,6 +147,18 @@ export class PageSidebar {
     });
     this.dropIndicator = document.createElement("div");
     this.dropIndicator.className = "page-sidebar-drop hidden";
+
+    // "+" at the end of the list: append another PDF (to merge it in)
+    this.addCard = document.createElement("button");
+    this.addCard.className = "page-sidebar-add";
+    this.addCard.innerHTML = ICON_PLUS_LG;
+    const addLabel = document.createElement("span");
+    this.text(addLabel, "sbAppendPdf", "Add a PDF");
+    this.addCard.append(addLabel);
+    this.title(this.addCard, "sbAppendPdfHint", "Add the pages of another PDF at the end");
+    this.addCard.addEventListener("click", () => {
+      if (this.canAct()) for (const cb of this.insertPdfHandlers) cb(this.thumbs.length);
+    });
 
     // Footer, shown while pages are selected
     this.footer = document.createElement("div");
@@ -184,6 +221,43 @@ export class PageSidebar {
   /** Another PDF's pages are wanted after page `after` (0 = at the start). */
   onInsertPdf(cb: (after: number) => void): void { this.insertPdfHandlers.push(cb); }
   onVisibilityChange(cb: (visible: boolean) => void): void { this.visibilityHandlers.push(cb); }
+  /** The check mark: save the document. */
+  onSave(cb: () => void): void { this.saveHandlers.push(cb); }
+  /** Search term typed (debounced; "" when cleared). */
+  onSearch(cb: (query: string) => void): void { this.searchHandlers.push(cb); }
+  /** Next (1) or previous (-1) search match. */
+  onSearchStep(cb: (dir: 1 | -1) => void): void { this.searchStepHandlers.push(cb); }
+
+  /** Highlights the save check mark while there are unsaved changes. */
+  setDirty(dirty: boolean): void {
+    this.saveBtn.disabled = !dirty;
+    this.saveBtn.classList.toggle("dirty", dirty);
+  }
+
+  /** Text next to the search field, e.g. "3 / 27" or "No results". */
+  setSearchStatus(text: string, noResults = false): void {
+    this.searchStatus.textContent = text;
+    this.searchStatus.classList.toggle("empty", noResults);
+  }
+
+  /** Marks the thumbnails of pages with search matches (count per page). */
+  setHits(counts: Map<number, number>): void {
+    for (const t of this.thumbs) {
+      const n = counts.get(t.page) ?? 0;
+      t.card.classList.toggle("has-hits", n > 0);
+      const badge = t.card.querySelector(".page-sidebar-hits") as HTMLElement | null;
+      if (badge) badge.textContent = n > 0 ? String(n) : "";
+    }
+  }
+
+  /** Shows the panel and puts the cursor in the search field. */
+  focusSearch(): void {
+    if (!this._visible) this.setVisible(true);
+    this.searchInput.focus();
+    this.searchInput.select();
+  }
+
+  get searchQuery(): string { return this.searchInput.value.trim(); }
 
   // ── Public API ──────────────────────────────────────────────────────────────
 
@@ -228,6 +302,7 @@ export class PageSidebar {
       this.thumbs.push(thumb);
       frag.appendChild(thumb.card);
     }
+    frag.appendChild(this.addCard);
     frag.appendChild(this.dropIndicator);
     this.list.appendChild(frag);
     for (const t of this.thumbs) this.observer.observe(t.card);
@@ -287,8 +362,69 @@ export class PageSidebar {
     this.translations = t;
     this.i18nText.forEach(([key, fb], el) => { el.textContent = this.t(key, fb); });
     this.i18nTitle.forEach(([key, fb], el) => { el.title = this.t(key, fb); });
+    this.placeholders.forEach(([key, fb], el) => { el.placeholder = this.t(key, fb); });
     for (const thumb of this.thumbs) this.labelThumb(thumb);
     this.updateFooter();
+  }
+
+  // ── Search bar ──────────────────────────────────────────────────────────────
+
+  private buildSearchBar(): HTMLElement {
+    const bar = document.createElement("div");
+    bar.className = "page-sidebar-search";
+    const icon = document.createElement("span");
+    icon.className = "page-sidebar-search-icon";
+    icon.innerHTML = ICON_SEARCH;
+    this.searchInput = document.createElement("input");
+    this.searchInput.type = "search";
+    this.searchInput.className = "page-sidebar-search-input";
+    this.searchInput.placeholder = "Search…";
+    this.i18nPlaceholder(this.searchInput, "sbSearchPlaceholder", "Search in the document…");
+    this.searchInput.addEventListener("input", () => {
+      if (this.searchTimer) clearTimeout(this.searchTimer);
+      this.searchTimer = setTimeout(() => this.emitSearch(), SEARCH_DEBOUNCE_MS);
+    });
+    this.searchInput.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        if (this.searchTimer) this.emitSearch(); // typed but not searched yet
+        else this.step(e.shiftKey ? -1 : 1);
+      } else if (e.key === "Escape") {
+        e.stopPropagation();
+        if (this.searchInput.value) {
+          this.searchInput.value = "";
+          this.emitSearch();
+        } else {
+          this.searchInput.blur();
+        }
+      }
+    });
+    this.searchStatus = document.createElement("span");
+    this.searchStatus.className = "page-sidebar-search-status";
+    const prev = document.createElement("button");
+    prev.className = "page-sidebar-search-step";
+    prev.innerHTML = ICON_UP;
+    this.title(prev, "sbSearchPrev", "Previous match (Shift+Enter)");
+    prev.addEventListener("click", () => this.step(-1));
+    const next = document.createElement("button");
+    next.className = "page-sidebar-search-step";
+    next.innerHTML = ICON_DOWN;
+    this.title(next, "sbSearchNext", "Next match (Enter)");
+    next.addEventListener("click", () => this.step(1));
+    bar.append(icon, this.searchInput, this.searchStatus, prev, next);
+    return bar;
+  }
+
+  private emitSearch(): void {
+    if (this.searchTimer) clearTimeout(this.searchTimer);
+    this.searchTimer = null;
+    const q = this.searchInput.value.trim();
+    this.root.classList.toggle("searching", q.length > 0);
+    for (const cb of this.searchHandlers) cb(q);
+  }
+
+  private step(dir: 1 | -1): void {
+    for (const cb of this.searchStepHandlers) cb(dir);
   }
 
   // ── Thumbnails ──────────────────────────────────────────────────────────────
@@ -303,13 +439,6 @@ export class PageSidebar {
     const canvas = document.createElement("canvas");
     frame.appendChild(canvas);
 
-    const check = this.overlayBtn("page-sidebar-check", ICON_CHECK, () => {
-      this.toggleSelected(page);
-      this.anchor = page;
-      this.updateSelectionClasses();
-    });
-    check.setAttribute("aria-pressed", "false");
-
     const tools = document.createElement("div");
     tools.className = "page-sidebar-tools";
     const rotate = this.overlayBtn("page-sidebar-rotate", ICON_ROTATE, () => {
@@ -319,7 +448,9 @@ export class PageSidebar {
       if (this.canAct()) for (const cb of this.deleteHandlers) cb([page]);
     });
     tools.append(rotate, del);
-    frame.append(check, tools);
+    const hits = document.createElement("span");
+    hits.className = "page-sidebar-hits";
+    frame.append(tools, hits);
 
     const label = document.createElement("span");
     label.className = "page-sidebar-label";
@@ -350,8 +481,6 @@ export class PageSidebar {
     const q = (sel: string) => thumb.card.querySelector(sel) as HTMLElement | null;
     const label = q(".page-sidebar-label");
     if (label) label.textContent = String(thumb.page);
-    const check = q(".page-sidebar-check");
-    if (check) check.title = this.t("sbSelectPage", "Select page (Ctrl+click)");
     const rotate = q(".page-sidebar-rotate");
     if (rotate) rotate.title = this.t("pmRotatePage", "Rotate page");
     const del = q(".page-sidebar-remove");
@@ -425,7 +554,10 @@ export class PageSidebar {
       this.updateSelectionClasses();
       return;
     }
+    // Plain click: this page alone is selected, and shown in the viewer.
+    this.selected = new Set([page]);
     this.anchor = page;
+    this.updateSelectionClasses();
     for (const cb of this.goToHandlers) cb(page);
   }
 
@@ -486,7 +618,7 @@ export class PageSidebar {
     for (const t of this.thumbs) {
       const on = this.selected.has(t.page);
       t.card.classList.toggle("selected", on);
-      t.card.querySelector(".page-sidebar-check")?.setAttribute("aria-pressed", String(on));
+      t.card.setAttribute("aria-selected", String(on));
     }
     this.root.classList.toggle("selecting", this.selected.size > 0);
     this.updateFooter();
@@ -675,6 +807,11 @@ export class PageSidebar {
   private text(el: HTMLElement, key: keyof Translations, fallback: string): void {
     el.textContent = fallback;
     this.i18nText.set(el, [key, fallback]);
+  }
+
+  private i18nPlaceholder(el: HTMLInputElement, key: keyof Translations, fallback: string): void {
+    el.placeholder = fallback;
+    this.placeholders.set(el, [key, fallback]);
   }
 
   private title(el: HTMLElement, key: keyof Translations, fallback: string): void {
