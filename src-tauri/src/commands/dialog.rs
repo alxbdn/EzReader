@@ -19,7 +19,11 @@ pub fn open_pdf_dialog(app: AppHandle) -> Result<Option<String>, String> {
         .add_filter("PDF Files", &["pdf"])
         .blocking_pick_file();
 
-    Ok(result.map(filepath_to_string))
+    let picked = result.map(filepath_to_string);
+    if let Some(path) = &picked {
+        crate::allow_viewing(&app, path);
+    }
+    Ok(picked)
 }
 
 /// Opens a native Save As dialog.

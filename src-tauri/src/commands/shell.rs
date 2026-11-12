@@ -15,7 +15,7 @@ pub fn check_pdf_association() -> bool {
         use winreg::enums::HKEY_CURRENT_USER;
         use winreg::RegKey;
         let hkcu = RegKey::predef(HKEY_CURRENT_USER);
-        hkcu.open_subkey(r"Software\Classes\com.pdfrider.app\shell\open\command")
+        hkcu.open_subkey(r"Software\Classes\com.ezreader.app\shell\open\command")
             .is_ok()
     }
     #[cfg(not(target_os = "windows"))]
@@ -43,13 +43,13 @@ pub fn register_pdf_handler() -> Result<(), String> {
 
         // ProgID root
         let (progid, _) = classes
-            .create_subkey("com.pdfrider.app")
+            .create_subkey("com.ezreader.app")
             .map_err(|e| e.to_string())?;
         progid
-            .set_value("", &"PDF Rider Document")
+            .set_value("", &"EzReader Document")
             .map_err(|e| e.to_string())?;
         progid
-            .set_value("FriendlyTypeName", &"PDF Rider Document")
+            .set_value("FriendlyTypeName", &"EzReader Document")
             .map_err(|e| e.to_string())?;
 
         // DefaultIcon
@@ -76,21 +76,21 @@ pub fn register_pdf_handler() -> Result<(), String> {
             .set_value("", &format!("\"{exe}\" --print \"%1\""))
             .map_err(|e| e.to_string())?;
 
-        // .pdf → com.pdfrider.app
+        // .pdf → com.ezreader.app
         let (pdf_ext, _) = classes
             .create_subkey(".pdf")
             .map_err(|e| e.to_string())?;
         pdf_ext
-            .set_value("", &"com.pdfrider.app")
+            .set_value("", &"com.ezreader.app")
             .map_err(|e| e.to_string())?;
 
-        // Also register print verb under Applications\pdf-rider.exe (used when
+        // Also register print verb under Applications\ezreader.exe (used when
         // Windows sets the default via Settings → Default Apps, which ignores our
         // ProgID and uses Applications\<exe-name> instead).
         let exe_name = std::path::Path::new(&exe)
             .file_name()
             .map(|n| n.to_string_lossy().to_string())
-            .unwrap_or_else(|| "pdf-rider.exe".to_string());
+            .unwrap_or_else(|| "ezreader.exe".to_string());
         let app_key_path = format!(r"Software\Classes\Applications\{exe_name}");
         let (app_key, _) = hkcu
             .create_subkey(&app_key_path)
@@ -520,13 +520,13 @@ pub fn unregister_pdf_handler() -> Result<(), String> {
         let hkcu = RegKey::predef(HKEY_CURRENT_USER);
 
         // Remove ProgID
-        hkcu.delete_subkey_all(r"Software\Classes\com.pdfrider.app")
+        hkcu.delete_subkey_all(r"Software\Classes\com.ezreader.app")
             .ok();
 
         // Remove .pdf extension mapping
         hkcu.delete_subkey_all(r"Software\Classes\.pdf").ok();
 
-        // Remove Applications\pdf-rider.exe
+        // Remove Applications\ezreader.exe
         let exe = std::env::current_exe()
             .map_err(|e| e.to_string())?
             .to_string_lossy()
@@ -534,7 +534,7 @@ pub fn unregister_pdf_handler() -> Result<(), String> {
         let exe_name = std::path::Path::new(&exe)
             .file_name()
             .map(|n| n.to_string_lossy().to_string())
-            .unwrap_or_else(|| "pdf-rider.exe".to_string());
+            .unwrap_or_else(|| "ezreader.exe".to_string());
         hkcu.delete_subkey_all(format!(r"Software\Classes\Applications\{exe_name}"))
             .ok();
 
@@ -543,7 +543,7 @@ pub fn unregister_pdf_handler() -> Result<(), String> {
             r"Software\Microsoft\Windows\CurrentVersion\Explorer\FileExts\.pdf\OpenWithProgids",
             winreg::enums::KEY_SET_VALUE,
         ) {
-            key.delete_value("com.pdfrider.app").ok();
+            key.delete_value("com.ezreader.app").ok();
         }
 
         Ok(())
@@ -570,14 +570,14 @@ pub fn register_print_verb() -> Result<(), String> {
         let exe_name = std::path::Path::new(&exe)
             .file_name()
             .map(|n| n.to_string_lossy().to_string())
-            .unwrap_or_else(|| "pdf-rider.exe".to_string());
+            .unwrap_or_else(|| "ezreader.exe".to_string());
 
         let hkcu = RegKey::predef(HKEY_CURRENT_USER);
 
         // Under our ProgID
         let (progid_print, _) = hkcu
             .create_subkey(format!(
-                r"Software\Classes\com.pdfrider.app\shell\print\command"
+                r"Software\Classes\com.ezreader.app\shell\print\command"
             ))
             .map_err(|e| e.to_string())?;
         progid_print
