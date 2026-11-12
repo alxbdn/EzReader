@@ -119,12 +119,23 @@ export class PdfPageView {
 
       // Render PDF content into an off-screen buffer first so the visible
       // canvas is never blank — old content stays until the new frame is ready.
+      //
+      // The canvas must map 1:1 onto screen pixels to look sharp.  Pick a
+      // whole number of device pixels first, then derive the CSS size from
+      // it.  (Flooring the backing store while keeping the fractional CSS
+      // size made the browser stretch every page slightly, blurring text.)
       const dpr = window.devicePixelRatio || 1;
+      const pxW = Math.max(1, Math.round(viewport.width  * dpr));
+      const pxH = Math.max(1, Math.round(viewport.height * dpr));
+      const cssW = pxW / dpr;
+      const cssH = pxH / dpr;
       const buf = document.createElement("canvas");
-      buf.width  = Math.floor(viewport.width  * dpr);
-      buf.height = Math.floor(viewport.height * dpr);
+      buf.width  = pxW;
+      buf.height = pxH;
       const bufCtx = buf.getContext("2d")!;
-      const transform = dpr !== 1 ? [dpr, 0, 0, dpr, 0, 0] : undefined;
+      const sx = pxW / viewport.width;
+      const sy = pxH / viewport.height;
+      const transform = sx !== 1 || sy !== 1 ? [sx, 0, 0, sy, 0, 0] : undefined;
       this._renderTask = page.render({ canvasContext: bufCtx, viewport, transform, annotationMode: AnnotationMode.ENABLE_FORMS });
       try {
         await this._renderTask.promise;
@@ -140,15 +151,15 @@ export class PdfPageView {
       // Atomic swap: resize + blit in one synchronous block.
       this.canvas.width  = buf.width;
       this.canvas.height = buf.height;
-      this.canvas.style.width  = `${viewport.width}px`;
-      this.canvas.style.height = `${viewport.height}px`;
+      this.canvas.style.width  = `${cssW}px`;
+      this.canvas.style.height = `${cssH}px`;
       this.canvas.getContext("2d")!.drawImage(buf, 0, 0);
 
       // Size annotation canvas (no content to preserve here).
-      this.annotationCanvas.width  = Math.floor(viewport.width  * dpr);
-      this.annotationCanvas.height = Math.floor(viewport.height * dpr);
-      this.annotationCanvas.style.width  = `${viewport.width}px`;
-      this.annotationCanvas.style.height = `${viewport.height}px`;
+      this.annotationCanvas.width  = pxW;
+      this.annotationCanvas.height = pxH;
+      this.annotationCanvas.style.width  = `${cssW}px`;
+      this.annotationCanvas.style.height = `${cssH}px`;
 
       // Snap wrapper to actual rendered size
       this.setPlaceholderSize(viewport.width, viewport.height);
@@ -554,6 +565,21 @@ export class PdfViewer {
 
   constructor() {
     this.scrollEl = document.getElementById("viewer-scroll") as HTMLElement;
+    this._watchPixelRatio();
+  }
+
+  /**
+   * Re-render when the screen pixel density changes (window moved to another
+   * monitor, Windows display scaling changed).  Otherwise pages keep the
+   * resolution of the previous screen and look blurry.
+   */
+  private _watchPixelRatio(): void {
+    if (typeof window.matchMedia !== "function") return;
+    const mq = window.matchMedia(`(resolution: ${window.devicePixelRatio || 1}dppx)`);
+    mq.addEventListener("change", () => {
+      if (this.pdfDoc) this.reflow();
+      this._watchPixelRatio();
+    }, { once: true });
   }
 
   // ── Accessors ───────────────────────────────────────────────────────────────
