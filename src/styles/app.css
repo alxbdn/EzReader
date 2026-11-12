@@ -1453,3 +1453,8 @@ kbd,
     background: #fff;
   }
 }
+
+/* ══ Toolbar actions (right-aligned) ══════════════════════════════════════ */
+
+.toolbar-actions { margin-left: auto; }
+.toolbar-actions .btn { height: 32px; padding: 0 10px; }

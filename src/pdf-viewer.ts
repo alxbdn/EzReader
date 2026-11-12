@@ -5,8 +5,8 @@ import { convertFileSrc } from "@tauri-apps/api/core";
 import workerUrl from "pdfjs-dist/build/pdf.worker.min.mjs?url";
 import { CanvasOverlay } from "./canvas-overlay";
 import { AnnotationStore } from "./annotation-store";
-import { defaultToolState, type ActiveToolState, CSS_UNITS } from "./models";
-import { openUrl } from "./tauri-bridge";
+import { defaultToolState, type ActiveToolState, type RedactAnnotation, CSS_UNITS } from "./models";
+import { openUrl, type RedactedPage } from "./tauri-bridge";
 
 pdfjs.GlobalWorkerOptions.workerSrc = workerUrl;
 
@@ -919,3 +919,62 @@ async function renderDocPages(
   }
   return results;
 }
+
+/**
+ * Renders the pages of `filePath` that carry redactions, unrotated and over
+ * their visible area (`page.view`), with the redacted areas filled black.
+ * Redaction coordinates are PDF user space, like every annotation.
+ */
+export async function renderRedactedPages(
+  filePath: string,
+  redactions: RedactAnnotation[],
+  dpi = 300,
+): Promise<RedactedPage[]> {
+  const byPage = new Map<number, RedactAnnotation[]>();
+  for (const r of redactions) byPage.set(r.page, [...(byPage.get(r.page) ?? []), r]);
+
+  const doc = await pdfjs.getDocument({ url: convertFileSrc(filePath) + `?t=${Date.now()}` }).promise;
+  try {
+    const out: RedactedPage[] = [];
+    for (const [pageNum, areas] of [...byPage.entries()].sort((a, b) => a[0] - b[0])) {
+      if (pageNum < 1 || pageNum > doc.numPages) continue;
+      const page = await doc.getPage(pageNum);
+      // Cap the bitmap (~40 MP) so very large pages do not exhaust memory.
+      const unit  = page.getViewport({ scale: 1, rotation: 0 });
+      const scale = Math.min(dpi / 72, Math.sqrt(40e6 / (unit.width * unit.height)));
+      const viewport = page.getViewport({ scale, rotation: 0 });
+      const canvas   = document.createElement("canvas");
+      canvas.width   = Math.ceil(viewport.width);
+      canvas.height  = Math.ceil(viewport.height);
+      const ctx = canvas.getContext("2d")!;
+      ctx.fillStyle = "#fff";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      await page.render({ canvasContext: ctx, viewport }).promise;
+
+      ctx.fillStyle = "#000";
+      for (const a of areas) {
+        const [x1, y1] = viewport.convertToViewportPoint(a.x, a.y);
+        const [x2, y2] = viewport.convertToViewportPoint(a.x + a.width, a.y + a.height);
+        // Round outwards so no anti-aliased sliver of the content survives.
+        const left = Math.floor(Math.min(x1, x2)) - 1, top = Math.floor(Math.min(y1, y2)) - 1;
+        const right = Math.ceil(Math.max(x1, x2)) + 1, bottom = Math.ceil(Math.max(y1, y2)) + 1;
+        ctx.fillRect(left, top, right - left, bottom - top);
+      }
+
+      const [v0, v1, v2, v3] = page.view;
+      out.push({
+        page: pageNum,
+        jpegBase64: canvas.toDataURL("image/jpeg", 0.9).split(",")[1],
+        widthPx: canvas.width,
+        heightPx: canvas.height,
+        view: [v0, v1, v2, v3],
+      });
+      canvas.width = canvas.height = 0;
+      page.cleanup();
+    }
+    return out;
+  } finally {
+    await doc.destroy();
+  }
+}
+

@@ -54,3 +54,6 @@ export const ICON_PEN = lucide(`<path d="M21.17 6.81a1 1 0 0 0-3.99-3.99L3.84 16
 export const ICON_BRING_FRONT = lucide(`<rect x="8" y="8" width="8" height="8" rx="2"/><path d="M4 10a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2"/><path d="M14 20a2 2 0 0 0 2 2h4a2 2 0 0 0 2-2v-4a2 2 0 0 0-2-2"/>`);
 export const ICON_SEND_BACK = lucide(`<rect x="14" y="14" width="8" height="8" rx="2"/><rect x="2" y="2" width="8" height="8" rx="2"/><path d="M7 14v1a2 2 0 0 0 2 2h1"/><path d="M14 7h1a2 2 0 0 1 2 2v1"/>`);
 export const ICON_STROKE_WIDTH = lucide(`<path d="M4 6h16" stroke-width="1"/><path d="M4 12h16" stroke-width="2"/><path d="M4 18h16" stroke-width="3.5"/>`);
+export const ICON_SEARCH = lucide(`<circle cx="11" cy="11" r="7"/><path d="m20 20-4.3-4.3"/>`);
+export const ICON_REDACT = lucide(`<rect x="3" y="5" width="18" height="14" rx="2"/><rect x="7" y="10" width="10" height="4" fill="currentColor" stroke="none"/>`);
+export const ICON_COMPRESS = lucide(`<path d="M12 3v6"/><path d="m9 6 3 3 3-3"/><path d="M12 21v-6"/><path d="m9 18 3-3 3 3"/><path d="M4 12h16"/>`);

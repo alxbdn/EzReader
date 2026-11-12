@@ -26,6 +26,9 @@ import {
   ICON_BRING_FRONT,
   ICON_SEND_BACK,
   ICON_STROKE_WIDTH,
+  ICON_SEARCH,
+  ICON_REDACT,
+  ICON_COMPRESS,
 } from "./icons";
 
 type ToolbarEvent =
@@ -37,6 +40,7 @@ type ToolbarEvent =
   | { type: "zoom-in" }
   | { type: "zoom-out" }
   | { type: "zoom-set"; scale: number }
+  | { type: "zoom-reset" }
   | { type: "fit-width" }
   | { type: "fit-height" }
   | { type: "page-prev" }
@@ -269,7 +273,7 @@ export class Toolbar {
         items: [
           { label: "menuZoomIn", shortcut: "Ctrl++", action: () => this.emit({ type: "zoom-in" }), requiresDoc: true },
           { label: "menuZoomOut", shortcut: "Ctrl+\u2212", action: () => this.emit({ type: "zoom-out" }), requiresDoc: true },
-          { label: "menuResetZoom", shortcut: "Ctrl+0", action: () => this.emit({ type: "zoom-set", scale: CSS_UNITS }), requiresDoc: true },
+          { label: "menuResetZoom", shortcut: "Ctrl+0", action: () => this.emit({ type: "zoom-reset" }), requiresDoc: true },
           null,
           { label: "menuFitWidth", action: () => this.emit({ type: "fit-width" }), requiresDoc: true },
           { label: "menuFitHeight", action: () => this.emit({ type: "fit-height" }), requiresDoc: true },
@@ -537,9 +541,13 @@ export class Toolbar {
     const zoomSegment = document.createElement("div");
     zoomSegment.className = "toolbar-segment";
     zoomSegment.append(zoomOut, this.zoomInput, zoomIn);
+    const resetZoomBtn = this.btn(ICON_SEARCH, "Reset zoom to default (Ctrl+0)", "icon-btn");
+    this.reg(resetZoomBtn, undefined, "ttResetZoom");
+    resetZoomBtn.addEventListener("click", () => this.emit({ type: "zoom-reset" }));
+
     const fitGroup = document.createElement("div");
     fitGroup.className = "toolbar-group";
-    fitGroup.append(this.fitWidthBtn, this.fitHeightBtn);
+    fitGroup.append(resetZoomBtn, this.fitWidthBtn, this.fitHeightBtn);
     ctx.append(zoomSegment, fitGroup, this.sep());
 
     // Annotation mode toggle
@@ -568,19 +576,12 @@ export class Toolbar {
       ["rect",      ICON_RECT,             "Rectangle", "ttRect"],
       ["circle",    ICON_CIRCLE,           "Circle",    "ttCircle"],
       ["text",      ICON_EDITOR_FREE_TEXT, "Text",      "ttText"],
-      ["signature", ICON_EDITOR_SIGNATURE, "Signature", "ttSignature"],
     ];
 
     for (const [kind, icon, title, ttKey] of tools) {
       const b = this.btn(icon, title, "icon-btn");
       this.reg(b, undefined, ttKey);
-      b.addEventListener("click", () => {
-        if (kind === "signature") {
-          this.emit({ type: "signature" });
-          return;
-        }
-        this.setActiveTool(kind);
-      });
+      b.addEventListener("click", () => this.setActiveTool(kind));
       this.toolBtns[kind] = b;
       toolSegment.append(b);
     }
@@ -588,6 +589,37 @@ export class Toolbar {
     // Contextual style sections (hidden by default)
     this.buildTextStyleSection(ann);
     this.buildShapeStyleSection(ann);
+
+    // Document actions, always at hand on the right
+    const actions = document.createElement("div");
+    actions.className = "toolbar-group toolbar-actions";
+
+    const redactBtn = this.labeledBtn(ICON_REDACT, "btnRedact", "Redact", "ttRedact");
+    redactBtn.addEventListener("click", () => {
+      if (this.state.tool === "redact") this.clearActiveTool();
+      else this.setActiveTool("redact");
+    });
+    this.toolBtns["redact"] = redactBtn;
+
+    const signBtn = this.labeledBtn(ICON_EDITOR_SIGNATURE, "btnSign", "Sign", "ttSignature");
+    signBtn.addEventListener("click", () => this.emit({ type: "signature" }));
+
+    const compressBtn = this.labeledBtn(ICON_COMPRESS, "btnCompressShort", "Compress", "ttCompress");
+    compressBtn.addEventListener("click", () => this.emit({ type: "compress" }));
+
+    actions.append(redactBtn, signBtn, compressBtn);
+    ctx.append(actions);
+  }
+
+  /** Ghost button with an icon and a translated text label. */
+  private labeledBtn(icon: string, label: keyof Translations, fallback: string, tooltip: keyof Translations): HTMLButtonElement {
+    const b = this.btn(icon, fallback, "btn btn-ghost");
+    const span = document.createElement("span");
+    span.textContent = fallback;
+    b.append(span);
+    this.reg(span, label);
+    this.reg(b, undefined, tooltip);
+    return b;
   }
 
   private buildTextStyleSection(container: HTMLElement): void {
