@@ -15,6 +15,14 @@ export async function savePdfDialog(
   });
 }
 
+/**
+ * Renames a file in place. Rejects with "exists" when another file already
+ * has that name, or "invalid" for an unusable name.
+ */
+export async function renameFile(from: string, to: string): Promise<void> {
+  return invoke<void>("rename_file", { from, to });
+}
+
 /** Returns the number of pages in the PDF at `filePath`. */
 export async function getPageCount(filePath: string): Promise<number> {
   return invoke<number>("get_page_count", { filePath });

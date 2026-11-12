@@ -13,15 +13,15 @@ const AUTOSCROLL_STEP_PX = 14;
 
 const svg = (body: string, size = 12, stroke = 2.5): string =>
   `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="${stroke}" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${body}</svg>`;
-const ICON_X      = svg(`<path d="M18 6 6 18"/><path d="m6 6 12 12"/>`);
-const ICON_ROTATE = svg(`<path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/>`);
-const ICON_PLUS   = svg(`<path d="M12 5v14"/><path d="M5 12h14"/>`, 14, 2);
+/** Rotate a quarter turn anticlockwise: open arc, with the arrowhead set apart from its tail. */
+const ICON_ROTATE_LEFT = `<svg width="15" height="15" viewBox="0 0 24 24" aria-hidden="true"><path d="M9.6 4.4A8 8 0 1 1 4.4 15.2" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/><path d="M2.2 3.6v6.6h6.6z" fill="currentColor"/></svg>`;
+const ICON_TRASH  = svg(`<path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6M10 11v6M14 11v6"/>`, 13, 2);
 const ICON_PLUS_LG = svg(`<path d="M12 5v14"/><path d="M5 12h14"/>`, 22, 2);
-const ICON_SAVE   = svg(`<path d="M20 6 9 17l-5-5"/>`, 16, 2.5);
-const ICON_SEARCH = svg(`<circle cx="11" cy="11" r="7"/><path d="m20 20-4.3-4.3"/>`, 14, 2);
-const ICON_UP     = svg(`<path d="m18 15-6-6-6 6"/>`, 14, 2);
-const ICON_DOWN   = svg(`<path d="m6 9 6 6 6-6"/>`, 14, 2);
-const SEARCH_DEBOUNCE_MS = 250;
+const ICON_UP     = svg(`<path d="m18 15-6-6-6 6"/>`, 13, 2.5);
+const ICON_DOWN   = svg(`<path d="m6 9 6 6 6-6"/>`, 13, 2.5);
+/** Holding a page arrow repeats after this delay, then every HOLD_REPEAT_MS. */
+const HOLD_DELAY_MS = 500;
+const HOLD_REPEAT_MS = 45;
 
 interface Thumb {
   page: number;
@@ -47,20 +47,18 @@ interface DragState {
 type PagesHandler = (pages: number[]) => void;
 
 /**
- * Page panel beside the viewer: a scrollable column of thumbnails to go to,
- * select, reorder (drag and drop), rotate, delete and export pages, and to
- * insert blank pages or the pages of another PDF.
+ * Page panel beside the viewer: a page counter to jump anywhere, a scrollable
+ * column of thumbnails to select (check box), reorder (drag and drop), rotate
+ * and delete, and an "add a PDF" card at the end.
  *
- * The panel only reports what the user asked for; the caller rewrites the
- * document and calls `load()` again with the result.
+ * A click on a thumbnail selects or deselects it; its number underneath shows
+ * it in the viewer. The panel only reports what the user asked for; the
+ * caller rewrites the document and calls `load()` again with the result.
  */
 export class PageSidebar {
   private root: HTMLElement;
   private list: HTMLElement;
   private dropIndicator: HTMLElement;
-  private footer: HTMLElement;
-  private countEl: HTMLElement;
-  private actionBtns: HTMLButtonElement[] = [];
   private thumbs: Thumb[] = [];
   private selected = new Set<number>();
   private anchor: number | null = null;
@@ -75,23 +73,25 @@ export class PageSidebar {
   private translations: Translations | null = null;
   private i18nText = new Map<HTMLElement, [keyof Translations, string]>();
   private i18nTitle = new Map<HTMLElement, [keyof Translations, string]>();
-  private placeholders = new Map<HTMLInputElement, [keyof Translations, string]>();
-  private goToHandlers: ((page: number) => void)[] = [];
+  private goToHandlers: ((page: number, instant: boolean) => void)[] = [];
   private deleteHandlers: PagesHandler[] = [];
   private exportHandlers: PagesHandler[] = [];
-  private rotateHandlers: PagesHandler[] = [];
+  private rotateHandlers: ((pages: number[], quarterTurns: number) => void)[] = [];
   private moveHandlers: ((pages: number[], insertAt: number) => void)[] = [];
   private insertBlankHandlers: ((after: number) => void)[] = [];
   private insertPdfHandlers: ((after: number) => void)[] = [];
   private visibilityHandlers: ((visible: boolean) => void)[] = [];
-  private saveHandlers: (() => void)[] = [];
-  private searchHandlers: ((query: string) => void)[] = [];
-  private searchStepHandlers: ((dir: 1 | -1) => void)[] = [];
-  private searchInput!: HTMLInputElement;
-  private searchStatus!: HTMLElement;
-  private searchTimer: ReturnType<typeof setTimeout> | null = null;
-  private saveBtn!: HTMLButtonElement;
   private addCard!: HTMLElement;
+  private pageInput!: HTMLInputElement;
+  private pageTotal!: HTMLElement;
+  private selectAllBtn!: HTMLButtonElement;
+  private selectAllLabel!: HTMLElement;
+  private deleteBtn!: HTMLButtonElement;
+  private deleteLabel!: HTMLElement;
+  /** Page the arrows are heading to while held down (the viewer catches up). */
+  private navTarget = 0;
+  private holdTimer: ReturnType<typeof setTimeout> | null = null;
+  private holdInterval: ReturnType<typeof setInterval> | null = null;
   private onPointerMove = (e: PointerEvent) => this.handlePointerMove(e);
   private onPointerUp = (e: PointerEvent) => this.handlePointerUp(e);
 
@@ -99,7 +99,7 @@ export class PageSidebar {
     this.root = root;
     this.root.classList.add("page-sidebar");
 
-    // Header: title, select all, insert buttons
+    // Header: title and page counter, then "Select all" and "Delete".
     const header = document.createElement("div");
     header.className = "page-sidebar-header";
     const titleRow = document.createElement("div");
@@ -107,44 +107,35 @@ export class PageSidebar {
     const title = document.createElement("span");
     title.className = "page-sidebar-title";
     this.text(title, "sbTitle", "Pages");
-    const selectAll = document.createElement("button");
-    selectAll.className = "btn btn-ghost btn-sm";
-    this.text(selectAll, "sbSelectAll", "Select all");
-    selectAll.addEventListener("click", () => this.selectAll());
-    this.saveBtn = document.createElement("button");
-    this.saveBtn.className = "icon-btn page-sidebar-save";
-    this.saveBtn.innerHTML = ICON_SAVE;
-    this.title(this.saveBtn, "sbSave", "Save changes (Ctrl+S)");
-    this.saveBtn.disabled = true;
-    this.saveBtn.addEventListener("click", () => {
-      if (!this.busy) for (const cb of this.saveHandlers) cb();
-    });
-    const titleActions = document.createElement("div");
-    titleActions.className = "page-sidebar-title-actions";
-    titleActions.append(selectAll, this.saveBtn);
-    titleRow.append(title, titleActions);
+    titleRow.append(title, this.buildPageNav());
 
-    const insertRow = document.createElement("div");
-    insertRow.className = "page-sidebar-insert-row";
-    const addBlank = this.labeledBtn(ICON_PLUS, "sbAddBlank", "Blank page", "pmAddBlankHint", "Insert a blank page after the selection");
-    addBlank.addEventListener("click", () => {
-      if (this.canAct()) for (const cb of this.insertBlankHandlers) cb(this.insertionPoint());
+    const pills = document.createElement("div");
+    pills.className = "page-sidebar-pills";
+    this.selectAllBtn = document.createElement("button");
+    this.selectAllBtn.className = "sb-pill";
+    const check = document.createElement("span");
+    check.className = "sb-check";
+    this.selectAllLabel = document.createElement("span");
+    this.selectAllBtn.append(check, this.selectAllLabel);
+    this.selectAllBtn.addEventListener("click", () => {
+      if (this.allSelected()) this.clearSelection();
+      else this.selectAll();
     });
-    const addPdf = this.labeledBtn(ICON_PLUS, "sbInsertPdf", "Insert PDF", "pmInsertPdfHint", "Insert the pages of another PDF after the selection");
-    addPdf.addEventListener("click", () => {
-      if (this.canAct()) for (const cb of this.insertPdfHandlers) cb(this.insertionPoint());
-    });
-    insertRow.append(addBlank, addPdf);
-    header.append(this.buildSearchBar(), titleRow, insertRow);
+    this.deleteBtn = document.createElement("button");
+    this.deleteBtn.className = "sb-pill sb-delete";
+    this.deleteBtn.innerHTML = ICON_TRASH;
+    this.deleteLabel = document.createElement("span");
+    this.deleteBtn.append(this.deleteLabel);
+    this.title(this.deleteBtn, "sbDeleteHint", "Delete the selected pages");
+    this.deleteBtn.addEventListener("click", () => this.emitSelection(this.deleteHandlers));
+    pills.append(this.selectAllBtn, this.deleteBtn);
+    header.append(titleRow, pills);
 
     // Thumbnails
     this.list = document.createElement("div");
     this.list.className = "page-sidebar-list";
     this.list.tabIndex = 0;
     this.list.addEventListener("keydown", (e) => this.handleKeydown(e));
-    this.list.addEventListener("mousedown", (e) => {
-      if (e.target === this.list) this.clearSelection();
-    });
     this.dropIndicator = document.createElement("div");
     this.dropIndicator.className = "page-sidebar-drop hidden";
 
@@ -160,41 +151,11 @@ export class PageSidebar {
       if (this.canAct()) for (const cb of this.insertPdfHandlers) cb(this.thumbs.length);
     });
 
-    // Footer, shown while pages are selected
-    this.footer = document.createElement("div");
-    this.footer.className = "page-sidebar-footer hidden";
-    this.countEl = document.createElement("span");
-    this.countEl.className = "page-sidebar-count";
-    const clearBtn = document.createElement("button");
-    clearBtn.className = "btn btn-ghost btn-sm";
-    this.text(clearBtn, "sbClear", "Clear");
-    clearBtn.addEventListener("click", () => this.clearSelection());
-    const countRow = document.createElement("div");
-    countRow.className = "page-sidebar-count-row";
-    countRow.append(this.countEl, clearBtn);
+    const hint = document.createElement("div");
+    hint.className = "page-sidebar-hint";
+    this.text(hint, "sbHint", "Drag pages to reorder them.");
 
-    const rotateBtn = document.createElement("button");
-    rotateBtn.className = "btn btn-sm page-sidebar-icon-action";
-    rotateBtn.innerHTML = ICON_ROTATE;
-    this.title(rotateBtn, "sbRotateHint", "Rotate the selected pages");
-    rotateBtn.addEventListener("click", () => this.emitSelection(this.rotateHandlers));
-    const deleteBtn = document.createElement("button");
-    deleteBtn.className = "btn btn-sm page-sidebar-delete";
-    this.text(deleteBtn, "sbDelete", "Delete");
-    this.title(deleteBtn, "sbDeleteHint", "Delete the selected pages");
-    deleteBtn.addEventListener("click", () => this.emitSelection(this.deleteHandlers));
-    const exportBtn = document.createElement("button");
-    exportBtn.className = "btn btn-primary btn-sm";
-    this.text(exportBtn, "sbExport", "Export");
-    this.title(exportBtn, "sbExportHint", "Save the selected pages as a new PDF");
-    exportBtn.addEventListener("click", () => this.emitSelection(this.exportHandlers));
-    this.actionBtns = [rotateBtn, deleteBtn, exportBtn];
-    const actions = document.createElement("div");
-    actions.className = "page-sidebar-actions";
-    actions.append(rotateBtn, deleteBtn, exportBtn);
-    this.footer.append(countRow, actions);
-
-    this.root.append(header, this.list, this.footer);
+    this.root.append(header, this.list, hint);
 
     this.observer = new IntersectionObserver((entries) => this.onIntersect(entries), {
       root: this.list,
@@ -203,17 +164,21 @@ export class PageSidebar {
 
     this._visible = this.readVisible();
     this.root.classList.toggle("collapsed", !this._visible);
+    window.addEventListener("pointerup", () => this.stopHold());
+    window.addEventListener("blur", () => this.stopHold());
+    this.updateHeader();
   }
 
   // ── Events ──────────────────────────────────────────────────────────────────
 
-  onGoTo(cb: (page: number) => void): void { this.goToHandlers.push(cb); }
+  /** Show `page` in the viewer; `instant` while an arrow is held down. */
+  onGoTo(cb: (page: number, instant: boolean) => void): void { this.goToHandlers.push(cb); }
   /** Pages (1-based, ascending) to delete. */
   onDelete(cb: PagesHandler): void { this.deleteHandlers.push(cb); }
   /** Pages (1-based, ascending) to save as a new PDF. */
   onExport(cb: PagesHandler): void { this.exportHandlers.push(cb); }
-  /** Pages (1-based, ascending) to turn a quarter clockwise. */
-  onRotate(cb: PagesHandler): void { this.rotateHandlers.push(cb); }
+  /** Pages (1-based, ascending) to turn by quarter turns (positive = clockwise). */
+  onRotate(cb: (pages: number[], quarterTurns: number) => void): void { this.rotateHandlers.push(cb); }
   /** Pages (1-based, ascending) to move to the gap `insertAt` (0 = before page 1). */
   onMove(cb: (pages: number[], insertAt: number) => void): void { this.moveHandlers.push(cb); }
   /** A blank page is wanted after page `after` (0 = at the start). */
@@ -221,24 +186,18 @@ export class PageSidebar {
   /** Another PDF's pages are wanted after page `after` (0 = at the start). */
   onInsertPdf(cb: (after: number) => void): void { this.insertPdfHandlers.push(cb); }
   onVisibilityChange(cb: (visible: boolean) => void): void { this.visibilityHandlers.push(cb); }
-  /** The check mark: save the document. */
-  onSave(cb: () => void): void { this.saveHandlers.push(cb); }
-  /** Search term typed (debounced; "" when cleared). */
-  onSearch(cb: (query: string) => void): void { this.searchHandlers.push(cb); }
-  /** Next (1) or previous (-1) search match. */
-  onSearchStep(cb: (dir: 1 | -1) => void): void { this.searchStepHandlers.push(cb); }
 
-  /** Highlights the save check mark while there are unsaved changes. */
-  setDirty(dirty: boolean): void {
-    this.saveBtn.disabled = !dirty;
-    this.saveBtn.classList.toggle("dirty", dirty);
+  /** Menu commands acting on the selection, or after the page shown. */
+  requestInsertBlank(): void { if (this.canAct()) for (const cb of this.insertBlankHandlers) cb(this.insertionPoint()); }
+  requestInsertPdf(): void { if (this.canAct()) for (const cb of this.insertPdfHandlers) cb(this.insertionPoint()); }
+  requestExportSelection(): void {
+    if (!this.canAct()) return;
+    const pages = this.selected.size > 0 ? this.sortedSelection() : (this.current ? [this.current] : []);
+    if (pages.length > 0) for (const cb of this.exportHandlers) cb(pages);
   }
 
-  /** Text next to the search field, e.g. "3 / 27" or "No results". */
-  setSearchStatus(text: string, noResults = false): void {
-    this.searchStatus.textContent = text;
-    this.searchStatus.classList.toggle("empty", noResults);
-  }
+  /** Selected pages, ascending. */
+  get selection(): number[] { return this.sortedSelection(); }
 
   /** Marks the thumbnails of pages with search matches (count per page). */
   setHits(counts: Map<number, number>): void {
@@ -249,15 +208,6 @@ export class PageSidebar {
       if (badge) badge.textContent = n > 0 ? String(n) : "";
     }
   }
-
-  /** Shows the panel and puts the cursor in the search field. */
-  focusSearch(): void {
-    if (!this._visible) this.setVisible(true);
-    this.searchInput.focus();
-    this.searchInput.select();
-  }
-
-  get searchQuery(): string { return this.searchInput.value.trim(); }
 
   // ── Public API ──────────────────────────────────────────────────────────────
 
@@ -283,8 +233,8 @@ export class PageSidebar {
   setBusy(busy: boolean): void {
     this.busy = busy;
     this.root.classList.toggle("busy", busy);
-    if (busy) this.cancelDrag();
-    this.updateFooter();
+    if (busy) { this.cancelDrag(); this.stopHold(); }
+    this.updateHeader();
   }
 
   /**
@@ -308,12 +258,13 @@ export class PageSidebar {
     for (const t of this.thumbs) this.observer.observe(t.card);
     // A reload of the same document (after an edit) keeps the panel where it was.
     this.list.scrollTop = scrollTop;
-    this.updateFooter();
+    this.updateHeader();
   }
 
   /** Forgets the document (on close / before reload). */
   clear(): void {
     this.cancelDrag();
+    this.stopHold();
     this.observer.disconnect();
     for (const t of this.thumbs) t.task?.cancel();
     this.thumbs = [];
@@ -321,9 +272,10 @@ export class PageSidebar {
     this.selected.clear();
     this.anchor = null;
     this.current = 0;
+    this.navTarget = 0;
     this.doc = null;
     this.root.classList.remove("selecting");
-    this.updateFooter();
+    this.updateHeader();
   }
 
   /** Selects exactly `pages` (after an edit, to keep the moved/rotated pages selected). */
@@ -352,6 +304,8 @@ export class PageSidebar {
     if (page === this.current) return;
     this.thumbs[this.current - 1]?.card.classList.remove("current");
     this.current = page;
+    if (!this.holdInterval && !this.holdTimer) this.navTarget = page;
+    this.updatePageInput();
     const t = this.thumbs[page - 1];
     if (!t) return;
     t.card.classList.add("current");
@@ -362,69 +316,132 @@ export class PageSidebar {
     this.translations = t;
     this.i18nText.forEach(([key, fb], el) => { el.textContent = this.t(key, fb); });
     this.i18nTitle.forEach(([key, fb], el) => { el.title = this.t(key, fb); });
-    this.placeholders.forEach(([key, fb], el) => { el.placeholder = this.t(key, fb); });
     for (const thumb of this.thumbs) this.labelThumb(thumb);
-    this.updateFooter();
+    this.updateHeader();
   }
 
-  // ── Search bar ──────────────────────────────────────────────────────────────
+  // ── Page counter ────────────────────────────────────────────────────────────
 
-  private buildSearchBar(): HTMLElement {
-    const bar = document.createElement("div");
-    bar.className = "page-sidebar-search";
-    const icon = document.createElement("span");
-    icon.className = "page-sidebar-search-icon";
-    icon.innerHTML = ICON_SEARCH;
-    this.searchInput = document.createElement("input");
-    this.searchInput.type = "search";
-    this.searchInput.className = "page-sidebar-search-input";
-    this.searchInput.placeholder = "Search…";
-    this.i18nPlaceholder(this.searchInput, "sbSearchPlaceholder", "Search in the document…");
-    this.searchInput.addEventListener("input", () => {
-      if (this.searchTimer) clearTimeout(this.searchTimer);
-      this.searchTimer = setTimeout(() => this.emitSearch(), SEARCH_DEBOUNCE_MS);
+  /** "⌃ | 12 / 48 | ⌄": type a page number, or hold an arrow to run through pages. */
+  private buildPageNav(): HTMLElement {
+    const pill = document.createElement("div");
+    pill.className = "page-nav-pill";
+    const prev = this.navArrow(ICON_UP, -1, "ttPagePrev", "Previous page (hold to scroll)");
+    const next = this.navArrow(ICON_DOWN, 1, "ttPageNext", "Next page (hold to scroll)");
+    this.pageInput = document.createElement("input");
+    this.pageInput.className = "page-nav-input";
+    this.pageInput.inputMode = "numeric";
+    this.pageInput.autocomplete = "off";
+    this.pageInput.spellcheck = false;
+    this.title(this.pageInput, "ttPageInput", "Type a page number, then Enter");
+    this.pageInput.addEventListener("focus", () => this.pageInput.select());
+    this.pageInput.addEventListener("input", () => {
+      this.pageInput.value = this.pageInput.value.replace(/[^0-9]/g, "").slice(0, 6);
+      this.sizePageInput();
     });
-    this.searchInput.addEventListener("keydown", (e) => {
-      if (e.key === "Enter") {
-        e.preventDefault();
-        if (this.searchTimer) this.emitSearch(); // typed but not searched yet
-        else this.step(e.shiftKey ? -1 : 1);
-      } else if (e.key === "Escape") {
-        e.stopPropagation();
-        if (this.searchInput.value) {
-          this.searchInput.value = "";
-          this.emitSearch();
-        } else {
-          this.searchInput.blur();
-        }
-      }
+    this.pageInput.addEventListener("keydown", (e) => {
+      e.stopPropagation();
+      if (e.key === "Enter") { this.commitPageInput(); this.pageInput.blur(); }
+      else if (e.key === "Escape") { this.updatePageInput(); this.pageInput.blur(); }
+      else if (e.key === "ArrowUp") { e.preventDefault(); this.stepPage(-1, false); }
+      else if (e.key === "ArrowDown") { e.preventDefault(); this.stepPage(1, false); }
     });
-    this.searchStatus = document.createElement("span");
-    this.searchStatus.className = "page-sidebar-search-status";
-    const prev = document.createElement("button");
-    prev.className = "page-sidebar-search-step";
-    prev.innerHTML = ICON_UP;
-    this.title(prev, "sbSearchPrev", "Previous match (Shift+Enter)");
-    prev.addEventListener("click", () => this.step(-1));
-    const next = document.createElement("button");
-    next.className = "page-sidebar-search-step";
-    next.innerHTML = ICON_DOWN;
-    this.title(next, "sbSearchNext", "Next match (Enter)");
-    next.addEventListener("click", () => this.step(1));
-    bar.append(icon, this.searchInput, this.searchStatus, prev, next);
-    return bar;
+    this.pageInput.addEventListener("blur", () => this.updatePageInput());
+    this.pageTotal = document.createElement("span");
+    this.pageTotal.className = "page-nav-total";
+    const mid = document.createElement("label");
+    mid.className = "page-nav-mid";
+    mid.append(this.pageInput, this.pageTotal);
+    const sep = () => { const d = document.createElement("span"); d.className = "page-nav-sep"; return d; };
+    pill.append(prev, sep(), mid, sep(), next);
+    return pill;
   }
 
-  private emitSearch(): void {
-    if (this.searchTimer) clearTimeout(this.searchTimer);
-    this.searchTimer = null;
-    const q = this.searchInput.value.trim();
-    this.root.classList.toggle("searching", q.length > 0);
-    for (const cb of this.searchHandlers) cb(q);
+  private navArrow(icon: string, dir: 1 | -1, key: keyof Translations, fallback: string): HTMLButtonElement {
+    const b = document.createElement("button");
+    b.className = "page-nav-step";
+    b.innerHTML = icon;
+    this.title(b, key, fallback);
+    b.addEventListener("pointerdown", (e) => {
+      if (e.button !== 0) return;
+      e.preventDefault();
+      this.startHold(dir);
+    });
+    b.addEventListener("pointerleave", () => this.stopHold());
+    b.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" || e.key === " ") { e.preventDefault(); this.stepPage(dir, false); }
+    });
+    return b;
   }
 
-  private step(dir: 1 | -1): void {
-    for (const cb of this.searchStepHandlers) cb(dir);
+  private startHold(dir: 1 | -1): void {
+    this.stopHold();
+    this.navTarget = this.current || 1;
+    this.stepPage(dir, false);
+    this.holdTimer = setTimeout(() => {
+      this.holdTimer = null;
+      this.holdInterval = setInterval(() => this.stepPage(dir, true), HOLD_REPEAT_MS);
+    }, HOLD_DELAY_MS);
+  }
+
+  private stopHold(): void {
+    if (this.holdTimer) clearTimeout(this.holdTimer);
+    if (this.holdInterval) clearInterval(this.holdInterval);
+    this.holdTimer = null;
+    this.holdInterval = null;
+  }
+
+  private stepPage(dir: 1 | -1, instant: boolean): void {
+    const n = this.thumbs.length;
+    if (n === 0) return;
+    const from = this.navTarget || this.current || 1;
+    const to = Math.min(n, Math.max(1, from + dir));
+    if (to === from) { this.stopHold(); return; }
+    this.navTarget = to;
+    this.pageInput.value = String(to);
+    this.sizePageInput();
+    for (const cb of this.goToHandlers) cb(to, instant);
+  }
+
+  private commitPageInput(): void {
+    const v = parseInt(this.pageInput.value, 10);
+    const n = this.thumbs.length;
+    if (!Number.isFinite(v) || n === 0) { this.updatePageInput(); return; }
+    const to = Math.min(n, Math.max(1, v));
+    this.navTarget = to;
+    for (const cb of this.goToHandlers) cb(to, false);
+  }
+
+  private updatePageInput(): void {
+    if (document.activeElement === this.pageInput) return;
+    const n = this.thumbs.length;
+    this.pageInput.value = n ? String(this.navTarget || this.current || 1) : "–";
+    this.pageTotal.textContent = `/ ${n || "–"}`;
+    this.sizePageInput();
+  }
+
+  /** Grows the field with the number of digits, so "1 / 6" and "142 / 2941" both sit tight. */
+  private sizePageInput(): void {
+    const digits = Math.max(String(this.thumbs.length || 1).length, this.pageInput.value.length, 1);
+    this.pageInput.style.width = `${digits + 1}ch`;
+  }
+
+  private updateHeader(): void {
+    if (!this.pageInput) return;
+    this.updatePageInput();
+    const all = this.allSelected();
+    this.selectAllBtn.classList.toggle("on", all);
+    this.selectAllLabel.textContent = all ? this.t("sbDeselectAll", "Deselect all") : this.t("sbSelectAll", "Select all");
+    this.selectAllBtn.disabled = this.busy || this.thumbs.length === 0;
+    const n = this.selected.size;
+    this.deleteLabel.textContent = n > 0
+      ? fmt(this.t("sbDeleteCount", "Delete ({n})"), { n })
+      : this.t("sbDelete", "Delete");
+    this.deleteBtn.disabled = this.busy || n === 0;
+  }
+
+  private allSelected(): boolean {
+    return this.thumbs.length > 0 && this.selected.size === this.thumbs.length;
   }
 
   // ── Thumbnails ──────────────────────────────────────────────────────────────
@@ -438,26 +455,32 @@ export class PageSidebar {
     frame.className = "page-sidebar-frame";
     const canvas = document.createElement("canvas");
     frame.appendChild(canvas);
-
-    const tools = document.createElement("div");
-    tools.className = "page-sidebar-tools";
-    const rotate = this.overlayBtn("page-sidebar-rotate", ICON_ROTATE, () => {
-      if (this.canAct()) for (const cb of this.rotateHandlers) cb([page]);
-    });
-    const del = this.overlayBtn("page-sidebar-remove", ICON_X, () => {
-      if (this.canAct()) for (const cb of this.deleteHandlers) cb([page]);
-    });
-    tools.append(rotate, del);
+    const check = document.createElement("span");
+    check.className = "page-sidebar-check";
+    check.setAttribute("aria-hidden", "true");
     const hits = document.createElement("span");
     hits.className = "page-sidebar-hits";
-    frame.append(tools, hits);
+    frame.append(check, hits);
+    frame.addEventListener("click", (e) => this.handleClick(page, e));
+    frame.addEventListener("dblclick", () => { for (const cb of this.goToHandlers) cb(page, false); });
+    frame.addEventListener("pointerdown", (e) => this.handlePointerDown(page, e));
 
-    const label = document.createElement("span");
-    label.className = "page-sidebar-label";
+    const meta = document.createElement("div");
+    meta.className = "page-sidebar-meta";
+    const num = document.createElement("button");
+    num.className = "page-sidebar-label";
+    num.addEventListener("click", () => { for (const cb of this.goToHandlers) cb(page, false); });
+    const rotate = document.createElement("button");
+    rotate.className = "page-sidebar-rotate";
+    rotate.innerHTML = ICON_ROTATE_LEFT;
+    rotate.addEventListener("click", () => {
+      if (!this.canAct()) return;
+      const pages = this.selected.has(page) ? this.sortedSelection() : [page];
+      for (const cb of this.rotateHandlers) cb(pages, -1);
+    });
+    meta.append(num, rotate);
 
-    card.append(frame, label);
-    card.addEventListener("click", (e) => this.handleClick(page, e));
-    card.addEventListener("pointerdown", (e) => this.handlePointerDown(page, e));
+    card.append(frame, meta);
 
     const thumb: Thumb = { page, card, canvas, rendered: false, task: null };
     this.sizePlaceholder(thumb, dim);
@@ -465,26 +488,17 @@ export class PageSidebar {
     return thumb;
   }
 
-  private overlayBtn(cls: string, icon: string, onClick: () => void): HTMLButtonElement {
-    const b = document.createElement("button");
-    b.className = `page-sidebar-overlay-btn ${cls}`;
-    b.innerHTML = icon;
-    b.addEventListener("pointerdown", (e) => e.stopPropagation());
-    b.addEventListener("click", (e) => {
-      e.stopPropagation();
-      onClick();
-    });
-    return b;
-  }
-
   private labelThumb(thumb: Thumb): void {
     const q = (sel: string) => thumb.card.querySelector(sel) as HTMLElement | null;
     const label = q(".page-sidebar-label");
-    if (label) label.textContent = String(thumb.page);
+    if (label) {
+      label.textContent = String(thumb.page);
+      label.title = this.t("sbShowPage", "Show this page");
+    }
     const rotate = q(".page-sidebar-rotate");
-    if (rotate) rotate.title = this.t("pmRotatePage", "Rotate page");
-    const del = q(".page-sidebar-remove");
-    if (del) del.title = this.t("pmDeletePage", "Delete page");
+    if (rotate) rotate.title = this.t("sbRotateLeft", "Rotate left");
+    const frame = q(".page-sidebar-frame");
+    if (frame) frame.title = this.t("sbToggleHint", "Click to select · double-click to show");
   }
 
   private sizePlaceholder(thumb: Thumb, dim: { width: number; height: number } | undefined): void {
@@ -536,6 +550,7 @@ export class PageSidebar {
 
   // ── Selection ───────────────────────────────────────────────────────────────
 
+  /** A click checks or unchecks the page; Shift extends from the last one clicked. */
   private handleClick(page: number, e: MouseEvent): void {
     if (this.suppressClick) {
       this.suppressClick = false;
@@ -543,22 +558,13 @@ export class PageSidebar {
     }
     if (e.shiftKey && this.anchor !== null) {
       const [a, b] = this.anchor < page ? [this.anchor, page] : [page, this.anchor];
-      if (!(e.ctrlKey || e.metaKey)) this.selected.clear();
       for (let p = a; p <= b; p++) this.selected.add(p);
       this.updateSelectionClasses();
       return;
     }
-    if (e.ctrlKey || e.metaKey) {
-      this.toggleSelected(page);
-      this.anchor = page;
-      this.updateSelectionClasses();
-      return;
-    }
-    // Plain click: this page alone is selected, and shown in the viewer.
-    this.selected = new Set([page]);
+    this.toggleSelected(page);
     this.anchor = page;
     this.updateSelectionClasses();
-    for (const cb of this.goToHandlers) cb(page);
   }
 
   private handleKeydown(e: KeyboardEvent): void {
@@ -593,7 +599,7 @@ export class PageSidebar {
     else this.selected.add(page);
   }
 
-  private selectAll(): void {
+  selectAll(): void {
     for (const t of this.thumbs) this.selected.add(t.page);
     this.updateSelectionClasses();
   }
@@ -621,17 +627,7 @@ export class PageSidebar {
       t.card.setAttribute("aria-selected", String(on));
     }
     this.root.classList.toggle("selecting", this.selected.size > 0);
-    this.updateFooter();
-  }
-
-  private updateFooter(): void {
-    const n = this.selected.size;
-    this.footer.classList.toggle("hidden", n === 0);
-    this.countEl.textContent = fmt(
-      n === 1 ? this.t("sbSelectedOne", "1 page selected") : this.t("sbSelectedMany", "{n} pages selected"),
-      { n },
-    );
-    for (const b of this.actionBtns) b.disabled = this.busy || n === 0;
+    this.updateHeader();
   }
 
   private canAct(): boolean {
@@ -782,23 +778,6 @@ export class PageSidebar {
     }
   }
 
-  private labeledBtn(
-    icon: string,
-    key: keyof Translations,
-    fallback: string,
-    titleKey: keyof Translations,
-    titleFallback: string,
-  ): HTMLButtonElement {
-    const b = document.createElement("button");
-    b.className = "btn btn-sm";
-    b.innerHTML = icon;
-    const span = document.createElement("span");
-    this.text(span, key, fallback);
-    b.append(span);
-    this.title(b, titleKey, titleFallback);
-    return b;
-  }
-
   private t(key: keyof Translations, fallback: string): string {
     const v = this.translations?.[key];
     return typeof v === "string" ? v : fallback;
@@ -807,11 +786,6 @@ export class PageSidebar {
   private text(el: HTMLElement, key: keyof Translations, fallback: string): void {
     el.textContent = fallback;
     this.i18nText.set(el, [key, fallback]);
-  }
-
-  private i18nPlaceholder(el: HTMLInputElement, key: keyof Translations, fallback: string): void {
-    el.placeholder = fallback;
-    this.placeholders.set(el, [key, fallback]);
   }
 
   private title(el: HTMLElement, key: keyof Translations, fallback: string): void {

@@ -258,6 +258,37 @@ export interface Translations {
   sbSearchNext?: string;
   sbSearchNone?: string;
   sbSearching?: string;
+  // Redesigned toolbar and pages panel (optional, English fallback)
+  sbHint?: string;
+  ttPageInput?: string;
+  sbDeselectAll?: string;
+  sbDeleteCount?: string;
+  sbShowPage?: string;
+  sbRotateLeft?: string;
+  sbToggleHint?: string;
+  ttHand?: string;
+  ttSelectText?: string;
+  ttZoomLabel?: string;
+  ttUndo?: string;
+  ttRedo?: string;
+  modeRead?: string;
+  modeAnnotate?: string;
+  modeEdit?: string;
+  btnExport?: string;
+  ttExport?: string;
+  ttSearch?: string;
+  ttSearchClear?: string;
+  ttRename?: string;
+  menuInsertBlank?: string;
+  menuInsertPdf?: string;
+  menuExtractPages?: string;
+  menuSelectAllPages?: string;
+  menuPages3?: string;
+  menuScrollHorizontal?: string;
+  msgRenamed?: string;
+  msgRenameFailed?: string;
+  msgRenameExists?: string;
+  msgRenameInvalid?: string;
 }
 
 // ── English ───────────────────────────────────────────────────────────────────
@@ -506,6 +537,36 @@ const EN: Translations = {
   sbSearchNext: "Next match (Enter)",
   sbSearchNone: "No results",
   sbSearching: "Searching…",
+  sbHint: "Drag pages to reorder them.",
+  ttPageInput: "Type a page number",
+  sbDeselectAll: "Deselect all",
+  sbDeleteCount: "Delete ({n})",
+  sbShowPage: "Show this page",
+  sbRotateLeft: "Rotate left",
+  sbToggleHint: "Click to select, double-click to open",
+  ttHand: "Hand: drag to move around",
+  ttSelectText: "Select text",
+  ttZoomLabel: "Click to reset the zoom, double-click to type a value",
+  ttUndo: "Undo (Ctrl+Z)",
+  ttRedo: "Redo (Ctrl+Y)",
+  modeRead: "Read",
+  modeAnnotate: "Annotate",
+  modeEdit: "Edit",
+  btnExport: "Export",
+  ttExport: "Export a copy",
+  ttSearch: "Search (Ctrl+F)",
+  ttSearchClear: "Clear the search",
+  ttRename: "Click to rename",
+  menuInsertBlank: "Insert blank page",
+  menuInsertPdf: "Insert PDF…",
+  menuExtractPages: "Extract selected pages…",
+  menuSelectAllPages: "Select all pages",
+  menuPages3: "Three pages per row",
+  menuScrollHorizontal: "Horizontal scrolling",
+  msgRenamed: "Renamed to {name}",
+  msgRenameFailed: "Rename failed: {err}",
+  msgRenameExists: "A file with that name already exists.",
+  msgRenameInvalid: "That name can't be used.",
 };
 
 // ── French ────────────────────────────────────────────────────────────────────
@@ -754,6 +815,36 @@ const FR: Translations = {
   sbSearchNext: "Résultat suivant (Entrée)",
   sbSearchNone: "Aucun résultat",
   sbSearching: "Recherche…",
+  sbHint: "Glissez les pages pour les réordonner.",
+  ttPageInput: "Saisir un numéro de page",
+  sbDeselectAll: "Tout désélectionner",
+  sbDeleteCount: "Supprimer ({n})",
+  sbShowPage: "Afficher cette page",
+  sbRotateLeft: "Pivoter à gauche",
+  sbToggleHint: "Cliquer pour sélectionner, double-cliquer pour afficher",
+  ttHand: "Main : glisser pour se déplacer",
+  ttSelectText: "Sélectionner du texte",
+  ttZoomLabel: "Cliquer pour réinitialiser le zoom, double-cliquer pour saisir une valeur",
+  ttUndo: "Annuler (Ctrl+Z)",
+  ttRedo: "Rétablir (Ctrl+Y)",
+  modeRead: "Lire",
+  modeAnnotate: "Annoter",
+  modeEdit: "Éditer",
+  btnExport: "Exporter",
+  ttExport: "Exporter une copie",
+  ttSearch: "Rechercher (Ctrl+F)",
+  ttSearchClear: "Effacer la recherche",
+  ttRename: "Cliquer pour renommer",
+  menuInsertBlank: "Insérer une page blanche",
+  menuInsertPdf: "Insérer un PDF…",
+  menuExtractPages: "Extraire les pages sélectionnées…",
+  menuSelectAllPages: "Sélectionner toutes les pages",
+  menuPages3: "Trois pages par ligne",
+  menuScrollHorizontal: "Défilement horizontal",
+  msgRenamed: "Renommé en {name}",
+  msgRenameFailed: "Échec du renommage : {err}",
+  msgRenameExists: "Un fichier porte déjà ce nom.",
+  msgRenameInvalid: "Ce nom n'est pas valide.",
 };
 
 // ── Chinese (Mandarin) ────────────────────────────────────────────────────────

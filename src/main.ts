@@ -1,6 +1,6 @@
 import { mountWelcomeDots } from "./welcome-dots";
 import { PdfViewer, PdfPageView, renderRedactedPages } from "./pdf-viewer";
-import { Toolbar } from "./toolbar";
+import { Toolbar, isValidFileStem, splitFileName } from "./toolbar";
 import { CompressModal } from "./compress-modal";
 import { PrintModal } from "./print-modal";
 import { SignatureModal } from "./signature-modal";
@@ -39,6 +39,7 @@ import {
   splitPdf,
   pickDirectoryDialog,
   redactPages,
+  renameFile,
 } from "./tauri-bridge";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { mountWindowControls } from "./window-controls";
@@ -221,7 +222,6 @@ viewer.onLayoutChanged((pageViews) => {
 
 document.getElementById("viewer-scroll")!.addEventListener("focused-page-changed", (e: Event) => {
   const { page } = (e as CustomEvent<{ page: number }>).detail;
-  toolbar.updatePageInfo(page, viewer.pageCount);
   pageSidebar.setCurrentPage(page);
 });
 
@@ -230,17 +230,11 @@ document.getElementById("viewer-scroll")!.addEventListener("focused-page-changed
 const infoPanel = new InfoPanel(document.getElementById("app")!);
 infoPanel.onClose = () => toolbar.setInfoOpen(false);
 
-/** Pages moved by the previous/next buttons: one row, or one page when horizontal. */
-function pageStep(): number {
-  return viewer.scrollMode === "horizontal" ? 1 : viewer.columnCount;
-}
-
 async function showInfo(): Promise<void> {
   const doc = viewer.document;
   if (!doc) return;
   const s = settingsModal.getSettings();
-  const target = session.saveTarget ?? "";
-  const name = target.split(/[\\/]/).pop() || target;
+  const name = displayName() ?? "";
   toolbar.setInfoOpen(true);
   await infoPanel.show(doc, name, getTranslations(s.language), s.language);
 }
@@ -309,11 +303,28 @@ function showToast(msg: string, isError = false): void {
   setTimeout(() => toast.classList.add("hidden"), 3000);
 }
 
+/** New file name typed in the title bar, applied by the next Save. */
+let pendingRename: string | null = null;
+
+function fileNameOf(path: string): string {
+  return path.split(/[\\/]/).pop() ?? path;
+}
+
+/** `path` with its file name replaced by `name` (same folder). */
+function withFileName(path: string, name: string): string {
+  const cut = Math.max(path.lastIndexOf("/"), path.lastIndexOf("\\"));
+  return path.slice(0, cut + 1) + name;
+}
+
+/** The name shown in the title bar: the pending rename, or the file's own. */
+function displayName(): string | null {
+  const target = session.saveTarget;
+  return pendingRename ?? (target ? fileNameOf(target) : null);
+}
+
 function setDirty(val: boolean): void {
   session.markDirty(val);
-  const target = session.saveTarget;
-  toolbar.setDocTitle(target ? target.split(/[\\/]/).pop() ?? target : null, val);
-  pageSidebar.setDirty(val);
+  toolbar.setDocTitle(displayName(), val);
   if (val) { void registerCloseGuard(); }
   else      { unregisterCloseGuard(); }
 }
@@ -393,7 +404,6 @@ async function promptPassword(fp: string): Promise<void> {
     setDirty(false);
     setWelcomeVisible(false);
     toolbar.setLoaded(true);
-    toolbar.updatePageInfo(1, viewer.pageCount);
     await applyDefaultZoom();
   } catch {
     showToast(msg("msgWrongPassword"), true);
@@ -407,7 +417,7 @@ function showThumbnails(): void {
   pageSidebar.setCurrentPage(viewer.currentPage);
   // The text changed: search again (without jumping) if a term is entered.
   docSearch.reset(viewer.document);
-  void runSearch(pageSidebar.searchQuery, false);
+  void runSearch(toolbar.search.query, false);
 }
 
 // ── Search in the document ───────────────────────────────────────────────────
@@ -427,12 +437,12 @@ async function runSearch(query: string, jump = true): Promise<void> {
     searchIndex = -1;
     viewer.setSearch("");
     pageSidebar.setHits(new Map());
-    pageSidebar.setSearchStatus("");
+    toolbar.search.setStatus("");
     return;
   }
-  pageSidebar.setSearchStatus(searchText("sbSearching", "Searching…"));
+  toolbar.search.setStatus(searchText("sbSearching", "Searching…"));
   const found = await docSearch.find(query, (done, total) =>
-    pageSidebar.setSearchStatus(`${Math.round((done / total) * 100)}%`));
+    toolbar.search.setStatus(`${Math.round((done / total) * 100)}%`));
   if (!found) return; // superseded by a newer search
   searchMatches = found;
   const hits = new Map<number, number>();
@@ -441,7 +451,7 @@ async function runSearch(query: string, jump = true): Promise<void> {
   if (found.length === 0) {
     searchIndex = -1;
     viewer.setSearch(query);
-    pageSidebar.setSearchStatus(searchText("sbSearchNone", "No results"), true);
+    toolbar.search.setStatus(searchText("sbSearchNone", "No results"), true);
     return;
   }
   const from = found.findIndex((m) => m.page >= viewer.currentPage);
@@ -452,17 +462,16 @@ async function runSearch(query: string, jump = true): Promise<void> {
 function showSearchMatch(scroll: boolean): void {
   const m = searchMatches[searchIndex];
   if (!m) return;
-  viewer.setSearch(pageSidebar.searchQuery, m.page, m.index, scroll);
-  pageSidebar.setSearchStatus(`${searchIndex + 1} / ${searchMatches.length}`);
+  viewer.setSearch(toolbar.search.query, m.page, m.index, scroll);
+  toolbar.search.setStatus(`${searchIndex + 1} / ${searchMatches.length}`);
 }
 
-pageSidebar.onSearch((query) => void runSearch(query));
-pageSidebar.onSearchStep((dir) => {
+toolbar.search.onSearch((query) => void runSearch(query));
+toolbar.search.onStep((dir) => {
   if (searchMatches.length === 0) return;
   searchIndex = (searchIndex + dir + searchMatches.length) % searchMatches.length;
   showSearchMatch(true);
 });
-pageSidebar.onSave(() => void saveFile(false));
 
 function setWelcomeVisible(visible: boolean): void {
   const el = document.getElementById("welcome-screen");
@@ -495,12 +504,12 @@ async function showInViewer(path: string): Promise<string | null> {
   history.clear();
   setWelcomeVisible(false);
   toolbar.setLoaded(true);
-  toolbar.updatePageInfo(1, viewer.pageCount);
   toolbar.updateZoom(viewer.scale);
   return workingCopy;
 }
 
 async function loadPdf(path: string): Promise<void> {
+  pendingRename = null;
   try {
     const workingCopy = await showInViewer(path);
     session.opened(path, workingCopy);
@@ -528,10 +537,13 @@ async function saveFile(forceDialog: boolean): Promise<void> {
   if (!current) return;
   let target = current;
   if (forceDialog) {
-    const picked = await savePdfDialog(current);
+    const picked = await savePdfDialog(pendingRename ? withFileName(current, pendingRename) : current);
     if (!picked) return;
     target = picked;
   }
+  // A plain Save also applies the name typed in the title bar.
+  const renameTo = !forceDialog && pendingRename && pendingRename !== fileNameOf(current)
+    ? withFileName(current, pendingRename) : null;
   const redacting = session.hasRedactions();
   if (redacting) {
     const ok = await ask(msg("msgRedactConfirm"), { title: msg("msgRedactTitle"), kind: "warning" });
@@ -539,6 +551,27 @@ async function saveFile(forceDialog: boolean): Promise<void> {
   }
   try {
     await session.saveTo(target);
+    if (forceDialog) pendingRename = null;
+    if (renameTo) {
+      const page = viewer.currentPage;
+      try {
+        await renameFile(target, renameTo);
+      } catch (err) {
+        pendingRename = null;
+        setDirty(false);
+        const why = String(err);
+        showToast(why.includes("exists") ? msg("msgRenameExists")
+          : why.includes("invalid") ? msg("msgRenameInvalid")
+          : msg("msgRenameFailed", { err: why }), true);
+        return;
+      }
+      // Show the file under its new name (pdf.js reads it from its path).
+      session.saved(renameTo);
+      await loadPdf(renameTo);
+      viewer.goToPage(page, "instant");
+      showToast(msg("msgRenamed", { name: fileNameOf(renameTo) }));
+      return;
+    }
     setDirty(false);
     if (redacting) {
       // Show the saved file: the redacted pages are now images and the
@@ -552,6 +585,57 @@ async function saveFile(forceDialog: boolean): Promise<void> {
     showToast(msg("msgSaveFailed", { err: String(err) }), true);
   }
 }
+
+/** Writes a copy of what is shown (edits included) elsewhere; the open document is unchanged. */
+async function exportCopy(): Promise<void> {
+  const current = session.saveTarget;
+  if (!current || !viewer.isLoaded()) return;
+  const out = await savePdfDialog(pendingRename ? withFileName(current, pendingRename) : current);
+  if (!out) return;
+  try {
+    const all = Array.from({ length: viewer.pageCount }, (_, i) => i + 1);
+    await extractPdfPages(await session.materialize(), out, all);
+    showToast(msg("msgPdfSaved"));
+  } catch (err) {
+    showToast(msg("msgExportFailed", { err: String(err) }), true);
+  }
+}
+
+// ── Hand tool: drag the pages around ─────────────────────────────────────────
+
+const viewerScroll = document.getElementById("viewer-scroll")!;
+let panStart: { x: number; y: number; left: number; top: number; id: number } | null = null;
+
+function handActive(): boolean {
+  return toolbar.pointerMode === "hand" && toolState.tool === "select" && !pendingSignature;
+}
+
+function updateHandMode(): void {
+  viewerScroll.classList.toggle("hand-mode", handActive());
+}
+
+viewerScroll.addEventListener("pointerdown", (e) => {
+  if (e.button !== 0 || !handActive()) return;
+  if ((e.target as HTMLElement).closest("input, textarea, select, a, button")) return;
+  e.preventDefault();
+  panStart = { x: e.clientX, y: e.clientY, left: viewerScroll.scrollLeft, top: viewerScroll.scrollTop, id: e.pointerId };
+  viewerScroll.setPointerCapture(e.pointerId);
+  viewerScroll.classList.add("panning");
+}, { capture: true });
+
+viewerScroll.addEventListener("pointermove", (e) => {
+  if (!panStart || e.pointerId !== panStart.id) return;
+  viewerScroll.scrollLeft = panStart.left - (e.clientX - panStart.x);
+  viewerScroll.scrollTop  = panStart.top  - (e.clientY - panStart.y);
+});
+
+const endPan = (e: PointerEvent) => {
+  if (!panStart || e.pointerId !== panStart.id) return;
+  panStart = null;
+  viewerScroll.classList.remove("panning");
+};
+viewerScroll.addEventListener("pointerup", endPan);
+viewerScroll.addEventListener("pointercancel", endPan);
 
 /**
  * Rasterises pages for printing exactly as the user sees them, including
@@ -640,7 +724,7 @@ async function insertSlots(after: number, inserted: PageSlot[]): Promise<void> {
   if (await editPages(slots, first, select)) showToast(msg("msgPagesUpdated"));
 }
 
-pageSidebar.onGoTo((page) => viewer.goToPage(page));
+pageSidebar.onGoTo((page, instant) => viewer.goToPage(page, instant ? "instant" : "smooth"));
 
 pageSidebar.onVisibilityChange((visible) => toolbar.updateSidebar(visible));
 toolbar.updateSidebar(pageSidebar.visible);
@@ -663,9 +747,10 @@ pageSidebar.onDelete(async (pages) => {
   if (await editPages(slots, keep)) showToast(msg("msgPagesDeleted", { n: pages.length }));
 });
 
-pageSidebar.onRotate(async (pages) => {
+pageSidebar.onRotate(async (pages, quarterTurns) => {
   const turn = new Set(pages);
-  const slots = currentSlots().map((s) => (s.kind === "original" && turn.has(s.page) ? { ...s, rotation: 90 } : s));
+  const rotation = (((quarterTurns * 90) % 360) + 360) % 360;
+  const slots = currentSlots().map((s) => (s.kind === "original" && turn.has(s.page) ? { ...s, rotation } : s));
   await editPages(slots, viewer.currentPage, pages);
 });
 
@@ -850,14 +935,6 @@ toolbar.on(async (e) => {
       }
       break;
 
-    case "page-prev":
-      if (viewer.isLoaded()) viewer.goToPage(viewer.currentPage - pageStep());
-      break;
-
-    case "page-next":
-      if (viewer.isLoaded()) viewer.goToPage(viewer.currentPage + pageStep());
-      break;
-
     case "zoom-real":
       if (viewer.isLoaded()) {
         fitMode = "none"; toolbar.updateFitMode(fitMode);
@@ -883,12 +960,48 @@ toolbar.on(async (e) => {
       else { await showInfo(); }
       break;
 
-    case "page-goto":
-      if (viewer.isLoaded()) viewer.goToPage(e.page);
+    case "export":
+      await exportCopy();
+      break;
+
+    case "rename":
+      if (!session.isOpen) break;
+      if (!isValidFileStem(e.stem)) { showToast(msg("msgRenameInvalid"), true); break; }
+      {
+        const own = fileNameOf(session.saveTarget ?? "");
+        const name = e.stem + splitFileName(own)[1];
+        pendingRename = name === own ? null : name;
+        setDirty(session.isDirty || pendingRename !== null);
+      }
+      break;
+
+    case "mode-change":
+      document.body.dataset["mode"] = e.mode;
+      break;
+
+    case "pointer-mode":
+      updateHandMode();
+      break;
+
+    case "select-all-pages":
+      if (viewer.isLoaded()) { pageSidebar.setVisible(true); pageSidebar.selectAll(); }
+      break;
+
+    case "insert-blank":
+      pageSidebar.requestInsertBlank();
+      break;
+
+    case "insert-pdf":
+      pageSidebar.requestInsertPdf();
+      break;
+
+    case "extract-pages":
+      pageSidebar.requestExportSelection();
       break;
 
     case "tool-change":
       toolState.tool = e.tool;
+      updateHandMode();
       for (const pv of viewer.pageViews) pv.overlay.setTool(e.tool);
       editingTextAnn  = null;
       editingShapeAnn = null;
@@ -998,7 +1111,7 @@ document.addEventListener("keydown", async (e) => {
   }
   if (ctrl && !shift && e.key.toLowerCase() === "f") {
     e.preventDefault();
-    if (viewer.isLoaded()) pageSidebar.focusSearch();
+    if (viewer.isLoaded()) toolbar.search.open();
     return;
   }
   if (ctrl && shift && e.key === "E") {
@@ -1058,6 +1171,7 @@ sigModal.onSignatureReady((imageData: string) => {
   pendingSignature = imageData;
   showSigPreview(imageData);
   document.getElementById("viewer-scroll")!.style.cursor = "none";
+  updateHandMode();
   showToast(msg("msgPlaceSignature"));
 });
 
@@ -1084,6 +1198,7 @@ document.getElementById("viewer-scroll")!.addEventListener("click", (e: MouseEve
   hideSigPreview();
   document.getElementById("viewer-scroll")!.style.cursor = "";
   toolbar.clearActiveTool();
+  updateHandMode();
 });
 
 // ── Context menu ──────────────────────────────────────────────────────────────
@@ -1127,6 +1242,7 @@ window.addEventListener("keydown", async (e: KeyboardEvent) => {
     hideSigPreview();
     document.getElementById("viewer-scroll")!.style.cursor = "";
     showToast(msg("msgSignatureCancelled"));
+    updateHandMode();
   } else if (toolState.tool !== "select") {
     toolState.tool = "select";
     for (const pv of viewer.pageViews) pv.overlay.setTool("select");

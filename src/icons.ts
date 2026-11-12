@@ -69,3 +69,20 @@ export const ICON_SCROLL_HORIZONTAL = lucide(`<rect x="2" y="7" width="8" height
 export const ICON_FILL = lucide(`<path d="m19 11-8-8-8.6 8.6a2 2 0 0 0 0 2.8l5.2 5.2c.8.8 2 .8 2.8 0L19 11Z"/><path d="m5 2 5 5"/><path d="M2 13h15"/><path d="M22 20a2 2 0 1 1-4 0c0-1.6 1.7-2.4 2-4 .3 1.6 2 2.4 2 4Z"/>`);
 export const ICON_NO_FILL = lucide(`<rect x="4" y="4" width="16" height="16" rx="2"/><path d="m5 19 14-14"/>`);
 export const ICON_SIDEBAR = lucide(`<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18"/>`);
+
+// ── Redesigned main toolbar ──────────────────────────────────────────────────
+export const ICON_SAVE = lucide(`<path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><path d="M17 21v-8H7v8M7 3v5h8"/>`);
+export const ICON_UNDO = lucide(`<path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/>`);
+export const ICON_REDO = lucide(`<path d="m15 14 5-5-5-5"/><path d="M20 9H9.5a5.5 5.5 0 0 0 0 11H13"/>`);
+export const ICON_HAND = lucide(`<path d="M18 11V6a2 2 0 0 0-4 0v5M14 10V4a2 2 0 0 0-4 0v6M10 10.5V6a2 2 0 0 0-4 0v8"/><path d="M18 8a2 2 0 1 1 4 0v6a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.86-6-2.34l-3.6-3.6a2 2 0 0 1 2.83-2.82L7 15"/>`);
+export const ICON_POINTER = lucide(`<path d="M5 3l14 7-6 2-2 6z"/>`);
+export const ICON_MINUS = lucide(`<path d="M5 12h14"/>`);
+export const ICON_PLUS = lucide(`<path d="M12 5v14"/><path d="M5 12h14"/>`);
+export const ICON_EXPORT = lucide(`<path d="M14 4h6v6M20 4l-8.5 8.5"/><path d="M19 14v4a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h4"/>`);
+/** An arrow pressing down on curved layers. */
+export const ICON_COMPRESS_LAYERS = lucide(`<path d="M12 2v8"/><path d="m8.5 6.5 3.5 3.5 3.5-3.5"/><path d="M3 12.5Q12 18.5 21 12.5"/><path d="M3 17Q12 21 21 17"/><path d="M3 21.5h18"/>`);
+/** Magnifier with the handle on the left. */
+export const ICON_SEARCH_MIRRORED = lucide(`<circle cx="13" cy="11" r="7"/><path d="m4 20 4.3-4.3"/>`);
+export const ICON_CHEVRON_UP = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 15 6-6 6 6"/></svg>`;
+export const ICON_CHEVRON_DOWN = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>`;
+export const ICON_X_CIRCLE = lucide(`<circle cx="12" cy="12" r="9"/><path d="m9 9 6 6M15 9l-6 6"/>`);
