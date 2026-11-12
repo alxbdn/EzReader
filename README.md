@@ -1,25 +1,25 @@
 <div align="center">
 
-# PDF Rider
+# EzReader
 
 **A fast, lightweight, open-source PDF reader for Windows.**
 Read, annotate, sign, fill forms, and compress — all in a single 5.5 MB portable executable. No installer. No subscription. No telemetry.
 
-[![Latest Release](https://img.shields.io/github/v/release/pleymor/pdf-rider?style=flat-square&label=Download)](https://github.com/pleymor/pdf-rider/releases/latest)
+[![Latest Release](https://img.shields.io/github/v/release/alxbdn/EzReader?style=flat-square&label=Download)](https://github.com/alxbdn/EzReader/releases/latest)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue?style=flat-square)](LICENSE)
 [![Built with Rust](https://img.shields.io/badge/built%20with-Rust-orange?style=flat-square)](https://www.rust-lang.org/)
 
-![PDF Rider main view](docs/screenshots/main-page.png)
-
 </div>
+
+> EzReader is a fork of [PDF Rider](https://github.com/pleymor/pdf-rider) by pleymor.
 
 ---
 
-## Why PDF Rider?
+## Why EzReader?
 
 Most PDF tools are either bloated desktop applications that take minutes to install and gigabytes of disk space, or cloud-based services that upload your documents to a third-party server. PDF Rider is neither.
 
-| | PDF Rider | Adobe Acrobat | Online tools |
+| | EzReader | Adobe Acrobat | Online tools |
 |---|---|---|---|
 | **Binary size** | 5.5 MB | ~4 GB | — |
 | **Installer required** | No | Yes | No |
@@ -68,14 +68,14 @@ Most PDF tools are either bloated desktop applications that take minutes to inst
 
 ### Windows integration
 - **Set as default PDF handler** directly from the app — no admin rights required
-- **Print** silently from the command line (`pdf-rider-portable.exe --print file.pdf`)
+- **Print** silently from the command line (`ezreader-portable.exe --print file.pdf`)
 - Registers both open and print verbs in HKCU
 
 ---
 
 ## Download
 
-**[→ Download the latest release](https://github.com/pleymor/pdf-rider/releases/latest)**
+**[→ Download the latest release](https://github.com/alxbdn/EzReader/releases/latest)**
 
 Single portable `.exe`, 5.5 MB. Drop it anywhere and run it — no installer, no dependencies.
 
@@ -83,7 +83,7 @@ Single portable `.exe`, 5.5 MB. Drop it anywhere and run it — no installer, no
 
 ## Contributing
 
-PDF Rider is built with **Rust + TypeScript + Tauri v2**. The codebase is intentionally small and straightforward. Contributions are welcome.
+EzReader is built with **Rust + TypeScript + Tauri v2**. The codebase is intentionally small and straightforward. Contributions are welcome.
 
 ### Prerequisites
 
@@ -100,8 +100,8 @@ PDF Rider is built with **Rust + TypeScript + Tauri v2**. The codebase is intent
 
 ```bash
 # Clone
-git clone https://github.com/pleymor/pdf-rider.git
-cd pdf-rider
+git clone https://github.com/alxbdn/EzReader.git
+cd EzReader
 
 # Install JS dependencies
 npm install
@@ -111,13 +111,13 @@ npm run tauri dev
 
 # Build a release portable executable
 npm run tauri build
-# Output: src-tauri/target/release/pdf-rider-portable.exe
+# Output: src-tauri/target/release/ezreader-portable.exe
 ```
 
 ### Architecture
 
 ```
-pdf-rider/
+EzReader/
 ├── src/                        # TypeScript frontend (Vite + PDF.js)
 │   ├── main.ts                 # App entrypoint, event wiring
 │   ├── tauri-bridge.ts         # All invoke() wrappers with types
@@ -158,6 +158,10 @@ cd src-tauri && cargo clippy -- -D warnings
 
 # TypeScript: type checks (no emit)
 npx tsc --noEmit
+
+# Tests (also run by CI on every push and pull request)
+npm test
+cd src-tauri && cargo test
 ```
 
 ### Branching & commit conventions
@@ -181,10 +185,12 @@ Feature branches are numbered sequentially. Pick the next available number from 
 
 ### Good first issues
 
-Check the [open issues](https://github.com/pleymor/pdf-rider/issues) — issues labeled [`good first issue`](https://github.com/pleymor/pdf-rider/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22) are a great place to start.
+Check the [open issues](https://github.com/alxbdn/EzReader/issues).
 
 ---
 
 ## License
 
 MIT — see [LICENSE](LICENSE) for details.
+
+EzReader is a fork of [PDF Rider](https://github.com/pleymor/pdf-rider) by pleymor, used under the MIT license. Thanks to the original author for the foundation.

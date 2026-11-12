@@ -73,6 +73,12 @@ jobs:
       - name: Install frontend dependencies
         run: npm ci
 
+      - name: Run tests
+        shell: bash
+        run: |
+          npm test
+          cargo test --manifest-path src-tauri/Cargo.toml
+
       - name: Build Tauri app
         run: npm run tauri build
 
@@ -85,12 +91,12 @@ jobs:
         shell: bash
         run: |
           VERSION="${{ steps.version.outputs.version }}"
-          cp "src-tauri/target/release/pdf-rider-portable.exe" \
-             "pdf-rider-portable-${VERSION}-win-x64.exe"
-          cp "src-tauri/target/release/bundle/nsis/PDF Rider_${VERSION}_x64-setup.exe" \
-             "pdf-rider-${VERSION}-win-x64-setup.exe"
-          cp "msix-output/PDFRider_${VERSION}.0_x64.msix" \
-             "pdf-rider-${VERSION}-win-x64.msix"
+          cp "src-tauri/target/release/ezreader-portable.exe" \
+             "ezreader-portable-${VERSION}-win-x64.exe"
+          cp "src-tauri/target/release/bundle/nsis/EzReader_${VERSION}_x64-setup.exe" \
+             "ezreader-${VERSION}-win-x64-setup.exe"
+          cp "msix-output/EzReader_${VERSION}.0_x64.msix" \
+             "ezreader-${VERSION}-win-x64.msix"
 
       - name: Check pre-release
         id: prerelease
@@ -119,13 +125,14 @@ jobs:
           generate_release_notes: true
           prerelease: ${{ steps.prerelease.outputs.is_prerelease == 'true' }}
           files: |
-            pdf-rider-portable-${{ steps.version.outputs.version }}-win-x64.exe
-            pdf-rider-${{ steps.version.outputs.version }}-win-x64-setup.exe
-            pdf-rider-${{ steps.version.outputs.version }}-win-x64.msix
+            ezreader-portable-${{ steps.version.outputs.version }}-win-x64.exe
+            ezreader-${{ steps.version.outputs.version }}-win-x64-setup.exe
+            ezreader-${{ steps.version.outputs.version }}-win-x64.msix
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Install Microsoft Store Developer CLI
+        if: vars.MICROSOFT_STORE_APP_ID != ''
         shell: pwsh
         run: |
           $release = Invoke-RestMethod "https://api.github.com/repos/microsoft/msstore-cli/releases/latest"
@@ -135,6 +142,7 @@ jobs:
           echo "$env:LOCALAPPDATA\msstore-cli" >> $env:GITHUB_PATH
 
       - name: Configure and submit to Microsoft Store
+        if: vars.MICROSOFT_STORE_APP_ID != ''
         continue-on-error: true
         shell: pwsh
         env:
@@ -147,7 +155,7 @@ jobs:
           New-Item -ItemType Directory -Path $configDir -Force | Out-Null
           $config = @{
             TenantId = $env:MICROSOFT_STORE_TENANT_ID
-            SellerId = 92945690
+            SellerId = ${{ vars.MICROSOFT_STORE_SELLER_ID }}
             ClientId = $env:MICROSOFT_STORE_CLIENT_ID
           } | ConvertTo-Json
           $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
@@ -163,6 +171,6 @@ jobs:
 
           # Submit
           $version = "${{ steps.version.outputs.version }}"
-          $msixFile = "pdf-rider-${version}-win-x64.msix"
+          $msixFile = "ezreader-${version}-win-x64.msix"
           Write-Host "Submitting $msixFile to Microsoft Store..."
-          msstore publish $msixFile --appId 9NJD0V2MC740
+          msstore publish $msixFile --appId ${{ vars.MICROSOFT_STORE_APP_ID }}

@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import type { Annotation, FormFieldValue } from "./models";
+import type { FormFieldValue, StoredAnnotation } from "./models";
 
 /** Opens a file-picker dialog filtered to PDF files. Returns the path or null. */
 export async function openPdfDialog(): Promise<string | null> {
@@ -28,7 +28,7 @@ export async function getPageCount(filePath: string): Promise<number> {
 export async function saveAnnotatedPdf(
   inputPath: string,
   outputPath: string,
-  annotations: Annotation[],
+  annotations: StoredAnnotation[],
   rotationDelta = 0,
   formFields: FormFieldValue[] = [],
 ): Promise<void> {
@@ -56,8 +56,8 @@ export async function stripAnnotationStreams(
  */
 export async function readAnnotations(
   filePath: string
-): Promise<Annotation[]> {
-  return invoke<Annotation[]>("read_annotations", { filePath });
+): Promise<StoredAnnotation[]> {
+  return invoke<StoredAnnotation[]>("read_annotations", { filePath });
 }
 
 export interface StartupArgs {
@@ -158,19 +158,23 @@ export async function openUrl(url: string): Promise<void> {
   return invoke<void>("open_url", { url });
 }
 
-export interface PageOperation {
-  page: number;
-  rotation: number;
-  delete: boolean;
-}
+/** One page of the document built by `rearrangePages`, in output order. */
+export type PageSlot =
+  | { kind: "original"; page: number; rotation: number }
+  | { kind: "blank"; width: number; height: number; rotation: number }
+  | { kind: "imported"; path: string; page: number; rotation: number };
 
-/** Applies per-page rotation and deletion to a PDF, then saves. */
-export async function modifyPages(
+/**
+ * Writes `inputPath` with its pages replaced by `slots` (reordered, rotated,
+ * deleted, blank or taken from other PDFs) to `outputPath`, as an
+ * incremental update.
+ */
+export async function rearrangePages(
   inputPath: string,
   outputPath: string,
-  operations: PageOperation[],
+  slots: PageSlot[],
 ): Promise<void> {
-  return invoke<void>("modify_pages", { inputPath, outputPath, operations });
+  return invoke<void>("rearrange_pages", { inputPath, outputPath, slots });
 }
 
 export interface CompressResult {
@@ -188,4 +192,29 @@ export async function compressPdf(
   level: "screen" | "ebook" | "print",
 ): Promise<CompressResult> {
   return invoke<CompressResult>("compress_pdf", { inputPath, outputPath, level });
+}
+
+/** A page rendered with its redacted areas blacked out, ready to replace the original. */
+export interface RedactedPage {
+  /** 1-based page number. */
+  page: number;
+  /** Base64 JPEG of the page's visible area (pdf.js `page.view`), unrotated. */
+  jpegBase64: string;
+  widthPx: number;
+  heightPx: number;
+  /** The area the image covers, in PDF user space: [x0, y0, x1, y1]. */
+  view: [number, number, number, number];
+}
+
+/**
+ * Replaces each page's content with its image and rewrites the whole file
+ * so the original content (text, images, links, form fields) of those pages
+ * is gone, not just hidden.
+ */
+export async function redactPages(
+  inputPath: string,
+  outputPath: string,
+  pages: RedactedPage[],
+): Promise<void> {
+  return invoke<void>("redact_pages", { inputPath, outputPath, pages });
 }

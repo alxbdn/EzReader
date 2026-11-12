@@ -3,15 +3,8 @@ use std::collections::{HashMap, HashSet};
 use lopdf::{Document, IncrementalDocument, Object, ObjectId};
 use serde::{Deserialize, Serialize};
 
-use crate::pdf::{models::Annotation, writer, writer::FormFieldValue};
-
-#[derive(Debug, Serialize, Deserialize, Clone)]
-#[serde(rename_all = "camelCase")]
-pub struct PageOperation {
-    pub page: u32,
-    pub rotation: i64,
-    pub delete: bool,
-}
+use crate::fsutil;
+use crate::pdf::{models::Annotation, redact, writer, writer::FormFieldValue};
 
 /// Returns the total number of pages in the given PDF file.
 #[tauri::command]
@@ -42,7 +35,7 @@ pub fn save_annotated_pdf(
             })
             .unwrap_or(true);
         if prev_meta_empty {
-            std::fs::copy(&input_path, &output_path).map_err(|e| e.to_string())?;
+            fsutil::copy_atomic(&input_path, &output_path)?;
             return Ok(());
         }
     }
@@ -122,7 +115,7 @@ pub fn save_annotated_pdf(
             inc.opt_clone_object_to_new_document(sid)
                 .map_err(|e| e.to_string())?;
             if let Ok(Object::Stream(s)) = inc.new_document.get_object_mut(sid) {
-                s.content = vec![];
+                writer::set_raw_content(s, vec![]);
             }
         }
     }
@@ -147,7 +140,7 @@ pub fn save_annotated_pdf(
         writer::write_form_fields(&mut inc.new_document, &form_fields)?;
     }
 
-    inc.save(&output_path).map_err(|e| e.to_string())?;
+    fsutil::save_incremental(&mut inc, &output_path)?;
     Ok(())
 }
 
@@ -296,7 +289,7 @@ pub fn strip_annotation_streams(
     if meta_empty {
         // No burn streams to clear; just copy bytes verbatim and avoid lopdf's
         // corruption-prone full rewrite.
-        std::fs::copy(&input_path, &output_path).map_err(|e| e.to_string())?;
+        fsutil::copy_atomic(&input_path, &output_path)?;
         return Ok(false);
     }
 
@@ -307,11 +300,29 @@ pub fn strip_annotation_streams(
         inc.opt_clone_object_to_new_document(sid)
             .map_err(|e| e.to_string())?;
         if let Ok(Object::Stream(s)) = inc.new_document.get_object_mut(sid) {
-            s.content = vec![];
+            writer::set_raw_content(s, vec![]);
         }
     }
-    inc.save(&output_path).map_err(|e| e.to_string())?;
+    fsutil::save_incremental(&mut inc, &output_path)?;
     Ok(true)
+}
+
+/// Writes `input_path` to `output_path` with `pages` replaced by their
+/// redacted images. Always a full rewrite: an incremental update would keep
+/// the original page content in the file's earlier revision.
+#[tauri::command]
+pub fn redact_pages(
+    input_path: String,
+    output_path: String,
+    pages: Vec<redact::RedactedPage>,
+) -> Result<(), String> {
+    let mut doc = Document::load(&input_path).map_err(|e| e.to_string())?;
+    let page_count = doc.get_pages().len();
+    redact::redact_pages(&mut doc, &pages)?;
+    if doc.get_pages().len() != page_count {
+        return Err("Redaction aborted: page count changed".into());
+    }
+    fsutil::save_document(&mut doc, &output_path)
 }
 
 /// Reads editable annotations from the PDF's `CCAnnot` catalog entry.
@@ -322,167 +333,395 @@ pub fn read_annotations(file_path: String) -> Result<Vec<Annotation>, String> {
     Ok(writer::load_meta(&doc).annotations)
 }
 
-/// Applies per-page rotation and deletion to a PDF.
+/// One page of the document produced by [`rearrange_pages`], in output order.
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(tag = "kind", rename_all = "camelCase")]
+pub enum PageSlot {
+    /// Page `page` (1-based) of the input file, turned by `rotation` degrees.
+    Original { page: u32, rotation: i64 },
+    /// A new empty page of `width` × `height` PDF points.
+    Blank { width: f64, height: f64, rotation: i64 },
+    /// Page `page` (1-based) of another PDF file at `path`.
+    Imported { path: String, page: u32, rotation: i64 },
+}
+
+/// Attributes a page may inherit from its ancestors in the page tree
+/// (PDF 32000-1, 7.7.3.4).
+const INHERITABLE: [&[u8]; 4] = [b"Resources", b"MediaBox", b"CropBox", b"Rotate"];
+
+/// Builds a new page list from `slots`: input pages may be reordered, rotated
+/// or left out (deleted), and blank pages or pages of other PDFs inserted.
 ///
 /// Implementation notes
 /// --------------------
 /// We **MUST NOT** round-trip the document through `Document::load` + `save`.
-/// lopdf 0.39's full-save path corrupts content streams on PDFs that use object
+/// lopdf's full-save path corrupts content streams on PDFs that use object
 /// streams (`/ObjStm`) or indirect-reference `/Length` entries (typical of
-/// iLovePDF/Acrobat output): some streams disappear, others lose their length
-/// reference, and the resulting file renders as garbage in Chrome, Edge, and
-/// pdf.js. Pure structural fixes (flattening the page tree, etc.) don't help —
-/// the corruption is at the save layer.
+/// iLovePDF/Acrobat output). Instead, we use `IncrementalDocument`, which
+/// preserves the input bytes verbatim and only appends an incremental update.
 ///
-/// Instead, we use `IncrementalDocument` which preserves the input bytes
-/// verbatim and only appends an incremental update with the modified objects.
-/// Page deletion in this model means: clone the deleted page's parent
-/// `/Pages` dict into the new revision, drop the kid ref, decrement `/Count`,
-/// walk up the parent chain decrementing each ancestor's `/Count`. Rotations
-/// clone the leaf page dict and bump its `/Rotate`. The deleted page objects
-/// stay in the original bytes but become unreferenced, so PDF viewers ignore
-/// them.
+/// The update flattens the page tree: the root `/Pages` node gets the new
+/// page list as its `/Kids`, and every kept page is cloned into the update
+/// with `/Parent` pointing at the root and the attributes it used to inherit
+/// from intermediate nodes copied onto it. Pages left out, and intermediate
+/// nodes, stay in the original bytes but become unreferenced, so viewers
+/// ignore them. Imported pages are deep-copied, with every object they
+/// reference, as new objects of the update.
 #[tauri::command]
-pub fn modify_pages(
+pub fn rearrange_pages(
     input_path: String,
     output_path: String,
-    operations: Vec<PageOperation>,
+    slots: Vec<PageSlot>,
 ) -> Result<(), String> {
+    if slots.is_empty() {
+        return Err("A document needs at least one page".to_string());
+    }
     let mut inc = IncrementalDocument::load(&input_path).map_err(|e| e.to_string())?;
+    let prev_pages = inc.get_prev_documents().get_pages();
 
-    let rotation_map: HashMap<u32, i64> = operations
-        .iter()
-        .filter(|op| !op.delete && op.rotation != 0)
-        .map(|op| (op.page, op.rotation))
-        .collect();
-
-    let delete_set: HashSet<u32> = operations
-        .iter()
-        .filter(|op| op.delete)
-        .map(|op| op.page)
-        .collect();
-
-    let pages = inc.get_prev_documents().get_pages();
-
-    // Rotations: clone the leaf, update /Rotate.
-    for (&page_num, &rot_delta) in &rotation_map {
-        let Some(&page_id) = pages.get(&page_num) else { continue };
-        inc.opt_clone_object_to_new_document(page_id)
-            .map_err(|e| e.to_string())?;
-        if let Ok(Object::Dictionary(dict)) = inc.new_document.get_object_mut(page_id) {
-            let current = dict
-                .get(b"Rotate")
-                .ok()
-                .and_then(|o| o.as_i64().ok())
-                .unwrap_or(0);
-            let new_rotate = (current + rot_delta).rem_euclid(360);
-            dict.set(b"Rotate", Object::Integer(new_rotate));
-        }
-    }
-
-    // Deletions: drop the page from its parent's /Kids, then decrement /Count
-    // up the chain. We do this per deleted page so multi-page deletes within
-    // the same intermediate node accumulate correctly.
-    for &page_num in &delete_set {
-        let Some(&page_id) = pages.get(&page_num) else { continue };
-
-        let direct_parent = inc
-            .get_prev_documents()
-            .get_object(page_id)
-            .and_then(Object::as_dict)
-            .and_then(|d| d.get(b"Parent"))
-            .and_then(Object::as_reference)
-            .map_err(|e| format!("page {page_num} has no /Parent: {e}"))?;
-
-        inc.opt_clone_object_to_new_document(direct_parent)
-            .map_err(|e| e.to_string())?;
-        if let Ok(Object::Dictionary(dict)) = inc.new_document.get_object_mut(direct_parent) {
-            if let Ok(Object::Array(kids)) = dict.get_mut(b"Kids") {
-                kids.retain(|k| k.as_reference().ok() != Some(page_id));
-            }
-            let count = dict
-                .get(b"Count")
-                .and_then(Object::as_i64)
-                .unwrap_or(0);
-            dict.set(b"Count", Object::Integer(count - 1));
-        }
-
-        // Walk the rest of the parent chain decrementing /Count.
-        let mut cursor = direct_parent;
-        let mut depth = 0;
-        loop {
-            depth += 1;
-            if depth > 64 {
-                break;
-            }
-            let next = inc
-                .get_prev_documents()
-                .get_object(cursor)
-                .and_then(Object::as_dict)
-                .and_then(|d| d.get(b"Parent"))
-                .and_then(Object::as_reference);
-            let Ok(next_id) = next else { break };
-            if next_id == cursor {
-                break;
-            }
-            inc.opt_clone_object_to_new_document(next_id)
-                .map_err(|e| e.to_string())?;
-            if let Ok(Object::Dictionary(dict)) = inc.new_document.get_object_mut(next_id) {
-                let count = dict
-                    .get(b"Count")
-                    .and_then(Object::as_i64)
-                    .unwrap_or(0);
-                dict.set(b"Count", Object::Integer(count - 1));
-            }
-            cursor = next_id;
-        }
-    }
-
-    // Update CCAnnot metadata so editable annotations follow the page renumber.
-    let mut meta = writer::load_meta(inc.get_prev_documents());
-    if !delete_set.is_empty() {
-        let sorted_deleted: Vec<u32> = {
-            let mut v: Vec<u32> = delete_set.iter().copied().collect();
-            v.sort();
-            v
-        };
-
-        meta.annotations.retain(|ann| !delete_set.contains(&ann.page()));
-        for ann in &mut meta.annotations {
-            let old_page = ann.page();
-            let shift = sorted_deleted.iter().filter(|&&d| d < old_page).count() as u32;
-            ann.set_page(old_page - shift);
-        }
-
-        let old_ids = std::mem::take(&mut meta.stream_ids);
-        for (page_num, ids) in old_ids {
-            if delete_set.contains(&page_num) {
-                continue;
-            }
-            let shift = sorted_deleted.iter().filter(|&&d| d < page_num).count() as u32;
-            meta.stream_ids.insert(page_num - shift, ids);
-        }
-    }
-
-    // save_meta needs the catalog in new_document so it can set /CCAnnot on it.
     let cat_id = inc
         .get_prev_documents()
         .trailer
         .get(b"Root")
         .and_then(Object::as_reference)
         .map_err(|e| format!("No catalog: {e}"))?;
+    let root_pages = inc
+        .get_prev_documents()
+        .get_object(cat_id)
+        .and_then(Object::as_dict)
+        .and_then(|d| d.get(b"Pages"))
+        .and_then(Object::as_reference)
+        .map_err(|e| format!("No page tree: {e}"))?;
+
+    // Old page number → new page number, for the annotation metadata.
+    let mut renumber: HashMap<u32, u32> = HashMap::new();
+    let mut kids: Vec<Object> = Vec::with_capacity(slots.len());
+
+    // Pages imported from the same file share one importer, so resources they
+    // have in common are copied once.
+    let mut importers: HashMap<String, Importer> = HashMap::new();
+    for slot in &slots {
+        if let PageSlot::Imported { path, .. } = slot {
+            if !importers.contains_key(path) {
+                importers.insert(path.clone(), Importer::load(path)?);
+            }
+        }
+    }
+    // Allocate an id for every imported page before copying anything, so
+    // links between imported pages (annotation /P, ...) stay connected.
+    let mut imported_ids: Vec<Option<ObjectId>> = Vec::with_capacity(slots.len());
+    for slot in &slots {
+        imported_ids.push(match slot {
+            PageSlot::Imported { path, page, .. } => {
+                let importer = importers.get_mut(path).expect("loaded above");
+                Some(importer.reserve_page(*page, &mut inc.new_document)?)
+            }
+            _ => None,
+        });
+    }
+
+    for (index, slot) in slots.iter().enumerate() {
+        let new_num = index as u32 + 1;
+        let (page_id, rotation) = match slot {
+            PageSlot::Original { page, rotation } => {
+                let &page_id = prev_pages
+                    .get(page)
+                    .ok_or_else(|| format!("Page {page} does not exist"))?;
+                if renumber.insert(*page, new_num).is_some() {
+                    return Err(format!("Page {page} is listed twice"));
+                }
+                let inherited = inherited_attributes(inc.get_prev_documents(), page_id);
+                inc.opt_clone_object_to_new_document(page_id)
+                    .map_err(|e| e.to_string())?;
+                let dict = inc
+                    .new_document
+                    .get_object_mut(page_id)
+                    .and_then(Object::as_dict_mut)
+                    .map_err(|e| format!("page {page}: {e}"))?;
+                for (key, value) in inherited {
+                    dict.set(key, value);
+                }
+                (page_id, *rotation)
+            }
+            PageSlot::Blank { width, height, rotation } => {
+                let contents = inc
+                    .new_document
+                    .add_object(lopdf::Stream::new(lopdf::Dictionary::new(), Vec::new()));
+                let mut dict = lopdf::Dictionary::new();
+                dict.set("Type", Object::Name(b"Page".to_vec()));
+                dict.set(
+                    "MediaBox",
+                    Object::Array(vec![0.into(), 0.into(), Object::Real(*width as f32), Object::Real(*height as f32)]),
+                );
+                dict.set("Resources", Object::Dictionary(lopdf::Dictionary::new()));
+                dict.set("Contents", Object::Reference(contents));
+                (inc.new_document.add_object(dict), *rotation)
+            }
+            PageSlot::Imported { path, rotation, .. } => {
+                let page_id = imported_ids[index].expect("reserved above");
+                importers
+                    .get_mut(path)
+                    .expect("loaded above")
+                    .copy_page(page_id, &mut inc.new_document)?;
+                (page_id, *rotation)
+            }
+        };
+
+        let dict = inc
+            .new_document
+            .get_object_mut(page_id)
+            .and_then(Object::as_dict_mut)
+            .map_err(|e| e.to_string())?;
+        dict.set("Parent", Object::Reference(root_pages));
+        if rotation != 0 {
+            let current = dict.get(b"Rotate").and_then(Object::as_i64).unwrap_or(0);
+            dict.set("Rotate", Object::Integer((current + rotation).rem_euclid(360)));
+        }
+        kids.push(Object::Reference(page_id));
+    }
+
+    // Every kept page now carries its inherited attributes itself; drop them
+    // from the root so they don't leak onto blank or imported pages.
+    inc.opt_clone_object_to_new_document(root_pages)
+        .map_err(|e| e.to_string())?;
+    let root = inc
+        .new_document
+        .get_object_mut(root_pages)
+        .and_then(Object::as_dict_mut)
+        .map_err(|e| e.to_string())?;
+    for key in INHERITABLE {
+        root.remove(key);
+    }
+    root.set("Count", Object::Integer(kids.len() as i64));
+    root.set("Kids", Object::Array(kids));
+    root.remove(b"Parent");
+
+    // Editable annotations follow their page; those of removed pages go.
+    let mut meta = writer::load_meta(inc.get_prev_documents());
+    meta.annotations.retain(|ann| renumber.contains_key(&ann.page()));
+    for ann in &mut meta.annotations {
+        ann.set_page(renumber[&ann.page()]);
+    }
+    meta.stream_ids = std::mem::take(&mut meta.stream_ids)
+        .into_iter()
+        .filter_map(|(page, ids)| renumber.get(&page).map(|&p| (p, ids)))
+        .collect();
+
+    // save_meta needs the catalog in new_document so it can set /CCAnnot on it.
     inc.opt_clone_object_to_new_document(cat_id)
         .map_err(|e| e.to_string())?;
     writer::save_meta(&mut inc.new_document, &meta)?;
 
-    inc.save(&output_path).map_err(|e| e.to_string())?;
+    fsutil::save_incremental(&mut inc, &output_path)?;
     Ok(())
+}
+
+/// The inheritable attributes `page_id` lacks itself, taken from its nearest
+/// ancestor that has them.
+fn inherited_attributes(doc: &Document, page_id: ObjectId) -> Vec<(&'static [u8], Object)> {
+    let Ok(page) = doc.get_object(page_id).and_then(Object::as_dict) else {
+        return Vec::new();
+    };
+    let mut found = Vec::new();
+    let mut missing: Vec<&'static [u8]> =
+        INHERITABLE.iter().copied().filter(|k| !page.has(k)).collect();
+    let mut cursor = page.get(b"Parent").and_then(Object::as_reference).ok();
+    let mut depth = 0;
+    while let Some(id) = cursor {
+        depth += 1;
+        if missing.is_empty() || depth > 64 {
+            break;
+        }
+        let Ok(node) = doc.get_object(id).and_then(Object::as_dict) else { break };
+        missing.retain(|key| match node.get(key) {
+            Ok(value) => {
+                found.push((*key, value.clone()));
+                false
+            }
+            Err(_) => true,
+        });
+        cursor = node.get(b"Parent").and_then(Object::as_reference).ok();
+    }
+    found
+}
+
+/// Copies pages of another PDF, and every object they reference, into the
+/// incremental update of the document being edited.
+struct Importer {
+    src: Document,
+    pages: std::collections::BTreeMap<u32, ObjectId>,
+    /// Source object id → id in the edited document.
+    map: HashMap<ObjectId, ObjectId>,
+    /// Id of each reserved page in the edited document → its source id.
+    reserved: HashMap<ObjectId, ObjectId>,
+}
+
+impl Importer {
+    fn load(path: &str) -> Result<Self, String> {
+        let src = Document::load(path).map_err(|e| format!("{path}: {e}"))?;
+        if src.is_encrypted() {
+            return Err(format!("{path}: encrypted PDFs cannot be inserted"));
+        }
+        let pages = src.get_pages();
+        Ok(Self { src, pages, map: HashMap::new(), reserved: HashMap::new() })
+    }
+
+    /// Picks the id page `page` will have in `dst`. Importing the same page
+    /// twice yields two independent copies.
+    fn reserve_page(&mut self, page: u32, dst: &mut Document) -> Result<ObjectId, String> {
+        let &src_id = self
+            .pages
+            .get(&page)
+            .ok_or_else(|| format!("Page {page} does not exist in the inserted file"))?;
+        let new_id = dst.new_object_id();
+        // Links to a page imported twice point at its first copy.
+        self.map.entry(src_id).or_insert(new_id);
+        self.reserved.insert(new_id, src_id);
+        Ok(new_id)
+    }
+
+    /// Writes the page reserved as `new_id` into `dst`.
+    fn copy_page(&mut self, new_id: ObjectId, dst: &mut Document) -> Result<(), String> {
+        let src_id = *self
+            .reserved
+            .get(&new_id)
+            .ok_or_else(|| "internal error: page was not reserved".to_string())?;
+        let mut dict = self
+            .src
+            .get_object(src_id)
+            .and_then(Object::as_dict)
+            .map_err(|e| e.to_string())?
+            .clone();
+        for (key, value) in inherited_attributes(&self.src, src_id) {
+            dict.set(key, value);
+        }
+        // The structure tree and article threads are not carried over.
+        for key in [&b"Parent"[..], b"StructParents", b"B", b"Tabs"] {
+            dict.remove(key);
+        }
+        let copied = self.copy_dict(&dict, dst);
+        dst.objects.insert(new_id, Object::Dictionary(copied));
+        Ok(())
+    }
+
+    fn copy_dict(&mut self, dict: &lopdf::Dictionary, dst: &mut Document) -> lopdf::Dictionary {
+        let mut out = lopdf::Dictionary::new();
+        for (key, value) in dict.iter() {
+            out.set(key.clone(), self.copy_value(value, dst));
+        }
+        out
+    }
+
+    fn copy_value(&mut self, value: &Object, dst: &mut Document) -> Object {
+        match value {
+            Object::Reference(id) => self.copy_ref(*id, dst),
+            Object::Array(items) => {
+                Object::Array(items.iter().map(|o| self.copy_value(o, dst)).collect())
+            }
+            Object::Dictionary(d) => Object::Dictionary(self.copy_dict(d, dst)),
+            Object::Stream(s) => {
+                let mut dict = self.copy_dict(&s.dict, dst);
+                dict.set("Length", Object::Integer(s.content.len() as i64));
+                let mut stream = s.clone();
+                stream.dict = dict;
+                Object::Stream(stream)
+            }
+            other => other.clone(),
+        }
+    }
+
+    fn copy_ref(&mut self, id: ObjectId, dst: &mut Document) -> Object {
+        if let Some(&new_id) = self.map.get(&id) {
+            return Object::Reference(new_id);
+        }
+        let Ok(obj) = self.src.get_object(id) else { return Object::Null };
+        // A link to a page that is not imported (an outline or link target)
+        // would drag the whole source page tree along: cut it.
+        let is_page_node = match obj {
+            Object::Dictionary(d) => d
+                .get(b"Type")
+                .and_then(Object::as_name)
+                .is_ok_and(|t| t == b"Page" || t == b"Pages"),
+            _ => false,
+        };
+        if is_page_node {
+            return Object::Null;
+        }
+        let obj = obj.clone();
+        let new_id = dst.new_object_id();
+        self.map.insert(id, new_id);
+        let copied = self.copy_value(&obj, dst);
+        dst.objects.insert(new_id, copied);
+        Object::Reference(new_id)
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use lopdf::{dictionary, ObjectId};
+
+    use crate::test_util::{fixture, tmp};
+
+    /// The page manager's former rotate/delete-only request.
+    struct PageOperation {
+        page: u32,
+        rotation: i64,
+        delete: bool,
+    }
+
+    fn modify_pages(input: String, output: String, ops: Vec<PageOperation>) -> Result<(), String> {
+        let total = Document::load(&input).unwrap().get_pages().len() as u32;
+        let slots = (1..=total)
+            .filter_map(|page| {
+                let op = ops.iter().find(|op| op.page == page);
+                match op {
+                    Some(op) if op.delete => None,
+                    _ => Some(PageSlot::Original { page, rotation: op.map_or(0, |op| op.rotation) }),
+                }
+            })
+            .collect();
+        rearrange_pages(input, output, slots)
+    }
+
+    fn rect(page: u32, w: f64) -> Annotation {
+        serde_json::from_value(serde_json::json!({
+            "kind": "rect", "page": page, "x": 10.0, "y": 10.0, "width": w,
+            "height": 40.0, "color": {"r": 255, "g": 0, "b": 0}, "strokeWidth": 2.0
+        }))
+        .unwrap()
+    }
+
+    /// Save, re-save with a changed annotation, strip, then delete a page, on a
+    /// PDF with object streams + indirect /Length (iLovePDF / Acrobat style).
+    #[test]
+    fn annotate_resave_strip_and_delete_on_object_stream_pdf() {
+        let first = tmp("first.pdf");
+        let second = tmp("second.pdf");
+        let stripped = tmp("stripped.pdf");
+        let one_page = tmp("one.pdf");
+
+        save_annotated_pdf(fixture("objstm-indirect-length.pdf"), first.clone(), vec![rect(1, 200.0)], 0, vec![]).unwrap();
+        assert_eq!(read_annotations(first.clone()).unwrap().len(), 1);
+
+        // Re-saving rewrites the existing burn stream in place; its /Length
+        // used to stay at the old size.
+        save_annotated_pdf(first.clone(), second.clone(), vec![rect(1, 20.0), rect(1, 30.0)], 0, vec![]).unwrap();
+        crate::test_util::assert_lengths_consistent(&second);
+        assert_eq!(read_annotations(second.clone()).unwrap().len(), 2);
+
+        assert!(strip_annotation_streams(second.clone(), stripped.clone()).unwrap());
+        crate::test_util::assert_lengths_consistent(&stripped);
+
+        modify_pages(second.clone(), one_page.clone(), vec![PageOperation { page: 2, rotation: 0, delete: true }]).unwrap();
+        let doc = Document::load(&one_page).unwrap();
+        assert_eq!(doc.get_pages().len(), 1);
+        assert!(doc.extract_text(&[1]).unwrap().contains("Page 1"));
+
+        for p in [first, second, stripped, one_page] {
+            std::fs::remove_file(p).ok();
+        }
+    }
 
     /// Build a PDF whose page tree mirrors iLovePDF/Acrobat output: a root
     /// /Pages node with several intermediate /Pages nodes, each holding several
@@ -561,8 +800,8 @@ mod tests {
         let (mut doc, _leaves) = build_nested_pdf(20, 4);
         assert_eq!(doc.get_pages().len(), 80);
 
-        let input = std::env::temp_dir().join("pdf-rider-test-multilevel-in.pdf");
-        let output = std::env::temp_dir().join("pdf-rider-test-multilevel-out.pdf");
+        let input = std::env::temp_dir().join("ezreader-test-multilevel-in.pdf");
+        let output = std::env::temp_dir().join("ezreader-test-multilevel-out.pdf");
         doc.save(&input).unwrap();
 
         modify_pages(
@@ -603,13 +842,155 @@ mod tests {
         let _ = std::fs::remove_file(&output);
     }
 
+    fn page_order(path: &str) -> Vec<String> {
+        let doc = Document::load(path).unwrap();
+        doc.get_pages()
+            .keys()
+            .map(|&n| doc.extract_text(&[n]).unwrap_or_default().trim().to_string())
+            .collect()
+    }
+
+    /// Reordering a multi-level tree (and the iLovePDF-style fixture) keeps
+    /// every page readable in the new order; annotations follow their page.
+    #[test]
+    fn rearrange_reorders_pages_and_annotations() {
+        let annotated = tmp("rearrange-annotated.pdf");
+        let out = tmp("rearrange-out.pdf");
+        save_annotated_pdf(fixture("objstm-indirect-length.pdf"), annotated.clone(), vec![rect(1, 50.0)], 0, vec![]).unwrap();
+        let before = page_order(&annotated);
+        assert!(before.len() >= 2);
+
+        rearrange_pages(
+            annotated.clone(),
+            out.clone(),
+            vec![
+                PageSlot::Original { page: 2, rotation: 90 },
+                PageSlot::Original { page: 1, rotation: 0 },
+            ],
+        )
+        .unwrap();
+        crate::test_util::assert_lengths_consistent(&out);
+        let after = page_order(&out);
+        assert_eq!(after, vec![before[1].clone(), before[0].clone()]);
+
+        let anns = read_annotations(out.clone()).unwrap();
+        assert_eq!(anns.len(), 1);
+        assert_eq!(anns[0].page(), 2, "the annotation moves with page 1");
+
+        let doc = Document::load(&out).unwrap();
+        let first = doc.get_pages()[&1];
+        let rotate = doc.get_object(first).unwrap().as_dict().unwrap().get(b"Rotate").unwrap().as_i64().unwrap();
+        assert_eq!(rotate, 90);
+
+        for p in [annotated, out] {
+            std::fs::remove_file(p).ok();
+        }
+    }
+
+    /// Pages under intermediate nodes inherit /MediaBox; flattening must copy
+    /// it down, and blank pages must not inherit anything from the root.
+    #[test]
+    fn rearrange_inserts_blank_pages_and_keeps_inherited_boxes() {
+        let (mut doc, leaves) = build_nested_pdf(2, 2);
+        // Move MediaBox of the first group up to its intermediate node.
+        let mid = doc.get_object(leaves[0]).unwrap().as_dict().unwrap().get(b"Parent").unwrap().as_reference().unwrap();
+        for &leaf in &leaves[..2] {
+            doc.get_object_mut(leaf).unwrap().as_dict_mut().unwrap().remove(b"MediaBox");
+        }
+        doc.get_object_mut(mid).unwrap().as_dict_mut().unwrap().set(
+            "MediaBox",
+            Object::Array(vec![0.into(), 0.into(), 300.into(), 400.into()]),
+        );
+        let input = tmp("rearrange-blank-in.pdf");
+        let out = tmp("rearrange-blank-out.pdf");
+        doc.save(&input).unwrap();
+
+        rearrange_pages(
+            input.clone(),
+            out.clone(),
+            vec![
+                PageSlot::Original { page: 4, rotation: 0 },
+                PageSlot::Blank { width: 200.0, height: 100.0, rotation: 0 },
+                PageSlot::Original { page: 1, rotation: 0 },
+            ],
+        )
+        .unwrap();
+
+        let saved = Document::load(&out).unwrap();
+        let pages = saved.get_pages();
+        assert_eq!(pages.len(), 3);
+        let media = |n: u32| -> Vec<f32> {
+            let dict = saved.get_object(pages[&n]).unwrap().as_dict().unwrap();
+            dict.get(b"MediaBox").unwrap().as_array().unwrap().iter().map(|o| o.as_float().unwrap()).collect()
+        };
+        assert_eq!(media(1), vec![0.0, 0.0, 612.0, 792.0]);
+        assert_eq!(media(2), vec![0.0, 0.0, 200.0, 100.0]);
+        assert_eq!(media(3), vec![0.0, 0.0, 300.0, 400.0], "page 1 keeps the box it inherited");
+
+        for p in [input, out] {
+            std::fs::remove_file(p).ok();
+        }
+    }
+
+    /// Pages of another PDF are copied in with their content and resources.
+    #[test]
+    fn rearrange_imports_pages_from_another_pdf() {
+        let (mut doc, _) = build_nested_pdf(1, 1);
+        let input = tmp("rearrange-import-in.pdf");
+        let out = tmp("rearrange-import-out.pdf");
+        doc.save(&input).unwrap();
+        let other = fixture("objstm-indirect-length.pdf");
+        let other_text = page_order(&other);
+
+        rearrange_pages(
+            input.clone(),
+            out.clone(),
+            vec![
+                PageSlot::Imported { path: other.clone(), page: 2, rotation: 0 },
+                PageSlot::Original { page: 1, rotation: 0 },
+                PageSlot::Imported { path: other.clone(), page: 1, rotation: 180 },
+            ],
+        )
+        .unwrap();
+        crate::test_util::assert_lengths_consistent(&out);
+
+        let after = page_order(&out);
+        assert_eq!(after.len(), 3);
+        assert_eq!(after[0], other_text[1]);
+        assert_eq!(after[2], other_text[0]);
+
+        // A second edit on top of the first still works.
+        let again = tmp("rearrange-import-again.pdf");
+        rearrange_pages(out.clone(), again.clone(), vec![PageSlot::Original { page: 3, rotation: 0 }]).unwrap();
+        assert_eq!(page_order(&again), vec![other_text[0].clone()]);
+
+        for p in [input, out, again] {
+            std::fs::remove_file(p).ok();
+        }
+    }
+
+    #[test]
+    fn rearrange_rejects_empty_and_duplicate_lists() {
+        let (mut doc, _) = build_nested_pdf(2, 1);
+        let input = tmp("rearrange-bad-in.pdf");
+        let out = tmp("rearrange-bad-out.pdf");
+        doc.save(&input).unwrap();
+        assert!(rearrange_pages(input.clone(), out.clone(), vec![]).is_err());
+        let dup = vec![
+            PageSlot::Original { page: 1, rotation: 0 },
+            PageSlot::Original { page: 1, rotation: 0 },
+        ];
+        assert!(rearrange_pages(input.clone(), out.clone(), dup).unwrap_err().contains("twice"));
+        std::fs::remove_file(input).ok();
+    }
+
     /// split_pdf produces one PDF per range with the expected page count
     /// and reuses existing filenames safely via `-2` suffixes.
     #[test]
     fn split_pdf_produces_one_file_per_range() {
         let (mut doc, _) = build_nested_pdf(5, 2); // 10 pages
         let dir = std::env::temp_dir().join(format!(
-            "pdf-rider-split-test-{}",
+            "ezreader-split-test-{}",
             std::process::id()
         ));
         std::fs::create_dir_all(&dir).unwrap();
@@ -657,7 +1038,7 @@ mod tests {
     fn split_pdf_rejects_out_of_range() {
         let (mut doc, _) = build_nested_pdf(3, 1); // 3 pages
         let dir = std::env::temp_dir().join(format!(
-            "pdf-rider-split-oob-test-{}",
+            "ezreader-split-oob-test-{}",
             std::process::id()
         ));
         std::fs::create_dir_all(&dir).unwrap();
@@ -684,15 +1065,15 @@ mod tests {
         let (mut doc, _) = build_nested_pdf(5, 4);
         assert_eq!(doc.get_pages().len(), 20);
 
-        let input = std::env::temp_dir().join("pdf-rider-test-cross-in.pdf");
-        let output = std::env::temp_dir().join("pdf-rider-test-cross-out.pdf");
+        let input = std::env::temp_dir().join("ezreader-test-cross-in.pdf");
+        let output = std::env::temp_dir().join("ezreader-test-cross-out.pdf");
         doc.save(&input).unwrap();
 
         let ops: Vec<PageOperation> = (1..=20)
             .map(|p| PageOperation {
                 page: p,
                 rotation: 0,
-                delete: matches!(p, 5 | 6 | 7),
+                delete: matches!(p, 5..=7),
             })
             .collect();
 
@@ -747,13 +1128,13 @@ fn extract_pages_via_incremental(
         && (1..=total).all(|p| keep.contains(&p));
     if keeping_all {
         // Byte-perfect copy — no incremental update needed.
-        std::fs::copy(input_path, output_path).map_err(|e| e.to_string())?;
+        fsutil::copy_atomic(input_path, output_path)?;
         return Ok(());
     }
 
     let delete_set: HashSet<u32> = (1..=total).filter(|p| !keep.contains(p)).collect();
     apply_page_deletions(&mut inc, &delete_set)?;
-    inc.save(output_path).map_err(|e| e.to_string())?;
+    fsutil::save_incremental(&mut inc, output_path)?;
     Ok(())
 }
 

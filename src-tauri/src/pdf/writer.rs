@@ -510,7 +510,7 @@ pub fn write_annotations_for_page(
         // If we had a previous stream, empty it so stale operators are gone
         if let Some(sid) = existing_stream_id {
             let obj = doc.get_object_mut(sid).map_err(|e| e.to_string())?;
-            if let Object::Stream(s) = obj { s.content = vec![]; }
+            if let Object::Stream(s) = obj { set_raw_content(s, vec![]); }
             return Ok(Some(sid));
         }
         return Ok(None);
@@ -530,7 +530,7 @@ pub fn write_annotations_for_page(
     if let Some(sid) = existing_stream_id {
         let obj = doc.get_object_mut(sid).map_err(|e| e.to_string())?;
         if let Object::Stream(s) = obj {
-            s.content = ops;
+            set_raw_content(s, ops);
             return Ok(Some(sid));
         }
     }
@@ -727,14 +727,22 @@ fn field_on_state_name(dict: &lopdf::Dictionary) -> Vec<u8> {
 /// loaded `Document`. Production code uses `IncrementalDocument` paths (see
 /// `commands::pdf::strip_annotation_streams`) — this helper remains only as a
 /// building block for the round-trip tests below.
+/// Replaces a stream's bytes with uncompressed `content`, keeping `/Length` in
+/// sync and dropping any `/Filter` left over from a previous encoding (for
+/// example after the compress command flate-encoded every stream). Assigning
+/// `stream.content` directly leaves a stale `/Length`, which corrupts the file.
+pub(crate) fn set_raw_content(s: &mut lopdf::Stream, content: Vec<u8>) {
+    s.dict.remove(b"Filter");
+    s.dict.remove(b"DecodeParms");
+    s.set_content(content);
+}
+
 #[cfg(test)]
 fn clear_annotation_streams(doc: &mut Document, meta: &AnnotationMeta) -> Result<(), String> {
     for arr in meta.stream_ids.values() {
         let sid = (arr[0], arr[1] as u16);
-        if let Ok(obj) = doc.get_object_mut(sid) {
-            if let Object::Stream(s) = obj {
-                s.content = vec![];
-            }
+        if let Ok(Object::Stream(s)) = doc.get_object_mut(sid) {
+            set_raw_content(s, vec![]);
         }
     }
     Ok(())
@@ -1133,7 +1141,7 @@ mod tests {
 
         let mut meta = load_meta(&doc);
         let existing = meta.stream_ids.get(&1).map(|arr| (arr[0], arr[1] as u16));
-        let sid = write_annotations_for_page(&mut doc, page_id, &[ann.clone()], existing)
+        let sid = write_annotations_for_page(&mut doc, page_id, std::slice::from_ref(&ann), existing)
             .unwrap()
             .expect("should return a stream id");
 
@@ -1201,7 +1209,7 @@ mod tests {
         // 2. First save (no existing meta)
         let mut meta = load_meta(&doc);
         let existing = meta.stream_ids.get(&1).map(|arr| (arr[0], arr[1] as u16));
-        let sid = write_annotations_for_page(&mut doc, page_id, &[ann.clone()], existing)
+        let sid = write_annotations_for_page(&mut doc, page_id, std::slice::from_ref(&ann), existing)
             .unwrap().unwrap();
         meta.annotations = vec![ann.clone()];
         meta.stream_ids.insert(1, [sid.0, sid.1 as u32]);
@@ -1216,9 +1224,9 @@ mod tests {
         let pages2 = doc2.get_pages();
         let page_id2 = *pages2.get(&1).unwrap();
         let existing2 = meta2.stream_ids.get(&1).map(|arr| (arr[0], arr[1] as u16));
-        let sid2 = write_annotations_for_page(&mut doc2, page_id2, &[ann.clone()], existing2)
+        let sid2 = write_annotations_for_page(&mut doc2, page_id2, std::slice::from_ref(&ann), existing2)
             .unwrap().unwrap();
-        let mut new_meta = AnnotationMeta {
+        let new_meta = AnnotationMeta {
             annotations: vec![ann],
             stream_ids: HashMap::from([(1, [sid2.0, sid2.1 as u32])]),
         };

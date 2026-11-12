@@ -6,15 +6,19 @@
   xmlns:rescap="http://schemas.microsoft.com/appx/manifest/foundation/windows10/restrictedcapabilities"
   IgnorableNamespaces="uap uap3 rescap">
 
+  <!-- Name and Publisher must match the identity reserved for EzReader in
+       Microsoft Partner Center (Product identity page). The values below are
+       placeholders: the previous ones belonged to the upstream PDF Rider
+       listing. -->
   <Identity
-    Name="Pleymor.pdf-rider"
-    Publisher="CN=B79D1225-9D8B-4940-8036-D7FDBD5EA2D3"
+    Name="EzReader"
+    Publisher="CN=00000000-0000-0000-0000-000000000000"
     Version="0.0.0.0"
     ProcessorArchitecture="x64" />
 
   <Properties>
-    <DisplayName>PDF Rider</DisplayName>
-    <PublisherDisplayName>Pleymor</PublisherDisplayName>
+    <DisplayName>EzReader</DisplayName>
+    <PublisherDisplayName>alxbdn</PublisherDisplayName>
     <Logo>icons\StoreLogo.png</Logo>
     <Description>A simple, lightweight PDF reader with annotations and signing</Description>
   </Properties>
@@ -29,9 +33,9 @@
   </Resources>
 
   <Applications>
-    <Application Id="App" Executable="pdf-rider-portable.exe" EntryPoint="Windows.FullTrustApplication">
+    <Application Id="App" Executable="ezreader-portable.exe" EntryPoint="Windows.FullTrustApplication">
       <uap:VisualElements
-        DisplayName="PDF Rider"
+        DisplayName="EzReader"
         Description="A simple, lightweight PDF reader with annotations and signing"
         BackgroundColor="transparent"
         Square150x150Logo="icons\Square150x150Logo.png"

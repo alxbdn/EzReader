@@ -1,7 +1,12 @@
 mod commands;
+mod fsutil;
 mod pdf;
+#[cfg(test)]
+mod test_util;
 
 use std::sync::Mutex;
+
+use tauri::{DragDropEvent, Manager, WindowEvent};
 
 #[derive(Debug, Default, Clone, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -12,6 +17,15 @@ pub struct StartupArgs {
 
 pub struct AppState {
     pub startup_args: Mutex<StartupArgs>,
+}
+
+/// Lets the webview read `path` through the asset protocol (pdf.js loads the
+/// document that way). The static scope in tauri.conf.json only covers the
+/// app's own temp files; documents are allowed one by one when the user picks
+/// them (open dialog, drag and drop, command line), so a compromised page
+/// cannot read arbitrary files from disk.
+pub(crate) fn allow_viewing<R: tauri::Runtime, M: Manager<R>>(app: &M, path: &str) {
+    let _ = app.asset_protocol_scope().allow_file(path);
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -30,8 +44,23 @@ pub fn run() {
         }
     }
 
+    let startup_file = startup.file_path.clone();
+
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
+        .setup(move |app| {
+            if let Some(path) = &startup_file {
+                allow_viewing(app, path);
+            }
+            Ok(())
+        })
+        .on_window_event(|window, event| {
+            if let WindowEvent::DragDrop(DragDropEvent::Drop { paths, .. }) = event {
+                for p in paths {
+                    allow_viewing(window, &p.to_string_lossy());
+                }
+            }
+        })
         .manage(AppState {
             startup_args: Mutex::new(startup),
         })
@@ -44,9 +73,10 @@ pub fn run() {
             commands::pdf::save_annotated_pdf,
             commands::pdf::strip_annotation_streams,
             commands::pdf::read_annotations,
-            commands::pdf::modify_pages,
+            commands::pdf::rearrange_pages,
             commands::pdf::extract_pdf_pages,
             commands::pdf::split_pdf,
+            commands::pdf::redact_pages,
             commands::shell::list_printers,
             commands::shell::print_pages,
             commands::shell::get_startup_args,
