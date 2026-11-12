@@ -45,6 +45,8 @@ export interface RectAnnotation extends BaseAnnotation {
   height: number;
   color: RgbColor;
   strokeWidth: number;
+  /** Interior colour; null or absent means hollow. */
+  fillColor?: RgbColor | null;
 }
 
 export interface CircleAnnotation extends BaseAnnotation {
@@ -53,9 +55,25 @@ export interface CircleAnnotation extends BaseAnnotation {
   height: number;
   color: RgbColor;
   strokeWidth: number;
+  /** Interior colour; null or absent means hollow. */
+  fillColor?: RgbColor | null;
 }
 
 export type TextAlignmentValue = "left" | "center" | "right";
+
+/** PDF standard fonts: available in every viewer without embedding. */
+export type FontFamilyValue = "helvetica" | "times" | "courier";
+
+export const FONT_FAMILIES: { value: FontFamilyValue; label: string; css: string }[] = [
+  { value: "helvetica", label: "Helvetica", css: `"Segoe UI", Helvetica, Arial, sans-serif` },
+  { value: "times",     label: "Times",     css: `"Times New Roman", Times, serif` },
+  { value: "courier",   label: "Courier",   css: `"Courier New", Courier, monospace` },
+];
+
+/** CSS font-family list that looks like the PDF font the text will be saved with. */
+export function fontCss(family: FontFamilyValue | undefined): string {
+  return (FONT_FAMILIES.find(f => f.value === family) ?? FONT_FAMILIES[0]).css;
+}
 
 export interface TextAnnotation extends BaseAnnotation {
   kind: "text";
@@ -68,6 +86,8 @@ export interface TextAnnotation extends BaseAnnotation {
   italic: boolean;
   underline: boolean;
   alignment: TextAlignmentValue;
+  /** Absent in files saved before font choice existed (Helvetica). */
+  fontFamily?: FontFamilyValue;
 }
 
 export interface SignatureAnnotation extends BaseAnnotation {
@@ -125,6 +145,11 @@ export interface ActiveToolState {
   italic: boolean;
   underline: boolean;
   alignment: TextAlignmentValue;
+  fontFamily: FontFamilyValue;
+  /** Outline colour of rectangles and ellipses (text uses `color`). */
+  shapeColor: RgbColor;
+  /** Interior colour of new shapes, or null for hollow. */
+  fillColor: RgbColor | null;
   strokeWidth: number;
 }
 
@@ -137,6 +162,10 @@ export function defaultToolState(): ActiveToolState {
     italic: false,
     underline: false,
     alignment: "left",
+    fontFamily: "helvetica",
+    // Red reads on white pages and on the dark toolbar alike.
+    shapeColor: { r: 229, g: 57, b: 53 },
+    fillColor: null,
     strokeWidth: 1.5,
   };
 }

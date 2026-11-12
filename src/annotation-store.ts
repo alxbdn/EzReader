@@ -67,6 +67,16 @@ export class AnnotationStore {
     }
   }
 
+  /** Moves `ann` one layer up (+1, drawn later) or down (-1) on its page. */
+  moveLayer(ann: Annotation, step: 1 | -1): void {
+    const list = this.store.get(ann.page);
+    if (!list) return;
+    const idx = list.indexOf(ann);
+    const to = idx + step;
+    if (idx === -1 || to < 0 || to >= list.length) return;
+    [list[idx], list[to]] = [list[to], list[idx]];
+  }
+
   replaceAll(anns: Annotation[]): void {
     this.store.clear();
     for (const ann of anns) this.add(ann);

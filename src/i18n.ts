@@ -188,6 +188,41 @@ export interface Translations {
   btnRedact?: string;
   ttRedact?: string;
   ttResetZoom?: string;
+  ttRealSize?: string;
+  ttPages1?: string;
+  ttPages2?: string;
+  ttPages3?: string;
+  ttScrollVertical?: string;
+  ttScrollHorizontal?: string;
+  ttInfo?: string;
+  ttFont?: string;
+  ttLayerUp?: string;
+  ttLayerDown?: string;
+  ttFillColor?: string;
+  ttNoFill?: string;
+  lblOutline?: string;
+  lblFill?: string;
+  infoTitle?: string;
+  infoFileName?: string;
+  infoKind?: string;
+  infoKindPdf?: string;
+  infoVersion?: string;
+  infoPages?: string;
+  infoPageSize?: string;
+  infoDocTitle?: string;
+  infoAuthor?: string;
+  infoSubject?: string;
+  infoProducer?: string;
+  infoCreator?: string;
+  infoCreated?: string;
+  infoModified?: string;
+  infoKeywords?: string;
+  settingsRealSize?: string;
+  settingsRealSizeHint?: string;
+  wcMinimize?: string;
+  wcMaximize?: string;
+  wcRestore?: string;
+  wcClose?: string;
   settingsDefaultZoom?: string;
   settingsZoomFitWidth?: string;
   settingsZoomFitPage?: string;
@@ -402,6 +437,41 @@ const EN: Translations = {
   btnRedact:            "Redact",
   ttRedact:             "Redact: black out an area (permanent once saved)",
   ttResetZoom:          "Reset zoom to default (Ctrl+0)",
+  ttRealSize:           "Actual size (1:1)",
+  ttPages1:             "One page per row",
+  ttPages2:             "Two pages per row",
+  ttPages3:             "Three pages per row",
+  ttScrollVertical:     "Scroll vertically",
+  ttScrollHorizontal:   "Scroll horizontally",
+  ttInfo:               "Document info",
+  ttFont:               "Font",
+  ttLayerUp:            "Bring forward",
+  ttLayerDown:          "Send backward",
+  ttFillColor:          "Fill colour",
+  ttNoFill:             "No fill",
+  lblOutline:           "Outline",
+  lblFill:              "Fill",
+  infoTitle:            "Document info",
+  infoFileName:         "File name",
+  infoKind:             "Kind",
+  infoKindPdf:          "PDF document",
+  infoVersion:          "PDF version",
+  infoPages:            "Pages",
+  infoPageSize:         "Page size",
+  infoDocTitle:         "Title",
+  infoAuthor:           "Author",
+  infoSubject:          "Subject",
+  infoProducer:         "PDF producer",
+  infoCreator:          "Content creator",
+  infoCreated:          "Created",
+  infoModified:         "Modified",
+  infoKeywords:         "Keywords",
+  settingsRealSize:     "Actual size calibration",
+  settingsRealSizeHint: "Drag the slider until the card on screen is the size of a real bank card.",
+  wcMinimize:           "Minimize",
+  wcMaximize:           "Maximize",
+  wcRestore:            "Restore",
+  wcClose:              "Close",
   settingsDefaultZoom:  "Default zoom",
   settingsZoomFitWidth: "Fit width",
   settingsZoomFitPage:  "Fit page",
@@ -615,6 +685,41 @@ const FR: Translations = {
   btnRedact:            "Caviarder",
   ttRedact:             "Caviarder : masquer une zone (définitif à l'enregistrement)",
   ttResetZoom:          "Revenir au zoom par défaut (Ctrl+0)",
+  ttRealSize:           "Taille réelle (1:1)",
+  ttPages1:             "1 page par ligne",
+  ttPages2:             "2 pages par ligne",
+  ttPages3:             "3 pages par ligne",
+  ttScrollVertical:     "Défilement vertical",
+  ttScrollHorizontal:   "Défilement horizontal",
+  ttInfo:               "Infos du document",
+  ttFont:               "Police",
+  ttLayerUp:            "Monter d'une couche",
+  ttLayerDown:          "Descendre d'une couche",
+  ttFillColor:          "Couleur de remplissage",
+  ttNoFill:             "Sans remplissage",
+  lblOutline:           "Contour",
+  lblFill:              "Remplissage",
+  infoTitle:            "Infos du document",
+  infoFileName:         "Nom du fichier",
+  infoKind:             "Type",
+  infoKindPdf:          "Document PDF",
+  infoVersion:          "Version PDF",
+  infoPages:            "Pages",
+  infoPageSize:         "Format de page",
+  infoDocTitle:         "Titre",
+  infoAuthor:           "Auteur",
+  infoSubject:          "Sujet",
+  infoProducer:         "Producteur PDF",
+  infoCreator:          "Créateur du contenu",
+  infoCreated:          "Création",
+  infoModified:         "Modification",
+  infoKeywords:         "Mots-clés",
+  settingsRealSize:     "Calibrage de la taille réelle",
+  settingsRealSizeHint: "Ajuste le curseur jusqu'à ce que la carte à l'écran ait la taille d'une vraie carte bancaire.",
+  wcMinimize:           "Réduire",
+  wcMaximize:           "Agrandir",
+  wcRestore:            "Restaurer",
+  wcClose:              "Fermer",
   settingsDefaultZoom:  "Zoom par défaut",
   settingsZoomFitWidth: "Ajuster à la largeur",
   settingsZoomFitPage:  "Page entière",

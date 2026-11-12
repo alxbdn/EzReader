@@ -1,5 +1,6 @@
 import {
   canvasToPdf,
+  fontCss,
   hexToRgb,
   pdfToCanvas,
   rgbToCss,
@@ -26,7 +27,7 @@ interface PdfViewport {
 type AnnotationCreatedHandler      = (ann: Annotation) => void;
 type AnnotationMovedHandler        = (ann: Annotation) => void;
 type AnnotationRemovedHandler      = (ann: Annotation) => void;
-type AnnotationReorderHandler      = (ann: Annotation, dir: "front" | "back") => void;
+type AnnotationReorderHandler      = (ann: Annotation, dir: "up" | "down") => void;
 type TextAnnotationSelectedHandler  = (ann: TextAnnotation | null) => void;
 type ShapeAnnotationSelectedHandler = (ann: RectAnnotation | CircleAnnotation | null) => void;
 type ResizeHandle = "nw" | "n" | "ne" | "e" | "se" | "s" | "sw" | "w";
@@ -135,7 +136,7 @@ export class CanvasOverlay {
   private emit             (a: Annotation): void { this.createdHandlers.forEach(h => h(a)); }
   private emitMoved        (a: Annotation): void { this.movedHandlers.forEach(h => h(a)); }
   private emitRemoved      (a: Annotation): void { this.removedHandlers.forEach(h => h(a)); }
-  private emitReordered    (a: Annotation, dir: "front" | "back"): void {
+  private emitReordered    (a: Annotation, dir: "up" | "down"): void {
     this.reorderHandlers.forEach(h => h(a, dir));
   }
   private emitTextSelected  (a: TextAnnotation | null):                void { this.textSelectedHandlers.forEach(h => h(a)); }
@@ -144,10 +145,16 @@ export class CanvasOverlay {
   get currentTool(): ToolKind { return this.activeTool; }
 
   /** Apply shape style fields to an existing rect/circle and redraw. */
-  applyShapeAnnotationStyle(ann: RectAnnotation | CircleAnnotation, color: RgbColor, strokeWidth: number): void {
+  applyShapeAnnotationStyle(
+    ann: RectAnnotation | CircleAnnotation,
+    color: RgbColor,
+    strokeWidth: number,
+    fillColor: RgbColor | null,
+  ): void {
     this.emitBeforeModify();
     ann.color = { ...color };
     ann.strokeWidth = strokeWidth;
+    ann.fillColor = fillColor ? { ...fillColor } : null;
     this.redrawCommitted();
     this.emitMoved(ann);
   }
@@ -155,10 +162,11 @@ export class CanvasOverlay {
   /** Apply text style fields to an existing annotation and redraw. */
   applyTextAnnotationStyle(
     ann: TextAnnotation,
-    style: Pick<ActiveToolState, "color" | "fontSize" | "bold" | "italic" | "underline" | "alignment">
+    style: Pick<ActiveToolState, "color" | "fontSize" | "bold" | "italic" | "underline" | "alignment" | "fontFamily">
   ): void {
     this.emitBeforeModify();
     ann.color     = { ...style.color };
+    ann.fontFamily = style.fontFamily;
     ann.fontSize  = style.fontSize;
     ann.bold      = style.bold;
     ann.italic    = style.italic;
@@ -437,7 +445,7 @@ export class CanvasOverlay {
   private textLineCount(ann: TextAnnotation): number {
     const { scale } = this;
     const saved = this.ctx.font;
-    this.ctx.font = `${ann.italic ? "italic" : "normal"} ${ann.bold ? "bold" : "300"} ${ann.fontSize * scale}px Segoe UI, Helvetica, Arial, sans-serif`;
+    this.ctx.font = `${ann.italic ? "italic" : "normal"} ${ann.bold ? "bold" : "300"} ${ann.fontSize * scale}px ${fontCss(ann.fontFamily)}`;
     const count = this.wrapLines(this.ctx, ann.content, ann.width * scale).length;
     this.ctx.font = saved;
     return count;
@@ -471,20 +479,27 @@ export class CanvasOverlay {
     if (ann.kind === "rect") {
       const [x1, y1] = this.toCanvas(ann.x, ann.y + ann.height); // PDF top-left
       const [x2, y2] = this.toCanvas(ann.x + ann.width, ann.y);  // PDF bottom-right
-      ctx.strokeStyle = rgbToCss(ann.color);
-      ctx.lineWidth   = ann.strokeWidth;
-      ctx.strokeRect(Math.min(x1, x2), Math.min(y1, y2), Math.abs(x2 - x1), Math.abs(y2 - y1));
+      const l = Math.min(x1, x2), t = Math.min(y1, y2), w = Math.abs(x2 - x1), h = Math.abs(y2 - y1);
+      if (ann.fillColor) { ctx.fillStyle = rgbToCss(ann.fillColor); ctx.fillRect(l, t, w, h); }
+      if (ann.strokeWidth > 0) {
+        ctx.strokeStyle = rgbToCss(ann.color);
+        ctx.lineWidth   = ann.strokeWidth * scale;
+        ctx.strokeRect(l, t, w, h);
+      }
 
     } else if (ann.kind === "circle") {
       const [x1, y1] = this.toCanvas(ann.x, ann.y + ann.height);
       const [x2, y2] = this.toCanvas(ann.x + ann.width, ann.y);
       const cx = (x1 + x2) / 2;
       const cy = (y1 + y2) / 2;
-      ctx.strokeStyle = rgbToCss(ann.color);
-      ctx.lineWidth   = ann.strokeWidth;
       ctx.beginPath();
       ctx.ellipse(cx, cy, Math.abs(x2 - x1) / 2, Math.abs(y2 - y1) / 2, 0, 0, Math.PI * 2);
-      ctx.stroke();
+      if (ann.fillColor) { ctx.fillStyle = rgbToCss(ann.fillColor); ctx.fill(); }
+      if (ann.strokeWidth > 0) {
+        ctx.strokeStyle = rgbToCss(ann.color);
+        ctx.lineWidth   = ann.strokeWidth * scale;
+        ctx.stroke();
+      }
 
     } else if (ann.kind === "text") {
       const [x, y] = this.toCanvas(ann.x, ann.y);
@@ -493,7 +508,7 @@ export class CanvasOverlay {
       ctx.translate(x, y);
       if (rotRad !== 0) ctx.rotate(rotRad);
       ctx.fillStyle = rgbToCss(ann.color);
-      ctx.font      = `${ann.italic ? "italic" : "normal"} ${ann.bold ? "bold" : "300"} ${ann.fontSize * scale}px Segoe UI, Helvetica, Arial, sans-serif`;
+      ctx.font      = `${ann.italic ? "italic" : "normal"} ${ann.bold ? "bold" : "300"} ${ann.fontSize * scale}px ${fontCss(ann.fontFamily)}`;
       ctx.textAlign = ann.alignment as CanvasTextAlign;
       const lineH   = ann.fontSize * scale * 1.2;
       const maxW    = ann.width * scale;
@@ -553,9 +568,16 @@ export class CanvasOverlay {
     const y0 = Math.min(this.startY, curY);
     const w  = Math.abs(curX - this.startX);
     const h  = Math.abs(curY - this.startY);
-    ctx.strokeStyle = rgbToCss(this.style.color);
-    ctx.lineWidth   = this.style.strokeWidth;
+    ctx.strokeStyle = rgbToCss(this.style.shapeColor);
+    ctx.lineWidth   = Math.max(1, this.style.strokeWidth * this.scale);
     ctx.setLineDash([4, 3]);
+    if (this.style.fillColor && (this.activeTool === "rect" || this.activeTool === "circle")) {
+      ctx.fillStyle = rgbToCss(this.style.fillColor);
+      ctx.globalAlpha = 0.6;
+      if (this.activeTool === "rect") ctx.fillRect(x0, y0, w, h);
+      else { ctx.beginPath(); ctx.ellipse(x0 + w / 2, y0 + h / 2, w / 2, h / 2, 0, 0, Math.PI * 2); ctx.fill(); }
+      ctx.globalAlpha = 1;
+    }
     if (this.activeTool === "rect") {
       ctx.strokeRect(x0, y0, w, h);
     } else if (this.activeTool === "redact") {
@@ -755,7 +777,8 @@ export class CanvasOverlay {
       const ann: RectAnnotation = {
         kind: "rect", page: this.currentPage,
         x: px, y: py, width: pw, height: ph,
-        color: { ...this.style.color }, strokeWidth: this.style.strokeWidth,
+        color: { ...this.style.shapeColor }, strokeWidth: this.style.strokeWidth,
+        fillColor: this.style.fillColor ? { ...this.style.fillColor } : null,
       };
       this.committed.push(ann);
       this.redrawCommitted();
@@ -772,7 +795,8 @@ export class CanvasOverlay {
       const ann: CircleAnnotation = {
         kind: "circle", page: this.currentPage,
         x: px, y: py, width: pw, height: ph,
-        color: { ...this.style.color }, strokeWidth: this.style.strokeWidth,
+        color: { ...this.style.shapeColor }, strokeWidth: this.style.strokeWidth,
+        fillColor: this.style.fillColor ? { ...this.style.fillColor } : null,
       };
       this.committed.push(ann);
       this.redrawCommitted();
@@ -835,7 +859,7 @@ export class CanvasOverlay {
       position: absolute;
       left: ${left}px; top: ${top}px;
       ${hasWidth ? `width: ${widthPx}px;` : "min-width: 120px;"}
-      font-size: ${fontSize}px; line-height: 1.2; font-family: Segoe UI, Helvetica, Arial, sans-serif;
+      font-size: ${fontSize}px; line-height: 1.2; font-family: ${fontCss(this.style.fontFamily)};
       font-weight: ${this.style.bold ? "bold" : "300"};
       font-style: ${this.style.italic ? "italic" : "normal"};
       text-decoration: ${this.style.underline ? "underline" : "none"};
@@ -878,6 +902,7 @@ export class CanvasOverlay {
           fontSize: this.style.fontSize,
           bold: this.style.bold, italic: this.style.italic, underline: this.style.underline,
           alignment: this.style.alignment,
+          fontFamily: this.style.fontFamily,
         };
         this.committed.push(ann);
         this.redrawCommitted();
@@ -913,16 +938,13 @@ export class CanvasOverlay {
     e.preventDefault(); // suppress browser context menu
   };
 
-  reorderTextAnnotation(ann: Annotation, dir: "front" | "back"): void {
-    this.reorderAnnotation(ann, dir);
-  }
-
-  private reorderAnnotation(ann: Annotation, dir: "front" | "back"): void {
+  /** Moves `ann` one layer up or down among this page's annotations. */
+  reorderAnnotation(ann: Annotation, dir: "up" | "down"): void {
     const idx = this.committed.indexOf(ann);
-    if (idx === -1) return;
-    this.committed.splice(idx, 1);
-    if (dir === "front") this.committed.push(ann);
-    else this.committed.unshift(ann);
+    const to = idx + (dir === "up" ? 1 : -1);
+    if (idx === -1 || to < 0 || to >= this.committed.length) return;
+    this.emitBeforeModify();
+    [this.committed[idx], this.committed[to]] = [this.committed[to], this.committed[idx]];
     this.redrawCommitted();
     this.emitReordered(ann, dir);
   }
@@ -947,7 +969,7 @@ export class CanvasOverlay {
       position: absolute;
       left: ${canvasX}px; top: ${boxTop}px;
       width: ${boxW}px;
-      font-size: ${ann.fontSize * scale}px; line-height: 1.2; font-family: Segoe UI, Helvetica, Arial, sans-serif;
+      font-size: ${ann.fontSize * scale}px; line-height: 1.2; font-family: ${fontCss(ann.fontFamily)};
       font-weight: ${ann.bold ? "bold" : "300"};
       font-style: ${ann.italic ? "italic" : "normal"};
       text-decoration: ${ann.underline ? "underline" : "none"};
