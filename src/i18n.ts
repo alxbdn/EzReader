@@ -151,6 +151,25 @@ export interface Translations {
   welcomeFeatCompressDesc?: string;
   welcomeFeatPrint?: string;
   welcomeFeatPrintDesc?: string;
+  // Messages (toasts and dialogs; optional, English fallback)
+  msgUnsavedTitle?: string;
+  msgCloseWithoutSaving?: string;
+  msgDiscardChanges?: string;
+  msgPasswordPrompt?: string;
+  msgWrongPassword?: string;
+  msgOpenFailed?: string;
+  msgOnlyPdf?: string;
+  msgSaved?: string;
+  msgSaveFailed?: string;
+  msgCompressed?: string;
+  msgCompressFailed?: string;
+  msgPagesUpdated?: string;
+  msgPagesFailed?: string;
+  msgPdfSaved?: string;
+  msgSentToPrinter?: string;
+  msgPrintFailed?: string;
+  msgPlaceSignature?: string;
+  msgSignatureCancelled?: string;
 }
 
 // ── English ───────────────────────────────────────────────────────────────────
@@ -295,6 +314,24 @@ const EN: Translations = {
   welcomeFeatCompressDesc:  "Shrink file size",
   welcomeFeatPrint:         "Print",
   welcomeFeatPrintDesc:     "Select pages & printer",
+  msgUnsavedTitle:        "Unsaved changes",
+  msgCloseWithoutSaving:  "Close without saving?",
+  msgDiscardChanges:      "Discard unsaved changes and continue?",
+  msgPasswordPrompt:      "This PDF is password-protected. Enter password:",
+  msgWrongPassword:       "Wrong password or could not open file.",
+  msgOpenFailed:          "Could not open file: {err}",
+  msgOnlyPdf:             "Only PDF files can be opened.",
+  msgSaved:               "Saved.",
+  msgSaveFailed:          "Save failed: {err}",
+  msgCompressed:          "Compressed: {from} MB → {to} MB ({pct}% smaller)",
+  msgCompressFailed:      "Compression failed: {err}",
+  msgPagesUpdated:        "Pages updated.",
+  msgPagesFailed:         "Page modification failed: {err}",
+  msgPdfSaved:            "PDF saved.",
+  msgSentToPrinter:       "Sent to printer.",
+  msgPrintFailed:         "Print failed: {err}",
+  msgPlaceSignature:      "Click on the page to place your signature. Press Esc to cancel.",
+  msgSignatureCancelled:  "Signature placement cancelled.",
 };
 
 // ── French ────────────────────────────────────────────────────────────────────
@@ -439,6 +476,24 @@ const FR: Translations = {
   welcomeFeatCompressDesc:  "R\u00e9duire la taille du fichier",
   welcomeFeatPrint:         "Imprimer",
   welcomeFeatPrintDesc:     "Choisir pages et imprimante",
+  msgUnsavedTitle:        "Modifications non enregistrées",
+  msgCloseWithoutSaving:  "Fermer sans enregistrer ?",
+  msgDiscardChanges:      "Abandonner les modifications non enregistrées et continuer ?",
+  msgPasswordPrompt:      "Ce PDF est protégé par un mot de passe. Saisissez le mot de passe :",
+  msgWrongPassword:       "Mot de passe incorrect ou fichier impossible à ouvrir.",
+  msgOpenFailed:          "Impossible d'ouvrir le fichier : {err}",
+  msgOnlyPdf:             "Seuls les fichiers PDF peuvent être ouverts.",
+  msgSaved:               "Enregistré.",
+  msgSaveFailed:          "Échec de l'enregistrement : {err}",
+  msgCompressed:          "Compressé : {from} Mo → {to} Mo ({pct} % plus léger)",
+  msgCompressFailed:      "Échec de la compression : {err}",
+  msgPagesUpdated:        "Pages mises à jour.",
+  msgPagesFailed:         "Échec de la modification des pages : {err}",
+  msgPdfSaved:            "PDF enregistré.",
+  msgSentToPrinter:       "Envoyé à l'imprimante.",
+  msgPrintFailed:         "Échec de l'impression : {err}",
+  msgPlaceSignature:      "Cliquez sur la page pour placer votre signature. Échap pour annuler.",
+  msgSignatureCancelled:  "Placement de la signature annulé.",
 };
 
 // ── Chinese (Mandarin) ────────────────────────────────────────────────────────
@@ -2398,4 +2453,9 @@ export function applyTranslationsToDOM(t: Translations): void {
     const val = key in t ? t[key] : undefined;
     if (val != null) el.title = val;
   });
+}
+
+/** Fills `{name}` placeholders in a translated message. */
+export function fmt(template: string, vars: Record<string, string | number>): string {
+  return template.replace(/\{(\w+)\}/g, (m, k: string) => (k in vars ? String(vars[k]) : m));
 }
