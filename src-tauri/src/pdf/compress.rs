@@ -128,7 +128,10 @@ pub fn compress_images(doc: &mut Document, level: CompressionLevel) -> (u64, u64
 
         if let Some(new_bytes) = recompress_jpeg(&stream.content, quality) {
             compressed_total += new_bytes.len() as u64;
-            stream.content = new_bytes;
+            // set_content keeps /Length in sync with the new bytes; assigning
+            // `stream.content` directly left the old length and produced a
+            // file every reader flagged as having truncated streams.
+            stream.set_content(new_bytes);
         } else {
             // Not compressible at this level — count as unchanged.
             compressed_total += original_size;
