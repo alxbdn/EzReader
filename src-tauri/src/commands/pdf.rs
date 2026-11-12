@@ -603,8 +603,8 @@ mod tests {
         let (mut doc, _leaves) = build_nested_pdf(20, 4);
         assert_eq!(doc.get_pages().len(), 80);
 
-        let input = std::env::temp_dir().join("pdf-rider-test-multilevel-in.pdf");
-        let output = std::env::temp_dir().join("pdf-rider-test-multilevel-out.pdf");
+        let input = std::env::temp_dir().join("ezreader-test-multilevel-in.pdf");
+        let output = std::env::temp_dir().join("ezreader-test-multilevel-out.pdf");
         doc.save(&input).unwrap();
 
         modify_pages(
@@ -651,7 +651,7 @@ mod tests {
     fn split_pdf_produces_one_file_per_range() {
         let (mut doc, _) = build_nested_pdf(5, 2); // 10 pages
         let dir = std::env::temp_dir().join(format!(
-            "pdf-rider-split-test-{}",
+            "ezreader-split-test-{}",
             std::process::id()
         ));
         std::fs::create_dir_all(&dir).unwrap();
@@ -699,7 +699,7 @@ mod tests {
     fn split_pdf_rejects_out_of_range() {
         let (mut doc, _) = build_nested_pdf(3, 1); // 3 pages
         let dir = std::env::temp_dir().join(format!(
-            "pdf-rider-split-oob-test-{}",
+            "ezreader-split-oob-test-{}",
             std::process::id()
         ));
         std::fs::create_dir_all(&dir).unwrap();
@@ -726,8 +726,8 @@ mod tests {
         let (mut doc, _) = build_nested_pdf(5, 4);
         assert_eq!(doc.get_pages().len(), 20);
 
-        let input = std::env::temp_dir().join("pdf-rider-test-cross-in.pdf");
-        let output = std::env::temp_dir().join("pdf-rider-test-cross-out.pdf");
+        let input = std::env::temp_dir().join("ezreader-test-cross-in.pdf");
+        let output = std::env::temp_dir().join("ezreader-test-cross-out.pdf");
         doc.save(&input).unwrap();
 
         let ops: Vec<PageOperation> = (1..=20)
