@@ -10,8 +10,8 @@ param(
 $ErrorActionPreference = "Stop"
 
 # Configuration
-$AppName = "pdf-rider"
-$ExeName = "pdf-rider-portable"
+$AppName = "ezreader"
+$ExeName = "ezreader-portable"
 $OutputDir = ".\msix-output"
 $PackageDir = "$OutputDir\package"
 
@@ -115,7 +115,7 @@ $manifest = $manifest -creplace 'Version="0\.0\.0\.0"', "Version=`"$Version`""
 
 # Step 6: Create MSIX package
 Write-Host "`n=== Creating MSIX package ===" -ForegroundColor Green
-$msixFile = "$OutputDir\PDFRider_${Version}_${Architecture}.msix"
+$msixFile = "$OutputDir\EzReader_${Version}_${Architecture}.msix"
 
 & $makeappx pack /d $PackageDir /p $msixFile /o
 

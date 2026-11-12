@@ -1,16 +1,16 @@
 [package]
-name = "pdf-rider"
+name = "ezreader"
 version = "0.2.31"
 description = "A simple, lightweight PDF reader with annotations and signing"
 authors = []
 edition = "2021"
 
 [[bin]]
-name = "pdf-rider-portable"
+name = "ezreader-portable"
 path = "src/main.rs"
 
 [lib]
-name = "pdf_rider_lib"
+name = "ezreader_lib"
 crate-type = ["rlib"]
 
 [build-dependencies]

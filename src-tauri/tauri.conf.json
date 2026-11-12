@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "PDF Rider",
+  "productName": "EzReader",
   "version": "0.2.31",
-  "identifier": "com.pdfrider.app",
+  "identifier": "com.ezreader.app",
   "build": {
     "frontendDist": "../dist",
     "devUrl": "http://localhost:5173",
@@ -12,7 +12,7 @@
   "app": {
     "windows": [
       {
-        "title": "PDF Rider",
+        "title": "EzReader",
         "width": 1280,
         "height": 800,
         "resizable": true,
@@ -33,7 +33,7 @@
   "bundle": {
     "active": true,
     "targets": ["nsis"],
-    "publisher": "Pleymor",
+    "publisher": "alxbdn",
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
