@@ -6,6 +6,7 @@ import { SignatureModal } from "./signature-modal";
 import { SignatureStore } from "./signature-store";
 import { SettingsModal } from "./settings";
 import { PageManagerModal } from "./page-manager";
+import { isUnchangedLayout } from "./page-order";
 import { SplitModal } from "./split-modal";
 import { getTranslations, applyTranslationsToDOM, fmt, type Translations } from "./i18n";
 import { DocumentSession, uniqueTempName, isMicrosoftPrintToPdf } from "./document-session";
@@ -30,7 +31,7 @@ import {
   getStartupArgs,
   printPages,
   extractPdfPages,
-  modifyPages,
+  rearrangePages,
   splitPdf,
   pickDirectoryDialog,
 } from "./tauri-bridge";
@@ -443,17 +444,16 @@ compressModal.onConfirm(async (level) => {
 
 // ── Page manager handler ─────────────────────────────────────────────────────
 
-pageManagerModal.onConfirm(async (operations) => {
+pageManagerModal.onConfirm(async (slots) => {
   const source = session.sourcePath;
   if (!source) return;
-  const hasChanges = operations.some(op => op.delete || op.rotation !== 0);
-  if (!hasChanges) return;
+  if (isUnchangedLayout(slots, viewer.pageCount)) return;
   try {
     // Burn pending edits first (no-op when there are none: the viewed file is
-    // used as is), then apply the page operations as an incremental update.
+    // used as is), then apply the new page layout as an incremental update.
     const input   = await session.materialize();
     const tmpPath = await newTempPath(`pages-${await basename(source)}`);
-    await modifyPages(input, tmpPath, operations);
+    await rearrangePages(input, tmpPath, slots);
     // Still the same document: Save keeps writing to the source / Save As target.
     const workingCopy = await showInViewer(tmpPath);
     session.replacedWorkingCopy(workingCopy ?? tmpPath);
@@ -463,6 +463,7 @@ pageManagerModal.onConfirm(async (operations) => {
     showToast(msg("msgPagesFailed", { err: String(err) }), true);
   }
 });
+pageManagerModal.onError((message) => showToast(message, true));
 
 splitModal.onConfirm(async (req) => {
   const source = session.sourcePath;
