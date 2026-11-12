@@ -1,22 +1,23 @@
 /**
- * Interactive dot grid behind the welcome screen: dots are pushed away from
- * the cursor, light up and grow near it, spring back when it leaves, and a
+ * Interactive dot grid behind the welcome screen: dots light up and grow near
+ * the cursor and drift aside as it passes (the dot right under it stays put,
+ * so there is no hole around the pointer), spring back when it leaves, and a
  * click sends a ripple through the grid. Respects prefers-reduced-motion
  * (static grid) and stops animating once every dot has settled.
  */
 
 const SPACING   = 22;   // px between dots
 const RADIUS    = 170;  // cursor influence radius
-const PUSH      = 24;   // max displacement under the cursor
+const PUSH      = 14;   // max displacement, reached a third of the way out
 // Heavy, slow dots: a soft spring with strong damping, so they drift into
 // place and settle back over about a second instead of snapping.
-const SPRING    = 0.02;
-const DAMPING   = 0.88;
+const SPRING    = 0.03;
+const DAMPING   = 0.86;
 // Going back to rest is a slow glide with no spring and no bounce: each frame
 // covers this fraction of the remaining distance (about 5 s to settle).
 const RETURN_EASE = 0.01;
 // The point the dots react to trails the real cursor, which gives the field weight.
-const FOLLOW    = 0.045;
+const FOLLOW    = 0.08;
 const PRESENCE_EASE = 0.025; // how fast the influence fades in
 const PRESENCE_FADE = 0.008; // and out, once the cursor has left
 const GLOW_EASE = 0.04;
@@ -90,17 +91,21 @@ export function mountWelcomeDots(screen: HTMLElement): void {
     ripples = ripples.filter(r => r.r < Math.hypot(width, height));
 
     for (const d of dots) {
-      let tx = 0, ty = 0, glow = 0;
+      let tx = 0, ty = 0, glow = 0, inField = false;
       if (focus && presence > 0) {
         const ex = d.x - focus.x, ey = d.y - focus.y;
         const dist = Math.hypot(ex, ey);
         if (dist < RADIUS && dist > 0.01) {
-          // Smooth falloff so the edge of the field moves gently too.
-          const t = 1 - dist / RADIUS;
-          const f = t * t * (3 - 2 * t) * presence;
-          tx = (ex / dist) * PUSH * f;
-          ty = (ey / dist) * PUSH * f;
-          glow = f;
+          inField = presence > 0.05;
+          // Displacement is zero right under the cursor, peaks a third of the
+          // way out and fades at the edge: dots let the cursor pass over them
+          // instead of being ejected from a forbidden zone.
+          const u = dist / RADIUS;
+          const push = (u * (1 - u) * (1 - u)) / (4 / 27) * presence;
+          tx = (ex / dist) * PUSH * push;
+          ty = (ey / dist) * PUSH * push;
+          const t = 1 - u;
+          glow = t * t * (3 - 2 * t) * presence;
         }
       }
       for (const r of ripples) {
@@ -114,14 +119,14 @@ export function mountWelcomeDots(screen: HTMLElement): void {
           glow = Math.max(glow, band * fade);
         }
       }
-      if (Math.hypot(tx, ty) >= Math.hypot(d.dx, d.dy)) {
-        // Pushed outwards: a soft, heavy spring.
+      if (inField || Math.hypot(tx, ty) >= Math.hypot(d.dx, d.dy)) {
+        // Under the cursor's influence: a soft, heavy spring that follows it.
         d.vx = (d.vx + (tx - d.dx) * SPRING) * DAMPING;
         d.vy = (d.vy + (ty - d.dy) * SPRING) * DAMPING;
         d.dx += d.vx;
         d.dy += d.vy;
       } else {
-        // Coming back: glide slowly towards the target, carrying no momentum.
+        // Out of the field: glide slowly back to rest, carrying no momentum.
         d.vx *= 0.9;
         d.vy *= 0.9;
         d.dx += (tx - d.dx) * RETURN_EASE + d.vx * 0.1;
