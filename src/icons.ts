@@ -86,3 +86,22 @@ export const ICON_SEARCH_MIRRORED = lucide(`<circle cx="13" cy="11" r="7"/><path
 export const ICON_CHEVRON_UP = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 15 6-6 6 6"/></svg>`;
 export const ICON_CHEVRON_DOWN = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>`;
 export const ICON_X_CIRCLE = lucide(`<circle cx="12" cy="12" r="9"/><path d="m9 9 6 6M15 9l-6 6"/>`);
+
+// ── Annotate tools and their options ─────────────────────────────────────────
+export const ICON_TOOL_TEXT = lucide(`<path d="M4 7V4h16v3"/><path d="M9 20h6"/><path d="M12 4v16"/>`);
+export const ICON_TOOL_PENCIL = lucide(`<path d="M21.17 6.81a1 1 0 0 0-3.99-3.99L3.84 16.17a2 2 0 0 0-.5.83l-1.32 4.35a.5.5 0 0 0 .62.62l4.35-1.32a2 2 0 0 0 .83-.5z"/><path d="m15 5 4 4"/>`);
+export const ICON_TOOL_SHAPES = lucide(`<rect x="3" y="3" width="10" height="10" rx="1.5"/><circle cx="15.5" cy="15.5" r="5.5"/>`);
+export const ICON_TOOL_NOTE = lucide(`<path d="M16 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h9l7-7V5a2 2 0 0 0-2-2z" /><path d="M14 21v-5a2 2 0 0 1 2-2h5"/>`);
+export const ICON_TOOL_HIGHLIGHT = lucide(`<path d="m9 11-6 6v3h9l3-3"/><path d="m22 12-4.6 4.6a2 2 0 0 1-2.8 0l-5.2-5.2a2 2 0 0 1 0-2.8L14 4"/>`);
+export const ICON_TOOL_SIGN = lucide(`<path d="M3 17c3-1 4-9 6-9s1 8 3 8 2-4 4-4 1 3 5 3"/><path d="M3 21h18"/>`);
+export const ICON_STYLE_FREEFORM = lucide(`<path d="M3 17c2-6 4-9 6-9s2 8 5 8 4-7 7-9"/>`);
+export const ICON_STYLE_STRAIGHT = lucide(`<path d="M4 20 20 4"/>`);
+export const ICON_SHAPE_RECT = lucide(`<rect x="3" y="5" width="18" height="14" rx="1.5"/>`);
+export const ICON_SHAPE_ELLIPSE = lucide(`<ellipse cx="12" cy="12" rx="9" ry="7"/>`);
+export const ICON_SHAPE_ARROW = lucide(`<path d="M5 19 19 5"/><path d="M10 5h9v9"/>`);
+export const ICON_OPT_TEXT_COLOR = lucide(`<path d="M5 16 12 3l7 13M8 11h8M4 21h16"/>`);
+export const ICON_OPT_OUTLINE = lucide(`<path d="M17 3a2.85 2.85 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/>`);
+export const ICON_OPT_FILL = lucide(`<path d="m19 11-8-8-8.6 8.6a2 2 0 0 0 0 2.8l5.2 5.2c.8.8 2 .8 2.8 0L19 11ZM5 2l5 5M2 13h15M22 20a2 2 0 1 1-4 0c0-1.6 1.7-2.4 2-4 .3 1.6 2 2.4 2 4Z"/>`);
+export const ICON_OPT_COLOR = lucide(`<circle cx="13.5" cy="6.5" r=".5" fill="currentColor"/><circle cx="17.5" cy="10.5" r=".5" fill="currentColor"/><circle cx="8.5" cy="7.5" r=".5" fill="currentColor"/><circle cx="6.5" cy="12.5" r=".5" fill="currentColor"/><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.93 0 1.65-.75 1.65-1.69 0-.44-.18-.84-.44-1.13-.29-.29-.44-.65-.44-1.13a1.64 1.64 0 0 1 1.67-1.67h2c3.05 0 5.56-2.5 5.56-5.55C21.97 6.01 17.46 2 12 2z"/>`);
+export const ICON_CHECK = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m4 12 5 5L20 6"/></svg>`;
+export const ICON_DISCARD = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" aria-hidden="true"><path d="M5 5l14 14M19 5 5 19"/></svg>`;

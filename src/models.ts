@@ -47,6 +47,8 @@ export interface RectAnnotation extends BaseAnnotation {
   strokeWidth: number;
   /** Interior colour; null or absent means hollow. */
   fillColor?: RgbColor | null;
+  /** 0–1; absent means opaque. */
+  opacity?: number;
 }
 
 export interface CircleAnnotation extends BaseAnnotation {
@@ -57,6 +59,48 @@ export interface CircleAnnotation extends BaseAnnotation {
   strokeWidth: number;
   /** Interior colour; null or absent means hollow. */
   fillColor?: RgbColor | null;
+  /** 0–1; absent means opaque. */
+  opacity?: number;
+}
+
+/**
+ * A pencil stroke, straight line or arrow. The points are relative to the
+ * box (0–1 from its left and bottom edges), so moving or resizing the box
+ * moves or stretches the stroke with it.
+ */
+export interface InkAnnotation extends BaseAnnotation {
+  kind: "ink";
+  width: number;
+  height: number;
+  points: [number, number][];
+  color: RgbColor;
+  strokeWidth: number;
+  /** Closes the stroke and fills it; null or absent means no fill. */
+  fillColor?: RgbColor | null;
+  /** 0–1; absent means opaque. */
+  opacity?: number;
+  /** Draws an arrowhead at the last point. */
+  arrow?: boolean;
+}
+
+/** Highlighted text: one rectangle per line, in PDF points. */
+export interface HighlightAnnotation extends BaseAnnotation {
+  kind: "highlight";
+  width: number;
+  height: number;
+  rects: { x: number; y: number; width: number; height: number }[];
+  color: RgbColor;
+  /** 0–1 */
+  opacity: number;
+}
+
+/** A sticky note: a coloured square with text, drawn on the page. */
+export interface NoteAnnotation extends BaseAnnotation {
+  kind: "note";
+  width: number;
+  height: number;
+  content: string;
+  color: RgbColor;
 }
 
 export type TextAlignmentValue = "left" | "center" | "right";
@@ -88,6 +132,8 @@ export interface TextAnnotation extends BaseAnnotation {
   alignment: TextAlignmentValue;
   /** Absent in files saved before font choice existed (Helvetica). */
   fontFamily?: FontFamilyValue;
+  /** Box colour behind the text; null or absent means none. */
+  backgroundColor?: RgbColor | null;
 }
 
 export interface SignatureAnnotation extends BaseAnnotation {
@@ -113,6 +159,9 @@ export interface RedactAnnotation extends BaseAnnotation {
 export type Annotation =
   | RectAnnotation
   | CircleAnnotation
+  | InkAnnotation
+  | HighlightAnnotation
+  | NoteAnnotation
   | TextAnnotation
   | SignatureAnnotation
   | RedactAnnotation;
@@ -135,7 +184,12 @@ export interface FormFieldValue {
 
 // ── Tool state ────────────────────────────────────────────────────────────────
 
-export type ToolKind = "select" | "rect" | "circle" | "text" | "signature" | "redact";
+export type ToolKind =
+  | "select" | "rect" | "circle" | "arrow" | "ink" | "line" | "highlight" | "note"
+  | "text" | "signature" | "redact";
+
+/** Tools that draw by dragging on the page (the overlay takes the mouse). */
+export const DRAW_TOOLS: readonly ToolKind[] = ["rect", "circle", "arrow", "ink", "line", "note", "text", "redact"];
 
 export interface ActiveToolState {
   tool: ToolKind;
@@ -151,6 +205,13 @@ export interface ActiveToolState {
   /** Interior colour of new shapes, or null for hollow. */
   fillColor: RgbColor | null;
   strokeWidth: number;
+  /** Opacity of new shapes and pencil strokes, 0–1. */
+  opacity: number;
+  /** Box colour behind new text, or null. */
+  textBackground: RgbColor | null;
+  highlightColor: RgbColor;
+  highlightOpacity: number;
+  noteColor: RgbColor;
 }
 
 export function defaultToolState(): ActiveToolState {
@@ -166,7 +227,12 @@ export function defaultToolState(): ActiveToolState {
     // Red reads on white pages and on the dark toolbar alike.
     shapeColor: { r: 229, g: 57, b: 53 },
     fillColor: null,
-    strokeWidth: 1.5,
+    strokeWidth: 2,
+    opacity: 1,
+    textBackground: null,
+    highlightColor: { r: 250, g: 204, b: 21 },
+    highlightOpacity: 0.45,
+    noteColor: { r: 253, g: 224, b: 71 },
   };
 }
 

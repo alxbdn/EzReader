@@ -8,6 +8,9 @@ import {
   type ActiveToolState,
   type Annotation,
   type CircleAnnotation,
+  type HighlightAnnotation,
+  type InkAnnotation,
+  type NoteAnnotation,
   type RectAnnotation,
   type RedactAnnotation,
   type RgbColor,
@@ -15,7 +18,20 @@ import {
   type TextAlignmentValue,
   type TextAnnotation,
   type ToolKind,
+  DRAW_TOOLS,
 } from "./models";
+
+/** Shapes whose outline, fill, thickness and opacity can be changed. */
+export type ShapeAnnotation = RectAnnotation | CircleAnnotation | InkAnnotation;
+
+/** Default sticky-note size, in PDF points. */
+const NOTE_W = 150;
+const NOTE_H = 100;
+const NOTE_FONT = 10;
+const NOTE_PAD = 6;
+
+/** Average glyph width (em) the PDF writer assumes when wrapping text. */
+const PDF_CHAR_W: Record<string, number> = { helvetica: 0.5, times: 0.45, courier: 0.6 };
 
 /** Minimal duck-type for pdfjs PageViewport — avoids importing pdfjs-dist here. */
 interface PdfViewport {
@@ -29,7 +45,7 @@ type AnnotationMovedHandler        = (ann: Annotation) => void;
 type AnnotationRemovedHandler      = (ann: Annotation) => void;
 type AnnotationReorderHandler      = (ann: Annotation, dir: "up" | "down") => void;
 type TextAnnotationSelectedHandler  = (ann: TextAnnotation | null) => void;
-type ShapeAnnotationSelectedHandler = (ann: RectAnnotation | CircleAnnotation | null) => void;
+type ShapeAnnotationSelectedHandler = (ann: ShapeAnnotation | null) => void;
 type ResizeHandle = "nw" | "n" | "ne" | "e" | "se" | "s" | "sw" | "w";
 
 const HANDLE_R = 4; // half-size of handle squares in px
@@ -40,6 +56,14 @@ const HANDLE_CURSORS: Record<ResizeHandle, string> = {
   sw: "sw-resize", w:  "w-resize",
 };
 const MIN_SIZE_PT = 10; // minimum annotation dimension in PDF pts
+
+/**
+ * A click on a page that closes an open text box or note only closes it:
+ * it does not also start a new annotation with the active tool.
+ */
+function endsEditOnly(ev: MouseEvent): void {
+  if ((ev.target as Element | null)?.classList?.contains("page-annotation-canvas")) ev.stopPropagation();
+}
 
 export class CanvasOverlay {
   private canvas: HTMLCanvasElement;
@@ -54,6 +78,8 @@ export class CanvasOverlay {
   private isDrawing = false;
   private startX = 0;
   private startY = 0;
+  /** Canvas points of the pencil stroke being drawn. */
+  private inkPts: [number, number][] = [];
 
   // ── Select / move / resize state ────────────────────────────────────────────
   private selected: Annotation | null = null;
@@ -73,6 +99,8 @@ export class CanvasOverlay {
   /** PDF coords of the mouse at drag-start — used for delta-based dragging. */
   private dragStartPdfX = 0;
   private dragStartPdfY = 0;
+  /** Whether the current drag has reported "about to modify" yet. */
+  private changeNotified = true;
 
   // ── Page state ──────────────────────────────────────────────────────────────
   private currentPage = 1;
@@ -133,6 +161,13 @@ export class CanvasOverlay {
   onBeforeModify(h: () => void): void { this.beforeModifyHandlers.push(h); }
   private emitBeforeModify(): void { this.beforeModifyHandlers.forEach(h => h()); }
 
+  /** A click only selects; the first actual move or resize opens the change. */
+  private notifyChangeOnce(): void {
+    if (this.changeNotified) return;
+    this.changeNotified = true;
+    this.emitBeforeModify();
+  }
+
   private emit             (a: Annotation): void { this.createdHandlers.forEach(h => h(a)); }
   private emitMoved        (a: Annotation): void { this.movedHandlers.forEach(h => h(a)); }
   private emitRemoved      (a: Annotation): void { this.removedHandlers.forEach(h => h(a)); }
@@ -140,21 +175,26 @@ export class CanvasOverlay {
     this.reorderHandlers.forEach(h => h(a, dir));
   }
   private emitTextSelected  (a: TextAnnotation | null):                void { this.textSelectedHandlers.forEach(h => h(a)); }
-  private emitShapeSelected (a: RectAnnotation | CircleAnnotation | null): void { this.shapeSelectedHandlers.forEach(h => h(a)); }
+  private emitShapeSelected (a: ShapeAnnotation | null): void { this.shapeSelectedHandlers.forEach(h => h(a)); }
 
   get currentTool(): ToolKind { return this.activeTool; }
 
-  /** Apply shape style fields to an existing rect/circle and redraw. */
+  /** Where the page's annotation layer is on screen. */
+  get screenRect(): DOMRect { return this.canvas.getBoundingClientRect(); }
+
+  /** Apply shape style fields to an existing shape or stroke and redraw. */
   applyShapeAnnotationStyle(
-    ann: RectAnnotation | CircleAnnotation,
+    ann: ShapeAnnotation,
     color: RgbColor,
     strokeWidth: number,
     fillColor: RgbColor | null,
+    opacity: number,
   ): void {
     this.emitBeforeModify();
     ann.color = { ...color };
     ann.strokeWidth = strokeWidth;
     ann.fillColor = fillColor ? { ...fillColor } : null;
+    ann.opacity = opacity;
     this.redrawCommitted();
     this.emitMoved(ann);
   }
@@ -162,10 +202,11 @@ export class CanvasOverlay {
   /** Apply text style fields to an existing annotation and redraw. */
   applyTextAnnotationStyle(
     ann: TextAnnotation,
-    style: Pick<ActiveToolState, "color" | "fontSize" | "bold" | "italic" | "underline" | "alignment" | "fontFamily">
+    style: Pick<ActiveToolState, "color" | "fontSize" | "bold" | "italic" | "underline" | "alignment" | "fontFamily" | "textBackground">
   ): void {
     this.emitBeforeModify();
     ann.color     = { ...style.color };
+    ann.backgroundColor = style.textBackground ? { ...style.textBackground } : null;
     ann.fontFamily = style.fontFamily;
     ann.fontSize  = style.fontSize;
     ann.bold      = style.bold;
@@ -192,7 +233,7 @@ export class CanvasOverlay {
     }
     this.activeTool = tool;
     this.applyPointerEvents(tool);
-    if (tool === "text")         this.canvas.style.cursor = "text";
+    if (tool === "text" || tool === "highlight") this.canvas.style.cursor = "text";
     else if (tool === "select")  this.canvas.style.cursor = "default";
     else if (tool !== "signature") this.canvas.style.cursor = "crosshair";
     else                         this.canvas.style.cursor = "";
@@ -202,8 +243,7 @@ export class CanvasOverlay {
     // Annotation canvas only captures events when a draw tool is active.
     // "select" and "signature" keep pointer-events:none so the text layer
     // (below in z-index) receives events and text can be selected.
-    const isDrawTool = tool === "rect" || tool === "circle" || tool === "text" || tool === "redact";
-    this.canvas.style.pointerEvents = isDrawTool ? "auto" : "none";
+    this.canvas.style.pointerEvents = DRAW_TOOLS.includes(tool) ? "auto" : "none";
   }
 
   /** Convert PDF user-space point → canvas pixel coords (handles rotation via viewport). */
@@ -289,6 +329,7 @@ export class CanvasOverlay {
   private hitTest(cx: number, cy: number): Annotation | null {
     const P = 5;
     for (let i = this.committed.length - 1; i >= 0; i--) {
+      if (this.committed[i].kind === "highlight") continue;
       const b = this.getAnnBounds(this.committed[i]);
       if (cx >= b.left - P && cx <= b.right  + P &&
           cy >= b.top  - P && cy <= b.bottom + P) return this.committed[i];
@@ -474,6 +515,16 @@ export class CanvasOverlay {
 
   private drawAnnotation(ann: Annotation): void {
     const ctx = this.ctx;
+    ctx.save();
+    if ((ann.kind === "rect" || ann.kind === "circle" || ann.kind === "ink") && ann.opacity != null) {
+      ctx.globalAlpha = Math.max(0, Math.min(1, ann.opacity));
+    }
+    this.drawAnnotationBody(ann);
+    ctx.restore();
+  }
+
+  private drawAnnotationBody(ann: Annotation): void {
+    const ctx = this.ctx;
     const { scale } = this;
 
     if (ann.kind === "rect") {
@@ -501,19 +552,46 @@ export class CanvasOverlay {
         ctx.stroke();
       }
 
+    } else if (ann.kind === "ink") {
+      this.strokeInk(ann.points.map(([u, v]) => this.toCanvas(ann.x + u * ann.width, ann.y + v * ann.height)),
+        ann.color, ann.strokeWidth, ann.fillColor ?? null, !!ann.arrow);
+
+    } else if (ann.kind === "highlight") {
+      ctx.save();
+      ctx.globalAlpha = ann.opacity;
+      ctx.globalCompositeOperation = "multiply";
+      ctx.fillStyle = rgbToCss(ann.color);
+      for (const r of ann.rects) {
+        const [x1, y1] = this.toCanvas(r.x, r.y + r.height);
+        const [x2, y2] = this.toCanvas(r.x + r.width, r.y);
+        ctx.fillRect(Math.min(x1, x2), Math.min(y1, y2), Math.abs(x2 - x1), Math.abs(y2 - y1));
+      }
+      ctx.restore();
+
+    } else if (ann.kind === "note") {
+      this.drawNote(ann);
+
     } else if (ann.kind === "text") {
       const [x, y] = this.toCanvas(ann.x, ann.y);
       const rotRad = (this.viewportRotation * Math.PI) / 180;
       ctx.save();
       ctx.translate(x, y);
       if (rotRad !== 0) ctx.rotate(rotRad);
-      ctx.fillStyle = rgbToCss(ann.color);
       ctx.font      = `${ann.italic ? "italic" : "normal"} ${ann.bold ? "bold" : "300"} ${ann.fontSize * scale}px ${fontCss(ann.fontFamily)}`;
-      ctx.textAlign = ann.alignment as CanvasTextAlign;
       const lineH   = ann.fontSize * scale * 1.2;
       const maxW    = ann.width * scale;
-      const tx      = ann.alignment === "left" ? 0 : ann.alignment === "right" ? maxW : maxW / 2;
       const lines   = this.wrapLines(ctx, ann.content, maxW);
+      if (ann.backgroundColor) {
+        // Same box as the PDF writer: first line's ascent to last line's descent.
+        const fs = ann.fontSize * scale;
+        const top = -(fs * 0.95 + 2 * scale);
+        const bottom = (lines.length - 1) * lineH + fs * 0.3 + 2 * scale;
+        ctx.fillStyle = rgbToCss(ann.backgroundColor);
+        ctx.fillRect(-3 * scale, top, maxW + 6 * scale, bottom - top);
+      }
+      ctx.fillStyle = rgbToCss(ann.color);
+      ctx.textAlign = ann.alignment as CanvasTextAlign;
+      const tx      = ann.alignment === "left" ? 0 : ann.alignment === "right" ? maxW : maxW / 2;
       lines.forEach((line, i) => {
         const ly = i * lineH;
         ctx.fillText(line, tx, ly);
@@ -561,9 +639,105 @@ export class CanvasOverlay {
     }
   }
 
+  /** Draws a stroke through canvas points, with an optional fill or arrowhead. */
+  private strokeInk(pts: [number, number][], color: RgbColor, strokeWidth: number, fill: RgbColor | null, arrow: boolean): void {
+    if (pts.length < 2) return;
+    const ctx = this.ctx;
+    const lw = Math.max(0.5, strokeWidth * this.scale);
+    ctx.save();
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+    ctx.lineWidth = lw;
+    ctx.strokeStyle = rgbToCss(color);
+    ctx.fillStyle = rgbToCss(color);
+    const path = pts.slice();
+    let head: [number, number][] | null = null;
+    if (arrow) {
+      const [tx, ty] = path[path.length - 1];
+      const [px, py] = path[path.length - 2];
+      const len = Math.hypot(tx - px, ty - py);
+      if (len > 0) {
+        const ux = (tx - px) / len, uy = (ty - py) / len;
+        const l = Math.min(len, Math.max(6, strokeWidth * 3.5) * this.scale);
+        const hw = l * 0.55;
+        const bx = tx - ux * l, by = ty - uy * l;
+        head = [[tx, ty], [bx - uy * hw, by + ux * hw], [bx + uy * hw, by - ux * hw]];
+        path[path.length - 1] = [tx - ux * l * 0.8, ty - uy * l * 0.8];
+      }
+    }
+    ctx.beginPath();
+    ctx.moveTo(path[0][0], path[0][1]);
+    for (const [x, y] of path.slice(1)) ctx.lineTo(x, y);
+    if (fill && !arrow) {
+      ctx.closePath();
+      ctx.fillStyle = rgbToCss(fill);
+      ctx.fill();
+    }
+    if (strokeWidth > 0) ctx.stroke();
+    if (head) {
+      ctx.fillStyle = rgbToCss(color);
+      ctx.beginPath();
+      ctx.moveTo(head[0][0], head[0][1]);
+      ctx.lineTo(head[1][0], head[1][1]);
+      ctx.lineTo(head[2][0], head[2][1]);
+      ctx.closePath();
+      ctx.fill();
+    }
+    ctx.restore();
+  }
+
+  /** Canvas box of an annotation stored as x/y/width/height (any rotation). */
+  private boxOf(ann: { x: number; y: number; width: number; height: number }): { l: number; t: number; w: number; h: number } {
+    const [x1, y1] = this.toCanvas(ann.x, ann.y + ann.height);
+    const [x2, y2] = this.toCanvas(ann.x + ann.width, ann.y);
+    return { l: Math.min(x1, x2), t: Math.min(y1, y2), w: Math.abs(x2 - x1), h: Math.abs(y2 - y1) };
+  }
+
+  private drawNote(ann: NoteAnnotation): void {
+    const ctx = this.ctx;
+    const { scale } = this;
+    const b = this.boxOf(ann);
+    ctx.save();
+    ctx.shadowColor = "rgba(0,0,0,0.18)";
+    ctx.shadowBlur = 6;
+    ctx.shadowOffsetY = 2;
+    ctx.fillStyle = rgbToCss(ann.color);
+    ctx.fillRect(b.l, b.t, b.w, b.h);
+    ctx.restore();
+    ctx.save();
+    ctx.strokeStyle = rgbToCss({ r: ann.color.r * 0.8, g: ann.color.g * 0.8, b: ann.color.b * 0.8 });
+    ctx.lineWidth = 0.75 * scale;
+    ctx.strokeRect(b.l, b.t, b.w, b.h);
+    if (ann !== this.editingAnn && ann.content) {
+      ctx.beginPath();
+      ctx.rect(b.l, b.t, b.w, b.h);
+      ctx.clip();
+      const [x, y] = this.toCanvas(ann.x + NOTE_PAD, ann.y + ann.height - NOTE_PAD - NOTE_FONT);
+      ctx.translate(x, y);
+      const rot = (this.viewportRotation * Math.PI) / 180;
+      if (rot) ctx.rotate(rot);
+      ctx.fillStyle = "#262626";
+      ctx.font = `${NOTE_FONT * scale}px ${fontCss("helvetica")}`;
+      const lines = this.wrapLines(ctx, ann.content, (ann.width - 2 * NOTE_PAD) * scale);
+      lines.forEach((line, i) => ctx.fillText(line, 0, i * NOTE_FONT * 1.2 * scale));
+    }
+    ctx.restore();
+  }
+
   private drawLivePreview(curX: number, curY: number): void {
     this.redrawCommitted();
     const ctx = this.ctx;
+    if (this.activeTool === "ink" || this.activeTool === "line" || this.activeTool === "arrow") {
+      const pts: [number, number][] = this.activeTool === "ink"
+        ? this.inkPts
+        : [[this.startX, this.startY], [curX, curY]];
+      ctx.save();
+      ctx.globalAlpha = this.style.opacity;
+      this.strokeInk(pts, this.style.shapeColor, this.style.strokeWidth,
+        this.activeTool === "ink" ? null : null, this.activeTool === "arrow");
+      ctx.restore();
+      return;
+    }
     const x0 = Math.min(this.startX, curX);
     const y0 = Math.min(this.startY, curY);
     const w  = Math.abs(curX - this.startX);
@@ -650,7 +824,7 @@ export class CanvasOverlay {
       if (this.selected) {
         const h = this.hitHandle(e.offsetX, e.offsetY, this.selected);
         if (h) {
-          this.emitBeforeModify();
+          this.changeNotified = false;
           this.startResize(this.selected, h);
           this.canvas.style.cursor = HANDLE_CURSORS[h];
           return;
@@ -660,7 +834,7 @@ export class CanvasOverlay {
       const hit = this.hitTest(e.offsetX, e.offsetY);
       this.selected = hit;
       if (hit) {
-        this.emitBeforeModify();
+        this.changeNotified = false;
         const bounds = this.getAnnBounds(hit);
         this.dragging    = true;
         this.dragTarget  = hit;
@@ -675,7 +849,7 @@ export class CanvasOverlay {
       }
       this.redrawCommitted();
       this.emitTextSelected(hit?.kind === "text" ? hit : null);
-      this.emitShapeSelected((hit?.kind === "rect" || hit?.kind === "circle") ? hit : null);
+      this.emitShapeSelected((hit?.kind === "rect" || hit?.kind === "circle" || hit?.kind === "ink") ? hit : null);
       return;
     }
 
@@ -687,6 +861,7 @@ export class CanvasOverlay {
       return;
     }
 
+    if (this.activeTool === "ink") this.inkPts = [[e.offsetX, e.offsetY]];
     this.isDrawing = true;
     this.startX = e.offsetX;
     this.startY = e.offsetY;
@@ -695,11 +870,13 @@ export class CanvasOverlay {
   private onMouseMove = (e: MouseEvent): void => {
     if (this.activeTool === "select") {
       if (this.resizing && this.dragTarget) {
+        this.notifyChangeOnce();
         this.applyResize(e.offsetX, e.offsetY);
         this.redrawCommitted();
         return;
       }
       if (this.dragging && this.dragTarget) {
+        this.notifyChangeOnce();
         const [curPdfX, curPdfY] = this.toPdf(e.offsetX, e.offsetY);
         this.dragTarget.x = this.dragOrigX + (curPdfX - this.dragStartPdfX);
         this.dragTarget.y = this.dragOrigY + (curPdfY - this.dragStartPdfY);
@@ -721,6 +898,10 @@ export class CanvasOverlay {
     }
 
     if (!this.isDrawing) return;
+    if (this.activeTool === "ink") {
+      const last = this.inkPts[this.inkPts.length - 1];
+      if (!last || Math.hypot(e.offsetX - last[0], e.offsetY - last[1]) >= 1.5) this.inkPts.push([e.offsetX, e.offsetY]);
+    }
     this.drawLivePreview(e.offsetX, e.offsetY);
   };
 
@@ -746,6 +927,31 @@ export class CanvasOverlay {
 
     if (!this.isDrawing) return;
     this.isDrawing = false;
+
+    if (this.activeTool === "ink" || this.activeTool === "line" || this.activeTool === "arrow") {
+      const pts: [number, number][] = this.activeTool === "ink"
+        ? [...this.inkPts, [e.offsetX, e.offsetY]]
+        : [[this.startX, this.startY], [e.offsetX, e.offsetY]];
+      this.inkPts = [];
+      const ann = this.makeInk(pts, this.activeTool === "arrow");
+      if (ann) { this.committed.push(ann); this.emit(ann); }
+      this.redrawCommitted();
+      return;
+    }
+
+    if (this.activeTool === "note") {
+      this.redrawCommitted();
+      const [px, py] = this.toPdf(this.startX, this.startY);
+      const ann: NoteAnnotation = {
+        kind: "note", page: this.currentPage,
+        x: px, y: py - NOTE_H, width: NOTE_W, height: NOTE_H,
+        content: "", color: { ...this.style.noteColor },
+      };
+      this.committed.push(ann);
+      this.emit(ann);
+      this.editNote(ann, true);
+      return;
+    }
 
     const x0 = Math.min(this.startX, e.offsetX);
     const y0 = Math.min(this.startY, e.offsetY);
@@ -779,6 +985,7 @@ export class CanvasOverlay {
         x: px, y: py, width: pw, height: ph,
         color: { ...this.style.shapeColor }, strokeWidth: this.style.strokeWidth,
         fillColor: this.style.fillColor ? { ...this.style.fillColor } : null,
+        opacity: this.style.opacity,
       };
       this.committed.push(ann);
       this.redrawCommitted();
@@ -797,6 +1004,7 @@ export class CanvasOverlay {
         x: px, y: py, width: pw, height: ph,
         color: { ...this.style.shapeColor }, strokeWidth: this.style.strokeWidth,
         fillColor: this.style.fillColor ? { ...this.style.fillColor } : null,
+        opacity: this.style.opacity,
       };
       this.committed.push(ann);
       this.redrawCommitted();
@@ -820,9 +1028,84 @@ export class CanvasOverlay {
     }
     if (this.isDrawing) {
       this.isDrawing = false;
+      this.inkPts = [];
       this.redrawCommitted();
     }
   };
+
+  /** Turns canvas points into a stroke whose points are relative to its box. */
+  private makeInk(canvasPts: [number, number][], arrow: boolean): InkAnnotation | null {
+    if (canvasPts.length < 2) return null;
+    const lenPx = canvasPts.slice(1).reduce((acc, p, i) => acc + Math.hypot(p[0] - canvasPts[i][0], p[1] - canvasPts[i][1]), 0);
+    if (lenPx < 4) return null;
+    const pdf = canvasPts.map(([cx, cy]) => this.toPdf(cx, cy));
+    const xs = pdf.map(p => p[0]), ys = pdf.map(p => p[1]);
+    const minX = Math.min(...xs), maxX = Math.max(...xs), minY = Math.min(...ys), maxY = Math.max(...ys);
+    // A flat line still gets a box of 1 pt so its points stay well defined.
+    const w = Math.max(maxX - minX, 1), h = Math.max(maxY - minY, 1);
+    const x0 = (minX + maxX) / 2 - w / 2, y0 = (minY + maxY) / 2 - h / 2;
+    const round = (n: number) => Math.round(n * 10000) / 10000;
+    return {
+      kind: "ink", page: this.currentPage,
+      x: x0, y: y0, width: w, height: h,
+      points: pdf.map(([x, y]) => [round((x - x0) / w), round((y - y0) / h)]),
+      color: { ...this.style.shapeColor },
+      strokeWidth: this.style.strokeWidth,
+      fillColor: !arrow && this.activeTool === "ink" && this.style.fillColor ? { ...this.style.fillColor } : null,
+      opacity: this.style.opacity,
+      ...(arrow ? { arrow: true } : {}),
+    };
+  }
+
+  // ── Highlighter ──────────────────────────────────────────────────────────────
+
+  /**
+   * Highlights the text under `rects` (canvas px, one per selected span).
+   * Highlighting text that is already highlighted removes that highlight.
+   */
+  applyHighlight(rects: { left: number; top: number; right: number; bottom: number }[], color: RgbColor, opacity: number): void {
+    const pdfRects = rects
+      .filter(r => r.right - r.left > 0.5 && r.bottom - r.top > 0.5)
+      .map(r => {
+        const [x1, y1] = this.toPdf(r.left, r.bottom);
+        const [x2, y2] = this.toPdf(r.right, r.top);
+        return { x: Math.min(x1, x2), y: Math.min(y1, y2), width: Math.abs(x2 - x1), height: Math.abs(y2 - y1) };
+      });
+    if (pdfRects.length === 0) return;
+
+    const area = (r: { width: number; height: number }) => r.width * r.height;
+    const overlap = (a: typeof pdfRects[number], b: typeof pdfRects[number]) =>
+      Math.max(0, Math.min(a.x + a.width, b.x + b.width) - Math.max(a.x, b.x)) *
+      Math.max(0, Math.min(a.y + a.height, b.y + b.height) - Math.max(a.y, b.y));
+    const total = pdfRects.reduce((acc, r) => acc + area(r), 0);
+    const existing = this.committed.filter((a): a is HighlightAnnotation => a.kind === "highlight");
+    const touched = existing.filter(h => h.rects.some(hr => pdfRects.some(r => overlap(hr, r) > 0)));
+    const covered = pdfRects.reduce((acc, r) =>
+      acc + Math.min(area(r), touched.reduce((s2, h) => s2 + h.rects.reduce((s3, hr) => s3 + overlap(hr, r), 0), 0)), 0);
+
+    if (touched.length > 0 && covered >= total * 0.6) {
+      // Already highlighted: highlighting it again takes the highlight off.
+      this.emitBeforeModify();
+      for (const h of touched) {
+        this.committed.splice(this.committed.indexOf(h), 1);
+        this.emitRemoved(h);
+      }
+      this.redrawCommitted();
+      return;
+    }
+
+    const xs = pdfRects.flatMap(r => [r.x, r.x + r.width]);
+    const ys = pdfRects.flatMap(r => [r.y, r.y + r.height]);
+    const ann: HighlightAnnotation = {
+      kind: "highlight", page: this.currentPage,
+      x: Math.min(...xs), y: Math.min(...ys),
+      width: Math.max(...xs) - Math.min(...xs), height: Math.max(...ys) - Math.min(...ys),
+      rects: pdfRects, color: { ...color }, opacity,
+    };
+    this.committed.push(ann);
+    this.redrawCommitted();
+    this.emit(ann);
+  }
 
   private onKeyDown = (e: KeyboardEvent): void => {
     // Don't intercept keys while the user is typing in a form field
@@ -865,7 +1148,7 @@ export class CanvasOverlay {
       text-decoration: ${this.style.underline ? "underline" : "none"};
       text-align: ${this.style.alignment};
       color: ${rgbToCss(this.style.color)};
-      outline: 1px dashed #aaa; background: rgba(0,0,0,0.08);
+      outline: 1px dashed #aaa; background: ${this.style.textBackground ? rgbToCss(this.style.textBackground) : "rgba(0,0,0,0.08)"};
       padding: 2px 4px; white-space: pre-wrap; z-index: 20;
     `;
 
@@ -892,7 +1175,7 @@ export class CanvasOverlay {
         const [pdfX, pdfY] = this.toPdf(left, baselineCanvasY);
         const annWidth = hasWidth
           ? widthPx / this.scale
-          : content.length * this.style.fontSize * 0.55 + 10;
+          : this.fitTextWidth(content, this.style);
         const ann: TextAnnotation = {
           kind: "text", page: this.currentPage,
           x: pdfX, y: pdfY,
@@ -903,6 +1186,7 @@ export class CanvasOverlay {
           bold: this.style.bold, italic: this.style.italic, underline: this.style.underline,
           alignment: this.style.alignment,
           fontFamily: this.style.fontFamily,
+          backgroundColor: this.style.textBackground ? { ...this.style.textBackground } : null,
         };
         this.committed.push(ann);
         this.redrawCommitted();
@@ -911,11 +1195,17 @@ export class CanvasOverlay {
     };
 
     const outsideClick = (ev: MouseEvent): void => {
-      if (!input.contains(ev.target as Node)) commit();
+      if (input.contains(ev.target as Node)) return;
+      endsEditOnly(ev);
+      commit();
     };
 
     input.addEventListener("keydown", (ev: KeyboardEvent) => {
+      // Enter / Escape belong to the text box, not to the ✓ / ✕ shortcuts.
+      if (ev.key === "Enter" || ev.key === "Escape") ev.stopPropagation();
       if (ev.key === "Escape") { cleanup(); }
+      // Enter places the text; Shift+Enter starts a new line.
+      else if (ev.key === "Enter" && !ev.shiftKey) { ev.preventDefault(); commit(); }
     });
 
     container.appendChild(input);
@@ -931,6 +1221,7 @@ export class CanvasOverlay {
     if (!hit) return;
     e.preventDefault();
     if (hit.kind === "text") this.handleTextEdit(hit);
+    else if (hit.kind === "note") this.editNote(hit);
 
   };
 
@@ -998,17 +1289,25 @@ export class CanvasOverlay {
       if (content && content !== ann.content) {
         this.emitBeforeModify();
         ann.content = content;
+        // Text placed with a click grows with what is typed.
+        ann.width = Math.max(ann.width, this.fitTextWidth(content, { ...ann, fontFamily: ann.fontFamily ?? "helvetica" }));
         this.emitMoved(ann);
       }
       this.redrawCommitted();
     };
     const outsideClick = (ev: MouseEvent): void => {
-      if (!input.contains(ev.target as Node)) commit();
+      if (input.contains(ev.target as Node)) return;
+      endsEditOnly(ev);
+      commit();
     };
     input.addEventListener("keydown", (ev: KeyboardEvent) => {
+      if (ev.key === "Enter" || ev.key === "Escape") ev.stopPropagation();
       if (ev.key === "Escape") {
         finish();
         this.redrawCommitted();
+      } else if (ev.key === "Enter" && !ev.shiftKey) {
+        ev.preventDefault();
+        commit();
       }
     });
     container.appendChild(input);
@@ -1018,6 +1317,66 @@ export class CanvasOverlay {
     window.getSelection()?.removeAllRanges();
     window.getSelection()?.addRange(range);
     setTimeout(() => document.addEventListener("mousedown", outsideClick, true), 0);
+  }
+
+  /** Width (pt) that fits every line on screen and in the saved PDF. */
+  private fitTextWidth(content: string, st: Pick<TextAnnotation, "fontSize" | "bold" | "italic"> & { fontFamily: string }): number {
+    const ctx = this.ctx;
+    ctx.save();
+    ctx.font = `${st.italic ? "italic" : "normal"} ${st.bold ? "bold" : "300"} ${st.fontSize}px ${fontCss(st.fontFamily as TextAnnotation["fontFamily"])}`;
+    const lines = content.split("\n");
+    const measured = Math.max(...lines.map(l => ctx.measureText(l).width));
+    ctx.restore();
+    const longest = Math.max(...lines.map(l => new TextEncoder().encode(l).length));
+    return Math.max(measured + 4, longest * st.fontSize * (PDF_CHAR_W[st.fontFamily] ?? 0.5) + 1);
+  }
+
+  /** Lets the user type in a sticky note, right on the page. */
+  private editNote(ann: NoteAnnotation, fresh = false): void {
+    const { scale } = this;
+    const b = this.boxOf(ann);
+    this.editingAnn = ann;
+    this.selected = null;
+    this.redrawCommitted();
+
+    const area = document.createElement("textarea");
+    area.value = ann.content;
+    area.spellcheck = false;
+    area.style.cssText = `
+      position: absolute; left: ${b.l}px; top: ${b.t}px; width: ${b.w}px; height: ${b.h}px;
+      box-sizing: border-box; padding: ${NOTE_PAD * scale}px; margin: 0; resize: none;
+      border: 1px dashed rgba(0,0,0,0.35); outline: none; background: transparent; color: #262626;
+      font: ${NOTE_FONT * scale}px/1.2 ${fontCss("helvetica")}; z-index: 20; overflow: hidden;
+    `;
+    const done = (keep: boolean): void => {
+      if (!area.isConnected) return;
+      document.removeEventListener("mousedown", outside, true);
+      area.remove();
+      this.editingAnn = null;
+      if (fresh && !area.value.trim()) {
+        // A new note left empty goes away, like empty text.
+        this.committed = this.committed.filter(a => a !== ann);
+        this.emitRemoved(ann);
+      } else if (keep && area.value !== ann.content) {
+        this.emitBeforeModify();
+        ann.content = area.value.replace(/\s+$/, "");
+        this.emitMoved(ann);
+      }
+      this.redrawCommitted();
+    };
+    const outside = (ev: MouseEvent): void => {
+      if (ev.target === area) return;
+      endsEditOnly(ev);
+      done(true);
+    };
+    area.addEventListener("keydown", (ev) => {
+      ev.stopPropagation();
+      if (ev.key === "Escape") done(false);
+      else if (ev.key === "Enter" && (ev.ctrlKey || ev.metaKey)) done(true);
+    });
+    this.container.appendChild(area);
+    area.focus();
+    setTimeout(() => document.addEventListener("mousedown", outside, true), 0);
   }
 
   private handleTextStyleEdit(ann: TextAnnotation): void {

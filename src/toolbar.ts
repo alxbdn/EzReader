@@ -1,33 +1,16 @@
 import {
-  defaultToolState,
-  hexToRgb,
-  rgbToHex,
   type ActiveToolState,
-  type TextAlignmentValue,
   type ToolKind,
   type FontFamilyValue,
   type RgbColor,
-  FONT_FAMILIES,
   CSS_UNITS,
 } from "./models";
+import { ToolRow, type SignatureChip } from "./tool-row";
 import type { Translations } from "./i18n";
 import {
-  ICON_EDITOR_FREE_TEXT,
-  ICON_EDITOR_SIGNATURE,
-  ICON_RECT,
-  ICON_CIRCLE,
-  ICON_ALIGN_LEFT,
-  ICON_ALIGN_CENTER,
-  ICON_ALIGN_RIGHT,
-  ICON_STROKE_WIDTH,
-  ICON_REDACT,
-  ICON_LAYER_UP,
-  ICON_LAYER_DOWN,
   ICON_INFO,
   ICON_PAGES_1,
   ICON_PAGES_2,
-  ICON_FILL,
-  ICON_NO_FILL,
   ICON_SIDEBAR,
   ICON_SAVE,
   ICON_UNDO,
@@ -46,7 +29,7 @@ export type AppMode = "read" | "annotate" | "edit";
 /** What a plain drag does on the page: move around (hand) or select text. */
 export type PointerMode = "hand" | "select";
 
-type ToolbarEvent =
+export type ToolbarEvent =
   | { type: "open" }
   | { type: "save" }
   | { type: "save-as" }
@@ -70,6 +53,10 @@ type ToolbarEvent =
   | { type: "style-change"; style: ActiveToolState }
   | { type: "layer-change"; dir: "up" | "down" }
   | { type: "signature" }
+  | { type: "signature-use"; id: string }
+  | { type: "signature-delete"; id: string }
+  | { type: "draft-apply" }
+  | { type: "draft-discard" }
   | { type: "pages" }
   | { type: "toggle-sidebar" }
   | { type: "select-all-pages" }
@@ -97,6 +84,12 @@ interface MenuDef {
   items: (MenuItemDef | null)[]; // null = separator
 }
 
+/** Actions that must wait until pending changes are validated or discarded. */
+const GUARDED = new Set<ToolbarEvent["type"]>([
+  "open", "save", "save-as", "export", "compress", "print", "settings", "split", "rotate",
+  "insert-blank", "insert-pdf", "extract-pages",
+]);
+
 /** Splits "report.final.pdf" into ["report.final", ".pdf"]. */
 export function splitFileName(name: string): [string, string] {
   const dot = name.lastIndexOf(".");
@@ -112,13 +105,14 @@ export function isValidFileStem(stem: string): boolean {
 }
 
 export class Toolbar {
-  private state: ActiveToolState = defaultToolState();
   private handlers: EventHandler[] = [];
 
   private menuBarEl: HTMLElement;
   private contextEl: HTMLElement;
-  private toolRow!: HTMLElement;
   readonly search: SearchPill;
+  readonly tools: ToolRow;
+  /** Changes wait for ✓ / ✕ before anything else can be done. */
+  private pending = false;
 
   // Menu bar state
   private activeMenuId: string | null = null;
@@ -137,8 +131,6 @@ export class Toolbar {
   private pointer: PointerMode = "select";
   private modeBtns: HTMLButtonElement[] = [];
   private pointerBtns: HTMLButtonElement[] = [];
-  private annotateTools!: HTMLElement;
-  private editTools!: HTMLElement;
   private zoomLabel!: HTMLButtonElement;
   private zoomInput!: HTMLInputElement;
   private columnBtns: HTMLButtonElement[] = [];
@@ -146,34 +138,15 @@ export class Toolbar {
   private sidebarBtn!: HTMLButtonElement;
   private saveBtn!: HTMLButtonElement;
   private _lastScale = CSS_UNITS;
-  private toolBtns: Partial<Record<ToolKind, HTMLButtonElement>> = {};
 
   private _i18nText  = new Map<HTMLElement, keyof Translations>();
   private _i18nTitle = new Map<HTMLElement, keyof Translations>();
-
-  // Text style section
-  private textStyleSection!: HTMLElement;
-  private colorPicker!: HTMLInputElement;
-  private sizeInput!: HTMLInputElement;
-  private boldBtn!: HTMLButtonElement;
-  private italicBtn!: HTMLButtonElement;
-  private underlineBtn!: HTMLButtonElement;
-  private alignBtns: HTMLButtonElement[] = [];
-
-  // Shape style section
-  private shapeStyleSection!: HTMLElement;
-  private shapeColorPicker!: HTMLInputElement;
-  private shapeStrokeInput!: HTMLInputElement;
-  private fillPicker!: HTMLInputElement;
-  private noFillBtn!: HTMLButtonElement;
-  /** Last fill colour picked, restored when fill is switched back on. */
-  private lastFill: RgbColor = { r: 255, g: 235, b: 59 };
-  private fontSelect!: HTMLSelectElement;
 
   constructor() {
     this.menuBarEl = document.getElementById("menubar-row")!;
     this.contextEl = document.getElementById("context-toolbar")!;
     this.search = new SearchPill();
+    this.tools = new ToolRow((e) => this.emit(e), () => this.allowed());
     this.buildMenuBar();
     this.buildContextToolbar();
     this.setupMenuInteraction();
@@ -189,6 +162,7 @@ export class Toolbar {
     this.renameTitle = t.ttRename ?? "Click to rename";
     this.docTitleName.title = this.docName ? this.renameTitle : "";
     this.search.applyTranslations(t);
+    this.tools.applyTranslations(t);
   }
 
   private reg(el: HTMLElement, text?: keyof Translations, title?: keyof Translations): void {
@@ -197,8 +171,23 @@ export class Toolbar {
   }
 
   private emit(e: ToolbarEvent): void {
+    if (GUARDED.has(e.type) && !this.allowed()) return;
     this.handlers.forEach((h) => h(e));
   }
+
+  /** While changes wait for validation, shakes ✓ / ✕ and says no. */
+  allowed(): boolean {
+    if (!this.pending) return true;
+    this.tools.shake();
+    return false;
+  }
+
+  setPending(pending: boolean): void {
+    this.pending = pending;
+    this.tools.setPending(pending);
+  }
+
+  get isPending(): boolean { return this.pending; }
 
   get currentMode(): AppMode { return this.mode; }
   get pointerMode(): PointerMode { return this.pointer; }
@@ -247,50 +236,21 @@ export class Toolbar {
     if (!loaded) this.search.close();
   }
 
-  getStyle(): ActiveToolState {
-    return { ...this.state };
+  getStyle(): ActiveToolState { return this.tools.getStyle(); }
+
+  showTextStyles(state: Pick<ActiveToolState, "color" | "fontSize" | "bold" | "italic" | "underline"> & { fontFamily?: FontFamilyValue; backgroundColor?: RgbColor | null }): void {
+    this.tools.showTextStyles(state);
   }
 
-  showTextStyles(state: Pick<ActiveToolState, "color" | "fontSize" | "bold" | "italic" | "underline" | "alignment"> & { fontFamily?: FontFamilyValue }): void {
-    this.state.color     = { ...state.color };
-    this.state.fontFamily = state.fontFamily ?? "helvetica";
-    this.fontSelect.value = this.state.fontFamily;
-    this.state.fontSize  = state.fontSize;
-    this.state.bold      = state.bold;
-    this.state.italic    = state.italic;
-    this.state.underline = state.underline;
-    this.state.alignment = state.alignment;
+  hideTextStyles(): void { this.tools.hideTextStyles(); }
 
-    this.colorPicker.value = rgbToHex(state.color);
-    this.sizeInput.value   = String(state.fontSize);
-    this.boldBtn.classList.toggle("active",      state.bold);
-    this.italicBtn.classList.toggle("active",    state.italic);
-    this.underlineBtn.classList.toggle("active", state.underline);
-    this.alignBtns.forEach(b => b.classList.toggle("active", b.dataset["align"] === state.alignment));
-
-    this.textStyleSection.style.display = "flex";
+  showShapeStyles(state: { color: RgbColor; strokeWidth: number; fillColor?: RgbColor | null; opacity?: number }, panel: "pencil" | "shapes" = "shapes"): void {
+    this.tools.showShapeStyles(state, panel);
   }
 
-  hideTextStyles(): void {
-    this.textStyleSection.style.display = "none";
-  }
+  hideShapeStyles(): void { this.tools.hideShapeStyles(); }
 
-  /** Shows the shape controls for a shape (its outline is `color`) or for new shapes. */
-  showShapeStyles(state: { color: RgbColor; strokeWidth: number; fillColor?: RgbColor | null }): void {
-    this.state.shapeColor  = { ...state.color };
-    this.state.strokeWidth = state.strokeWidth;
-    this.state.fillColor   = state.fillColor ? { ...state.fillColor } : null;
-
-    this.shapeColorPicker.value = rgbToHex(state.color);
-    this.shapeStrokeInput.value = String(state.strokeWidth);
-    this.syncFillControls();
-
-    this.shapeStyleSection.style.display = "flex";
-  }
-
-  hideShapeStyles(): void {
-    this.shapeStyleSection.style.display = "none";
-  }
+  setSignatures(list: SignatureChip[]): void { this.tools.setSignatures(list); }
 
   private sep(): HTMLElement {
     const d = document.createElement("div");
@@ -618,10 +578,7 @@ export class Toolbar {
   private buildContextToolbar(): void {
     const main = document.createElement("div");
     main.className = "tb-row tb-main";
-    this.toolRow = document.createElement("div");
-    this.toolRow.className = "tb-row tb-tools";
-    this.toolRow.hidden = true;
-    this.contextEl.append(main, this.toolRow);
+    this.contextEl.append(main, this.tools.row, this.tools.options);
 
     // Page thumbnails sidebar toggle
     this.sidebarBtn = this.btn(ICON_SIDEBAR, "Show or hide the page thumbnails", "icon-btn");
@@ -736,68 +693,14 @@ export class Toolbar {
       modeSeg, right,
     );
     this.updateLayout(null, "vertical");
-
-    this.buildToolRow();
     this.syncModeBtns();
-  }
-
-  /** Second row: the tools of the Annotate or Edit mode and their options. */
-  private buildToolRow(): void {
-    // Annotate
-    this.annotateTools = document.createElement("div");
-    this.annotateTools.className = "toolbar-group tb-tool-group";
-    const toolSegment = this.segment();
-    const tools: [ToolKind, string, string, keyof Translations][] = [
-      ["text",   ICON_EDITOR_FREE_TEXT, "Text",      "ttText"],
-      ["rect",   ICON_RECT,             "Rectangle", "ttRect"],
-      ["circle", ICON_CIRCLE,           "Circle",    "ttCircle"],
-    ];
-    for (const [kind, icon, title, ttKey] of tools) {
-      const b = this.btn(icon, title, "icon-btn");
-      this.reg(b, undefined, ttKey);
-      b.addEventListener("click", () => this.setActiveTool(kind));
-      this.toolBtns[kind] = b;
-      toolSegment.append(b);
-    }
-    const signBtn = this.labeledBtn(ICON_EDITOR_SIGNATURE, "btnSign", "Sign", "ttSignature");
-    signBtn.addEventListener("click", () => this.emit({ type: "signature" }));
-    this.annotateTools.append(toolSegment, signBtn);
-
-    // Edit
-    this.editTools = document.createElement("div");
-    this.editTools.className = "toolbar-group tb-tool-group";
-    const redactBtn = this.labeledBtn(ICON_REDACT, "btnRedact", "Redact", "ttRedact");
-    redactBtn.addEventListener("click", () => {
-      if (this.state.tool === "redact") this.clearActiveTool();
-      else this.setActiveTool("redact");
-    });
-    this.toolBtns["redact"] = redactBtn;
-    this.editTools.append(redactBtn);
-
-    this.toolRow.append(this.annotateTools, this.editTools);
-    // Contextual style sections (hidden until a text or shape tool is used)
-    this.buildTextStyleSection(this.toolRow);
-    this.buildShapeStyleSection(this.toolRow);
-  }
-
-  /** Ghost button with an icon and a translated text label. */
-  private labeledBtn(icon: string, label: keyof Translations, fallback: string, tooltip: keyof Translations): HTMLButtonElement {
-    const b = this.btn(icon, fallback, "btn btn-ghost");
-    const span = document.createElement("span");
-    span.textContent = fallback;
-    b.append(span);
-    this.reg(span, label);
-    this.reg(b, undefined, tooltip);
-    return b;
   }
 
   /** Switches between reading, annotating and editing; any active tool is dropped. */
   setMode(mode: AppMode): void {
-    if (mode === this.mode) return;
+    if (mode === this.mode || !this.allowed()) return;
     this.mode = mode;
-    if (this.state.tool !== "select") this.clearActiveTool();
-    this.hideTextStyles();
-    this.hideShapeStyles();
+    this.tools.setMode(mode);
     this.syncModeBtns();
     this.emit({ type: "mode-change", mode });
   }
@@ -808,9 +711,6 @@ export class Toolbar {
       b.classList.toggle("active", on);
       b.setAttribute("aria-pressed", String(on));
     }
-    this.toolRow.hidden = this.mode === "read";
-    this.annotateTools.hidden = this.mode !== "annotate";
-    this.editTools.hidden = this.mode !== "edit";
   }
 
   setPointerMode(mode: PointerMode): void {
@@ -843,206 +743,6 @@ export class Toolbar {
     this.zoomLabel.hidden = false;
   }
 
-  private buildTextStyleSection(container: HTMLElement): void {
-    this.textStyleSection = document.createElement("div");
-    this.textStyleSection.className = "toolbar-group";
-    this.textStyleSection.style.cssText = "display:none;gap:4px;";
-
-    this.textStyleSection.append(this.sep());
-
-    // Colour
-    this.colorPicker = document.createElement("input");
-    this.colorPicker.type = "color";
-    this.colorPicker.className = "color-picker";
-    this.colorPicker.title = "Text colour";
-    this.reg(this.colorPicker, undefined, "ttTextColor");
-    this.colorPicker.value = rgbToHex(this.state.color);
-    this.colorPicker.addEventListener("input", () => {
-      this.state.color = hexToRgb(this.colorPicker.value);
-      this.emitStyleChange();
-    });
-    this.textStyleSection.append(this.colorPicker);
-
-    // Font family (PDF standard fonts)
-    this.fontSelect = document.createElement("select");
-    this.fontSelect.className = "toolbar-select";
-    this.reg(this.fontSelect, undefined, "ttFont");
-    for (const f of FONT_FAMILIES) {
-      const opt = document.createElement("option");
-      opt.value = f.value;
-      opt.textContent = f.label;
-      opt.style.fontFamily = f.css;
-      this.fontSelect.append(opt);
-    }
-    this.fontSelect.value = this.state.fontFamily;
-    this.fontSelect.addEventListener("change", () => {
-      this.state.fontFamily = this.fontSelect.value as FontFamilyValue;
-      this.emitStyleChange();
-    });
-    this.textStyleSection.append(this.fontSelect);
-
-    // Font size
-    this.sizeInput = document.createElement("input");
-    this.sizeInput.type = "number";
-    this.sizeInput.className = "toolbar-input";
-    this.sizeInput.title = "Font size";
-    this.sizeInput.value = String(this.state.fontSize);
-    this.sizeInput.min = "6";
-    this.sizeInput.max = "72";
-    this.sizeInput.addEventListener("change", () => {
-      const n = parseInt(this.sizeInput.value, 10);
-      if (!isNaN(n) && n > 0) { this.state.fontSize = n; this.emitStyleChange(); }
-    });
-    this.textStyleSection.append(this.sizeInput);
-
-    // Bold / Italic / Underline
-    this.boldBtn      = this.btn("B", "Bold",      "icon-btn");
-    this.italicBtn    = this.btn("I", "Italic",    "icon-btn");
-    this.underlineBtn = this.btn("U", "Underline", "icon-btn");
-    this.reg(this.boldBtn,      undefined, "ttBold");
-    this.reg(this.italicBtn,    undefined, "ttItalic");
-    this.reg(this.underlineBtn, undefined, "ttUnderline");
-    this.boldBtn.style.fontWeight          = "700";
-    this.italicBtn.style.fontStyle         = "italic";
-    this.underlineBtn.style.textDecoration = "underline";
-
-    ([
-      [this.boldBtn,      "bold"]      as const,
-      [this.italicBtn,    "italic"]    as const,
-      [this.underlineBtn, "underline"] as const,
-    ] as const).forEach(([b, key]) => {
-      b.addEventListener("click", () => {
-        (this.state[key] as boolean) = !this.state[key];
-        b.classList.toggle("active", this.state[key] as boolean);
-        this.emitStyleChange();
-      });
-    });
-    this.textStyleSection.append(this.segment(this.boldBtn, this.italicBtn, this.underlineBtn));
-
-    // Alignment
-    const alignDefs: [TextAlignmentValue, string, string, keyof Translations][] = [
-      ["left",   ICON_ALIGN_LEFT,   "Align left",   "ttAlignLeft"],
-      ["center", ICON_ALIGN_CENTER, "Align center", "ttAlignCenter"],
-      ["right",  ICON_ALIGN_RIGHT,  "Align right",  "ttAlignRight"],
-    ];
-    this.alignBtns = alignDefs.map(([val, icon, title, ttKey]) => {
-      const b = this.btn(icon, title, "icon-btn");
-      this.reg(b, undefined, ttKey);
-      b.dataset["align"] = val;
-      if (val === "left") b.classList.add("active");
-      b.addEventListener("click", () => {
-        this.state.alignment = val;
-        this.alignBtns.forEach(ab => ab.classList.remove("active"));
-        b.classList.add("active");
-        this.emitStyleChange();
-      });
-      return b;
-    });
-    this.textStyleSection.append(this.segment(...this.alignBtns));
-
-    // Layer order
-    const frontBtn = this.btn(ICON_LAYER_UP,   "Move up one layer",   "icon-btn");
-    const backBtn  = this.btn(ICON_LAYER_DOWN, "Move down one layer", "icon-btn");
-    this.reg(frontBtn, undefined, "ttLayerUp");
-    this.reg(backBtn,  undefined, "ttLayerDown");
-    frontBtn.addEventListener("click", () => this.emit({ type: "layer-change", dir: "up" }));
-    backBtn.addEventListener ("click", () => this.emit({ type: "layer-change", dir: "down" }));
-    this.textStyleSection.append(this.segment(frontBtn, backBtn));
-
-    container.append(this.textStyleSection);
-  }
-
-  private buildShapeStyleSection(container: HTMLElement): void {
-    this.shapeStyleSection = document.createElement("div");
-    this.shapeStyleSection.className = "toolbar-group";
-    this.shapeStyleSection.style.cssText = "display:none;gap:4px;";
-
-    this.shapeStyleSection.append(this.sep());
-
-    // Stroke colour
-    this.shapeColorPicker = document.createElement("input");
-    this.shapeColorPicker.type = "color";
-    this.shapeColorPicker.className = "color-picker";
-    this.shapeColorPicker.title = "Stroke colour";
-    this.reg(this.shapeColorPicker, undefined, "ttStrokeColor");
-    this.shapeColorPicker.value = rgbToHex(this.state.shapeColor);
-    this.shapeColorPicker.addEventListener("input", () => {
-      this.state.shapeColor = hexToRgb(this.shapeColorPicker.value);
-      this.emitStyleChange();
-    });
-
-    // Fill: colour, or none
-    this.fillPicker = document.createElement("input");
-    this.fillPicker.type = "color";
-    this.fillPicker.className = "color-picker";
-    this.reg(this.fillPicker, undefined, "ttFillColor");
-    this.fillPicker.addEventListener("input", () => {
-      this.lastFill = hexToRgb(this.fillPicker.value);
-      this.state.fillColor = { ...this.lastFill };
-      this.syncFillControls();
-      this.emitStyleChange();
-    });
-    this.noFillBtn = this.btn(ICON_NO_FILL, "No fill", "icon-btn");
-    this.reg(this.noFillBtn, undefined, "ttNoFill");
-    this.noFillBtn.addEventListener("click", () => {
-      this.state.fillColor = this.state.fillColor ? null : { ...this.lastFill };
-      this.syncFillControls();
-      this.emitStyleChange();
-    });
-    const fillLabel = document.createElement("span");
-    fillLabel.className = "toolbar-label";
-    fillLabel.innerHTML = ICON_FILL;
-    this.reg(fillLabel, undefined, "lblFill");
-    this.syncFillControls();
-
-    const outlineLabel = document.createElement("span");
-    outlineLabel.className = "toolbar-label";
-    outlineLabel.innerHTML = ICON_RECT;
-    this.reg(outlineLabel, undefined, "lblOutline");
-    this.shapeStyleSection.append(
-      outlineLabel, this.shapeColorPicker,
-      this.sep(), fillLabel, this.fillPicker, this.noFillBtn, this.sep(),
-    );
-
-    // Stroke width
-    const strokeLabel = document.createElement("span");
-    strokeLabel.className = "toolbar-label";
-    strokeLabel.innerHTML = ICON_STROKE_WIDTH;
-
-    this.shapeStrokeInput = document.createElement("input");
-    this.shapeStrokeInput.type = "number";
-    this.shapeStrokeInput.className = "toolbar-input";
-    this.shapeStrokeInput.title = "Stroke width";
-    this.shapeStrokeInput.value = String(this.state.strokeWidth);
-    this.shapeStrokeInput.min = "0";
-    this.shapeStrokeInput.max = "20";
-    this.shapeStrokeInput.step = "0.5";
-    this.shapeStrokeInput.addEventListener("change", () => {
-      const sw = parseFloat(this.shapeStrokeInput.value);
-      if (!isNaN(sw) && sw >= 0) { this.state.strokeWidth = sw; this.emitStyleChange(); }
-    });
-    this.shapeStyleSection.append(strokeLabel, this.shapeStrokeInput);
-
-    // Layer order
-    const frontBtn = this.btn(ICON_LAYER_UP,   "Move up one layer",   "icon-btn");
-    const backBtn  = this.btn(ICON_LAYER_DOWN, "Move down one layer", "icon-btn");
-    this.reg(frontBtn, undefined, "ttLayerUp");
-    this.reg(backBtn,  undefined, "ttLayerDown");
-    frontBtn.addEventListener("click", () => this.emit({ type: "layer-change", dir: "up" }));
-    backBtn.addEventListener ("click", () => this.emit({ type: "layer-change", dir: "down" }));
-    this.shapeStyleSection.append(this.segment(frontBtn, backBtn));
-
-    container.append(this.shapeStyleSection);
-  }
-
-  /** The fill swatch shows the current fill; "no fill" is lit when the shape is hollow. */
-  private syncFillControls(): void {
-    if (this.state.fillColor) this.lastFill = { ...this.state.fillColor };
-    this.fillPicker.value = rgbToHex(this.lastFill);
-    this.fillPicker.classList.toggle("is-off", !this.state.fillColor);
-    this.noFillBtn.classList.toggle("active", !this.state.fillColor);
-  }
-
   // ── Shared logic ────────────────────────────────────────────────────────────
 
   private commitZoomInput(): void {
@@ -1055,26 +755,6 @@ export class Toolbar {
     }
   }
 
-  private emitStyleChange(): void {
-    this.emit({ type: "style-change", style: this.getStyle() });
-  }
-
-  private setActiveTool(tool: ToolKind): void {
-    this.state.tool = tool;
-    for (const [kind, btn] of Object.entries(this.toolBtns) as [
-      ToolKind,
-      HTMLButtonElement,
-    ][]) {
-      btn.classList.toggle("active", kind === tool);
-    }
-    this.emit({ type: "tool-change", tool });
-  }
-
-  clearActiveTool(): void {
-    this.state.tool = "select";
-    for (const btn of Object.values(this.toolBtns)) {
-      btn?.classList.remove("active");
-    }
-    this.emit({ type: "tool-change", tool: "select" });
-  }
+  /** Back to selecting and moving annotations. */
+  clearActiveTool(): void { this.tools.clearTool(); }
 }
