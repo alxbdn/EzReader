@@ -10,12 +10,17 @@ const RADIUS    = 170;  // cursor influence radius
 const PUSH      = 24;   // max displacement under the cursor
 // Heavy, slow dots: a soft spring with strong damping, so they drift into
 // place and settle back over about a second instead of snapping.
-const SPRING    = 0.028;
-const DAMPING   = 0.86;
+const SPRING    = 0.02;
+const DAMPING   = 0.88;
+// Going back to rest is a slow glide with no spring and no bounce: each frame
+// covers this fraction of the remaining distance (about 5 s to settle).
+const RETURN_EASE = 0.01;
 // The point the dots react to trails the real cursor, which gives the field weight.
-const FOLLOW    = 0.07;
-const PRESENCE_EASE = 0.04; // how fast the influence fades in and out
-const GLOW_EASE = 0.05;
+const FOLLOW    = 0.045;
+const PRESENCE_EASE = 0.025; // how fast the influence fades in
+const PRESENCE_FADE = 0.008; // and out, once the cursor has left
+const GLOW_EASE = 0.04;
+const GLOW_FADE = 0.012;
 const BASE_SIZE = 1;    // dot radius at rest
 const RIPPLE_SPEED = 3.5; // px per frame
 const RIPPLE_WIDTH = 90;
@@ -77,7 +82,7 @@ export function mountWelcomeDots(screen: HTMLElement): void {
       focus.x += (mouse.x - focus.x) * FOLLOW;
       focus.y += (mouse.y - focus.y) * FOLLOW;
     }
-    presence += ((mouse ? 1 : 0) - presence) * PRESENCE_EASE;
+    presence += ((mouse ? 1 : 0) - presence) * (mouse ? PRESENCE_EASE : PRESENCE_FADE);
     if (!mouse && presence < 0.005) { presence = 0; focus = null; }
     if (mouse && (Math.abs(mouse.x - focus!.x) > 0.3 || Math.abs(mouse.y - focus!.y) > 0.3)) moving = true;
     if (presence > 0.005 && presence < 0.995) moving = true;
@@ -109,11 +114,20 @@ export function mountWelcomeDots(screen: HTMLElement): void {
           glow = Math.max(glow, band * fade);
         }
       }
-      d.vx = (d.vx + (tx - d.dx) * SPRING) * DAMPING;
-      d.vy = (d.vy + (ty - d.dy) * SPRING) * DAMPING;
-      d.dx += d.vx;
-      d.dy += d.vy;
-      d.glow += (glow - d.glow) * GLOW_EASE;
+      if (Math.hypot(tx, ty) >= Math.hypot(d.dx, d.dy)) {
+        // Pushed outwards: a soft, heavy spring.
+        d.vx = (d.vx + (tx - d.dx) * SPRING) * DAMPING;
+        d.vy = (d.vy + (ty - d.dy) * SPRING) * DAMPING;
+        d.dx += d.vx;
+        d.dy += d.vy;
+      } else {
+        // Coming back: glide slowly towards the target, carrying no momentum.
+        d.vx *= 0.9;
+        d.vy *= 0.9;
+        d.dx += (tx - d.dx) * RETURN_EASE + d.vx * 0.1;
+        d.dy += (ty - d.dy) * RETURN_EASE + d.vy * 0.1;
+      }
+      d.glow += (glow - d.glow) * (glow > d.glow ? GLOW_EASE : GLOW_FADE);
       if (Math.abs(d.vx) > 0.01 || Math.abs(d.vy) > 0.01 || Math.abs(d.dx) > 0.05 || Math.abs(d.dy) > 0.05 || d.glow > 0.01) {
         moving = true;
       }
