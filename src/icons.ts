@@ -57,3 +57,4 @@ export const ICON_STROKE_WIDTH = lucide(`<path d="M4 6h16" stroke-width="1"/><pa
 export const ICON_SEARCH = lucide(`<circle cx="11" cy="11" r="7"/><path d="m20 20-4.3-4.3"/>`);
 export const ICON_REDACT = lucide(`<rect x="3" y="5" width="18" height="14" rx="2"/><rect x="7" y="10" width="10" height="4" fill="currentColor" stroke="none"/>`);
 export const ICON_COMPRESS = lucide(`<path d="M12 3v6"/><path d="m9 6 3 3 3-3"/><path d="M12 21v-6"/><path d="m9 18 3-3 3 3"/><path d="M4 12h16"/>`);
+export const ICON_SIDEBAR = lucide(`<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18"/>`);
