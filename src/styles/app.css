@@ -665,10 +665,22 @@ input[type="color"].color-picker::-webkit-color-swatch { border: none; border-ra
   align-items: safe center;
   justify-content: center;
   overflow: auto;
+  position: relative;
   background: var(--background);
-  background-image: radial-gradient(color-mix(in srgb, var(--muted-foreground) 18%, transparent) 1px, transparent 1px);
-  background-size: 22px 22px;
   padding: 40px 24px;
+}
+
+/* Interactive dot grid (src/welcome-dots.ts), drawn behind the content. */
+.welcome-dots {
+  position: absolute;
+  top: 0;
+  left: 0;
+  pointer-events: none;
+}
+
+#welcome-screen .welcome-inner {
+  position: relative;
+  z-index: 1;
 }
 
 #welcome-screen.hidden {

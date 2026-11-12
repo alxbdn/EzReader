@@ -1,3 +1,4 @@
+import { mountWelcomeDots } from "./welcome-dots";
 import { PdfViewer, PdfPageView, renderRedactedPages } from "./pdf-viewer";
 import { Toolbar } from "./toolbar";
 import { CompressModal } from "./compress-modal";
@@ -546,6 +547,8 @@ printModal.onConfirm(async (settings) => {
 });
 
 // ── Welcome screen ────────────────────────────────────────────────────────────
+
+mountWelcomeDots(document.getElementById("welcome-screen")!);
 
 document.getElementById("welcome-open-btn")?.addEventListener("click", async () => {
   await openFile();
