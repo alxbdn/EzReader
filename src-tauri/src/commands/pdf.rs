@@ -3,6 +3,7 @@ use std::collections::{HashMap, HashSet};
 use lopdf::{Document, IncrementalDocument, Object, ObjectId};
 use serde::{Deserialize, Serialize};
 
+use crate::fsutil;
 use crate::pdf::{models::Annotation, writer, writer::FormFieldValue};
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -42,7 +43,7 @@ pub fn save_annotated_pdf(
             })
             .unwrap_or(true);
         if prev_meta_empty {
-            std::fs::copy(&input_path, &output_path).map_err(|e| e.to_string())?;
+            fsutil::copy_atomic(&input_path, &output_path)?;
             return Ok(());
         }
     }
@@ -122,7 +123,7 @@ pub fn save_annotated_pdf(
             inc.opt_clone_object_to_new_document(sid)
                 .map_err(|e| e.to_string())?;
             if let Ok(Object::Stream(s)) = inc.new_document.get_object_mut(sid) {
-                s.content = vec![];
+                writer::set_raw_content(s, vec![]);
             }
         }
     }
@@ -147,7 +148,7 @@ pub fn save_annotated_pdf(
         writer::write_form_fields(&mut inc.new_document, &form_fields)?;
     }
 
-    inc.save(&output_path).map_err(|e| e.to_string())?;
+    fsutil::save_incremental(&mut inc, &output_path)?;
     Ok(())
 }
 
@@ -296,7 +297,7 @@ pub fn strip_annotation_streams(
     if meta_empty {
         // No burn streams to clear; just copy bytes verbatim and avoid lopdf's
         // corruption-prone full rewrite.
-        std::fs::copy(&input_path, &output_path).map_err(|e| e.to_string())?;
+        fsutil::copy_atomic(&input_path, &output_path)?;
         return Ok(false);
     }
 
@@ -307,10 +308,10 @@ pub fn strip_annotation_streams(
         inc.opt_clone_object_to_new_document(sid)
             .map_err(|e| e.to_string())?;
         if let Ok(Object::Stream(s)) = inc.new_document.get_object_mut(sid) {
-            s.content = vec![];
+            writer::set_raw_content(s, vec![]);
         }
     }
-    inc.save(&output_path).map_err(|e| e.to_string())?;
+    fsutil::save_incremental(&mut inc, &output_path)?;
     Ok(true)
 }
 
@@ -475,7 +476,7 @@ pub fn modify_pages(
         .map_err(|e| e.to_string())?;
     writer::save_meta(&mut inc.new_document, &meta)?;
 
-    inc.save(&output_path).map_err(|e| e.to_string())?;
+    fsutil::save_incremental(&mut inc, &output_path)?;
     Ok(())
 }
 
@@ -483,6 +484,47 @@ pub fn modify_pages(
 mod tests {
     use super::*;
     use lopdf::{dictionary, ObjectId};
+
+    use crate::test_util::{fixture, tmp};
+
+    fn rect(page: u32, w: f64) -> Annotation {
+        serde_json::from_value(serde_json::json!({
+            "kind": "rect", "page": page, "x": 10.0, "y": 10.0, "width": w,
+            "height": 40.0, "color": {"r": 255, "g": 0, "b": 0}, "strokeWidth": 2.0
+        }))
+        .unwrap()
+    }
+
+    /// Save, re-save with a changed annotation, strip, then delete a page, on a
+    /// PDF with object streams + indirect /Length (iLovePDF / Acrobat style).
+    #[test]
+    fn annotate_resave_strip_and_delete_on_object_stream_pdf() {
+        let first = tmp("first.pdf");
+        let second = tmp("second.pdf");
+        let stripped = tmp("stripped.pdf");
+        let one_page = tmp("one.pdf");
+
+        save_annotated_pdf(fixture("objstm-indirect-length.pdf"), first.clone(), vec![rect(1, 200.0)], 0, vec![]).unwrap();
+        assert_eq!(read_annotations(first.clone()).unwrap().len(), 1);
+
+        // Re-saving rewrites the existing burn stream in place; its /Length
+        // used to stay at the old size.
+        save_annotated_pdf(first.clone(), second.clone(), vec![rect(1, 20.0), rect(1, 30.0)], 0, vec![]).unwrap();
+        crate::test_util::assert_lengths_consistent(&second);
+        assert_eq!(read_annotations(second.clone()).unwrap().len(), 2);
+
+        assert!(strip_annotation_streams(second.clone(), stripped.clone()).unwrap());
+        crate::test_util::assert_lengths_consistent(&stripped);
+
+        modify_pages(second.clone(), one_page.clone(), vec![PageOperation { page: 2, rotation: 0, delete: true }]).unwrap();
+        let doc = Document::load(&one_page).unwrap();
+        assert_eq!(doc.get_pages().len(), 1);
+        assert!(doc.extract_text(&[1]).unwrap().contains("Page 1"));
+
+        for p in [first, second, stripped, one_page] {
+            std::fs::remove_file(p).ok();
+        }
+    }
 
     /// Build a PDF whose page tree mirrors iLovePDF/Acrobat output: a root
     /// /Pages node with several intermediate /Pages nodes, each holding several
@@ -692,7 +734,7 @@ mod tests {
             .map(|p| PageOperation {
                 page: p,
                 rotation: 0,
-                delete: matches!(p, 5 | 6 | 7),
+                delete: matches!(p, 5..=7),
             })
             .collect();
 
@@ -747,13 +789,13 @@ fn extract_pages_via_incremental(
         && (1..=total).all(|p| keep.contains(&p));
     if keeping_all {
         // Byte-perfect copy — no incremental update needed.
-        std::fs::copy(input_path, output_path).map_err(|e| e.to_string())?;
+        fsutil::copy_atomic(input_path, output_path)?;
         return Ok(());
     }
 
     let delete_set: HashSet<u32> = (1..=total).filter(|p| !keep.contains(p)).collect();
     apply_page_deletions(&mut inc, &delete_set)?;
-    inc.save(output_path).map_err(|e| e.to_string())?;
+    fsutil::save_incremental(&mut inc, output_path)?;
     Ok(())
 }
 

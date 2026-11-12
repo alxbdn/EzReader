@@ -24,7 +24,7 @@
       "assetProtocol": {
         "enable": true,
         "scope": {
-          "allow": ["**"],
+          "allow": ["$TEMP/ezreader-*"],
           "requireLiteralLeadingDot": false
         }
       }
