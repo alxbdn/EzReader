@@ -78,11 +78,31 @@ export interface SignatureAnnotation extends BaseAnnotation {
   imageData: string;
 }
 
+/**
+ * An area to black out. Until the document is saved it is an ordinary,
+ * editable annotation; on save the page is rasterised with the area filled
+ * and the original page content is dropped, so the hidden content is gone
+ * for good (see DocumentSession and the `redact_pages` command).
+ */
+export interface RedactAnnotation extends BaseAnnotation {
+  kind: "redact";
+  width: number;
+  height: number;
+}
+
 export type Annotation =
   | RectAnnotation
   | CircleAnnotation
   | TextAnnotation
-  | SignatureAnnotation;
+  | SignatureAnnotation
+  | RedactAnnotation;
+
+/** Annotations the backend stores as editable metadata (everything but redactions). */
+export type StoredAnnotation = Exclude<Annotation, RedactAnnotation>;
+
+export function isRedaction(a: Annotation): a is RedactAnnotation {
+  return a.kind === "redact";
+}
 
 // ── Form fields ───────────────────────────────────────────────────────────────
 
@@ -95,7 +115,7 @@ export interface FormFieldValue {
 
 // ── Tool state ────────────────────────────────────────────────────────────────
 
-export type ToolKind = "select" | "rect" | "circle" | "text" | "signature";
+export type ToolKind = "select" | "rect" | "circle" | "text" | "signature" | "redact";
 
 export interface ActiveToolState {
   tool: ToolKind;

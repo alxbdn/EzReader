@@ -4,7 +4,7 @@ use lopdf::{Document, IncrementalDocument, Object, ObjectId};
 use serde::{Deserialize, Serialize};
 
 use crate::fsutil;
-use crate::pdf::{models::Annotation, writer, writer::FormFieldValue};
+use crate::pdf::{models::Annotation, redact, writer, writer::FormFieldValue};
 
 /// Returns the total number of pages in the given PDF file.
 #[tauri::command]
@@ -305,6 +305,24 @@ pub fn strip_annotation_streams(
     }
     fsutil::save_incremental(&mut inc, &output_path)?;
     Ok(true)
+}
+
+/// Writes `input_path` to `output_path` with `pages` replaced by their
+/// redacted images. Always a full rewrite: an incremental update would keep
+/// the original page content in the file's earlier revision.
+#[tauri::command]
+pub fn redact_pages(
+    input_path: String,
+    output_path: String,
+    pages: Vec<redact::RedactedPage>,
+) -> Result<(), String> {
+    let mut doc = Document::load(&input_path).map_err(|e| e.to_string())?;
+    let page_count = doc.get_pages().len();
+    redact::redact_pages(&mut doc, &pages)?;
+    if doc.get_pages().len() != page_count {
+        return Err("Redaction aborted: page count changed".into());
+    }
+    fsutil::save_document(&mut doc, &output_path)
 }
 
 /// Reads editable annotations from the PDF's `CCAnnot` catalog entry.

@@ -48,6 +48,10 @@ export interface Translations {
   settingsClose: string;
   settingsInterface: string;
   settingsLanguage: string;
+  settingsTheme: string;
+  settingsThemeSystem: string;
+  settingsThemeLight: string;
+  settingsThemeDark: string;
   settingsDefaultApp?: string;
   settingsSetDefault?: string;
   settingsRemoveDefault?: string;
@@ -178,6 +182,17 @@ export interface Translations {
   msgPrintFailed?: string;
   msgPlaceSignature?: string;
   msgSignatureCancelled?: string;
+  // Toolbar shortcuts, redaction and default zoom (optional, English fallback)
+  btnSign?: string;
+  btnCompressShort?: string;
+  btnRedact?: string;
+  ttRedact?: string;
+  ttResetZoom?: string;
+  settingsDefaultZoom?: string;
+  settingsZoomFitWidth?: string;
+  settingsZoomFitPage?: string;
+  msgRedactTitle?: string;
+  msgRedactConfirm?: string;
 }
 
 // ── English ───────────────────────────────────────────────────────────────────
@@ -226,6 +241,10 @@ const EN: Translations = {
   settingsClose:     "Close",
   settingsInterface: "Interface",
   settingsLanguage:  "Language",
+  settingsTheme:       "Theme",
+  settingsThemeSystem: "System",
+  settingsThemeLight:  "Light",
+  settingsThemeDark:   "Dark",
   btnCompress:       "Compress\u2026",
   ttCompress:        "Compress PDF",
   compressTitle:     "Compress PDF",
@@ -348,6 +367,16 @@ const EN: Translations = {
   msgPrintFailed:         "Print failed: {err}",
   msgPlaceSignature:      "Click on the page to place your signature. Press Esc to cancel.",
   msgSignatureCancelled:  "Signature placement cancelled.",
+  btnSign:              "Sign",
+  btnCompressShort:     "Compress",
+  btnRedact:            "Redact",
+  ttRedact:             "Redact: black out an area (permanent once saved)",
+  ttResetZoom:          "Reset zoom to default (Ctrl+0)",
+  settingsDefaultZoom:  "Default zoom",
+  settingsZoomFitWidth: "Fit width",
+  settingsZoomFitPage:  "Fit page",
+  msgRedactTitle:       "Apply redactions",
+  msgRedactConfirm:     "Saving permanently removes everything under the black boxes. The redacted pages become images and their text can no longer be selected. This cannot be undone. Continue?",
 };
 
 // ── French ────────────────────────────────────────────────────────────────────
@@ -396,6 +425,10 @@ const FR: Translations = {
   settingsClose:     "Fermer",
   settingsInterface: "Interface",
   settingsLanguage:  "Langue",
+  settingsTheme:       "Th\u00e8me",
+  settingsThemeSystem: "Syst\u00e8me",
+  settingsThemeLight:  "Clair",
+  settingsThemeDark:   "Sombre",
   btnCompress:       "Compresser\u2026",
   ttCompress:        "Compresser le PDF",
   compressTitle:     "Compresser le PDF",
@@ -518,6 +551,16 @@ const FR: Translations = {
   msgPrintFailed:         "Échec de l'impression : {err}",
   msgPlaceSignature:      "Cliquez sur la page pour placer votre signature. Échap pour annuler.",
   msgSignatureCancelled:  "Placement de la signature annulé.",
+  btnSign:              "Signer",
+  btnCompressShort:     "Compresser",
+  btnRedact:            "Caviarder",
+  ttRedact:             "Caviarder : masquer une zone (définitif à l'enregistrement)",
+  ttResetZoom:          "Revenir au zoom par défaut (Ctrl+0)",
+  settingsDefaultZoom:  "Zoom par défaut",
+  settingsZoomFitWidth: "Ajuster à la largeur",
+  settingsZoomFitPage:  "Page entière",
+  msgRedactTitle:       "Appliquer le caviardage",
+  msgRedactConfirm:     "L'enregistrement supprime définitivement tout ce qui se trouve sous les zones noires. Les pages caviardées deviennent des images et leur texte ne pourra plus être sélectionné. Cette action est irréversible. Continuer ?",
 };
 
 // ── Chinese (Mandarin) ────────────────────────────────────────────────────────
@@ -566,6 +609,10 @@ const ZH: Translations = {
   settingsClose:     "\u5173\u95ed",
   settingsInterface: "\u754c\u9762",
   settingsLanguage:  "\u8bed\u8a00",
+  settingsTheme:       "\u4e3b\u9898",
+  settingsThemeSystem: "\u8ddf\u968f\u7cfb\u7edf",
+  settingsThemeLight:  "\u6d45\u8272",
+  settingsThemeDark:   "\u6df1\u8272",
   btnCompress:       "\u538b\u7f29\u2026",
   ttCompress:        "\u538b\u7f29 PDF",
   compressTitle:     "\u538b\u7f29 PDF",
@@ -673,6 +720,10 @@ const HI: Translations = {
   settingsClose:     "\u092c\u0902\u0926 \u0915\u0930\u0947\u0902",
   settingsInterface: "\u0907\u0902\u091f\u0930\u092b\u093c\u0947\u0938",
   settingsLanguage:  "\u092d\u093e\u0937\u093e",
+  settingsTheme:       "\u0925\u0940\u092e",
+  settingsThemeSystem: "\u0938\u093f\u0938\u094d\u091f\u092e",
+  settingsThemeLight:  "\u0939\u0932\u094d\u0915\u093e",
+  settingsThemeDark:   "\u0917\u0939\u0930\u093e",
   btnCompress:       "\u0938\u0902\u092a\u0940\u0921\u093c\u093f\u0924 \u0915\u0930\u0947\u0902\u2026",
   ttCompress:        "PDF \u0938\u0902\u092a\u0940\u0921\u093c\u093f\u0924 \u0915\u0930\u0947\u0902",
   compressTitle:     "PDF \u0938\u0902\u092a\u0940\u0921\u093c\u093f\u0924 \u0915\u0930\u0947\u0902",
@@ -780,6 +831,10 @@ const ES: Translations = {
   settingsClose:     "Cerrar",
   settingsInterface: "Interfaz",
   settingsLanguage:  "Idioma",
+  settingsTheme:       "Tema",
+  settingsThemeSystem: "Sistema",
+  settingsThemeLight:  "Claro",
+  settingsThemeDark:   "Oscuro",
   btnCompress:       "Comprimir\u2026",
   ttCompress:        "Comprimir PDF",
   compressTitle:     "Comprimir PDF",
@@ -887,6 +942,10 @@ const AR: Translations = {
   settingsClose:     "\u0625\u063a\u0644\u0627\u0642",
   settingsInterface: "\u0627\u0644\u0648\u0627\u062c\u0647\u0629",
   settingsLanguage:  "\u0627\u0644\u0644\u063a\u0629",
+  settingsTheme:       "\u0627\u0644\u0633\u0645\u0629",
+  settingsThemeSystem: "\u0627\u0644\u0646\u0638\u0627\u0645",
+  settingsThemeLight:  "\u0641\u0627\u062a\u062d",
+  settingsThemeDark:   "\u062f\u0627\u0643\u0646",
   btnCompress:       "\u0636\u063a\u0637\u2026",
   ttCompress:        "\u0636\u063a\u0637 PDF",
   compressTitle:     "\u0636\u063a\u0637 PDF",
@@ -994,6 +1053,10 @@ const BN: Translations = {
   settingsClose:     "\u09ac\u09a8\u09cd\u09a7 \u0995\u09b0\u09c1\u09a8",
   settingsInterface: "\u0987\u09a8\u09cd\u099f\u09be\u09b0\u09ab\u09c7\u09b8",
   settingsLanguage:  "\u09ad\u09be\u09b7\u09be",
+  settingsTheme:       "\u09a5\u09bf\u09ae",
+  settingsThemeSystem: "\u09b8\u09bf\u09b8\u09cd\u099f\u09c7\u09ae",
+  settingsThemeLight:  "\u09b9\u09be\u09b2\u0995\u09be",
+  settingsThemeDark:   "\u0997\u09be\u09a2\u09bc",
   btnCompress:       "সংকুচিত করুন…",
   ttCompress:        "PDF সংকুচিত করুন",
   compressTitle:     "PDF সংকুচিত করুন",
@@ -1101,6 +1164,10 @@ const RU: Translations = {
   settingsClose:     "\u0417\u0430\u043a\u0440\u044b\u0442\u044c",
   settingsInterface: "\u0418\u043d\u0442\u0435\u0440\u0444\u0435\u0439\u0441",
   settingsLanguage:  "\u042f\u0437\u044b\u043a",
+  settingsTheme:       "\u0422\u0435\u043c\u0430",
+  settingsThemeSystem: "\u0421\u0438\u0441\u0442\u0435\u043c\u043d\u0430\u044f",
+  settingsThemeLight:  "\u0421\u0432\u0435\u0442\u043b\u0430\u044f",
+  settingsThemeDark:   "\u0422\u0451\u043c\u043d\u0430\u044f",
   btnCompress:       "Сжать…",
   ttCompress:        "Сжать PDF",
   compressTitle:     "Сжать PDF",
@@ -1208,6 +1275,10 @@ const PT: Translations = {
   settingsClose:     "Fechar",
   settingsInterface: "Interface",
   settingsLanguage:  "Idioma",
+  settingsTheme:       "Tema",
+  settingsThemeSystem: "Sistema",
+  settingsThemeLight:  "Claro",
+  settingsThemeDark:   "Escuro",
   btnCompress:       "Comprimir…",
   ttCompress:        "Comprimir PDF",
   compressTitle:     "Comprimir PDF",
@@ -1315,6 +1386,10 @@ const UR: Translations = {
   settingsClose:     "\u0628\u0646\u062f \u06a9\u0631\u06cc\u06ba",
   settingsInterface: "\u0627\u0646\u0679\u0631\u0641\u06cc\u0633",
   settingsLanguage:  "\u0632\u0628\u0627\u0646",
+  settingsTheme:       "\u062a\u06be\u06cc\u0645",
+  settingsThemeSystem: "\u0633\u0633\u0679\u0645",
+  settingsThemeLight:  "\u06c1\u0644\u06a9\u0627",
+  settingsThemeDark:   "\u06af\u06c1\u0631\u0627",
   btnCompress:       "سکیڑیں…",
   ttCompress:        "PDF سکیڑیں",
   compressTitle:     "PDF سکیڑیں",
@@ -1422,6 +1497,10 @@ const ID: Translations = {
   settingsClose:     "Tutup",
   settingsInterface: "Antarmuka",
   settingsLanguage:  "Bahasa",
+  settingsTheme:       "Tema",
+  settingsThemeSystem: "Sistem",
+  settingsThemeLight:  "Terang",
+  settingsThemeDark:   "Gelap",
   btnCompress:       "Kompres…",
   ttCompress:        "Kompres PDF",
   compressTitle:     "Kompres PDF",
@@ -1529,6 +1608,10 @@ const DE: Translations = {
   settingsClose:     "Schlie\u00dfen",
   settingsInterface: "Oberfl\u00e4che",
   settingsLanguage:  "Sprache",
+  settingsTheme:       "Design",
+  settingsThemeSystem: "System",
+  settingsThemeLight:  "Hell",
+  settingsThemeDark:   "Dunkel",
   btnCompress:       "Komprimieren…",
   ttCompress:        "PDF komprimieren",
   compressTitle:     "PDF komprimieren",
@@ -1636,6 +1719,10 @@ const JA: Translations = {
   settingsClose:     "\u9589\u3058\u308b",
   settingsInterface: "\u30a4\u30f3\u30bf\u30fc\u30d5\u30a7\u30fc\u30b9",
   settingsLanguage:  "\u8a00\u8a9e",
+  settingsTheme:       "\u30c6\u30fc\u30de",
+  settingsThemeSystem: "\u30b7\u30b9\u30c6\u30e0",
+  settingsThemeLight:  "\u30e9\u30a4\u30c8",
+  settingsThemeDark:   "\u30c0\u30fc\u30af",
   btnCompress:       "圧縮…",
   ttCompress:        "PDF を圧縮",
   compressTitle:     "PDF を圧縮",
@@ -1743,6 +1830,10 @@ const SW: Translations = {
   settingsClose:     "Funga",
   settingsInterface: "Kiolesura",
   settingsLanguage:  "Lugha",
+  settingsTheme:       "Mandhari",
+  settingsThemeSystem: "Mfumo",
+  settingsThemeLight:  "Angavu",
+  settingsThemeDark:   "Giza",
   btnCompress:       "Bana…",
   ttCompress:        "Bana PDF",
   compressTitle:     "Bana PDF",
@@ -1850,6 +1941,10 @@ const MR: Translations = {
   settingsClose:     "\u092c\u0902\u0926 \u0915\u0930\u093e",
   settingsInterface: "\u0907\u0902\u091f\u0930\u092b\u0947\u0938",
   settingsLanguage:  "\u092d\u093e\u0937\u093e",
+  settingsTheme:       "\u0925\u0940\u092e",
+  settingsThemeSystem: "\u0938\u093f\u0938\u094d\u091f\u092e",
+  settingsThemeLight:  "\u092b\u093f\u0915\u091f",
+  settingsThemeDark:   "\u0917\u0921\u0926",
   btnCompress:       "संकुचित करा…",
   ttCompress:        "PDF संकुचित करा",
   compressTitle:     "PDF संकुचित करा",
@@ -1957,6 +2052,10 @@ const TE: Translations = {
   settingsClose:     "\u0c2e\u0c42\u0c38\u0c3f\u0c35\u0c47\u0c2f\u0c02\u0c21\u0c3f",
   settingsInterface: "\u0c07\u0c02\u0c1f\u0c30\u0c4d\u200c\u0c2b\u0c47\u0c38\u0c4d",
   settingsLanguage:  "\u0c2d\u0c3e\u0c37",
+  settingsTheme:       "\u0c25\u0c40\u0c2e\u0c4d",
+  settingsThemeSystem: "\u0c38\u0c3f\u0c38\u0c4d\u0c1f\u0c2e\u0c4d",
+  settingsThemeLight:  "\u0c32\u0c47\u0c24",
+  settingsThemeDark:   "\u0c2e\u0c41\u0c26\u0c41\u0c30\u0c41",
   btnCompress:       "కుదించు…",
   ttCompress:        "PDF కుదించు",
   compressTitle:     "PDF కుదించు",
@@ -2064,6 +2163,10 @@ const TR: Translations = {
   settingsClose:     "Kapat",
   settingsInterface: "Aray\u00fcz",
   settingsLanguage:  "Dil",
+  settingsTheme:       "Tema",
+  settingsThemeSystem: "Sistem",
+  settingsThemeLight:  "A\u00e7\u0131k",
+  settingsThemeDark:   "Koyu",
   btnCompress:       "Sıkıştır…",
   ttCompress:        "PDF Sıkıştır",
   compressTitle:     "PDF Sıkıştır",
@@ -2171,6 +2274,10 @@ const TA: Translations = {
   settingsClose:     "\u0bae\u0bc2\u0b9f\u0bc1",
   settingsInterface: "\u0b87\u0b9f\u0bc8\u0bae\u0bc1\u0b95\u0bae\u0bcd",
   settingsLanguage:  "\u0bae\u0bca\u0bb4\u0bbf",
+  settingsTheme:       "\u0ba4\u0bc0\u0bae\u0bcd",
+  settingsThemeSystem: "\u0b95\u0ba3\u0bbf\u0ba9\u0bbf",
+  settingsThemeLight:  "\u0bb5\u0bc6\u0bb3\u0bbf\u0bb0\u0bcd",
+  settingsThemeDark:   "\u0b87\u0bb0\u0bc1\u0ba3\u0bcd\u0b9f",
   btnCompress:       "சுருக்கு…",
   ttCompress:        "PDF சுருக்கு",
   compressTitle:     "PDF சுருக்கு",
@@ -2278,6 +2385,10 @@ const VI: Translations = {
   settingsClose:     "\u0110\u00f3ng",
   settingsInterface: "Giao di\u1ec7n",
   settingsLanguage:  "Ng\u00f4n ng\u1eef",
+  settingsTheme:       "Giao di\u1ec7n",
+  settingsThemeSystem: "H\u1ec7 th\u1ed1ng",
+  settingsThemeLight:  "S\u00e1ng",
+  settingsThemeDark:   "T\u1ed1i",
   btnCompress:       "Nén…",
   ttCompress:        "Nén PDF",
   compressTitle:     "Nén PDF",
@@ -2385,6 +2496,10 @@ const KO: Translations = {
   settingsClose:     "\ub2eb\uae30",
   settingsInterface: "\uc778\ud130\ud398\uc774\uc2a4",
   settingsLanguage:  "\uc5b8\uc5b4",
+  settingsTheme:       "\ud14c\ub9c8",
+  settingsThemeSystem: "\uc2dc\uc2a4\ud15c",
+  settingsThemeLight:  "\ub77c\uc774\ud2b8",
+  settingsThemeDark:   "\ub2e4\ud06c",
   btnCompress:       "압축…",
   ttCompress:        "PDF 압축",
   compressTitle:     "PDF 압축",

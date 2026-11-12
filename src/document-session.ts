@@ -1,4 +1,4 @@
-import type { Annotation, FormFieldValue } from "./models";
+import { isRedaction, type Annotation, type FormFieldValue, type RedactAnnotation, type StoredAnnotation } from "./models";
 
 /**
  * Everything the app needs to know about the open document, in one place.
@@ -18,6 +18,11 @@ import type { Annotation, FormFieldValue } from "./models";
  * exports the document (save, compress, split, print) must start from
  * `materialize()`, which returns a file reflecting all of that — never from
  * `sourcePath` directly, which would silently drop the user's work.
+ *
+ * Redactions are applied first and for good: the affected pages of the base
+ * are rasterised with the areas blacked out, their original content dropped,
+ * and only then are the other edits written on top. They are never stored as
+ * editable metadata, so reopening the file cannot bring the content back.
  */
 
 export interface PendingEdits {
@@ -31,10 +36,15 @@ export interface SessionIO {
   saveAnnotated(
     input: string,
     output: string,
-    annotations: Annotation[],
+    annotations: StoredAnnotation[],
     rotation: number,
     formFields: FormFieldValue[],
   ): Promise<void>;
+  /**
+   * Writes `input` to `output` with the redacted areas blacked out and the
+   * original content of their pages removed (a full rewrite, no history).
+   */
+  redact(input: string, output: string, redactions: RedactAnnotation[]): Promise<void>;
   /** Returns a fresh, unique temp file path whose name ends with `suffix`. */
   tempPath(suffix: string): Promise<string>;
 }
@@ -119,11 +129,24 @@ export class DocumentSession {
     this.saved(target);
   }
 
-  private writeWithEdits(input: string, output: string): Promise<void> {
-    return this.io.saveAnnotated(
+  /** True when saving will permanently remove content. */
+  hasRedactions(): boolean {
+    return this.edits.annotations().some(isRedaction);
+  }
+
+  private async writeWithEdits(input: string, output: string): Promise<void> {
+    const all = this.edits.annotations();
+    const redactions = all.filter(isRedaction);
+    const others = all.filter((a): a is StoredAnnotation => !isRedaction(a));
+    if (redactions.length > 0) {
+      const redacted = await this.io.tempPath("redacted.pdf");
+      await this.io.redact(input, redacted, redactions);
+      input = redacted;
+    }
+    await this.io.saveAnnotated(
       input,
       output,
-      this.edits.annotations(),
+      others,
       this.pendingRotation(),
       this.edits.formFields(),
     );

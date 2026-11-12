@@ -1,4 +1,4 @@
-import { PdfViewer, PdfPageView } from "./pdf-viewer";
+import { PdfViewer, PdfPageView, renderRedactedPages } from "./pdf-viewer";
 import { Toolbar } from "./toolbar";
 import { CompressModal } from "./compress-modal";
 import { PrintModal } from "./print-modal";
@@ -34,6 +34,7 @@ import {
   rearrangePages,
   splitPdf,
   pickDirectoryDialog,
+  redactPages,
 } from "./tauri-bridge";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { tempDir, basename } from "@tauri-apps/api/path";
@@ -92,7 +93,12 @@ const session = new DocumentSession(
     formFields:  () => [...formValues.entries()].map(([name, value]): FormFieldValue => ({ name, value })),
     rotation:    () => viewer.rotation,
   },
-  { saveAnnotated: saveAnnotatedPdf, tempPath: newTempPath },
+  {
+    saveAnnotated: saveAnnotatedPdf,
+    redact: async (input, output, redactions) =>
+      redactPages(input, output, await renderRedactedPages(input, redactions)),
+    tempPath: newTempPath,
+  },
 );
 
 type MessageKey = Extract<keyof Translations, `msg${string}`>;
@@ -110,6 +116,23 @@ async function applyFitMode(): Promise<void> {
     await viewer.setScale((scroll.clientWidth - 40) / viewer.pageWidthPt);
   } else {
     await viewer.setScale(scroll.clientHeight / viewer.pageHeightPt);
+  }
+  toolbar.updateZoom(viewer.scale);
+}
+
+/** Applies the zoom chosen in Settings (on open, Ctrl+0 and the magnifier button). */
+async function applyDefaultZoom(): Promise<void> {
+  if (!viewer.isLoaded()) return;
+  const pref = settingsModal.getSettings().defaultZoom;
+  if (pref === "fit-width" || pref === "fit-page") {
+    fitMode = pref === "fit-width" ? "fit-width" : "fit-height";
+    toolbar.updateFitMode(fitMode);
+    await applyFitMode();
+  } else {
+    fitMode = "none";
+    toolbar.updateFitMode(fitMode);
+    const pct = parseFloat(pref);
+    await viewer.setScale((Number.isFinite(pct) ? pct : 100) / 100 * CSS_UNITS);
   }
   toolbar.updateZoom(viewer.scale);
 }
@@ -249,6 +272,8 @@ function showToast(msg: string, isError = false): void {
 
 function setDirty(val: boolean): void {
   session.markDirty(val);
+  const target = session.saveTarget;
+  toolbar.setDocTitle(target ? target.split(/[\\/]/).pop() ?? target : null, val);
   if (val) { void registerCloseGuard(); }
   else      { unregisterCloseGuard(); }
 }
@@ -328,7 +353,7 @@ async function promptPassword(fp: string): Promise<void> {
     setWelcomeVisible(false);
     toolbar.setLoaded(true);
     toolbar.updatePageInfo(1, viewer.pageCount);
-    toolbar.updateZoom(viewer.scale);
+    await applyDefaultZoom();
   } catch {
     showToast(msg("msgWrongPassword"), true);
   }
@@ -374,6 +399,7 @@ async function loadPdf(path: string): Promise<void> {
     const workingCopy = await showInViewer(path);
     session.opened(path, workingCopy);
     setDirty(false);
+    await applyDefaultZoom();
   } catch (err: unknown) {
     const errText = String(err);
     if (errText.includes("PasswordException") || errText.includes("password")) {
@@ -399,9 +425,21 @@ async function saveFile(forceDialog: boolean): Promise<void> {
     if (!picked) return;
     target = picked;
   }
+  const redacting = session.hasRedactions();
+  if (redacting) {
+    const ok = await ask(msg("msgRedactConfirm"), { title: msg("msgRedactTitle"), kind: "warning" });
+    if (!ok) return;
+  }
   try {
     await session.saveTo(target);
     setDirty(false);
+    if (redacting) {
+      // Show the saved file: the redacted pages are now images and the
+      // redaction boxes are gone from the editable annotations.
+      const page = viewer.currentPage;
+      await loadPdf(target);
+      viewer.goToPage(page);
+    }
     showToast(msg("msgSaved"));
   } catch (err: unknown) {
     showToast(msg("msgSaveFailed", { err: String(err) }), true);
@@ -559,6 +597,10 @@ toolbar.on(async (e) => {
         await viewer.setScale(snapZoom(viewer.scale, e.type === "zoom-in" ? 1 : -1));
         toolbar.updateZoom(viewer.scale);
       }
+      break;
+
+    case "zoom-reset":
+      await applyDefaultZoom();
       break;
 
     case "zoom-set":
@@ -725,7 +767,7 @@ document.addEventListener("keydown", async (e) => {
   }
   if (ctrl && e.key === "0") {
     e.preventDefault();
-    if (viewer.isLoaded()) { fitMode = "none"; toolbar.updateFitMode(fitMode); await viewer.setScale(CSS_UNITS); toolbar.updateZoom(viewer.scale); }
+    await applyDefaultZoom();
     return;
   }
   if (!ctrl && (e.key === "ArrowRight" || e.key === "PageDown")) {
