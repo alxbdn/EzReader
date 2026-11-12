@@ -26,7 +26,7 @@ export const ZOOM_CHOICES = ["fit-width", "fit-page", "50", "75", "100", "125", 
 // ── Persistence ───────────────────────────────────────────────────────────────
 
 const STORAGE_KEY = "pdf-rider-settings";
-const DEFAULTS: AppSettings = { language: "fr", theme: "system", defaultZoom: "100", pxPerInch: 96 };
+const DEFAULTS: AppSettings = { language: "en", theme: "system", defaultZoom: "100", pxPerInch: 96 };
 
 const CARD_W_MM = 85.6;
 const CARD_H_MM = 53.98;
@@ -58,26 +58,26 @@ function saveSettings(s: AppSettings): void {
 // ── Language list (20 most spoken) ────────────────────────────────────────────
 
 export const LANGUAGES: { code: string; native: string; label: string }[] = [
-  { code: "en", native: "English",          label: "Anglais"           },
-  { code: "zh", native: "中文",              label: "Chinois mandarin"  },
-  { code: "hi", native: "हिन्दी",             label: "Hindi"             },
-  { code: "es", native: "Español",          label: "Espagnol"          },
-  { code: "fr", native: "Français",         label: "Français"          },
-  { code: "ar", native: "العربية",           label: "Arabe"             },
-  { code: "bn", native: "বাংলা",              label: "Bengali"           },
-  { code: "ru", native: "Русский",           label: "Russe"             },
-  { code: "pt", native: "Português",        label: "Portugais"         },
-  { code: "ur", native: "اردو",              label: "Ourdou"            },
-  { code: "id", native: "Bahasa Indonesia", label: "Indonésien"        },
-  { code: "de", native: "Deutsch",          label: "Allemand"          },
-  { code: "ja", native: "日本語",             label: "Japonais"          },
-  { code: "sw", native: "Kiswahili",        label: "Swahili"           },
-  { code: "mr", native: "मराठी",              label: "Marathi"           },
-  { code: "te", native: "తెలుగు",             label: "Télougou"          },
-  { code: "tr", native: "Türkçe",           label: "Turc"              },
-  { code: "ta", native: "தமிழ்",              label: "Tamoul"            },
-  { code: "vi", native: "Tiếng Việt",       label: "Vietnamien"        },
-  { code: "ko", native: "한국어",             label: "Coréen"            },
+  { code: "en", native: "English",          label: "English" },
+  { code: "zh", native: "中文",              label: "Mandarin Chinese" },
+  { code: "hi", native: "हिन्दी",             label: "Hindi" },
+  { code: "es", native: "Español",          label: "Spanish" },
+  { code: "fr", native: "Français",         label: "French" },
+  { code: "ar", native: "العربية",           label: "Arabic" },
+  { code: "bn", native: "বাংলা",              label: "Bengali" },
+  { code: "ru", native: "Русский",           label: "Russian" },
+  { code: "pt", native: "Português",        label: "Portuguese" },
+  { code: "ur", native: "اردو",              label: "Urdu" },
+  { code: "id", native: "Bahasa Indonesia", label: "Indonesian" },
+  { code: "de", native: "Deutsch",          label: "German" },
+  { code: "ja", native: "日本語",             label: "Japanese" },
+  { code: "sw", native: "Kiswahili",        label: "Swahili" },
+  { code: "mr", native: "मराठी",              label: "Marathi" },
+  { code: "te", native: "తెలుగు",             label: "Telugu" },
+  { code: "tr", native: "Türkçe",           label: "Turkish" },
+  { code: "ta", native: "தமிழ்",              label: "Tamil" },
+  { code: "vi", native: "Tiếng Việt",       label: "Vietnamese" },
+  { code: "ko", native: "한국어",             label: "Korean" },
 ];
 
 // ── Modal ─────────────────────────────────────────────────────────────────────
@@ -121,7 +121,7 @@ export class SettingsModal {
     for (const lang of LANGUAGES) {
       const opt = document.createElement("option");
       opt.value = lang.code;
-      opt.textContent = `${lang.native} — ${lang.label}`;
+      opt.textContent = lang.native === lang.label ? lang.native : `${lang.native} — ${lang.label}`;
       sel.appendChild(opt);
     }
   }

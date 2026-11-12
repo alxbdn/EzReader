@@ -12,10 +12,6 @@ import {
 } from "./models";
 import type { Translations } from "./i18n";
 import {
-  ICON_PAGE_UP,
-  ICON_PAGE_DOWN,
-  ICON_ZOOM_OUT,
-  ICON_ZOOM_IN,
   ICON_EDITOR_FREE_TEXT,
   ICON_EDITOR_SIGNATURE,
   ICON_RECT,
@@ -23,28 +19,38 @@ import {
   ICON_ALIGN_LEFT,
   ICON_ALIGN_CENTER,
   ICON_ALIGN_RIGHT,
-  ICON_PEN,
   ICON_STROKE_WIDTH,
-  ICON_SEARCH,
   ICON_REDACT,
-  ICON_COMPRESS,
   ICON_LAYER_UP,
   ICON_LAYER_DOWN,
   ICON_INFO,
   ICON_PAGES_1,
   ICON_PAGES_2,
-  ICON_PAGES_3,
-  ICON_SCROLL_VERTICAL,
-  ICON_SCROLL_HORIZONTAL,
   ICON_FILL,
   ICON_NO_FILL,
   ICON_SIDEBAR,
+  ICON_SAVE,
+  ICON_UNDO,
+  ICON_REDO,
+  ICON_HAND,
+  ICON_POINTER,
+  ICON_MINUS,
+  ICON_PLUS,
+  ICON_EXPORT,
+  ICON_COMPRESS_LAYERS,
 } from "./icons";
+import { SearchPill } from "./search-pill";
+
+/** What the main toolbar is set up for: reading, annotating or editing. */
+export type AppMode = "read" | "annotate" | "edit";
+/** What a plain drag does on the page: move around (hand) or select text. */
+export type PointerMode = "hand" | "select";
 
 type ToolbarEvent =
   | { type: "open" }
   | { type: "save" }
   | { type: "save-as" }
+  | { type: "export" }
   | { type: "compress" }
   | { type: "rotate" }
   | { type: "zoom-in" }
@@ -57,15 +63,19 @@ type ToolbarEvent =
   | { type: "info" }
   | { type: "fit-width" }
   | { type: "fit-height" }
-  | { type: "page-prev" }
-  | { type: "page-next" }
-  | { type: "page-goto"; page: number }
+  | { type: "mode-change"; mode: AppMode }
+  | { type: "pointer-mode"; mode: PointerMode }
+  | { type: "rename"; stem: string }
   | { type: "tool-change"; tool: ToolKind }
   | { type: "style-change"; style: ActiveToolState }
   | { type: "layer-change"; dir: "up" | "down" }
   | { type: "signature" }
   | { type: "pages" }
   | { type: "toggle-sidebar" }
+  | { type: "select-all-pages" }
+  | { type: "insert-blank" }
+  | { type: "insert-pdf" }
+  | { type: "extract-pages" }
   | { type: "split" }
   | { type: "print" }
   | { type: "settings" }
@@ -87,14 +97,28 @@ interface MenuDef {
   items: (MenuItemDef | null)[]; // null = separator
 }
 
+/** Splits "report.final.pdf" into ["report.final", ".pdf"]. */
+export function splitFileName(name: string): [string, string] {
+  const dot = name.lastIndexOf(".");
+  return dot > 0 ? [name.slice(0, dot), name.slice(dot)] : [name, ""];
+}
+
+/** True when `stem` can be used as a file name on Windows (and elsewhere). */
+export function isValidFileStem(stem: string): boolean {
+  if (!stem.trim() || stem !== stem.trimEnd() || stem.endsWith(".")) return false;
+  // eslint-disable-next-line no-control-regex
+  if (/[<>:"/\\|?*\u0000-\u001f]/.test(stem)) return false;
+  return !/^(con|prn|aux|nul|com[1-9]|lpt[1-9])$/i.test(stem);
+}
+
 export class Toolbar {
   private state: ActiveToolState = defaultToolState();
   private handlers: EventHandler[] = [];
 
-  private el: HTMLElement;
   private menuBarEl: HTMLElement;
-  private actionsEl!: HTMLElement;
   private contextEl: HTMLElement;
+  private toolRow!: HTMLElement;
+  readonly search: SearchPill;
 
   // Menu bar state
   private activeMenuId: string | null = null;
@@ -102,20 +126,25 @@ export class Toolbar {
   private menuButtons = new Map<string, HTMLButtonElement>();
   private docMenuEntries: HTMLButtonElement[] = [];
   private docTitleEl!: HTMLElement;
-  private docTitleName!: HTMLElement;
+  private docTitleName!: HTMLButtonElement;
+  private docTitleInput!: HTMLInputElement;
+  private docTitleExt!: HTMLElement;
+  private docName: string | null = null;
+  private renameTitle = "Click to rename";
 
-  // Context toolbar elements
-  private annotationSection!: HTMLElement;
-  private modeBtn!: HTMLButtonElement;
-  private isAnnotationMode = false;
-  private pageInput!: HTMLInputElement;
-  private pageTotal!: HTMLSpanElement;
-  private pageNavSection!: HTMLElement;
+  // Main toolbar
+  private mode: AppMode = "read";
+  private pointer: PointerMode = "select";
+  private modeBtns: HTMLButtonElement[] = [];
+  private pointerBtns: HTMLButtonElement[] = [];
+  private annotateTools!: HTMLElement;
+  private editTools!: HTMLElement;
+  private zoomLabel!: HTMLButtonElement;
   private zoomInput!: HTMLInputElement;
   private columnBtns: HTMLButtonElement[] = [];
-  private scrollBtns: HTMLButtonElement[] = [];
   private infoBtn!: HTMLButtonElement;
   private sidebarBtn!: HTMLButtonElement;
+  private saveBtn!: HTMLButtonElement;
   private _lastScale = CSS_UNITS;
   private toolBtns: Partial<Record<ToolKind, HTMLButtonElement>> = {};
 
@@ -142,9 +171,9 @@ export class Toolbar {
   private fontSelect!: HTMLSelectElement;
 
   constructor() {
-    this.el = document.getElementById("toolbar-container")!;
     this.menuBarEl = document.getElementById("menubar-row")!;
     this.contextEl = document.getElementById("context-toolbar")!;
+    this.search = new SearchPill();
     this.buildMenuBar();
     this.buildContextToolbar();
     this.setupMenuInteraction();
@@ -157,6 +186,9 @@ export class Toolbar {
   applyTranslations(t: Translations): void {
     this._i18nText.forEach((key, el)  => { const v = t[key]; if (v !== undefined) el.textContent = v; });
     this._i18nTitle.forEach((key, el) => { const v = t[key]; if (v !== undefined) el.title = v; });
+    this.renameTitle = t.ttRename ?? "Click to rename";
+    this.docTitleName.title = this.docName ? this.renameTitle : "";
+    this.search.applyTranslations(t);
   }
 
   private reg(el: HTMLElement, text?: keyof Translations, title?: keyof Translations): void {
@@ -168,42 +200,37 @@ export class Toolbar {
     this.handlers.forEach((h) => h(e));
   }
 
+  get currentMode(): AppMode { return this.mode; }
+  get pointerMode(): PointerMode { return this.pointer; }
+
   updateZoom(scale: number): void {
     this._lastScale = scale;
-    if (this.zoomInput && document.activeElement !== this.zoomInput) {
-      this.zoomInput.value = `${Math.round(scale / CSS_UNITS * 100)}%`;
-    }
+    this.zoomLabel.textContent = `${Math.round(scale / CSS_UNITS * 100)} %`;
   }
 
   /** Fit modes are menu-only now; kept so callers need not care. */
   updateFitMode(_mode: "none" | "fit-width" | "fit-height"): void {}
 
-  /** Highlights the pages-per-row and scroll-direction buttons. */
+  /** Highlights the one-page / two-page buttons. */
   updateLayout(columns: number | null, mode: "vertical" | "horizontal"): void {
     this.columnBtns.forEach(b => {
       b.classList.toggle("active", mode === "vertical" && Number(b.dataset["cols"]) === columns);
-      b.disabled = mode === "horizontal";
     });
-    this.scrollBtns.forEach(b => b.classList.toggle("active", b.dataset["mode"] === mode));
   }
 
   setInfoOpen(open: boolean): void {
     this.infoBtn.classList.toggle("active", open);
   }
 
-  updatePageInfo(current: number, total: number): void {
-    if (this.pageInput) this.pageInput.value = String(current);
-    if (this.pageTotal) this.pageTotal.textContent = `/ ${total}`;
-    if (this.pageNavSection) {
-      this.pageNavSection.style.display = total >= 2 ? "flex" : "none";
-    }
-  }
-
-  /** Shows the open file's name in the menu bar, with a dot while it has unsaved changes. */
+  /** Shows the open file's name in the title bar, with a dot while it has unsaved changes. */
   setDocTitle(name: string | null, dirty: boolean): void {
-    this.docTitleName.textContent = name ?? "";
+    this.docName = name;
+    if (!this.docTitleEl.classList.contains("renaming")) this.docTitleName.textContent = name ?? "";
+    this.docTitleName.title = name ? this.renameTitle : "";
+    this.docTitleName.disabled = !name;
     this.docTitleEl.classList.toggle("dirty", !!name && dirty);
-    document.title = name ? `${dirty ? "\u2022 " : ""}${name} \u2013 EzReader` : "EzReader";
+    this.saveBtn.classList.toggle("dirty", !!name && dirty);
+    document.title = name ? `${dirty ? "• " : ""}${name} – EzReader` : "EzReader";
   }
 
   /** Shows the sidebar toggle as pressed while the thumbnails are visible. */
@@ -214,10 +241,10 @@ export class Toolbar {
 
   setLoaded(loaded: boolean): void {
     this.contextEl.style.display = loaded ? "flex" : "none";
-    this.actionsEl.hidden = !loaded;
     for (const btn of this.docMenuEntries) {
       btn.disabled = !loaded;
     }
+    if (!loaded) this.search.close();
   }
 
   getStyle(): ActiveToolState {
@@ -298,6 +325,7 @@ export class Toolbar {
           null,
           { label: "btnSave", shortcut: "Ctrl+S", action: () => this.emit({ type: "save" }), requiresDoc: true },
           { label: "btnSaveAs", shortcut: "Ctrl+Shift+S", action: () => this.emit({ type: "save-as" }), requiresDoc: true },
+          { label: "btnExport", action: () => this.emit({ type: "export" }), requiresDoc: true },
           { label: "btnCompress", shortcut: "Ctrl+Shift+E", action: () => this.emit({ type: "compress" }), requiresDoc: true },
           null,
           { label: "menuPrint", shortcut: "Ctrl+P", action: () => this.emit({ type: "print" }), requiresDoc: true },
@@ -318,11 +346,17 @@ export class Toolbar {
         label: "menuView",
         items: [
           { label: "menuZoomIn", shortcut: "Ctrl++", action: () => this.emit({ type: "zoom-in" }), requiresDoc: true },
-          { label: "menuZoomOut", shortcut: "Ctrl+\u2212", action: () => this.emit({ type: "zoom-out" }), requiresDoc: true },
+          { label: "menuZoomOut", shortcut: "Ctrl+−", action: () => this.emit({ type: "zoom-out" }), requiresDoc: true },
           { label: "menuResetZoom", shortcut: "Ctrl+0", action: () => this.emit({ type: "zoom-reset" }), requiresDoc: true },
           null,
           { label: "menuFitWidth", action: () => this.emit({ type: "fit-width" }), requiresDoc: true },
           { label: "menuFitHeight", action: () => this.emit({ type: "fit-height" }), requiresDoc: true },
+          null,
+          { label: "ttPages1", action: () => this.emit({ type: "columns", n: 1 }), requiresDoc: true },
+          { label: "ttPages2", action: () => this.emit({ type: "columns", n: 2 }), requiresDoc: true },
+          { label: "menuPages3", action: () => this.emit({ type: "columns", n: 3 }), requiresDoc: true },
+          { label: "ttScrollVertical", action: () => this.emit({ type: "scroll-mode", mode: "vertical" }), requiresDoc: true },
+          { label: "menuScrollHorizontal", action: () => this.emit({ type: "scroll-mode", mode: "horizontal" }), requiresDoc: true },
           null,
           { label: "menuRotate", action: () => this.emit({ type: "rotate" }), requiresDoc: true },
           { label: "menuPageSidebar", action: () => this.emit({ type: "toggle-sidebar" }), requiresDoc: true },
@@ -332,7 +366,12 @@ export class Toolbar {
         id: "pages",
         label: "menuPages",
         items: [
-          { label: "menuManagePages", action: () => this.emit({ type: "pages" }), requiresDoc: true },
+          { label: "menuSelectAllPages", action: () => this.emit({ type: "select-all-pages" }), requiresDoc: true },
+          null,
+          { label: "menuInsertBlank", action: () => this.emit({ type: "insert-blank" }), requiresDoc: true },
+          { label: "menuInsertPdf", action: () => this.emit({ type: "insert-pdf" }), requiresDoc: true },
+          { label: "menuExtractPages", action: () => this.emit({ type: "extract-pages" }), requiresDoc: true },
+          null,
           { label: "menuSplit", action: () => this.emit({ type: "split" }), requiresDoc: true },
         ],
       },
@@ -399,14 +438,75 @@ export class Toolbar {
       this.menuBarEl.append(wrapper);
     }
 
+    this.buildDocTitle();
+  }
+
+  // ── File name (click to rename) ─────────────────────────────────────────────
+
+  private buildDocTitle(): void {
     this.docTitleEl = document.createElement("div");
     this.docTitleEl.className = "doc-title";
-    this.docTitleName = document.createElement("span");
+    this.docTitleName = document.createElement("button");
     this.docTitleName.className = "doc-title-name";
+    this.docTitleName.disabled = true;
+    this.docTitleName.addEventListener("click", () => this.startRename());
+    this.docTitleName.addEventListener("dblclick", (e) => e.stopPropagation());
+
+    const field = document.createElement("label");
+    field.className = "doc-title-field";
+    this.docTitleInput = document.createElement("input");
+    this.docTitleInput.className = "doc-title-input";
+    this.docTitleInput.spellcheck = false;
+    this.docTitleInput.autocomplete = "off";
+    this.docTitleExt = document.createElement("span");
+    this.docTitleExt.className = "doc-title-ext";
+    field.append(this.docTitleInput, this.docTitleExt);
+    field.addEventListener("dblclick", (e) => e.stopPropagation());
+
+    this.docTitleInput.addEventListener("input", () => this.sizeTitleInput());
+    this.docTitleInput.addEventListener("keydown", (e) => {
+      e.stopPropagation();
+      if (e.key === "Enter") { e.preventDefault(); this.endRename(true); }
+      else if (e.key === "Escape") { e.preventDefault(); this.endRename(false); }
+    });
+    this.docTitleInput.addEventListener("blur", () => this.endRename(true));
+
     const dirtyDot = document.createElement("span");
     dirtyDot.className = "doc-title-dirty";
-    this.docTitleEl.append(this.docTitleName, dirtyDot);
+    this.docTitleEl.append(this.docTitleName, field, dirtyDot);
     this.menuBarEl.append(this.docTitleEl);
+  }
+
+  private startRename(): void {
+    if (!this.docName) return;
+    const [stem, ext] = splitFileName(this.docName);
+    this.docTitleInput.value = stem;
+    this.docTitleExt.textContent = ext;
+    this.docTitleEl.classList.add("renaming");
+    this.sizeTitleInput();
+    this.docTitleInput.focus();
+    this.docTitleInput.select();
+  }
+
+  private endRename(commit: boolean): void {
+    if (!this.docTitleEl.classList.contains("renaming")) return;
+    this.docTitleEl.classList.remove("renaming");
+    const stem = this.docTitleInput.value.trim();
+    const [current] = splitFileName(this.docName ?? "");
+    if (commit && stem && stem !== current) this.emit({ type: "rename", stem });
+    this.docTitleName.textContent = this.docName ?? "";
+  }
+
+  private measureCtx: CanvasRenderingContext2D | null = null;
+
+  /** Fits the rename field to its text, so the extension sits right after it. */
+  private sizeTitleInput(): void {
+    this.measureCtx ??= document.createElement("canvas").getContext("2d");
+    const ctx = this.measureCtx;
+    if (!ctx) return;
+    ctx.font = getComputedStyle(this.docTitleInput).font;
+    const w = ctx.measureText(this.docTitleInput.value || " ").width;
+    this.docTitleInput.style.width = `${Math.ceil(w) + 6}px`;
   }
 
   private setupMenuInteraction(): void {
@@ -512,149 +612,146 @@ export class Toolbar {
     this.activeMenuId = null;
   }
 
-  // ── Context Toolbar ─────────────────────────────────────────────────────────
+
+  // ── Main toolbar ────────────────────────────────────────────────────────────
 
   private buildContextToolbar(): void {
-    const ctx = this.contextEl;
+    const main = document.createElement("div");
+    main.className = "tb-row tb-main";
+    this.toolRow = document.createElement("div");
+    this.toolRow.className = "tb-row tb-tools";
+    this.toolRow.hidden = true;
+    this.contextEl.append(main, this.toolRow);
 
     // Page thumbnails sidebar toggle
     this.sidebarBtn = this.btn(ICON_SIDEBAR, "Show or hide the page thumbnails", "icon-btn");
     this.reg(this.sidebarBtn, undefined, "ttPageSidebar");
     this.sidebarBtn.addEventListener("click", () => this.emit({ type: "toggle-sidebar" }));
-    ctx.append(this.sidebarBtn);
 
-    // Page navigation
-    const prevBtn = this.btn(ICON_PAGE_UP, "Previous page", "icon-btn");
-    this.reg(prevBtn, undefined, "ttPagePrev");
-    prevBtn.addEventListener("click", () => this.emit({ type: "page-prev" }));
+    // Save, then undo / redo
+    this.saveBtn = this.btn(ICON_SAVE, "Save (Ctrl+S)", "btn tb-save");
+    const saveLabel = document.createElement("span");
+    saveLabel.textContent = "Save";
+    this.saveBtn.append(saveLabel);
+    this.reg(saveLabel, "btnSave");
+    this.reg(this.saveBtn, undefined, "ttSave");
+    this.saveBtn.addEventListener("click", () => this.emit({ type: "save" }));
 
-    this.pageInput = document.createElement("input");
-    this.pageInput.type = "number";
-    this.pageInput.className = "toolbar-input";
-    this.pageInput.value = "1";
-    this.pageInput.min = "1";
-    this.pageInput.addEventListener("change", () => {
-      const n = parseInt(this.pageInput.value, 10);
-      if (!isNaN(n)) this.emit({ type: "page-goto", page: n });
+    const undo = this.btn(ICON_UNDO, "Undo (Ctrl+Z)", "icon-btn");
+    this.reg(undo, undefined, "ttUndo");
+    undo.addEventListener("click", () => this.emit({ type: "undo" }));
+    const redo = this.btn(ICON_REDO, "Redo (Ctrl+Y)", "icon-btn");
+    this.reg(redo, undefined, "ttRedo");
+    redo.addEventListener("click", () => this.emit({ type: "redo" }));
+
+    // Hand / select
+    const pointerDefs: [PointerMode, string, keyof Translations, string][] = [
+      ["hand", ICON_HAND, "ttHand", "Hand: drag to move around"],
+      ["select", ICON_POINTER, "ttSelectText", "Select text"],
+    ];
+    this.pointerBtns = pointerDefs.map(([mode, icon, tt, fb]) => {
+      const b = this.btn(icon, fb, "icon-btn");
+      b.dataset["pointer"] = mode;
+      this.reg(b, undefined, tt);
+      b.addEventListener("click", () => this.setPointerMode(mode));
+      return b;
     });
+    this.syncPointerBtns();
 
-    this.pageTotal = document.createElement("span");
-    this.pageTotal.textContent = "/ \u2013";
-
-    const nextBtn = this.btn(ICON_PAGE_DOWN, "Next page", "icon-btn");
-    this.reg(nextBtn, undefined, "ttPageNext");
-    nextBtn.addEventListener("click", () => this.emit({ type: "page-next" }));
-
-    const navWrapper = document.createElement("div");
-    navWrapper.className = "page-nav toolbar-segment";
-    navWrapper.append(prevBtn, this.pageInput, this.pageTotal, nextBtn);
-
-    this.pageNavSection = document.createElement("div");
-    this.pageNavSection.className = "toolbar-group";
-    this.pageNavSection.style.display = "none";
-    this.pageNavSection.append(navWrapper);
-    ctx.append(this.pageNavSection);
-
-    // Zoom
-    const zoomOut = this.btn(ICON_ZOOM_OUT, "Zoom out (Ctrl+\u2212)", "icon-btn");
+    // Zoom: − / 100 % / + / 1:1
+    const zoomOut = this.btn(ICON_MINUS, "Zoom out (Ctrl+−)", "icon-btn");
     this.reg(zoomOut, undefined, "ttZoomOut");
     zoomOut.addEventListener("click", () => this.emit({ type: "zoom-out" }));
-
-    this.zoomInput = document.createElement("input");
-    this.zoomInput.type = "text";
-    this.zoomInput.className = "zoom-input";
-    this.zoomInput.value = "100%";
-    this.zoomInput.title = "Zoom (free input)";
-    this.reg(this.zoomInput, undefined, "ttZoomInput");
-    this.zoomInput.addEventListener("focus", () => this.zoomInput.select());
-    this.zoomInput.addEventListener("keydown", (e) => {
-      if (e.key === "Enter") {
-        this.commitZoomInput();
-        this.zoomInput.blur();
-      } else if (e.key === "Escape") {
-        this.zoomInput.value = `${Math.round(this._lastScale / CSS_UNITS * 100)}%`;
-        this.zoomInput.blur();
-      }
-    });
-    this.zoomInput.addEventListener("blur", () => {
-      this.zoomInput.value = `${Math.round(this._lastScale / CSS_UNITS * 100)}%`;
-    });
-
-    const zoomIn = this.btn(ICON_ZOOM_IN, "Zoom in (Ctrl++)", "icon-btn");
+    const zoomIn = this.btn(ICON_PLUS, "Zoom in (Ctrl++)", "icon-btn");
     this.reg(zoomIn, undefined, "ttZoomIn");
     zoomIn.addEventListener("click", () => this.emit({ type: "zoom-in" }));
 
-    const zoomSegment = document.createElement("div");
-    zoomSegment.className = "toolbar-segment";
-    zoomSegment.append(zoomOut, this.zoomInput, zoomIn);
-    const resetZoomBtn = this.btn(ICON_SEARCH, "Reset zoom to default (Ctrl+0)", "icon-btn");
-    this.reg(resetZoomBtn, undefined, "ttResetZoom");
-    resetZoomBtn.addEventListener("click", () => this.emit({ type: "zoom-reset" }));
+    // The percentage resets the zoom; a double click lets you type a value.
+    this.zoomLabel = this.btn("100 %", "Click to reset the zoom, double-click to type a value", "zoom-label");
+    this.reg(this.zoomLabel, undefined, "ttZoomLabel");
+    this.zoomLabel.addEventListener("click", () => this.emit({ type: "zoom-reset" }));
+    this.zoomLabel.addEventListener("dblclick", () => this.startZoomEdit());
+    this.zoomInput = document.createElement("input");
+    this.zoomInput.type = "text";
+    this.zoomInput.className = "zoom-input";
+    this.zoomInput.hidden = true;
+    this.zoomInput.inputMode = "numeric";
+    this.reg(this.zoomInput, undefined, "ttZoomInput");
+    this.zoomInput.addEventListener("keydown", (e) => {
+      e.stopPropagation();
+      if (e.key === "Enter") { this.commitZoomInput(); this.endZoomEdit(); }
+      else if (e.key === "Escape") this.endZoomEdit();
+    });
+    this.zoomInput.addEventListener("blur", () => this.endZoomEdit());
 
     const realSizeBtn = this.btn("1:1", "Real size (1:1)", "icon-btn text-icon-btn");
     this.reg(realSizeBtn, undefined, "ttRealSize");
     realSizeBtn.addEventListener("click", () => this.emit({ type: "zoom-real" }));
 
-    const zoomGroup = document.createElement("div");
-    zoomGroup.className = "toolbar-group";
-    zoomGroup.append(resetZoomBtn, realSizeBtn);
-
-    // Pages per row
-    const colDefs: [number, string, keyof Translations][] = [
-      [1, ICON_PAGES_1, "ttPages1"], [2, ICON_PAGES_2, "ttPages2"], [3, ICON_PAGES_3, "ttPages3"],
-    ];
+    // One page / two pages per row; clicking the active one goes back to "as many as fit".
+    const colDefs: [number, string, keyof Translations][] = [[1, ICON_PAGES_1, "ttPages1"], [2, ICON_PAGES_2, "ttPages2"]];
     this.columnBtns = colDefs.map(([n, icon, tt]) => {
       const b = this.btn(icon, `${n}`, "icon-btn");
       b.dataset["cols"] = String(n);
       this.reg(b, undefined, tt);
-      // Clicking the active choice goes back to "as many as fit".
       b.addEventListener("click", () => this.emit({ type: "columns", n: b.classList.contains("active") ? null : n }));
       return b;
     });
 
-    // Scroll direction
-    const scrollDefs: ["vertical" | "horizontal", string, keyof Translations][] = [
-      ["vertical", ICON_SCROLL_VERTICAL, "ttScrollVertical"], ["horizontal", ICON_SCROLL_HORIZONTAL, "ttScrollHorizontal"],
+    // Read / Annotate / Edit
+    const modeDefs: [AppMode, keyof Translations, string][] = [
+      ["read", "modeRead", "Read"], ["annotate", "modeAnnotate", "Annotate"], ["edit", "modeEdit", "Edit"],
     ];
-    this.scrollBtns = scrollDefs.map(([mode, icon, tt]) => {
-      const b = this.btn(icon, mode, "icon-btn");
+    this.modeBtns = modeDefs.map(([mode, key, fb]) => {
+      const b = document.createElement("button");
+      b.className = "mode-btn";
       b.dataset["mode"] = mode;
-      this.reg(b, undefined, tt);
-      b.addEventListener("click", () => this.emit({ type: "scroll-mode", mode }));
+      b.textContent = fb;
+      this.reg(b, key);
+      b.addEventListener("click", () => this.setMode(mode));
       return b;
     });
+    const modeSeg = this.segment(...this.modeBtns);
+    modeSeg.classList.add("mode-segment");
+
+    // Right side: export, compress, info, then the search pill
+    const exportBtn = this.btn(ICON_EXPORT, "Export a copy", "icon-btn tb-square");
+    this.reg(exportBtn, undefined, "ttExport");
+    exportBtn.addEventListener("click", () => this.emit({ type: "export" }));
+    const compressBtn = this.btn(ICON_COMPRESS_LAYERS, "Compress", "icon-btn tb-square");
+    this.reg(compressBtn, undefined, "ttCompress");
+    compressBtn.addEventListener("click", () => this.emit({ type: "compress" }));
+    this.infoBtn = this.btn(ICON_INFO, "Document info", "icon-btn tb-square");
+    this.reg(this.infoBtn, undefined, "ttInfo");
+    this.infoBtn.addEventListener("click", () => this.emit({ type: "info" }));
+    const right = document.createElement("div");
+    right.className = "toolbar-group tb-right";
+    right.append(exportBtn, compressBtn, this.infoBtn, this.sep(), this.search.el);
+
+    main.append(
+      this.sidebarBtn, this.saveBtn, this.segment(undo, redo), this.sep(),
+      this.segment(...this.pointerBtns),
+      this.segment(zoomOut, this.zoomLabel, this.zoomInput, zoomIn, realSizeBtn),
+      this.segment(...this.columnBtns), this.sep(),
+      modeSeg, right,
+    );
     this.updateLayout(null, "vertical");
 
-    ctx.append(zoomSegment, zoomGroup, this.sep(), this.segment(...this.columnBtns), this.segment(...this.scrollBtns), this.sep());
+    this.buildToolRow();
+    this.syncModeBtns();
+  }
 
-    // Annotation mode toggle
-    this.modeBtn = this.btn(ICON_PEN, "Annotation mode", "btn btn-ghost");
-    const modeLabel = document.createElement("span");
-    modeLabel.textContent = "Annotate";
-    this.modeBtn.append(modeLabel);
-    this.reg(modeLabel, "btnAnnotate");
-    this.reg(this.modeBtn, undefined, "ttAnnotate");
-    this.modeBtn.addEventListener("click", () => this.toggleMode());
-    ctx.append(this.modeBtn);
-
-    // Annotation-only section (hidden in read mode)
-    this.annotationSection = document.createElement("div");
-    this.annotationSection.className = "toolbar-group";
-    this.annotationSection.style.cssText = "display:none;gap:6px;";
-    ctx.append(this.annotationSection);
-    const ann = this.annotationSection;
-
-    const toolSegment = document.createElement("div");
-    toolSegment.className = "toolbar-segment";
-    ann.append(toolSegment);
-
-    // Drawing tools
+  /** Second row: the tools of the Annotate or Edit mode and their options. */
+  private buildToolRow(): void {
+    // Annotate
+    this.annotateTools = document.createElement("div");
+    this.annotateTools.className = "toolbar-group tb-tool-group";
+    const toolSegment = this.segment();
     const tools: [ToolKind, string, string, keyof Translations][] = [
-      ["rect",      ICON_RECT,             "Rectangle", "ttRect"],
-      ["circle",    ICON_CIRCLE,           "Circle",    "ttCircle"],
-      ["text",      ICON_EDITOR_FREE_TEXT, "Text",      "ttText"],
+      ["text",   ICON_EDITOR_FREE_TEXT, "Text",      "ttText"],
+      ["rect",   ICON_RECT,             "Rectangle", "ttRect"],
+      ["circle", ICON_CIRCLE,           "Circle",    "ttCircle"],
     ];
-
     for (const [kind, icon, title, ttKey] of tools) {
       const b = this.btn(icon, title, "icon-btn");
       this.reg(b, undefined, ttKey);
@@ -662,37 +759,25 @@ export class Toolbar {
       this.toolBtns[kind] = b;
       toolSegment.append(b);
     }
+    const signBtn = this.labeledBtn(ICON_EDITOR_SIGNATURE, "btnSign", "Sign", "ttSignature");
+    signBtn.addEventListener("click", () => this.emit({ type: "signature" }));
+    this.annotateTools.append(toolSegment, signBtn);
 
-    // Contextual style sections (hidden by default)
-    this.buildTextStyleSection(ann);
-    this.buildShapeStyleSection(ann);
-
-    // Document actions, always at hand on the right
-    const actions = document.createElement("div");
-    actions.className = "toolbar-group toolbar-actions";
-
+    // Edit
+    this.editTools = document.createElement("div");
+    this.editTools.className = "toolbar-group tb-tool-group";
     const redactBtn = this.labeledBtn(ICON_REDACT, "btnRedact", "Redact", "ttRedact");
     redactBtn.addEventListener("click", () => {
       if (this.state.tool === "redact") this.clearActiveTool();
       else this.setActiveTool("redact");
     });
     this.toolBtns["redact"] = redactBtn;
+    this.editTools.append(redactBtn);
 
-    const signBtn = this.labeledBtn(ICON_EDITOR_SIGNATURE, "btnSign", "Sign", "ttSignature");
-    signBtn.addEventListener("click", () => this.emit({ type: "signature" }));
-
-    const compressBtn = this.labeledBtn(ICON_COMPRESS, "btnCompressShort", "Compress", "ttCompress");
-    compressBtn.addEventListener("click", () => this.emit({ type: "compress" }));
-
-    this.infoBtn = this.btn(ICON_INFO, "Document info", "icon-btn");
-    this.reg(this.infoBtn, undefined, "ttInfo");
-    this.infoBtn.addEventListener("click", () => this.emit({ type: "info" }));
-
-    actions.append(redactBtn, signBtn, compressBtn, this.infoBtn);
-    // They live in the title bar row, which leaves the tool row room to breathe.
-    this.actionsEl = actions;
-    actions.hidden = true;
-    this.menuBarEl.append(actions);
+    this.toolRow.append(this.annotateTools, this.editTools);
+    // Contextual style sections (hidden until a text or shape tool is used)
+    this.buildTextStyleSection(this.toolRow);
+    this.buildShapeStyleSection(this.toolRow);
   }
 
   /** Ghost button with an icon and a translated text label. */
@@ -704,6 +789,58 @@ export class Toolbar {
     this.reg(span, label);
     this.reg(b, undefined, tooltip);
     return b;
+  }
+
+  /** Switches between reading, annotating and editing; any active tool is dropped. */
+  setMode(mode: AppMode): void {
+    if (mode === this.mode) return;
+    this.mode = mode;
+    if (this.state.tool !== "select") this.clearActiveTool();
+    this.hideTextStyles();
+    this.hideShapeStyles();
+    this.syncModeBtns();
+    this.emit({ type: "mode-change", mode });
+  }
+
+  private syncModeBtns(): void {
+    for (const b of this.modeBtns) {
+      const on = b.dataset["mode"] === this.mode;
+      b.classList.toggle("active", on);
+      b.setAttribute("aria-pressed", String(on));
+    }
+    this.toolRow.hidden = this.mode === "read";
+    this.annotateTools.hidden = this.mode !== "annotate";
+    this.editTools.hidden = this.mode !== "edit";
+  }
+
+  setPointerMode(mode: PointerMode): void {
+    if (mode !== this.pointer) {
+      this.pointer = mode;
+      this.emit({ type: "pointer-mode", mode });
+    }
+    this.syncPointerBtns();
+  }
+
+  private syncPointerBtns(): void {
+    for (const b of this.pointerBtns) {
+      const on = b.dataset["pointer"] === this.pointer;
+      b.classList.toggle("active", on);
+      b.setAttribute("aria-pressed", String(on));
+    }
+  }
+
+  private startZoomEdit(): void {
+    this.zoomInput.value = String(Math.round(this._lastScale / CSS_UNITS * 100));
+    this.zoomLabel.hidden = true;
+    this.zoomInput.hidden = false;
+    this.zoomInput.focus();
+    this.zoomInput.select();
+  }
+
+  private endZoomEdit(): void {
+    if (this.zoomInput.hidden) return;
+    this.zoomInput.hidden = true;
+    this.zoomLabel.hidden = false;
   }
 
   private buildTextStyleSection(container: HTMLElement): void {
@@ -913,8 +1050,7 @@ export class Toolbar {
     const pct = parseFloat(raw);
     if (!isNaN(pct) && pct >= 10 && pct <= 500) {
       const scale = Math.round(pct) / 100 * CSS_UNITS;
-      this._lastScale = scale;
-      this.zoomInput.value = `${Math.round(scale / CSS_UNITS * 100)}%`;
+      this.updateZoom(scale);
       this.emit({ type: "zoom-set", scale });
     }
   }
@@ -932,17 +1068,6 @@ export class Toolbar {
       btn.classList.toggle("active", kind === tool);
     }
     this.emit({ type: "tool-change", tool });
-  }
-
-  private toggleMode(): void {
-    this.isAnnotationMode = !this.isAnnotationMode;
-    this.modeBtn.classList.toggle("active", this.isAnnotationMode);
-    this.annotationSection.style.display = this.isAnnotationMode ? "flex" : "none";
-    if (!this.isAnnotationMode) {
-      this.clearActiveTool();
-      this.hideTextStyles();
-      this.hideShapeStyles();
-    }
   }
 
   clearActiveTool(): void {

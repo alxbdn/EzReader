@@ -69,6 +69,7 @@ pub fn run() {
             commands::dialog::open_pdf_dialog,
             commands::dialog::save_pdf_dialog,
             commands::dialog::pick_directory_dialog,
+            commands::files::rename_file,
             commands::pdf::get_page_count,
             commands::pdf::save_annotated_pdf,
             commands::pdf::strip_annotation_streams,
