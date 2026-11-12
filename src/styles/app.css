@@ -1132,6 +1132,7 @@ kbd,
   height: 100%;
   background: #1e1e1e;
   padding: 16px;
+  position: relative;
 }
 
 .page-manager-header {
@@ -1268,6 +1269,86 @@ kbd,
   font-size: 11px;
   color: #aaa;
   min-width: 24px;
+  text-align: center;
+}
+
+.page-manager-add {
+  display: flex;
+  gap: 8px;
+  font-weight: 400;
+}
+
+.page-manager-hint {
+  font-size: 12px;
+  color: #888;
+}
+
+.page-thumbnail-canvas-wrapper {
+  touch-action: none;
+}
+
+.page-thumbnail-card.dragging {
+  opacity: 0.4;
+}
+
+.page-thumbnail-card.inserted .page-thumbnail-canvas-wrapper canvas {
+  border-color: #4a90e2;
+}
+
+.page-thumbnail-label {
+  font-size: 11px;
+  color: #8ab4f8;
+  max-width: var(--pm-thumb-width);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.page-thumbnail-label:empty {
+  display: none;
+}
+
+.page-manager-drop-indicator {
+  position: absolute;
+  width: 3px;
+  border-radius: 2px;
+  background: #4a90e2;
+  box-shadow: 0 0 6px #4a90e2;
+  pointer-events: none;
+  z-index: 5;
+}
+
+.page-manager-drop-indicator.hidden {
+  display: none;
+}
+
+.page-manager-drag-ghost {
+  position: fixed;
+  top: 0;
+  left: 0;
+  pointer-events: none;
+  z-index: 300;
+  line-height: 0;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.6);
+  opacity: 0.9;
+}
+
+.page-manager-drag-ghost canvas {
+  border: 1px solid #4a90e2;
+  background: #fff;
+}
+
+.page-manager-drag-count {
+  position: absolute;
+  top: -8px;
+  right: -8px;
+  min-width: 20px;
+  padding: 3px 6px;
+  border-radius: 10px;
+  background: #4a90e2;
+  color: #fff;
+  font-size: 11px;
+  line-height: 14px;
   text-align: center;
 }
 

@@ -158,19 +158,23 @@ export async function openUrl(url: string): Promise<void> {
   return invoke<void>("open_url", { url });
 }
 
-export interface PageOperation {
-  page: number;
-  rotation: number;
-  delete: boolean;
-}
+/** One page of the document built by `rearrangePages`, in output order. */
+export type PageSlot =
+  | { kind: "original"; page: number; rotation: number }
+  | { kind: "blank"; width: number; height: number; rotation: number }
+  | { kind: "imported"; path: string; page: number; rotation: number };
 
-/** Applies per-page rotation and deletion to a PDF, then saves. */
-export async function modifyPages(
+/**
+ * Writes `inputPath` with its pages replaced by `slots` (reordered, rotated,
+ * deleted, blank or taken from other PDFs) to `outputPath`, as an
+ * incremental update.
+ */
+export async function rearrangePages(
   inputPath: string,
   outputPath: string,
-  operations: PageOperation[],
+  slots: PageSlot[],
 ): Promise<void> {
-  return invoke<void>("modify_pages", { inputPath, outputPath, operations });
+  return invoke<void>("rearrange_pages", { inputPath, outputPath, slots });
 }
 
 export interface CompressResult {

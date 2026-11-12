@@ -73,7 +73,7 @@ pub fn run() {
             commands::pdf::save_annotated_pdf,
             commands::pdf::strip_annotation_streams,
             commands::pdf::read_annotations,
-            commands::pdf::modify_pages,
+            commands::pdf::rearrange_pages,
             commands::pdf::extract_pdf_pages,
             commands::pdf::split_pdf,
             commands::pdf::redact_pages,

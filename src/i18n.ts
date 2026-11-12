@@ -79,6 +79,14 @@ export interface Translations {
   pmRestorePage: string;
   pmZoom?: string;
   pmWillDelete?: string;
+  pmAddBlank?: string;
+  pmAddBlankHint?: string;
+  pmInsertPdf?: string;
+  pmInsertPdfHint?: string;
+  pmBlankTag?: string;
+  pmDragHint?: string;
+  pmInsertFailed?: string;
+  pmInsertEncrypted?: string;
   // Split modal
   menuSplit?: string;
   splitTitle?: string;
@@ -259,6 +267,14 @@ const EN: Translations = {
   pmRestorePage:       "Restore page",
   pmZoom:              "Size",
   pmWillDelete:        "Will delete: {n}",
+  pmAddBlank:          "+ Blank page",
+  pmAddBlankHint:      "Insert a blank page after the selection",
+  pmInsertPdf:         "+ Insert PDF…",
+  pmInsertPdfHint:     "Insert the pages of another PDF after the selection",
+  pmBlankTag:          "Blank page",
+  pmDragHint:          "Drag pages to reorder them (Ctrl+←/→ with the keyboard)",
+  pmInsertFailed:      "Could not insert the PDF: {err}",
+  pmInsertEncrypted:   "Password-protected PDFs cannot be inserted",
   menuSplit:           "Split…",
   splitTitle:          "Split PDF",
   splitClose:          "Cancel",
@@ -435,6 +451,14 @@ const FR: Translations = {
   pmRestorePage:       "Restaurer la page",
   pmZoom:              "Taille",
   pmWillDelete:        "À supprimer : {n}",
+  pmAddBlank:          "+ Page blanche",
+  pmAddBlankHint:      "Insérer une page blanche après la sélection",
+  pmInsertPdf:         "+ Insérer un PDF…",
+  pmInsertPdfHint:     "Insérer les pages d'un autre PDF après la sélection",
+  pmBlankTag:          "Page blanche",
+  pmDragHint:          "Glissez les pages pour les réordonner (Ctrl+←/→ au clavier)",
+  pmInsertFailed:      "Impossible d'insérer le PDF : {err}",
+  pmInsertEncrypted:   "Les PDF protégés par mot de passe ne peuvent pas être insérés",
   menuSplit:           "Diviser…",
   splitTitle:          "Diviser le PDF",
   splitClose:          "Annuler",
