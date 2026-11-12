@@ -14,12 +14,17 @@ export type ThemePref = "system" | "light" | "dark";
 export interface AppSettings {
   language: string; // BCP-47 code, e.g. "fr"
   theme: ThemePref;
+  /** Zoom applied when a document opens and by the reset-zoom button:
+   *  a percentage ("100"), "fit-width" or "fit-page". */
+  defaultZoom: string;
 }
+
+export const ZOOM_CHOICES = ["fit-width", "fit-page", "50", "75", "100", "125", "150", "200"] as const;
 
 // ── Persistence ───────────────────────────────────────────────────────────────
 
 const STORAGE_KEY = "pdf-rider-settings";
-const DEFAULTS: AppSettings = { language: "fr", theme: "system" };
+const DEFAULTS: AppSettings = { language: "fr", theme: "system", defaultZoom: "100" };
 
 // ── Theme ─────────────────────────────────────────────────────────────────────
 
@@ -162,6 +167,12 @@ export class SettingsModal {
       applyTheme(theme);
       this.set("theme", theme);
     });
+
+    // Default zoom
+    const zoomSelect = document.getElementById("settings-zoom") as HTMLSelectElement;
+    zoomSelect.value = (ZOOM_CHOICES as readonly string[]).includes(this.settings.defaultZoom)
+      ? this.settings.defaultZoom : DEFAULTS.defaultZoom;
+    zoomSelect.addEventListener("change", () => this.set("defaultZoom", zoomSelect.value));
 
     // Default app button
     const defaultBtn = document.getElementById("settings-default-btn") as HTMLButtonElement;

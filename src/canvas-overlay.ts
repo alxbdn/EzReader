@@ -8,6 +8,7 @@ import {
   type Annotation,
   type CircleAnnotation,
   type RectAnnotation,
+  type RedactAnnotation,
   type RgbColor,
   type SignatureAnnotation,
   type TextAlignmentValue,
@@ -193,7 +194,7 @@ export class CanvasOverlay {
     // Annotation canvas only captures events when a draw tool is active.
     // "select" and "signature" keep pointer-events:none so the text layer
     // (below in z-index) receives events and text can be selected.
-    const isDrawTool = tool === "rect" || tool === "circle" || tool === "text";
+    const isDrawTool = tool === "rect" || tool === "circle" || tool === "text" || tool === "redact";
     this.canvas.style.pointerEvents = isDrawTool ? "auto" : "none";
   }
 
@@ -515,6 +516,19 @@ export class CanvasOverlay {
       });
       ctx.restore();
 
+    } else if (ann.kind === "redact") {
+      // Solid black like the saved result, with a red outline marking it as
+      // a redaction that is still pending (not yet applied by a save).
+      const [x1, y1] = this.toCanvas(ann.x, ann.y + ann.height);
+      const [x2, y2] = this.toCanvas(ann.x + ann.width, ann.y);
+      const l = Math.min(x1, x2), t = Math.min(y1, y2);
+      const w = Math.abs(x2 - x1), h = Math.abs(y2 - y1);
+      ctx.fillStyle = "#000";
+      ctx.fillRect(l, t, w, h);
+      ctx.strokeStyle = "#dc2626";
+      ctx.lineWidth   = 1.5;
+      ctx.strokeRect(l + 0.75, t + 0.75, w - 1.5, h - 1.5);
+
     } else if (ann.kind === "signature") {
       const [x, y] = this.toCanvas(ann.x, ann.y + ann.height); // PDF top-left → canvas anchor
       const rotRad = (this.viewportRotation * Math.PI) / 180;
@@ -543,6 +557,12 @@ export class CanvasOverlay {
     ctx.lineWidth   = this.style.strokeWidth;
     ctx.setLineDash([4, 3]);
     if (this.activeTool === "rect") {
+      ctx.strokeRect(x0, y0, w, h);
+    } else if (this.activeTool === "redact") {
+      ctx.fillStyle = "rgba(0, 0, 0, 0.6)";
+      ctx.fillRect(x0, y0, w, h);
+      ctx.strokeStyle = "#dc2626";
+      ctx.lineWidth   = 1.5;
       ctx.strokeRect(x0, y0, w, h);
     } else if (this.activeTool === "circle") {
       ctx.beginPath();
@@ -736,6 +756,14 @@ export class CanvasOverlay {
         kind: "rect", page: this.currentPage,
         x: px, y: py, width: pw, height: ph,
         color: { ...this.style.color }, strokeWidth: this.style.strokeWidth,
+      };
+      this.committed.push(ann);
+      this.redrawCommitted();
+      this.emit(ann);
+    } else if (this.activeTool === "redact") {
+      const ann: RedactAnnotation = {
+        kind: "redact", page: this.currentPage,
+        x: px, y: py, width: pw, height: ph,
       };
       this.committed.push(ann);
       this.redrawCommitted();

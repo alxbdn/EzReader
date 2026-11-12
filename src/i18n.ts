@@ -174,6 +174,17 @@ export interface Translations {
   msgPrintFailed?: string;
   msgPlaceSignature?: string;
   msgSignatureCancelled?: string;
+  // Toolbar shortcuts, redaction and default zoom (optional, English fallback)
+  btnSign?: string;
+  btnCompressShort?: string;
+  btnRedact?: string;
+  ttRedact?: string;
+  ttResetZoom?: string;
+  settingsDefaultZoom?: string;
+  settingsZoomFitWidth?: string;
+  settingsZoomFitPage?: string;
+  msgRedactTitle?: string;
+  msgRedactConfirm?: string;
 }
 
 // ── English ───────────────────────────────────────────────────────────────────
@@ -340,6 +351,16 @@ const EN: Translations = {
   msgPrintFailed:         "Print failed: {err}",
   msgPlaceSignature:      "Click on the page to place your signature. Press Esc to cancel.",
   msgSignatureCancelled:  "Signature placement cancelled.",
+  btnSign:              "Sign",
+  btnCompressShort:     "Compress",
+  btnRedact:            "Redact",
+  ttRedact:             "Redact: black out an area (permanent once saved)",
+  ttResetZoom:          "Reset zoom to default (Ctrl+0)",
+  settingsDefaultZoom:  "Default zoom",
+  settingsZoomFitWidth: "Fit width",
+  settingsZoomFitPage:  "Fit page",
+  msgRedactTitle:       "Apply redactions",
+  msgRedactConfirm:     "Saving permanently removes everything under the black boxes. The redacted pages become images and their text can no longer be selected. This cannot be undone. Continue?",
 };
 
 // ── French ────────────────────────────────────────────────────────────────────
@@ -506,6 +527,16 @@ const FR: Translations = {
   msgPrintFailed:         "Échec de l'impression : {err}",
   msgPlaceSignature:      "Cliquez sur la page pour placer votre signature. Échap pour annuler.",
   msgSignatureCancelled:  "Placement de la signature annulé.",
+  btnSign:              "Signer",
+  btnCompressShort:     "Compresser",
+  btnRedact:            "Caviarder",
+  ttRedact:             "Caviarder : masquer une zone (définitif à l'enregistrement)",
+  ttResetZoom:          "Revenir au zoom par défaut (Ctrl+0)",
+  settingsDefaultZoom:  "Zoom par défaut",
+  settingsZoomFitWidth: "Ajuster à la largeur",
+  settingsZoomFitPage:  "Page entière",
+  msgRedactTitle:       "Appliquer le caviardage",
+  msgRedactConfirm:     "L'enregistrement supprime définitivement tout ce qui se trouve sous les zones noires. Les pages caviardées deviennent des images et leur texte ne pourra plus être sélectionné. Cette action est irréversible. Continuer ?",
 };
 
 // ── Chinese (Mandarin) ────────────────────────────────────────────────────────
