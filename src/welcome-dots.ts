@@ -6,13 +6,19 @@
  */
 
 const SPACING   = 22;   // px between dots
-const RADIUS    = 150;  // cursor influence radius
-const PUSH      = 26;   // max displacement under the cursor
-const SPRING    = 0.09;
-const DAMPING   = 0.82;
+const RADIUS    = 170;  // cursor influence radius
+const PUSH      = 24;   // max displacement under the cursor
+// Heavy, slow dots: a soft spring with strong damping, so they drift into
+// place and settle back over about a second instead of snapping.
+const SPRING    = 0.028;
+const DAMPING   = 0.86;
+// The point the dots react to trails the real cursor, which gives the field weight.
+const FOLLOW    = 0.07;
+const PRESENCE_EASE = 0.04; // how fast the influence fades in and out
+const GLOW_EASE = 0.05;
 const BASE_SIZE = 1;    // dot radius at rest
-const RIPPLE_SPEED = 9; // px per frame
-const RIPPLE_WIDTH = 60;
+const RIPPLE_SPEED = 3.5; // px per frame
+const RIPPLE_WIDTH = 90;
 const ACCENT = [229, 57, 53]; // logo red
 
 interface Dot { x: number; y: number; dx: number; dy: number; vx: number; vy: number; glow: number }
@@ -29,6 +35,9 @@ export function mountWelcomeDots(screen: HTMLElement): void {
   let dots: Dot[] = [];
   let width = 0, height = 0, dpr = 1;
   let mouse: { x: number; y: number } | null = null;
+  // Lagging copy of the cursor and how strongly it currently acts (0..1).
+  let focus: { x: number; y: number } | null = null;
+  let presence = 0;
   let ripples: Ripple[] = [];
   let frame = 0;
   let base: number[] = [113, 113, 122];
@@ -63,16 +72,27 @@ export function mountWelcomeDots(screen: HTMLElement): void {
 
   function step(): boolean {
     let moving = false;
+    if (mouse) {
+      if (!focus) focus = { ...mouse };
+      focus.x += (mouse.x - focus.x) * FOLLOW;
+      focus.y += (mouse.y - focus.y) * FOLLOW;
+    }
+    presence += ((mouse ? 1 : 0) - presence) * PRESENCE_EASE;
+    if (!mouse && presence < 0.005) { presence = 0; focus = null; }
+    if (mouse && (Math.abs(mouse.x - focus!.x) > 0.3 || Math.abs(mouse.y - focus!.y) > 0.3)) moving = true;
+    if (presence > 0.005 && presence < 0.995) moving = true;
     for (const r of ripples) r.r += RIPPLE_SPEED;
     ripples = ripples.filter(r => r.r < Math.hypot(width, height));
 
     for (const d of dots) {
       let tx = 0, ty = 0, glow = 0;
-      if (mouse) {
-        const ex = d.x - mouse.x, ey = d.y - mouse.y;
+      if (focus && presence > 0) {
+        const ex = d.x - focus.x, ey = d.y - focus.y;
         const dist = Math.hypot(ex, ey);
         if (dist < RADIUS && dist > 0.01) {
-          const f = (1 - dist / RADIUS) ** 2;
+          // Smooth falloff so the edge of the field moves gently too.
+          const t = 1 - dist / RADIUS;
+          const f = t * t * (3 - 2 * t) * presence;
           tx = (ex / dist) * PUSH * f;
           ty = (ey / dist) * PUSH * f;
           glow = f;
@@ -84,8 +104,8 @@ export function mountWelcomeDots(screen: HTMLElement): void {
         const band = 1 - Math.abs(dist - r.r) / RIPPLE_WIDTH;
         if (band > 0 && dist > 0.01) {
           const fade = Math.max(0, 1 - r.r / 900);
-          tx += (ex / dist) * 14 * band * fade;
-          ty += (ey / dist) * 14 * band * fade;
+          tx += (ex / dist) * 12 * band * fade;
+          ty += (ey / dist) * 12 * band * fade;
           glow = Math.max(glow, band * fade);
         }
       }
@@ -93,7 +113,7 @@ export function mountWelcomeDots(screen: HTMLElement): void {
       d.vy = (d.vy + (ty - d.dy) * SPRING) * DAMPING;
       d.dx += d.vx;
       d.dy += d.vy;
-      d.glow += (glow - d.glow) * 0.2;
+      d.glow += (glow - d.glow) * GLOW_EASE;
       if (Math.abs(d.vx) > 0.01 || Math.abs(d.vy) > 0.01 || Math.abs(d.dx) > 0.05 || Math.abs(d.dy) > 0.05 || d.glow > 0.01) {
         moving = true;
       }
