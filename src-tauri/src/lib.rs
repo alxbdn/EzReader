@@ -76,6 +76,7 @@ pub fn run() {
             commands::pdf::modify_pages,
             commands::pdf::extract_pdf_pages,
             commands::pdf::split_pdf,
+            commands::pdf::redact_pages,
             commands::shell::list_printers,
             commands::shell::print_pages,
             commands::shell::get_startup_args,

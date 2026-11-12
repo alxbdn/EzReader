@@ -9,14 +9,32 @@ import { getTranslations } from "./i18n";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
+export type ThemePref = "system" | "light" | "dark";
+
 export interface AppSettings {
   language: string; // BCP-47 code, e.g. "fr"
+  theme: ThemePref;
+  /** Zoom applied when a document opens and by the reset-zoom button:
+   *  a percentage ("100"), "fit-width" or "fit-page". */
+  defaultZoom: string;
 }
+
+export const ZOOM_CHOICES = ["fit-width", "fit-page", "50", "75", "100", "125", "150", "200"] as const;
 
 // ── Persistence ───────────────────────────────────────────────────────────────
 
 const STORAGE_KEY = "pdf-rider-settings";
-const DEFAULTS: AppSettings = { language: "fr" };
+const DEFAULTS: AppSettings = { language: "fr", theme: "system", defaultZoom: "100" };
+
+// ── Theme ─────────────────────────────────────────────────────────────────────
+
+const darkQuery = window.matchMedia("(prefers-color-scheme: dark)");
+
+/** Sets the resolved theme ("light" or "dark") on <html data-theme>. */
+export function applyTheme(pref: ThemePref): void {
+  const dark = pref === "dark" || (pref === "system" && darkQuery.matches);
+  document.documentElement.dataset["theme"] = dark ? "dark" : "light";
+}
 
 export function loadSettings(): AppSettings {
   try {
@@ -66,6 +84,8 @@ export class SettingsModal {
 
   constructor() {
     this.settings = loadSettings();
+    applyTheme(this.settings.theme);
+    darkQuery.addEventListener("change", () => applyTheme(this.settings.theme));
     this.backdrop = document.getElementById("settings-modal")!;
     this.populateLangSelect();
     this.bind();
@@ -138,6 +158,21 @@ export class SettingsModal {
     langSelect.addEventListener("change", () => {
       this.set("language", langSelect.value);
     });
+
+    // Theme selector
+    const themeSelect = document.getElementById("settings-theme") as HTMLSelectElement;
+    themeSelect.value = this.settings.theme;
+    themeSelect.addEventListener("change", () => {
+      const theme = themeSelect.value as ThemePref;
+      applyTheme(theme);
+      this.set("theme", theme);
+    });
+
+    // Default zoom
+    const zoomSelect = document.getElementById("settings-zoom") as HTMLSelectElement;
+    zoomSelect.value = (ZOOM_CHOICES as readonly string[]).includes(this.settings.defaultZoom)
+      ? this.settings.defaultZoom : DEFAULTS.defaultZoom;
+    zoomSelect.addEventListener("change", () => this.set("defaultZoom", zoomSelect.value));
 
     // Default app button
     const defaultBtn = document.getElementById("settings-default-btn") as HTMLButtonElement;
