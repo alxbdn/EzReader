@@ -210,6 +210,11 @@ export interface Translations {
   msgPagesExported?: string;
   msgExportFailed?: string;
   msgCannotDeleteAll?: string;
+  sbAddBlank?: string;
+  sbInsertPdf?: string;
+  sbRotateHint?: string;
+  sbMovingOne?: string;
+  sbMovingMany?: string;
 }
 
 // ── English ───────────────────────────────────────────────────────────────────
@@ -410,6 +415,11 @@ const EN: Translations = {
   msgPagesExported: "{n} page(s) exported",
   msgExportFailed: "Export failed: {err}",
   msgCannotDeleteAll: "A PDF needs at least one page: keep at least one.",
+  sbAddBlank: "Blank page",
+  sbInsertPdf: "Insert PDF",
+  sbRotateHint: "Rotate the selected pages",
+  sbMovingOne: "Page {p}",
+  sbMovingMany: "{n} pages",
 };
 
 // ── French ────────────────────────────────────────────────────────────────────
@@ -610,6 +620,11 @@ const FR: Translations = {
   msgPagesExported: "{n} page(s) exportée(s)",
   msgExportFailed: "Échec de l'export : {err}",
   msgCannotDeleteAll: "Un PDF doit garder au moins une page.",
+  sbAddBlank: "Page blanche",
+  sbInsertPdf: "Insérer PDF",
+  sbRotateHint: "Tourner les pages sélectionnées",
+  sbMovingOne: "Page {p}",
+  sbMovingMany: "{n} pages",
 };
 
 // ── Chinese (Mandarin) ────────────────────────────────────────────────────────
