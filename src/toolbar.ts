@@ -5,6 +5,9 @@ import {
   type ActiveToolState,
   type TextAlignmentValue,
   type ToolKind,
+  type FontFamilyValue,
+  type RgbColor,
+  FONT_FAMILIES,
   CSS_UNITS,
 } from "./models";
 import type { Translations } from "./i18n";
@@ -20,15 +23,21 @@ import {
   ICON_ALIGN_LEFT,
   ICON_ALIGN_CENTER,
   ICON_ALIGN_RIGHT,
-  ICON_FIT_WIDTH,
-  ICON_FIT_HEIGHT,
   ICON_PEN,
-  ICON_BRING_FRONT,
-  ICON_SEND_BACK,
   ICON_STROKE_WIDTH,
   ICON_SEARCH,
   ICON_REDACT,
   ICON_COMPRESS,
+  ICON_LAYER_UP,
+  ICON_LAYER_DOWN,
+  ICON_INFO,
+  ICON_PAGES_1,
+  ICON_PAGES_2,
+  ICON_PAGES_3,
+  ICON_SCROLL_VERTICAL,
+  ICON_SCROLL_HORIZONTAL,
+  ICON_FILL,
+  ICON_NO_FILL,
 } from "./icons";
 
 type ToolbarEvent =
@@ -41,6 +50,10 @@ type ToolbarEvent =
   | { type: "zoom-out" }
   | { type: "zoom-set"; scale: number }
   | { type: "zoom-reset" }
+  | { type: "zoom-real" }
+  | { type: "columns"; n: number | null }
+  | { type: "scroll-mode"; mode: "vertical" | "horizontal" }
+  | { type: "info" }
   | { type: "fit-width" }
   | { type: "fit-height" }
   | { type: "page-prev" }
@@ -48,7 +61,7 @@ type ToolbarEvent =
   | { type: "page-goto"; page: number }
   | { type: "tool-change"; tool: ToolKind }
   | { type: "style-change"; style: ActiveToolState }
-  | { type: "layer-change"; dir: "front" | "back" }
+  | { type: "layer-change"; dir: "up" | "down" }
   | { type: "signature" }
   | { type: "pages" }
   | { type: "split" }
@@ -78,6 +91,7 @@ export class Toolbar {
 
   private el: HTMLElement;
   private menuBarEl: HTMLElement;
+  private actionsEl!: HTMLElement;
   private contextEl: HTMLElement;
 
   // Menu bar state
@@ -96,8 +110,9 @@ export class Toolbar {
   private pageTotal!: HTMLSpanElement;
   private pageNavSection!: HTMLElement;
   private zoomInput!: HTMLInputElement;
-  private fitWidthBtn!: HTMLButtonElement;
-  private fitHeightBtn!: HTMLButtonElement;
+  private columnBtns: HTMLButtonElement[] = [];
+  private scrollBtns: HTMLButtonElement[] = [];
+  private infoBtn!: HTMLButtonElement;
   private _lastScale = CSS_UNITS;
   private toolBtns: Partial<Record<ToolKind, HTMLButtonElement>> = {};
 
@@ -117,6 +132,11 @@ export class Toolbar {
   private shapeStyleSection!: HTMLElement;
   private shapeColorPicker!: HTMLInputElement;
   private shapeStrokeInput!: HTMLInputElement;
+  private fillPicker!: HTMLInputElement;
+  private noFillBtn!: HTMLButtonElement;
+  /** Last fill colour picked, restored when fill is switched back on. */
+  private lastFill: RgbColor = { r: 255, g: 235, b: 59 };
+  private fontSelect!: HTMLSelectElement;
 
   constructor() {
     this.el = document.getElementById("toolbar-container")!;
@@ -152,9 +172,20 @@ export class Toolbar {
     }
   }
 
-  updateFitMode(mode: "none" | "fit-width" | "fit-height"): void {
-    this.fitWidthBtn.classList.toggle("active", mode === "fit-width");
-    this.fitHeightBtn.classList.toggle("active", mode === "fit-height");
+  /** Fit modes are menu-only now; kept so callers need not care. */
+  updateFitMode(_mode: "none" | "fit-width" | "fit-height"): void {}
+
+  /** Highlights the pages-per-row and scroll-direction buttons. */
+  updateLayout(columns: number | null, mode: "vertical" | "horizontal"): void {
+    this.columnBtns.forEach(b => {
+      b.classList.toggle("active", mode === "vertical" && Number(b.dataset["cols"]) === columns);
+      b.disabled = mode === "horizontal";
+    });
+    this.scrollBtns.forEach(b => b.classList.toggle("active", b.dataset["mode"] === mode));
+  }
+
+  setInfoOpen(open: boolean): void {
+    this.infoBtn.classList.toggle("active", open);
   }
 
   updatePageInfo(current: number, total: number): void {
@@ -174,6 +205,7 @@ export class Toolbar {
 
   setLoaded(loaded: boolean): void {
     this.contextEl.style.display = loaded ? "flex" : "none";
+    this.actionsEl.hidden = !loaded;
     for (const btn of this.docMenuEntries) {
       btn.disabled = !loaded;
     }
@@ -183,8 +215,10 @@ export class Toolbar {
     return { ...this.state };
   }
 
-  showTextStyles(state: Pick<ActiveToolState, "color" | "fontSize" | "bold" | "italic" | "underline" | "alignment">): void {
+  showTextStyles(state: Pick<ActiveToolState, "color" | "fontSize" | "bold" | "italic" | "underline" | "alignment"> & { fontFamily?: FontFamilyValue }): void {
     this.state.color     = { ...state.color };
+    this.state.fontFamily = state.fontFamily ?? "helvetica";
+    this.fontSelect.value = this.state.fontFamily;
     this.state.fontSize  = state.fontSize;
     this.state.bold      = state.bold;
     this.state.italic    = state.italic;
@@ -205,12 +239,15 @@ export class Toolbar {
     this.textStyleSection.style.display = "none";
   }
 
-  showShapeStyles(state: Pick<ActiveToolState, "color" | "strokeWidth">): void {
-    this.state.color       = { ...state.color };
+  /** Shows the shape controls for a shape (its outline is `color`) or for new shapes. */
+  showShapeStyles(state: { color: RgbColor; strokeWidth: number; fillColor?: RgbColor | null }): void {
+    this.state.shapeColor  = { ...state.color };
     this.state.strokeWidth = state.strokeWidth;
+    this.state.fillColor   = state.fillColor ? { ...state.fillColor } : null;
 
     this.shapeColorPicker.value = rgbToHex(state.color);
     this.shapeStrokeInput.value = String(state.strokeWidth);
+    this.syncFillControls();
 
     this.shapeStyleSection.style.display = "flex";
   }
@@ -531,13 +568,6 @@ export class Toolbar {
     this.reg(zoomIn, undefined, "ttZoomIn");
     zoomIn.addEventListener("click", () => this.emit({ type: "zoom-in" }));
 
-    this.fitWidthBtn = this.btn(ICON_FIT_WIDTH, "Fit to width", "icon-btn");
-    this.reg(this.fitWidthBtn, undefined, "ttFitWidth");
-    this.fitWidthBtn.addEventListener("click", () => this.emit({ type: "fit-width" }));
-    this.fitHeightBtn = this.btn(ICON_FIT_HEIGHT, "Fit to height", "icon-btn");
-    this.reg(this.fitHeightBtn, undefined, "ttFitHeight");
-    this.fitHeightBtn.addEventListener("click", () => this.emit({ type: "fit-height" }));
-
     const zoomSegment = document.createElement("div");
     zoomSegment.className = "toolbar-segment";
     zoomSegment.append(zoomOut, this.zoomInput, zoomIn);
@@ -545,10 +575,41 @@ export class Toolbar {
     this.reg(resetZoomBtn, undefined, "ttResetZoom");
     resetZoomBtn.addEventListener("click", () => this.emit({ type: "zoom-reset" }));
 
-    const fitGroup = document.createElement("div");
-    fitGroup.className = "toolbar-group";
-    fitGroup.append(resetZoomBtn, this.fitWidthBtn, this.fitHeightBtn);
-    ctx.append(zoomSegment, fitGroup, this.sep());
+    const realSizeBtn = this.btn("1:1", "Real size (1:1)", "icon-btn text-icon-btn");
+    this.reg(realSizeBtn, undefined, "ttRealSize");
+    realSizeBtn.addEventListener("click", () => this.emit({ type: "zoom-real" }));
+
+    const zoomGroup = document.createElement("div");
+    zoomGroup.className = "toolbar-group";
+    zoomGroup.append(resetZoomBtn, realSizeBtn);
+
+    // Pages per row
+    const colDefs: [number, string, keyof Translations][] = [
+      [1, ICON_PAGES_1, "ttPages1"], [2, ICON_PAGES_2, "ttPages2"], [3, ICON_PAGES_3, "ttPages3"],
+    ];
+    this.columnBtns = colDefs.map(([n, icon, tt]) => {
+      const b = this.btn(icon, `${n}`, "icon-btn");
+      b.dataset["cols"] = String(n);
+      this.reg(b, undefined, tt);
+      // Clicking the active choice goes back to "as many as fit".
+      b.addEventListener("click", () => this.emit({ type: "columns", n: b.classList.contains("active") ? null : n }));
+      return b;
+    });
+
+    // Scroll direction
+    const scrollDefs: ["vertical" | "horizontal", string, keyof Translations][] = [
+      ["vertical", ICON_SCROLL_VERTICAL, "ttScrollVertical"], ["horizontal", ICON_SCROLL_HORIZONTAL, "ttScrollHorizontal"],
+    ];
+    this.scrollBtns = scrollDefs.map(([mode, icon, tt]) => {
+      const b = this.btn(icon, mode, "icon-btn");
+      b.dataset["mode"] = mode;
+      this.reg(b, undefined, tt);
+      b.addEventListener("click", () => this.emit({ type: "scroll-mode", mode }));
+      return b;
+    });
+    this.updateLayout(null, "vertical");
+
+    ctx.append(zoomSegment, zoomGroup, this.sep(), this.segment(...this.columnBtns), this.segment(...this.scrollBtns), this.sep());
 
     // Annotation mode toggle
     this.modeBtn = this.btn(ICON_PEN, "Annotation mode", "btn btn-ghost");
@@ -607,8 +668,15 @@ export class Toolbar {
     const compressBtn = this.labeledBtn(ICON_COMPRESS, "btnCompressShort", "Compress", "ttCompress");
     compressBtn.addEventListener("click", () => this.emit({ type: "compress" }));
 
-    actions.append(redactBtn, signBtn, compressBtn);
-    ctx.append(actions);
+    this.infoBtn = this.btn(ICON_INFO, "Document info", "icon-btn");
+    this.reg(this.infoBtn, undefined, "ttInfo");
+    this.infoBtn.addEventListener("click", () => this.emit({ type: "info" }));
+
+    actions.append(redactBtn, signBtn, compressBtn, this.infoBtn);
+    // They live in the title bar row, which leaves the tool row room to breathe.
+    this.actionsEl = actions;
+    actions.hidden = true;
+    this.menuBarEl.append(actions);
   }
 
   /** Ghost button with an icon and a translated text label. */
@@ -641,6 +709,24 @@ export class Toolbar {
       this.emitStyleChange();
     });
     this.textStyleSection.append(this.colorPicker);
+
+    // Font family (PDF standard fonts)
+    this.fontSelect = document.createElement("select");
+    this.fontSelect.className = "toolbar-select";
+    this.reg(this.fontSelect, undefined, "ttFont");
+    for (const f of FONT_FAMILIES) {
+      const opt = document.createElement("option");
+      opt.value = f.value;
+      opt.textContent = f.label;
+      opt.style.fontFamily = f.css;
+      this.fontSelect.append(opt);
+    }
+    this.fontSelect.value = this.state.fontFamily;
+    this.fontSelect.addEventListener("change", () => {
+      this.state.fontFamily = this.fontSelect.value as FontFamilyValue;
+      this.emitStyleChange();
+    });
+    this.textStyleSection.append(this.fontSelect);
 
     // Font size
     this.sizeInput = document.createElement("input");
@@ -702,13 +788,13 @@ export class Toolbar {
     this.textStyleSection.append(this.segment(...this.alignBtns));
 
     // Layer order
-    const frontBtn = this.btn(ICON_BRING_FRONT, "Bring to front", "icon-btn");
-    const backBtn  = this.btn(ICON_SEND_BACK,   "Send to back",   "icon-btn");
-    this.reg(frontBtn, undefined, "ttBringFront");
-    this.reg(backBtn,  undefined, "ttSendBack");
-    frontBtn.addEventListener("click", () => this.emit({ type: "layer-change", dir: "front" }));
-    backBtn.addEventListener ("click", () => this.emit({ type: "layer-change", dir: "back"  }));
-    this.textStyleSection.append(frontBtn, backBtn);
+    const frontBtn = this.btn(ICON_LAYER_UP,   "Move up one layer",   "icon-btn");
+    const backBtn  = this.btn(ICON_LAYER_DOWN, "Move down one layer", "icon-btn");
+    this.reg(frontBtn, undefined, "ttLayerUp");
+    this.reg(backBtn,  undefined, "ttLayerDown");
+    frontBtn.addEventListener("click", () => this.emit({ type: "layer-change", dir: "up" }));
+    backBtn.addEventListener ("click", () => this.emit({ type: "layer-change", dir: "down" }));
+    this.textStyleSection.append(this.segment(frontBtn, backBtn));
 
     container.append(this.textStyleSection);
   }
@@ -726,12 +812,44 @@ export class Toolbar {
     this.shapeColorPicker.className = "color-picker";
     this.shapeColorPicker.title = "Stroke colour";
     this.reg(this.shapeColorPicker, undefined, "ttStrokeColor");
-    this.shapeColorPicker.value = rgbToHex(this.state.color);
+    this.shapeColorPicker.value = rgbToHex(this.state.shapeColor);
     this.shapeColorPicker.addEventListener("input", () => {
-      this.state.color = hexToRgb(this.shapeColorPicker.value);
+      this.state.shapeColor = hexToRgb(this.shapeColorPicker.value);
       this.emitStyleChange();
     });
-    this.shapeStyleSection.append(this.shapeColorPicker);
+
+    // Fill: colour, or none
+    this.fillPicker = document.createElement("input");
+    this.fillPicker.type = "color";
+    this.fillPicker.className = "color-picker";
+    this.reg(this.fillPicker, undefined, "ttFillColor");
+    this.fillPicker.addEventListener("input", () => {
+      this.lastFill = hexToRgb(this.fillPicker.value);
+      this.state.fillColor = { ...this.lastFill };
+      this.syncFillControls();
+      this.emitStyleChange();
+    });
+    this.noFillBtn = this.btn(ICON_NO_FILL, "No fill", "icon-btn");
+    this.reg(this.noFillBtn, undefined, "ttNoFill");
+    this.noFillBtn.addEventListener("click", () => {
+      this.state.fillColor = this.state.fillColor ? null : { ...this.lastFill };
+      this.syncFillControls();
+      this.emitStyleChange();
+    });
+    const fillLabel = document.createElement("span");
+    fillLabel.className = "toolbar-label";
+    fillLabel.innerHTML = ICON_FILL;
+    this.reg(fillLabel, undefined, "lblFill");
+    this.syncFillControls();
+
+    const outlineLabel = document.createElement("span");
+    outlineLabel.className = "toolbar-label";
+    outlineLabel.innerHTML = ICON_RECT;
+    this.reg(outlineLabel, undefined, "lblOutline");
+    this.shapeStyleSection.append(
+      outlineLabel, this.shapeColorPicker,
+      this.sep(), fillLabel, this.fillPicker, this.noFillBtn, this.sep(),
+    );
 
     // Stroke width
     const strokeLabel = document.createElement("span");
@@ -743,25 +861,33 @@ export class Toolbar {
     this.shapeStrokeInput.className = "toolbar-input";
     this.shapeStrokeInput.title = "Stroke width";
     this.shapeStrokeInput.value = String(this.state.strokeWidth);
-    this.shapeStrokeInput.min = "0.5";
+    this.shapeStrokeInput.min = "0";
     this.shapeStrokeInput.max = "20";
     this.shapeStrokeInput.step = "0.5";
     this.shapeStrokeInput.addEventListener("change", () => {
       const sw = parseFloat(this.shapeStrokeInput.value);
-      if (!isNaN(sw) && sw > 0) { this.state.strokeWidth = sw; this.emitStyleChange(); }
+      if (!isNaN(sw) && sw >= 0) { this.state.strokeWidth = sw; this.emitStyleChange(); }
     });
     this.shapeStyleSection.append(strokeLabel, this.shapeStrokeInput);
 
     // Layer order
-    const frontBtn = this.btn(ICON_BRING_FRONT, "Bring to front", "icon-btn");
-    const backBtn  = this.btn(ICON_SEND_BACK,   "Send to back",   "icon-btn");
-    this.reg(frontBtn, undefined, "ttBringFront");
-    this.reg(backBtn,  undefined, "ttSendBack");
-    frontBtn.addEventListener("click", () => this.emit({ type: "layer-change", dir: "front" }));
-    backBtn.addEventListener ("click", () => this.emit({ type: "layer-change", dir: "back"  }));
-    this.shapeStyleSection.append(frontBtn, backBtn);
+    const frontBtn = this.btn(ICON_LAYER_UP,   "Move up one layer",   "icon-btn");
+    const backBtn  = this.btn(ICON_LAYER_DOWN, "Move down one layer", "icon-btn");
+    this.reg(frontBtn, undefined, "ttLayerUp");
+    this.reg(backBtn,  undefined, "ttLayerDown");
+    frontBtn.addEventListener("click", () => this.emit({ type: "layer-change", dir: "up" }));
+    backBtn.addEventListener ("click", () => this.emit({ type: "layer-change", dir: "down" }));
+    this.shapeStyleSection.append(this.segment(frontBtn, backBtn));
 
     container.append(this.shapeStyleSection);
+  }
+
+  /** The fill swatch shows the current fill; "no fill" is lit when the shape is hollow. */
+  private syncFillControls(): void {
+    if (this.state.fillColor) this.lastFill = { ...this.state.fillColor };
+    this.fillPicker.value = rgbToHex(this.lastFill);
+    this.fillPicker.classList.toggle("is-off", !this.state.fillColor);
+    this.noFillBtn.classList.toggle("active", !this.state.fillColor);
   }
 
   // ── Shared logic ────────────────────────────────────────────────────────────

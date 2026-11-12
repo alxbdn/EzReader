@@ -17,6 +17,8 @@ export interface AppSettings {
   /** Zoom applied when a document opens and by the reset-zoom button:
    *  a percentage ("100"), "fit-width" or "fit-page". */
   defaultZoom: string;
+  /** CSS pixels per real inch on this screen, used by the 1:1 zoom. */
+  pxPerInch: number;
 }
 
 export const ZOOM_CHOICES = ["fit-width", "fit-page", "50", "75", "100", "125", "150", "200"] as const;
@@ -24,7 +26,10 @@ export const ZOOM_CHOICES = ["fit-width", "fit-page", "50", "75", "100", "125", 
 // ── Persistence ───────────────────────────────────────────────────────────────
 
 const STORAGE_KEY = "pdf-rider-settings";
-const DEFAULTS: AppSettings = { language: "fr", theme: "system", defaultZoom: "100" };
+const DEFAULTS: AppSettings = { language: "fr", theme: "system", defaultZoom: "100", pxPerInch: 96 };
+
+const CARD_W_MM = 85.6;
+const CARD_H_MM = 53.98;
 
 // ── Theme ─────────────────────────────────────────────────────────────────────
 
@@ -173,6 +178,19 @@ export class SettingsModal {
     zoomSelect.value = (ZOOM_CHOICES as readonly string[]).includes(this.settings.defaultZoom)
       ? this.settings.defaultZoom : DEFAULTS.defaultZoom;
     zoomSelect.addEventListener("change", () => this.set("defaultZoom", zoomSelect.value));
+
+    // Actual-size calibration: the card outline follows the slider live.
+    const ppiInput = document.getElementById("settings-ppi") as HTMLInputElement;
+    const card = document.getElementById("settings-calib-card") as HTMLElement;
+    const drawCard = (ppi: number) => {
+      card.style.width  = `${(CARD_W_MM / 25.4) * ppi}px`;
+      card.style.height = `${(CARD_H_MM / 25.4) * ppi}px`;
+    };
+    const ppi0 = Number.isFinite(this.settings.pxPerInch) ? this.settings.pxPerInch : DEFAULTS.pxPerInch;
+    ppiInput.value = String(ppi0);
+    drawCard(ppi0);
+    ppiInput.addEventListener("input", () => drawCard(parseFloat(ppiInput.value)));
+    ppiInput.addEventListener("change", () => this.set("pxPerInch", parseFloat(ppiInput.value)));
 
     // Default app button
     const defaultBtn = document.getElementById("settings-default-btn") as HTMLButtonElement;

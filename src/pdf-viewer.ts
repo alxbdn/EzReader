@@ -553,6 +553,10 @@ export class PdfViewer {
   pageDimensions: Array<{ width: number; height: number }> = [];
   pageViews: PdfPageView[] = [];
   columnCount = 1;
+  /** Pages per row chosen by the user, or null to fit as many as the width allows. */
+  private _forcedColumns: number | null = null;
+  /** "horizontal" lays every page out in a single row that scrolls sideways. */
+  private _scrollMode: "vertical" | "horizontal" = "vertical";
 
   private onLayoutChangedCb?: (views: PdfPageView[]) => void;
   onResizeCb?: () => void;
@@ -588,6 +592,27 @@ export class PdfViewer {
   get pageCount():   number   { return this._pageCount; }
   get scale():       number   { return this._scale; }
   get rotation():    number   { return this._rotation; }
+  get forcedColumns(): number | null { return this._forcedColumns; }
+  get scrollMode(): "vertical" | "horizontal" { return this._scrollMode; }
+
+  /** Number of pages per row for the current settings. */
+  private _columnsFor(containerWidth: number, refPageWidthPx: number): number {
+    if (this._scrollMode === "horizontal") return Math.max(1, this._pageCount);
+    if (this._forcedColumns) return this._forcedColumns;
+    return calculateColumnCount(containerWidth, refPageWidthPx, PAGE_GAP);
+  }
+
+  /** Shows `n` pages per row (null: as many as fit), then keeps the current page in view. */
+  setColumns(n: number | null): void {
+    this._forcedColumns = n;
+    if (this.pdfDoc) { this.buildLayout(); this.goToPage(this._focusedPage, "instant"); }
+  }
+
+  setScrollMode(mode: "vertical" | "horizontal"): void {
+    this._scrollMode = mode;
+    this.scrollEl.classList.toggle("horizontal", mode === "horizontal");
+    if (this.pdfDoc) { this.buildLayout(); this.goToPage(this._focusedPage, "instant"); }
+  }
 
   get pageWidthPt():  number {
     const dim = this.pageDimensions[0];
@@ -679,7 +704,7 @@ export class PdfViewer {
     const swapped = this._rotation % 180 !== 0;
     const containerWidth  = Math.max(1, this.scrollEl.clientWidth - 40);
     const refPageWidthPx  = Math.max(...this.pageDimensions.map(d => swapped ? d.height : d.width)) * this._scale;
-    this.columnCount = calculateColumnCount(containerWidth, refPageWidthPx, PAGE_GAP);
+    this.columnCount = this._columnsFor(containerWidth, refPageWidthPx);
 
     // Build rows (US2: T019)
     const rows = buildRows(this._pageCount, this.columnCount);
@@ -737,7 +762,7 @@ export class PdfViewer {
           }
         }
       },
-      { root: this.scrollEl, rootMargin: "200px 0px" }
+      { root: this.scrollEl, rootMargin: "200px 200px" }
     );
 
     for (const pv of this.pageViews) this.observer.observe(pv.wrapper);
@@ -752,14 +777,16 @@ export class PdfViewer {
   private _scrollHandler: (() => void) | null = null;
 
   private _updateFocusedPage(): void {
-    const scrollTop = this.scrollEl.scrollTop;
-    const viewportMid = scrollTop + this.scrollEl.clientHeight / 3;
+    const horizontal = this._scrollMode === "horizontal";
+    const viewportMid = horizontal
+      ? this.scrollEl.scrollLeft + this.scrollEl.clientWidth / 3
+      : this.scrollEl.scrollTop + this.scrollEl.clientHeight / 3;
     let best = 1;
     let bestDist = Infinity;
     for (const pv of this.pageViews) {
-      const top = pv.wrapper.offsetTop;
-      const bottom = top + pv.wrapper.offsetHeight;
-      const mid = (top + bottom) / 2;
+      const start = horizontal ? pv.wrapper.offsetLeft : pv.wrapper.offsetTop;
+      const size = horizontal ? pv.wrapper.offsetWidth : pv.wrapper.offsetHeight;
+      const mid = start + size / 2;
       const dist = Math.abs(mid - viewportMid);
       if (dist < bestDist) {
         bestDist = dist;
@@ -811,7 +838,7 @@ export class PdfViewer {
   goToPage(n: number, behavior: ScrollBehavior = "smooth"): void {
     const clamped = Math.max(1, Math.min(n, this._pageCount));
     this._currentPage = clamped;
-    this.pageViews[clamped - 1]?.wrapper.scrollIntoView({ behavior, block: "start" });
+    this.pageViews[clamped - 1]?.wrapper.scrollIntoView({ behavior, block: "start", inline: this._scrollMode === "horizontal" ? "start" : "nearest" });
   }
 
   async nextPage(): Promise<void> { this.goToPage(this._currentPage + this.columnCount); }
@@ -840,10 +867,11 @@ export class PdfViewer {
       const swapped        = this._rotation % 180 !== 0;
       const containerWidth = Math.max(1, this.scrollEl.clientWidth - 40);
       const refW           = Math.max(...this.pageDimensions.map(d => swapped ? d.height : d.width)) * this._scale;
-      const newCols        = calculateColumnCount(containerWidth, refW, PAGE_GAP);
+      const newCols        = this._columnsFor(containerWidth, refW);
 
       if (newCols === this.columnCount) {
         const savedScroll = this.scrollEl.scrollTop;
+        const savedScrollX = this.scrollEl.scrollLeft;
         let anySizeChanged = false;
         for (const view of this.pageViews) {
           const dim = this.pageDimensions[view.pageNum - 1];
@@ -864,6 +892,7 @@ export class PdfViewer {
           this.goToPage(savedPage, "instant");
         } else {
           this.scrollEl.scrollTop = savedScroll;
+          this.scrollEl.scrollLeft = savedScrollX;
         }
         const scrollRect = this.scrollEl.getBoundingClientRect();
         for (const view of this.pageViews) {

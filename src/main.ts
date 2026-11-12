@@ -37,6 +37,8 @@ import {
   redactPages,
 } from "./tauri-bridge";
 import { getCurrentWindow } from "@tauri-apps/api/window";
+import { mountWindowControls } from "./window-controls";
+import { InfoPanel } from "./info-panel";
 import { tempDir, basename } from "@tauri-apps/api/path";
 import { ask } from "@tauri-apps/plugin-dialog";
 
@@ -171,8 +173,7 @@ function wirePageOverlay(pv: PdfPageView): void {
   });
 
   ov.onAnnotationReordered((ann: Annotation, dir) => {
-    if (dir === "front") store.bringToFront(ann);
-    else store.sendToBack(ann);
+    store.moveLayer(ann, dir === "up" ? 1 : -1);
     setDirty(true);
   });
 
@@ -216,6 +217,38 @@ viewer.onLayoutChanged((pageViews) => {
 document.getElementById("viewer-scroll")!.addEventListener("focused-page-changed", (e: Event) => {
   const { page } = (e as CustomEvent<{ page: number }>).detail;
   toolbar.updatePageInfo(page, viewer.pageCount);
+});
+
+// ── Document info ─────────────────────────────────────────────────────────────
+
+const infoPanel = new InfoPanel(document.getElementById("app")!);
+infoPanel.onClose = () => toolbar.setInfoOpen(false);
+
+/** Pages moved by the previous/next buttons: one row, or one page when horizontal. */
+function pageStep(): number {
+  return viewer.scrollMode === "horizontal" ? 1 : viewer.columnCount;
+}
+
+async function showInfo(): Promise<void> {
+  const doc = viewer.document;
+  if (!doc) return;
+  const s = settingsModal.getSettings();
+  const target = session.saveTarget ?? "";
+  const name = target.split(/[\\/]/).pop() || target;
+  toolbar.setInfoOpen(true);
+  await infoPanel.show(doc, name, getTranslations(s.language), s.language);
+}
+
+// ── Title bar (native decorations are off) ──────────────────────────────────
+
+mountWindowControls(document.getElementById("menubar-row")!, () => {
+  const t = getTranslations(settingsModal.getSettings().language);
+  return {
+    minimize: t.wcMinimize ?? "Minimize",
+    maximize: t.wcMaximize ?? "Maximize",
+    restore:  t.wcRestore  ?? "Restore",
+    close:    t.wcClose    ?? "Close",
+  };
 });
 
 // ── Translations ──────────────────────────────────────────────────────────────
@@ -400,6 +433,7 @@ async function loadPdf(path: string): Promise<void> {
     session.opened(path, workingCopy);
     setDirty(false);
     await applyDefaultZoom();
+    if (infoPanel.isOpen) await showInfo();
   } catch (err: unknown) {
     const errText = String(err);
     if (errText.includes("PasswordException") || errText.includes("password")) {
@@ -628,11 +662,36 @@ toolbar.on(async (e) => {
       break;
 
     case "page-prev":
-      if (viewer.isLoaded()) viewer.goToPage(viewer.currentPage - viewer.columnCount);
+      if (viewer.isLoaded()) viewer.goToPage(viewer.currentPage - pageStep());
       break;
 
     case "page-next":
-      if (viewer.isLoaded()) viewer.goToPage(viewer.currentPage + viewer.columnCount);
+      if (viewer.isLoaded()) viewer.goToPage(viewer.currentPage + pageStep());
+      break;
+
+    case "zoom-real":
+      if (viewer.isLoaded()) {
+        fitMode = "none"; toolbar.updateFitMode(fitMode);
+        const ppi = settingsModal.getSettings().pxPerInch;
+        await viewer.setScale((Number.isFinite(ppi) && ppi > 0 ? ppi : 96) / 72);
+        toolbar.updateZoom(viewer.scale);
+      }
+      break;
+
+    case "columns":
+      viewer.setColumns(e.n);
+      if (e.n != null && viewer.scrollMode === "horizontal") viewer.setScrollMode("vertical");
+      toolbar.updateLayout(viewer.forcedColumns, viewer.scrollMode);
+      break;
+
+    case "scroll-mode":
+      viewer.setScrollMode(e.mode);
+      toolbar.updateLayout(viewer.forcedColumns, viewer.scrollMode);
+      break;
+
+    case "info":
+      if (infoPanel.isOpen) { infoPanel.close(); toolbar.setInfoOpen(false); }
+      else { await showInfo(); }
       break;
 
     case "page-goto":
@@ -648,7 +707,7 @@ toolbar.on(async (e) => {
         toolbar.showTextStyles(toolState);
         toolbar.hideShapeStyles();
       } else if (e.tool === "rect" || e.tool === "circle") {
-        toolbar.showShapeStyles(toolState);
+        toolbar.showShapeStyles({ color: toolState.shapeColor, strokeWidth: toolState.strokeWidth, fillColor: toolState.fillColor });
         toolbar.hideTextStyles();
       } else {
         toolbar.hideTextStyles();
@@ -665,7 +724,7 @@ toolbar.on(async (e) => {
         setDirty(true);
       } else if (editingShapeAnn) {
         const pv = viewer.pageViews.find(p => p.pageNum === editingShapeAnn!.page);
-        pv?.overlay.applyShapeAnnotationStyle(editingShapeAnn, e.style.color, e.style.strokeWidth);
+        pv?.overlay.applyShapeAnnotationStyle(editingShapeAnn, e.style.shapeColor, e.style.strokeWidth, e.style.fillColor);
         setDirty(true);
       }
       break;
@@ -673,11 +732,9 @@ toolbar.on(async (e) => {
     case "layer-change": {
       const ann = editingTextAnn ?? editingShapeAnn;
       if (ann) {
-        if (e.dir === "front") store.bringToFront(ann);
-        else store.sendToBack(ann);
+        // The overlay reorders and reports back through onAnnotationReordered.
         const pv = viewer.pageViews.find(p => p.pageNum === ann.page);
-        pv?.overlay.reorderTextAnnotation(ann, e.dir);
-        setDirty(true);
+        pv?.overlay.reorderAnnotation(ann, e.dir);
       }
       break;
     }
@@ -890,6 +947,14 @@ window.addEventListener("keydown", async (e: KeyboardEvent) => {
 // ── Ctrl+wheel zoom ───────────────────────────────────────────────────────────
 
 document.getElementById("viewer-scroll")!.addEventListener("wheel", async (e: WheelEvent) => {
+  if (!e.ctrlKey && viewer.scrollMode === "horizontal" && !e.shiftKey && Math.abs(e.deltaY) > Math.abs(e.deltaX)) {
+    // A plain mouse wheel moves along the row of pages.
+    e.preventDefault();
+    const el = e.currentTarget as HTMLElement;
+    const lines = e.deltaMode === 1 ? 40 : e.deltaMode === 2 ? el.clientWidth : 1;
+    el.scrollLeft += e.deltaY * lines;
+    return;
+  }
   if (!e.ctrlKey || !viewer.isLoaded()) return;
   e.preventDefault();
   fitMode = "none"; toolbar.updateFitMode(fitMode);

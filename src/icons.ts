@@ -56,4 +56,15 @@ export const ICON_SEND_BACK = lucide(`<rect x="14" y="14" width="8" height="8" r
 export const ICON_STROKE_WIDTH = lucide(`<path d="M4 6h16" stroke-width="1"/><path d="M4 12h16" stroke-width="2"/><path d="M4 18h16" stroke-width="3.5"/>`);
 export const ICON_SEARCH = lucide(`<circle cx="11" cy="11" r="7"/><path d="m20 20-4.3-4.3"/>`);
 export const ICON_REDACT = lucide(`<rect x="3" y="5" width="18" height="14" rx="2"/><rect x="7" y="10" width="10" height="4" fill="currentColor" stroke="none"/>`);
-export const ICON_COMPRESS = lucide(`<path d="M12 3v6"/><path d="m9 6 3 3 3-3"/><path d="M12 21v-6"/><path d="m9 18 3-3 3 3"/><path d="M4 12h16"/>`);
+// A square squeezed from both sides.
+export const ICON_COMPRESS = lucide(`<rect x="8" y="5" width="8" height="14" rx="1.5"/><path d="M2 12h4"/><path d="m4.5 9.5 2.5 2.5-2.5 2.5"/><path d="M22 12h-4"/><path d="m19.5 9.5-2.5 2.5 2.5 2.5"/>`);
+export const ICON_LAYER_UP = lucide(`<path d="M12 19V5"/><path d="m5 12 7-7 7 7"/>`);
+export const ICON_LAYER_DOWN = lucide(`<path d="M12 5v14"/><path d="m19 12-7 7-7-7"/>`);
+export const ICON_INFO = lucide(`<circle cx="12" cy="12" r="9"/><path d="M12 16v-4"/><path d="M12 8h.01"/>`);
+export const ICON_PAGES_1 = lucide(`<rect x="7" y="4" width="10" height="16" rx="1.5"/>`);
+export const ICON_PAGES_2 = lucide(`<rect x="2.5" y="5" width="8.5" height="14" rx="1.5"/><rect x="13" y="5" width="8.5" height="14" rx="1.5"/>`);
+export const ICON_PAGES_3 = lucide(`<rect x="1.5" y="6" width="6" height="12" rx="1"/><rect x="9" y="6" width="6" height="12" rx="1"/><rect x="16.5" y="6" width="6" height="12" rx="1"/>`);
+export const ICON_SCROLL_VERTICAL = lucide(`<rect x="7" y="2" width="10" height="8" rx="1"/><rect x="7" y="14" width="10" height="8" rx="1"/><path d="M12 10v4"/>`);
+export const ICON_SCROLL_HORIZONTAL = lucide(`<rect x="2" y="7" width="8" height="10" rx="1"/><rect x="14" y="7" width="8" height="10" rx="1"/><path d="M10 12h4"/>`);
+export const ICON_FILL = lucide(`<path d="m19 11-8-8-8.6 8.6a2 2 0 0 0 0 2.8l5.2 5.2c.8.8 2 .8 2.8 0L19 11Z"/><path d="m5 2 5 5"/><path d="M2 13h15"/><path d="M22 20a2 2 0 1 1-4 0c0-1.6 1.7-2.4 2-4 .3 1.6 2 2.4 2 4Z"/>`);
+export const ICON_NO_FILL = lucide(`<rect x="4" y="4" width="16" height="16" rx="2"/><path d="m5 19 14-14"/>`);

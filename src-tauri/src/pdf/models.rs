@@ -32,6 +32,9 @@ pub struct RectAnnotation {
     pub height: f64,
     pub color: RgbColor,
     pub stroke_width: f64,
+    /// Interior colour; `None` (and files saved before fills existed) means hollow.
+    #[serde(default)]
+    pub fill_color: Option<RgbColor>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -44,6 +47,19 @@ pub struct CircleAnnotation {
     pub height: f64,
     pub color: RgbColor,
     pub stroke_width: f64,
+    /// Interior colour; `None` (and files saved before fills existed) means hollow.
+    #[serde(default)]
+    pub fill_color: Option<RgbColor>,
+}
+
+/// One of the PDF standard fonts, which every viewer has without embedding.
+#[derive(Debug, Serialize, Deserialize, Clone, Copy, Default, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub enum FontFamily {
+    #[default]
+    Helvetica,
+    Times,
+    Courier,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -60,6 +76,9 @@ pub struct TextAnnotation {
     pub italic: bool,
     pub underline: bool,
     pub alignment: TextAlignment,
+    /// Absent in files saved before font choice existed.
+    #[serde(default)]
+    pub font_family: FontFamily,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]

@@ -5,8 +5,8 @@ use image::ImageReader;
 use lopdf::{dictionary, Document, Object, ObjectId, Stream, StringFormat};
 
 use super::models::{
-    Annotation, CircleAnnotation, RectAnnotation, SignatureAnnotation, TextAlignment,
-    TextAnnotation,
+    Annotation, CircleAnnotation, FontFamily, RectAnnotation, RgbColor, SignatureAnnotation,
+    TextAlignment, TextAnnotation,
 };
 
 // ── Annotation metadata (JSON + stream-ID tracking) ──────────────────────────
@@ -83,10 +83,27 @@ pub fn save_meta(doc: &mut Document, meta: &AnnotationMeta) -> Result<(), String
 
 // ── PDF operator builders ─────────────────────────────────────────────────────
 
-/// Append rect stroke operators to `buf`.
+/// Fill colour operator and the path-painting operator for a shape:
+/// `B` fill + outline, `f` fill only, `S` outline only, `n` nothing.
+fn shape_paint(fill: Option<&RgbColor>, stroke_width: f64) -> (String, &'static str) {
+    let fill_op = fill
+        .map(|c| format!("{:.4} {:.4} {:.4} rg\n", c.r_f(), c.g_f(), c.b_f()))
+        .unwrap_or_default();
+    let paint = match (fill.is_some(), stroke_width > 0.0) {
+        (true, true) => "B",
+        (true, false) => "f",
+        (false, true) => "S",
+        (false, false) => "n",
+    };
+    (fill_op, paint)
+}
+
+/// Append rect operators (outline and optional fill) to `buf`.
 pub fn write_rect(buf: &mut Vec<u8>, ann: &RectAnnotation) {
+    let (fill_op, paint) = shape_paint(ann.fill_color.as_ref(), ann.stroke_width);
     let ops = format!(
-        "q\n{:.4} {:.4} {:.4} RG\n{:.4} w\n{:.4} {:.4} {:.4} {:.4} re\nS\nQ\n",
+        "q\n{}{:.4} {:.4} {:.4} RG\n{:.4} w\n{:.4} {:.4} {:.4} {:.4} re\n{}\nQ\n",
+        fill_op,
         ann.color.r_f(),
         ann.color.g_f(),
         ann.color.b_f(),
@@ -95,12 +112,14 @@ pub fn write_rect(buf: &mut Vec<u8>, ann: &RectAnnotation) {
         ann.y,
         ann.width,
         ann.height,
+        paint,
     );
     buf.extend_from_slice(ops.as_bytes());
 }
 
-/// Append circle stroke operators (4-arc Bézier) to `buf`.
+/// Append ellipse operators (4-arc Bézier, outline and optional fill) to `buf`.
 pub fn write_circle(buf: &mut Vec<u8>, ann: &CircleAnnotation) {
+    let (fill_op, paint) = shape_paint(ann.fill_color.as_ref(), ann.stroke_width);
     // Bézier approximation constant κ ≈ 0.5523
     const K: f64 = 0.5523;
     let cx = ann.x + ann.width / 2.0;
@@ -111,6 +130,7 @@ pub fn write_circle(buf: &mut Vec<u8>, ann: &CircleAnnotation) {
     let ops = format!(
         concat!(
             "q\n",
+            "{}",
             "{:.4} {:.4} {:.4} RG\n",
             "{:.4} w\n",
             // Move to top centre
@@ -123,8 +143,9 @@ pub fn write_circle(buf: &mut Vec<u8>, ann: &CircleAnnotation) {
             "{:.4} {:.4} {:.4} {:.4} {:.4} {:.4} c\n",
             // Arc 4: left → top
             "{:.4} {:.4} {:.4} {:.4} {:.4} {:.4} c\n",
-            "S\nQ\n"
+            "{}\nQ\n"
         ),
+        fill_op,
         ann.color.r_f(), ann.color.g_f(), ann.color.b_f(),
         ann.stroke_width,
         // Move to top
@@ -137,27 +158,53 @@ pub fn write_circle(buf: &mut Vec<u8>, ann: &CircleAnnotation) {
         cx - K * rx, cy - ry,   cx - rx, cy - K * ry,   cx - rx, cy,
         // Arc 4
         cx - rx, cy + K * ry,   cx - K * rx, cy + ry,   cx, cy + ry,
+        paint,
     );
     buf.extend_from_slice(ops.as_bytes());
 }
 
 /// Select the PDF standard Type1 font name for the given style flags.
-fn font_name(bold: bool, italic: bool) -> &'static str {
-    match (bold, italic) {
-        (true, true) => "Helvetica-BoldOblique",
-        (true, false) => "Helvetica-Bold",
-        (false, true) => "Helvetica-Oblique",
-        _ => "Helvetica",
+fn font_name(family: FontFamily, bold: bool, italic: bool) -> &'static str {
+    match (family, bold, italic) {
+        (FontFamily::Helvetica, true, true) => "Helvetica-BoldOblique",
+        (FontFamily::Helvetica, true, false) => "Helvetica-Bold",
+        (FontFamily::Helvetica, false, true) => "Helvetica-Oblique",
+        (FontFamily::Helvetica, false, false) => "Helvetica",
+        (FontFamily::Times, true, true) => "Times-BoldItalic",
+        (FontFamily::Times, true, false) => "Times-Bold",
+        (FontFamily::Times, false, true) => "Times-Italic",
+        (FontFamily::Times, false, false) => "Times-Roman",
+        (FontFamily::Courier, true, true) => "Courier-BoldOblique",
+        (FontFamily::Courier, true, false) => "Courier-Bold",
+        (FontFamily::Courier, false, true) => "Courier-Oblique",
+        (FontFamily::Courier, false, false) => "Courier",
     }
 }
 
 /// Short resource key for a font name (no hyphens, fits in name dict).
-fn font_key(bold: bool, italic: bool) -> &'static str {
-    match (bold, italic) {
-        (true, true) => "HelvBO",
-        (true, false) => "HelvB",
-        (false, true) => "HelvO",
-        _ => "Helv",
+fn font_key(family: FontFamily, bold: bool, italic: bool) -> &'static str {
+    match (family, bold, italic) {
+        (FontFamily::Helvetica, true, true) => "HelvBO",
+        (FontFamily::Helvetica, true, false) => "HelvB",
+        (FontFamily::Helvetica, false, true) => "HelvO",
+        (FontFamily::Helvetica, false, false) => "Helv",
+        (FontFamily::Times, true, true) => "TimesBI",
+        (FontFamily::Times, true, false) => "TimesB",
+        (FontFamily::Times, false, true) => "TimesI",
+        (FontFamily::Times, false, false) => "TimesR",
+        (FontFamily::Courier, true, true) => "CourBO",
+        (FontFamily::Courier, true, false) => "CourB",
+        (FontFamily::Courier, false, true) => "CourO",
+        (FontFamily::Courier, false, false) => "Cour",
+    }
+}
+
+/// Average glyph width as a fraction of the font size, for wrapping and alignment.
+fn avg_char_width(family: FontFamily) -> f64 {
+    match family {
+        FontFamily::Helvetica => 0.5,
+        FontFamily::Times => 0.45,
+        FontFamily::Courier => 0.6,
     }
 }
 
@@ -208,10 +255,9 @@ fn wrap_text(text: &str, max_width: f64, char_w: f64) -> Vec<String> {
 /// Append text operators to `buf`.
 /// Returns the resource key and base font name so the caller can register it.
 pub fn write_text(buf: &mut Vec<u8>, ann: &TextAnnotation) -> (&'static str, &'static str) {
-    let fkey  = font_key(ann.bold, ann.italic);
-    let fname = font_name(ann.bold, ann.italic);
-    // Helvetica average glyph width ≈ 0.5 × font size
-    let char_w  = ann.font_size * 0.5;
+    let fkey  = font_key(ann.font_family, ann.bold, ann.italic);
+    let fname = font_name(ann.font_family, ann.bold, ann.italic);
+    let char_w  = ann.font_size * avg_char_width(ann.font_family);
     let line_h  = ann.font_size * 1.2;
     let lines   = wrap_text(&ann.content, ann.width, char_w);
 
@@ -766,6 +812,7 @@ mod tests {
             width: 50.0, height: 30.0,
             color: red(),
             stroke_width: 1.5,
+            fill_color: None,
         };
         let mut buf = Vec::new();
         write_rect(&mut buf, &ann);
@@ -781,6 +828,32 @@ mod tests {
     }
 
     #[test]
+    fn filled_shapes_fill_and_stroke_or_only_fill() {
+        let mut ann = RectAnnotation {
+            page: 1, x: 0.0, y: 0.0, width: 10.0, height: 10.0,
+            color: red(), stroke_width: 2.0, fill_color: Some(black()),
+        };
+        let mut buf = Vec::new();
+        write_rect(&mut buf, &ann);
+        let s = String::from_utf8(buf).unwrap();
+        assert!(s.contains("0.0000 0.0000 0.0000 rg"), "missing fill colour: {s}");
+        assert!(s.contains("re\nB\n"), "should fill and stroke: {s}");
+
+        ann.stroke_width = 0.0;
+        let mut buf = Vec::new();
+        write_rect(&mut buf, &ann);
+        assert!(String::from_utf8(buf).unwrap().contains("re\nf\n"));
+
+        let circle = CircleAnnotation {
+            page: 1, x: 0.0, y: 0.0, width: 10.0, height: 10.0,
+            color: red(), stroke_width: 1.0, fill_color: Some(red()),
+        };
+        let mut buf = Vec::new();
+        write_circle(&mut buf, &circle);
+        assert!(String::from_utf8(buf).unwrap().contains("\nB\nQ"));
+    }
+
+    #[test]
     fn test_write_circle_contains_bezier() {
         let ann = CircleAnnotation {
             page: 1,
@@ -788,6 +861,7 @@ mod tests {
             width: 60.0, height: 60.0,
             color: black(),
             stroke_width: 1.0,
+            fill_color: None,
         };
         let mut buf = Vec::new();
         write_circle(&mut buf, &ann);
@@ -812,6 +886,7 @@ mod tests {
             italic: false,
             underline: false,
             alignment: TextAlignment::Left,
+            font_family: FontFamily::Helvetica,
         };
         let mut buf = Vec::new();
         let (fkey, fname) = write_text(&mut buf, &ann);
@@ -839,11 +914,41 @@ mod tests {
             italic: true,
             underline: false,
             alignment: TextAlignment::Center,
+            font_family: FontFamily::Helvetica,
         };
         let mut buf = Vec::new();
         let (fkey, fname) = write_text(&mut buf, &ann);
         assert_eq!(fkey, "HelvBO");
         assert_eq!(fname, "Helvetica-BoldOblique");
+    }
+
+    #[test]
+    fn test_write_text_uses_chosen_font_family() {
+        let ann = TextAnnotation {
+            page: 1,
+            x: 0.0, y: 0.0,
+            width: 100.0,
+            content: "Serif".to_string(),
+            color: black(),
+            font_size: 10.0,
+            bold: false,
+            italic: true,
+            underline: false,
+            alignment: TextAlignment::Left,
+            font_family: FontFamily::Times,
+        };
+        let mut buf = Vec::new();
+        let (fkey, fname) = write_text(&mut buf, &ann);
+        assert_eq!(fkey, "TimesI");
+        assert_eq!(fname, "Times-Italic");
+    }
+
+    #[test]
+    fn text_annotation_without_font_family_defaults_to_helvetica() {
+        let json = r#"{"kind":"text","page":1,"x":0,"y":0,"width":10,"content":"a","color":{"r":0,"g":0,"b":0},"fontSize":12,"bold":false,"italic":false,"underline":false,"alignment":"left"}"#;
+        let ann: Annotation = serde_json::from_str(json).unwrap();
+        let Annotation::Text(t) = ann else { panic!("not text") };
+        assert_eq!(t.font_family, FontFamily::Helvetica);
     }
 
     #[test]
@@ -1137,6 +1242,7 @@ mod tests {
             font_size: 12.0,
             bold: false, italic: false, underline: false,
             alignment: TextAlignment::Left,
+            font_family: FontFamily::Helvetica,
         });
 
         let mut meta = load_meta(&doc);
@@ -1204,6 +1310,7 @@ mod tests {
             page: 1, x: 50.0, y: 300.0, width: 200.0,
             content: "Hello".to_string(), color: black(), font_size: 12.0,
             bold: false, italic: false, underline: false, alignment: TextAlignment::Left,
+            font_family: FontFamily::Helvetica,
         });
 
         // 2. First save (no existing meta)
