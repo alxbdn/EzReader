@@ -41,6 +41,21 @@ export function buildRows(pageCount: number, columnCount: number): number[][] {
   return rows;
 }
 
+/** Start offsets of the non-overlapping occurrences of `needle` (already lower-cased) in `text`. */
+export function matchOffsets(text: string, needle: string): number[] {
+  const out: number[] = [];
+  if (!needle) return out;
+  const hay = text.toLocaleLowerCase();
+  // Lower-casing can change the length of a few characters; fall back to no hits.
+  if (hay.length !== text.length) return out;
+  let at = hay.indexOf(needle);
+  while (at !== -1) {
+    out.push(at);
+    at = hay.indexOf(needle, at + needle.length);
+  }
+  return out;
+}
+
 // ── PdfPageView ───────────────────────────────────────────────────────────────
 
 export class PdfPageView {
@@ -257,6 +272,49 @@ export class PdfPageView {
       fragment.appendChild(span);
     }
     this.textLayer.appendChild(fragment);
+  }
+
+  // ── Search highlights ──────────────────────────────────────────────────────
+
+  /**
+   * Wraps each occurrence of `query` (case-insensitive, within one text item,
+   * as `countMatches` counts them) in a <mark>. The `active`-th one on this
+   * page gets the "active" class and is returned.
+   */
+  highlight(query: string, active: number): HTMLElement | null {
+    const needle = query.toLocaleLowerCase();
+    let n = 0;
+    let activeMark: HTMLElement | null = null;
+    for (const span of this.textLayer.querySelectorAll<HTMLSpanElement>(":scope > span")) {
+      const text = span.dataset.text ?? span.textContent ?? "";
+      const hits = needle ? matchOffsets(text, needle) : [];
+      if (hits.length === 0) {
+        if (span.dataset.text !== undefined) {
+          span.textContent = text;
+          delete span.dataset.text;
+        }
+        continue;
+      }
+      span.dataset.text = text;
+      const frag = document.createDocumentFragment();
+      let pos = 0;
+      for (const at of hits) {
+        if (at > pos) frag.append(text.slice(pos, at));
+        const mark = document.createElement("mark");
+        mark.className = "search-hit";
+        mark.textContent = text.slice(at, at + needle.length);
+        if (n === active) {
+          mark.classList.add("active");
+          activeMark = mark;
+        }
+        n++;
+        frag.append(mark);
+        pos = at + needle.length;
+      }
+      if (pos < text.length) frag.append(text.slice(pos));
+      span.replaceChildren(frag);
+    }
+    return activeMark;
   }
 
   // ── Link layer ──────────────────────────────────────────────────────────────
@@ -564,6 +622,8 @@ export class PdfViewer {
   /** Pages currently inside the observer's area (viewport + margin). */
   private _visiblePages = new Set<number>();
   private resizeObserver: ResizeObserver | null = null;
+  /** Search term to highlight, and the match to show (page 0 = none). */
+  private _search = { query: "", page: 0, index: -1, scroll: false };
   private resizeTimer: ReturnType<typeof setTimeout> | null = null;
   private scrollEl: HTMLElement;
 
@@ -826,10 +886,33 @@ export class PdfViewer {
       void this._renderPage(pageView);
       return;
     }
+    if (pageView.rendered) this._applySearch(pageView);
     // The render was abandoned (page cleared while scrolling) or a reflow
     // invalidated it, but the page is back in view: draw it now.
     if (!pageView.rendered && this._visiblePages.has(pageView.pageNum)) {
       void this._renderPage(pageView);
+    }
+  }
+
+  // ── Search ──────────────────────────────────────────────────────────────────
+
+  /**
+   * Highlights `query` on every page and marks match `index` of `page` as the
+   * current one. With `scroll`, brings that match into view (rendering its
+   * page first when needed).
+   */
+  setSearch(query: string, page = 0, index = -1, scroll = false): void {
+    this._search = { query, page, index, scroll };
+    for (const pv of this.pageViews) if (pv.rendered) this._applySearch(pv);
+    if (scroll && page > 0 && this._search.scroll) this.goToPage(page, "instant");
+  }
+
+  private _applySearch(pv: PdfPageView): void {
+    const s = this._search;
+    const mark = pv.highlight(s.query, pv.pageNum === s.page ? s.index : -1);
+    if (mark && s.scroll) {
+      s.scroll = false;
+      mark.scrollIntoView({ block: "center", inline: "nearest" });
     }
   }
 

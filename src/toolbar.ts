@@ -38,6 +38,7 @@ import {
   ICON_SCROLL_HORIZONTAL,
   ICON_FILL,
   ICON_NO_FILL,
+  ICON_SIDEBAR,
 } from "./icons";
 
 type ToolbarEvent =
@@ -64,6 +65,7 @@ type ToolbarEvent =
   | { type: "layer-change"; dir: "up" | "down" }
   | { type: "signature" }
   | { type: "pages" }
+  | { type: "toggle-sidebar" }
   | { type: "split" }
   | { type: "print" }
   | { type: "settings" }
@@ -113,6 +115,7 @@ export class Toolbar {
   private columnBtns: HTMLButtonElement[] = [];
   private scrollBtns: HTMLButtonElement[] = [];
   private infoBtn!: HTMLButtonElement;
+  private sidebarBtn!: HTMLButtonElement;
   private _lastScale = CSS_UNITS;
   private toolBtns: Partial<Record<ToolKind, HTMLButtonElement>> = {};
 
@@ -201,6 +204,12 @@ export class Toolbar {
     this.docTitleName.textContent = name ?? "";
     this.docTitleEl.classList.toggle("dirty", !!name && dirty);
     document.title = name ? `${dirty ? "\u2022 " : ""}${name} \u2013 EzReader` : "EzReader";
+  }
+
+  /** Shows the sidebar toggle as pressed while the thumbnails are visible. */
+  updateSidebar(visible: boolean): void {
+    this.sidebarBtn.classList.toggle("active", visible);
+    this.sidebarBtn.setAttribute("aria-pressed", String(visible));
   }
 
   setLoaded(loaded: boolean): void {
@@ -316,6 +325,7 @@ export class Toolbar {
           { label: "menuFitHeight", action: () => this.emit({ type: "fit-height" }), requiresDoc: true },
           null,
           { label: "menuRotate", action: () => this.emit({ type: "rotate" }), requiresDoc: true },
+          { label: "menuPageSidebar", action: () => this.emit({ type: "toggle-sidebar" }), requiresDoc: true },
         ],
       },
       {
@@ -506,6 +516,12 @@ export class Toolbar {
 
   private buildContextToolbar(): void {
     const ctx = this.contextEl;
+
+    // Page thumbnails sidebar toggle
+    this.sidebarBtn = this.btn(ICON_SIDEBAR, "Show or hide the page thumbnails", "icon-btn");
+    this.reg(this.sidebarBtn, undefined, "ttPageSidebar");
+    this.sidebarBtn.addEventListener("click", () => this.emit({ type: "toggle-sidebar" }));
+    ctx.append(this.sidebarBtn);
 
     // Page navigation
     const prevBtn = this.btn(ICON_PAGE_UP, "Previous page", "icon-btn");

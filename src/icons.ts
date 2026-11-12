@@ -68,3 +68,4 @@ export const ICON_SCROLL_VERTICAL = lucide(`<rect x="7" y="2" width="10" height=
 export const ICON_SCROLL_HORIZONTAL = lucide(`<rect x="2" y="7" width="8" height="10" rx="1"/><rect x="14" y="7" width="8" height="10" rx="1"/><path d="M10 12h4"/>`);
 export const ICON_FILL = lucide(`<path d="m19 11-8-8-8.6 8.6a2 2 0 0 0 0 2.8l5.2 5.2c.8.8 2 .8 2.8 0L19 11Z"/><path d="m5 2 5 5"/><path d="M2 13h15"/><path d="M22 20a2 2 0 1 1-4 0c0-1.6 1.7-2.4 2-4 .3 1.6 2 2.4 2 4Z"/>`);
 export const ICON_NO_FILL = lucide(`<rect x="4" y="4" width="16" height="16" rx="2"/><path d="m5 19 14-14"/>`);
+export const ICON_SIDEBAR = lucide(`<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18"/>`);
