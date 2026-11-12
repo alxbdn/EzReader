@@ -1853,3 +1853,10 @@ body.custom-titlebar #menubar-row {
   flex-wrap: nowrap;
   gap: 20px;
 }
+
+/* App logo at the start of the title bar, as on the welcome screen. */
+.titlebar-logo {
+  flex-shrink: 0;
+  margin: 0 6px 0 4px;
+  pointer-events: none;
+}
