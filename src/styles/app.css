@@ -2654,3 +2654,6 @@ body.read-only .page-form-layer { pointer-events: none; }
 .settings-brightness { display: flex; align-items: center; gap: 8px; }
 .settings-brightness .settings-range { width: 140px; }
 @media print { .dim-pages .page-wrapper { filter: none; } }
+
+/* Full screen: no window buttons (F11, Esc or the toolbar button exit it). */
+body.fullscreen .window-controls { display: none; }

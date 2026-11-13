@@ -1356,6 +1356,10 @@ toolbar.on(async (e) => {
       refreshSignatures();
       break;
 
+    case "fullscreen":
+      await toggleFullscreen();
+      break;
+
     case "draft-apply":
       applyDraft();
       break;
@@ -1386,6 +1390,22 @@ toolbar.on(async (e) => {
   }
 });
 
+// ── Full screen ───────────────────────────────────────────────────────────────
+
+let fullscreen = false;
+
+/** Full screen on / off: the title bar hides, the toolbar stays. */
+async function toggleFullscreen(on = !fullscreen): Promise<void> {
+  try {
+    await appWindow.setFullscreen(on);
+  } catch {
+    // Browser preview: no window to resize.
+  }
+  fullscreen = on;
+  document.body.classList.toggle("fullscreen", on);
+  toolbar.setFullscreen(on);
+}
+
 // ── Keyboard shortcuts ────────────────────────────────────────────────────────
 
 document.addEventListener("keydown", async (e) => {
@@ -1395,6 +1415,12 @@ document.addEventListener("keydown", async (e) => {
 
   const ctrl  = e.ctrlKey || e.metaKey;
   const shift = e.shiftKey;
+
+  if (e.key === "F11") {
+    e.preventDefault();
+    await toggleFullscreen();
+    return;
+  }
 
   if (ctrl && !shift && e.key === "z") {
     e.preventDefault();
@@ -1608,6 +1634,8 @@ window.addEventListener("keydown", async (e: KeyboardEvent) => {
     discardDraft();
   } else if (toolState.tool !== "select") {
     toolbar.clearActiveTool();
+  } else if (fullscreen) {
+    await toggleFullscreen(false);
   }
 });
 

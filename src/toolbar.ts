@@ -11,6 +11,8 @@ import { ToolRow, type SignatureChip } from "./tool-row";
 import type { Translations } from "./i18n";
 import {
   ICON_INFO,
+  ICON_FULLSCREEN,
+  ICON_FULLSCREEN_EXIT,
   ICON_EYE,
   ICON_PEN,
   ICON_EDIT_TEXT,
@@ -54,6 +56,7 @@ export type ToolbarEvent =
   | { type: "columns"; n: number | null }
   | { type: "scroll-mode"; mode: "vertical" | "horizontal" }
   | { type: "info" }
+  | { type: "fullscreen" }
   | { type: "fit-width" }
   | { type: "fit-height" }
   | { type: "mode-change"; mode: AppMode }
@@ -171,7 +174,10 @@ export class Toolbar {
     this.handlers.push(handler);
   }
 
+  private _lastT: Translations | null = null;
+
   applyTranslations(t: Translations): void {
+    this._lastT = t;
     this._i18nText.forEach((key, el)  => { const v = t[key]; if (v !== undefined) el.textContent = v; });
     this._i18nTitle.forEach((key, el) => { const v = t[key]; if (v !== undefined) el.title = v; });
     this.renameTitle = t.ttRename ?? "Click to rename";
@@ -313,6 +319,17 @@ export class Toolbar {
 
   hideShapeStyles(): void { this.tools.hideShapeStyles(); }
 
+  private fullscreenBtn!: HTMLButtonElement;
+
+  /** Shows whether the window is full screen (the button then exits it). */
+  setFullscreen(on: boolean): void {
+    this.fullscreenBtn.innerHTML = on ? ICON_FULLSCREEN_EXIT : ICON_FULLSCREEN;
+    this.fullscreenBtn.classList.toggle("active", on);
+    this.fullscreenBtn.setAttribute("aria-pressed", String(on));
+    this._i18nTitle.set(this.fullscreenBtn, on ? "ttFullscreenExit" : "ttFullscreen");
+    this.fullscreenBtn.title = this._lastT?.[on ? "ttFullscreenExit" : "ttFullscreen"] ?? (on ? "Exit full screen (F11 or Esc)" : "Full screen (F11)");
+  }
+
   setActiveSignature(id: string | null): void { this.tools.setActiveSignature(id); }
 
   setSignatures(list: SignatureChip[]): void { this.tools.setSignatures(list); }
@@ -387,6 +404,8 @@ export class Toolbar {
           null,
           { label: "menuRotate", action: () => this.emit({ type: "rotate" }), requiresDoc: true },
           { label: "menuPageSidebar", action: () => this.emit({ type: "toggle-sidebar" }), requiresDoc: true },
+          null,
+          { label: "ttFullscreen", shortcut: "F11", action: () => this.emit({ type: "fullscreen" }) },
         ],
       },
       {
@@ -762,9 +781,12 @@ export class Toolbar {
     this.infoBtn = this.btn(ICON_INFO, "Document info", "icon-btn tb-square");
     this.reg(this.infoBtn, undefined, "ttInfo");
     this.infoBtn.addEventListener("click", () => this.emit({ type: "info" }));
+    this.fullscreenBtn = this.btn(ICON_FULLSCREEN, "Full screen (F11)", "icon-btn tb-square");
+    this.reg(this.fullscreenBtn, undefined, "ttFullscreen");
+    this.fullscreenBtn.addEventListener("click", () => this.emit({ type: "fullscreen" }));
     const right = document.createElement("div");
     right.className = "toolbar-group tb-right";
-    right.append(exportBtn, compressBtn, this.lockBtn, this.infoBtn, this.sep(), this.search.el);
+    right.append(exportBtn, compressBtn, this.lockBtn, this.infoBtn, this.fullscreenBtn, this.sep(), this.search.el);
 
     main.append(
       this.sidebarBtn, this.saveBtn, this.segment(undo, redo), this.sep(),
