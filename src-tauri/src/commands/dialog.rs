@@ -1,3 +1,4 @@
+use crate::error::CmdResult;
 use std::path::Path;
 use tauri::AppHandle;
 use tauri_plugin_dialog::{DialogExt, FilePath};
@@ -12,7 +13,7 @@ fn filepath_to_string(p: FilePath) -> String {
 /// Opens a native file-picker dialog filtered to PDF files.
 /// Returns the selected absolute path, or null if cancelled.
 #[tauri::command]
-pub fn open_pdf_dialog(app: AppHandle) -> Result<Option<String>, String> {
+pub fn open_pdf_dialog(app: AppHandle) -> CmdResult<Option<String>> {
     let result = app
         .dialog()
         .file()
@@ -32,7 +33,7 @@ pub const IMAGE_EXTENSIONS: [&str; 6] = ["png", "jpg", "jpeg", "webp", "gif", "b
 /// Opens a native file-picker dialog filtered to pictures.
 /// Returns the selected absolute path, or null if cancelled.
 #[tauri::command]
-pub fn open_image_dialog(app: AppHandle) -> Result<Option<String>, String> {
+pub fn open_image_dialog(app: AppHandle) -> CmdResult<Option<String>> {
     let result = app
         .dialog()
         .file()
@@ -44,7 +45,7 @@ pub fn open_image_dialog(app: AppHandle) -> Result<Option<String>, String> {
 /// Opens a native file-picker dialog for several pictures at once.
 /// Returns the selected paths (empty if cancelled).
 #[tauri::command]
-pub fn open_images_dialog(app: AppHandle) -> Result<Vec<String>, String> {
+pub fn open_images_dialog(app: AppHandle) -> CmdResult<Vec<String>> {
     let result = app
         .dialog()
         .file()
@@ -60,7 +61,7 @@ pub fn open_images_dialog(app: AppHandle) -> Result<Vec<String>, String> {
 pub fn save_pdf_dialog(
     app: AppHandle,
     current_path: String,
-) -> Result<Option<String>, String> {
+) -> CmdResult<Option<String>> {
     let default_name = Path::new(&current_path)
         .file_name()
         .and_then(|n| n.to_str())
@@ -79,7 +80,7 @@ pub fn save_pdf_dialog(
 
 /// Opens a native folder-picker dialog. Returns the chosen path or null.
 #[tauri::command]
-pub fn pick_directory_dialog(app: AppHandle) -> Result<Option<String>, String> {
+pub fn pick_directory_dialog(app: AppHandle) -> CmdResult<Option<String>> {
     let result = app.dialog().file().blocking_pick_folder();
     Ok(result.map(filepath_to_string))
 }

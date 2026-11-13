@@ -176,6 +176,13 @@ export interface Translations {
   msgCompressed?: string;
   msgCompressFailed?: string;
   msgCompressCancelled?: string;
+  msgErrWrongPassword?: string;
+  msgErrEmptyPassword?: string;
+  msgErrAlreadyEncrypted?: string;
+  msgErrNotAnImage?: string;
+  msgErrTooLarge?: string;
+  msgErrPageCountChanged?: string;
+  msgErrInvalidPages?: string;
   msgCompressNoGain?: string;
   cmpNoGain?: string;
   cmpRunning?: string;
@@ -654,6 +661,13 @@ const EN: Translations = {
   msgCompressed:          "Compressed: {from} MB → {to} MB ({pct}% smaller)",
   msgCompressFailed:      "Compression failed: {err}",
   msgCompressCancelled:   "Compression cancelled. Nothing was saved.",
+  msgErrWrongPassword:    "wrong password",
+  msgErrEmptyPassword:    "the password is empty",
+  msgErrAlreadyEncrypted: "the file already has a password",
+  msgErrNotAnImage:       "this file is not a PNG or JPEG picture",
+  msgErrTooLarge:         "the file is too large",
+  msgErrPageCountChanged: "the number of pages would have changed, so nothing was written",
+  msgErrInvalidPages:     "those pages don't exist in the document",
   msgCompressNoGain:      "This level won't make the file smaller. Save the copy anyway?",
   cmpNoGain:              "This level won't make the file smaller.",
   cmpRunning:             "Compressing… {pct} %",
@@ -1125,6 +1139,13 @@ const FR: Translations = {
   msgCompressed:          "Compressé : {from} Mo → {to} Mo ({pct} % plus léger)",
   msgCompressFailed:      "Échec de la compression : {err}",
   msgCompressCancelled:   "Compression annulée. Rien n'a été enregistré.",
+  msgErrWrongPassword:    "mot de passe incorrect",
+  msgErrEmptyPassword:    "le mot de passe est vide",
+  msgErrAlreadyEncrypted: "le fichier a déjà un mot de passe",
+  msgErrNotAnImage:       "ce fichier n'est pas une image PNG ou JPEG",
+  msgErrTooLarge:         "le fichier est trop volumineux",
+  msgErrPageCountChanged: "le nombre de pages aurait changé, rien n'a donc été écrit",
+  msgErrInvalidPages:     "ces pages n'existent pas dans le document",
   msgCompressNoGain:      "Ce niveau ne rendra pas le fichier plus léger. Enregistrer la copie quand même ?",
   cmpNoGain:              "Ce niveau ne rendra pas le fichier plus léger.",
   cmpRunning:             "Compression… {pct} %",

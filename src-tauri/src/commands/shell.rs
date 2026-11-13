@@ -1,3 +1,4 @@
+use crate::error::{CmdResult, PdfError};
 use std::process::Command;
 use tauri::State;
 
@@ -30,7 +31,7 @@ pub fn check_pdf_association() -> bool {
 }
 
 #[tauri::command]
-pub fn register_pdf_handler() -> Result<(), String> {
+pub fn register_pdf_handler() -> CmdResult<()> {
     #[cfg(target_os = "windows")]
     {
         use winreg::enums::{HKEY_CURRENT_USER, KEY_SET_VALUE};
@@ -115,7 +116,7 @@ pub fn register_pdf_handler() -> Result<(), String> {
     }
     #[cfg(not(target_os = "windows"))]
     {
-        Err("Registration is only supported on Windows".to_string())
+        Err("Registration is only supported on Windows".into())
     }
 }
 
@@ -129,10 +130,10 @@ pub struct PrinterList {
 }
 
 #[tauri::command]
-pub fn list_printers() -> Result<PrinterList, String> {
+pub fn list_printers() -> CmdResult<PrinterList> {
     #[cfg(target_os = "windows")]
     {
-        list_printers_impl()
+        list_printers_impl().map_err(PdfError::from)
     }
     #[cfg(not(target_os = "windows"))]
     {
@@ -255,15 +256,15 @@ pub fn print_pages(
     copies: Option<u32>,
     orientation: Option<String>,
     fit_mode: Option<String>,
-) -> Result<(), String> {
+) -> CmdResult<()> {
     #[cfg(target_os = "windows")]
     {
-        print_pages_impl(pages_b64, printer_name, copies, orientation, fit_mode)
+        print_pages_impl(pages_b64, printer_name, copies, orientation, fit_mode).map_err(PdfError::from)
     }
     #[cfg(not(target_os = "windows"))]
     {
         let _ = (pages_b64, printer_name, copies, orientation, fit_mode);
-        Err("Printing is only supported on Windows".to_string())
+        Err("Printing is only supported on Windows".into())
     }
 }
 
@@ -516,7 +517,7 @@ mod tests {
 
 /// Removes all registry entries created by register_pdf_handler.
 #[tauri::command]
-pub fn unregister_pdf_handler() -> Result<(), String> {
+pub fn unregister_pdf_handler() -> CmdResult<()> {
     #[cfg(target_os = "windows")]
     {
         use winreg::enums::HKEY_CURRENT_USER;
@@ -555,13 +556,13 @@ pub fn unregister_pdf_handler() -> Result<(), String> {
     }
     #[cfg(not(target_os = "windows"))]
     {
-        Err("Only supported on Windows".to_string())
+        Err("Only supported on Windows".into())
     }
 }
 
 /// Registers only the print verb (silent, no prompt needed).
 #[tauri::command]
-pub fn register_print_verb() -> Result<(), String> {
+pub fn register_print_verb() -> CmdResult<()> {
     #[cfg(target_os = "windows")]
     {
         use winreg::enums::HKEY_CURRENT_USER;
@@ -613,7 +614,7 @@ pub fn register_print_verb() -> Result<(), String> {
 }
 
 #[tauri::command]
-pub fn open_url(url: String) -> Result<(), String> {
+pub fn open_url(url: String) -> CmdResult<()> {
     if !url.starts_with("http://") && !url.starts_with("https://") {
         return Err("Only http/https URLs are supported".into());
     }
@@ -626,7 +627,7 @@ pub fn open_url(url: String) -> Result<(), String> {
 }
 
 #[tauri::command]
-pub fn open_default_apps_settings() -> Result<(), String> {
+pub fn open_default_apps_settings() -> CmdResult<()> {
     Command::new("cmd")
         .args(["/C", "start", "", "ms-settings:defaultapps"])
         .spawn()

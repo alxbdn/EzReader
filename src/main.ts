@@ -1,3 +1,4 @@
+import { errorCode, type ErrorCode } from "./errors";
 import { mountWelcomeDots } from "./welcome-dots";
 import { PdfViewer, PdfPageView, renderRedactedPages, renderStraightenedPages } from "./pdf-viewer";
 import { AdjustView, type PageSetting } from "./adjust-view";
@@ -145,6 +146,26 @@ type MessageKey = Extract<keyof Translations, `msg${string}`>;
 function msg(key: MessageKey, vars: Record<string, string | number> = {}): string {
   const t = getTranslations(settingsModal.getSettings().language);
   return fmt(t[key] ?? key, vars);
+}
+
+/** Translated text for each error code a command can return. */
+const ERROR_MESSAGES: Partial<Record<ErrorCode, MessageKey>> = {
+  "wrong-password": "msgErrWrongPassword",
+  "empty-password": "msgErrEmptyPassword",
+  "already-encrypted": "msgErrAlreadyEncrypted",
+  "exists": "msgRenameExists",
+  "invalid-name": "msgRenameInvalid",
+  "not-an-image": "msgErrNotAnImage",
+  "too-large": "msgErrTooLarge",
+  "page-count-changed": "msgErrPageCountChanged",
+  "invalid-pages": "msgErrInvalidPages",
+};
+
+/** What went wrong, in the interface language when the error has a known code. */
+function errText(err: unknown): string {
+  const code = errorCode(err);
+  const key = code ? ERROR_MESSAGES[code] : undefined;
+  return key ? msg(key) : String(err);
 }
 
 async function applyFitMode(): Promise<void> {
@@ -507,7 +528,7 @@ async function openProtected(fp: string, password?: string | null): Promise<void
     try {
       await decryptPdf(fp, tmp, pw);
     } catch (err) {
-      if (String(err).includes("wrong password")) return false;
+      if (errorCode(err) === "wrong-password") return false;
       failure = err;
       return true;
     }
@@ -517,7 +538,7 @@ async function openProtected(fp: string, password?: string | null): Promise<void
   };
   if (!(password && await tryOpen(password)) && !await passwordModal.askToOpen(name, tryOpen)) return;
   if (failure !== null || plain === null) {
-    if (failure !== null) showToast(msg("msgOpenProtectedFailed", { err: String(failure) }), true);
+    if (failure !== null) showToast(msg("msgOpenProtectedFailed", { err: errText(failure) }), true);
     return;
   }
   try {
@@ -528,7 +549,7 @@ async function openProtected(fp: string, password?: string | null): Promise<void
     await applyDefaultZoom();
     if (infoPanel.isOpen) await showInfo();
   } catch (err) {
-    showToast(msg("msgOpenProtectedFailed", { err: String(err) }), true);
+    showToast(msg("msgOpenProtectedFailed", { err: errText(err) }), true);
   }
 }
 
@@ -644,11 +665,12 @@ async function loadPdf(path: string, password?: string | null): Promise<void> {
     await applyDefaultZoom();
     if (infoPanel.isOpen) await showInfo();
   } catch (err: unknown) {
-    const errText = String(err);
-    if (errText.includes("PasswordException") || errText.includes("password")) {
+    // pdf.js's own error (not a command's): it has no code.
+    const why = String(err);
+    if (why.includes("PasswordException") || why.includes("password")) {
       await openProtected(path);
     } else {
-      showToast(msg("msgOpenFailed", { err: errText }), true);
+      showToast(msg("msgOpenFailed", { err: why }), true);
     }
   }
 }
@@ -687,10 +709,10 @@ async function saveFile(forceDialog: boolean): Promise<void> {
       } catch (err) {
         pendingRename = null;
         setDirty(false);
-        const why = String(err);
-        showToast(why.includes("exists") ? msg("msgRenameExists")
-          : why.includes("invalid") ? msg("msgRenameInvalid")
-          : msg("msgRenameFailed", { err: why }), true);
+        const code = errorCode(err);
+        showToast(code === "exists" ? msg("msgRenameExists")
+          : code === "invalid-name" ? msg("msgRenameInvalid")
+          : msg("msgRenameFailed", { err: errText(err) }), true);
         return;
       }
       // Show the file under its new name (pdf.js reads it from its path).
@@ -713,7 +735,7 @@ async function saveFile(forceDialog: boolean): Promise<void> {
     syncProtection();
     showToast(msg(session.isProtected ? "msgSavedProtected" : "msgSaved"));
   } catch (err: unknown) {
-    showToast(msg("msgSaveFailed", { err: String(err) }), true);
+    showToast(msg("msgSaveFailed", { err: errText(err) }), true);
   }
 }
 
@@ -769,7 +791,7 @@ async function runExport(req: ExportRequest): Promise<void> {
     });
     showToast(paths.length === 1 ? msg("msgExportedOne") : msg("msgExportedMany", { n: paths.length }));
   } catch (err) {
-    showToast(msg("msgExportFailed", { err: String(err) }), true);
+    showToast(msg("msgExportFailed", { err: errText(err) }), true);
   }
 }
 
@@ -894,8 +916,8 @@ compressModal.onConfirm(async (level: CompressLevel, targetBytes?: number) => {
     }
   } catch (err) {
     compressModal.finishRunning();
-    if (String(err) === "cancelled") showToast(msg("msgCompressCancelled"));
-    else showToast(msg("msgCompressFailed", { err: String(err) }), true);
+    if (errorCode(err) === "cancelled") showToast(msg("msgCompressCancelled"));
+    else showToast(msg("msgCompressFailed", { err: errText(err) }), true);
   } finally {
     stopListening();
   }
@@ -924,7 +946,7 @@ async function applyPageLayout(slots: PageSlot[], keepPage = 1, select: number[]
     pageSidebar.setSelection(select);
     return true;
   } catch (err) {
-    showToast(msg("msgPagesFailed", { err: String(err) }), true);
+    showToast(msg("msgPagesFailed", { err: errText(err) }), true);
     return false;
   }
 }
@@ -1033,7 +1055,7 @@ async function applyAdjust(settings: PageSetting[]): Promise<boolean> {
     showToast(pages.length === 1 ? msg("msgPageAdjusted") : msg("msgPagesAdjusted", { n: pages.length }));
     return true;
   } catch (err) {
-    showToast(msg("msgAdjustFailed", { err: String(err) }), true);
+    showToast(msg("msgAdjustFailed", { err: errText(err) }), true);
     return false;
   }
 }
@@ -1098,7 +1120,7 @@ async function insertPdfAt(after: number, path: string): Promise<void> {
   try {
     count = await getPageCount(path);
   } catch (err) {
-    showToast(msg("msgPagesFailed", { err: String(err) }), true);
+    showToast(msg("msgPagesFailed", { err: errText(err) }), true);
     return;
   }
   if (count < 1) return;
@@ -1116,7 +1138,7 @@ pageSidebar.onExport(async (pages) => {
     await extractPdfPages(await session.materialize(), out, pages);
     showToast(msg("msgPagesExported", { n: pages.length }));
   } catch (err) {
-    showToast(msg("msgExportFailed", { err: String(err) }), true);
+    showToast(msg("msgExportFailed", { err: errText(err) }), true);
   } finally {
     pageSidebar.setBusy(false);
   }
@@ -1132,7 +1154,7 @@ pageSidebar.onDragOut(async (pages, x, y) => {
   try {
     await openPagesInNewWindow(await session.materialize(), pages, name, x, y);
   } catch (err) {
-    showToast(msg("msgNewWindowFailed", { err: String(err) }), true);
+    showToast(msg("msgNewWindowFailed", { err: errText(err) }), true);
   } finally {
     pageSidebar.setBusy(false);
   }
@@ -1152,7 +1174,7 @@ splitModal.onConfirm(async (req) => {
     showToast(tmpl.replace("{n}", String(created.length)).replace("{dir}", dir));
   } catch (err) {
     const tmpl = t.splitFailedToast ?? "Split failed: {err}";
-    showToast(tmpl.replace("{err}", String(err)), true);
+    showToast(tmpl.replace("{err}", errText(err)), true);
   }
 });
 
@@ -1177,7 +1199,7 @@ printModal.onConfirm(async (settings) => {
       showToast(msg("msgSentToPrinter"));
     }
   } catch (err) {
-    showToast(msg("msgPrintFailed", { err: String(err) }), true);
+    showToast(msg("msgPrintFailed", { err: errText(err) }), true);
   }
 });
 
@@ -1722,7 +1744,7 @@ async function readPicture(path: string): Promise<Picture | null> {
   try {
     return await loadPicture(path);
   } catch (err) {
-    showToast(msg("msgImageFailed", { err: String(err) }), true);
+    showToast(msg("msgImageFailed", { err: errText(err) }), true);
     return null;
   }
 }

@@ -1,4 +1,5 @@
 mod commands;
+mod error;
 mod fsutil;
 mod pdf;
 #[cfg(test)]

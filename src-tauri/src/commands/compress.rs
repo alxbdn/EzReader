@@ -1,3 +1,4 @@
+use crate::error::{CmdResult, ErrorCode, PdfError};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
@@ -28,8 +29,10 @@ pub struct CompressEstimate {
     pub maximum_bytes: u64,
 }
 
-/// Error text when the user cancelled.
-pub const CANCELLED: &str = "cancelled";
+/// The error of a compression the user cancelled.
+pub fn cancelled() -> PdfError {
+    PdfError::new(ErrorCode::Cancelled, "cancelled")
+}
 
 /// What a running compression reports to, and is stopped by.
 pub struct Job<'a> {
@@ -57,9 +60,9 @@ impl Job<'_> {
 /// The document compressed in memory: streams recompressed and unused
 /// objects dropped; with `images`, pictures re-encoded. Form fields and
 /// annotations are kept as they are. Reports progress within `span`.
-fn compress_to_bytes(doc: &Document, images: Option<ImageSettings>, job: &Job, span: (f64, f64)) -> Result<Vec<u8>, String> {
+fn compress_to_bytes(doc: &Document, images: Option<ImageSettings>, job: &Job, span: (f64, f64)) -> CmdResult<Vec<u8>> {
     if job.cancelled() {
-        return Err(CANCELLED.into());
+        return Err(cancelled());
     }
     let mut doc = doc.clone();
     let page_count = doc.get_pages().len();
@@ -70,10 +73,10 @@ fn compress_to_bytes(doc: &Document, images: Option<ImageSettings>, job: &Job, s
             (job.progress)(from + (to - from) * 0.9 * done as f64 / total.max(1) as f64);
             !job.cancelled()
         };
-        compress::compress_images(&mut doc, settings, &mut on_image).map_err(|_| CANCELLED.to_string())?;
+        compress::compress_images(&mut doc, settings, &mut on_image).map_err(|_| cancelled())?;
     }
     if job.cancelled() {
-        return Err(CANCELLED.into());
+        return Err(cancelled());
     }
     compress::compress_streams(&mut doc);
     compress::strip_metadata(&mut doc);
@@ -83,7 +86,7 @@ fn compress_to_bytes(doc: &Document, images: Option<ImageSettings>, job: &Job, s
     // broken file.
     let pages_after = doc.get_pages().len();
     if page_count == 0 || pages_after != page_count {
-        return Err(format!("Compression aborted: page count changed ({page_count} → {pages_after})"));
+        return Err(PdfError::new(ErrorCode::PageCountChanged, format!("Compression aborted: page count changed ({page_count} → {pages_after})")));
     }
     let mut out = Vec::new();
     doc.save_to(&mut out).map_err(|e| e.to_string())?;
@@ -100,14 +103,14 @@ fn compress_to_bytes(doc: &Document, images: Option<ImageSettings>, job: &Job, s
 /// bytes), so this relies on lopdf ≥ 0.47: 0.39 could not load PDFs that
 /// combine object streams with indirect `/Length` entries.
 ///
-/// Nothing is written when `job` is cancelled: the error is [`CANCELLED`].
+/// Nothing is written when `job` is cancelled: the error is [`cancelled`].
 pub fn compress_file(
     input_path: &str,
     output_path: &str,
     level: &str,
     target_bytes: Option<u64>,
     job: &Job,
-) -> Result<CompressResult, String> {
+) -> CmdResult<CompressResult> {
     let original_bytes = std::fs::metadata(input_path).map_err(|e| e.to_string())?.len();
     let doc = Document::load(input_path).map_err(|e| e.to_string())?;
     (job.progress)(0.0);
@@ -138,10 +141,10 @@ pub fn compress_file(
             }
             (smallest, found)
         }
-        other => return Err(format!("Unknown compression level: {other}")),
+        other => return Err(PdfError::from(format!("Unknown compression level: {other}"))),
     };
     if job.cancelled() {
-        return Err(CANCELLED.into());
+        return Err(cancelled());
     }
     (job.progress)(1.0);
 
@@ -150,7 +153,7 @@ pub fn compress_file(
 }
 
 /// Sizes of the three levels, computed in memory.
-pub fn estimate_file(input_path: &str) -> Result<CompressEstimate, String> {
+pub fn estimate_file(input_path: &str) -> CmdResult<CompressEstimate> {
     let original_bytes = std::fs::metadata(input_path).map_err(|e| e.to_string())?.len();
     let doc = Document::load(input_path).map_err(|e| e.to_string())?;
     let job = Job::silent();
@@ -181,7 +184,7 @@ pub async fn compress_pdf(
     output_path: String,
     level: String,
     target_bytes: Option<u64>,
-) -> Result<CompressResult, String> {
+) -> CmdResult<CompressResult> {
     let flag = cancel.0.clone();
     flag.store(false, Ordering::Relaxed);
     tauri::async_runtime::spawn_blocking(move || {
@@ -202,7 +205,7 @@ pub async fn compress_pdf(
     .map_err(|e| e.to_string())?
 }
 
-/// Stops the compression in progress; it ends with the [`CANCELLED`] error.
+/// Stops the compression in progress; it ends with the [`cancelled`] error.
 #[tauri::command]
 pub fn cancel_compression(cancel: tauri::State<'_, CompressCancel>) {
     cancel.0.store(true, Ordering::Relaxed);
@@ -210,7 +213,7 @@ pub fn cancel_compression(cancel: tauri::State<'_, CompressCancel>) {
 
 /// See [`estimate_file`].
 #[tauri::command]
-pub async fn estimate_compression(input_path: String) -> Result<CompressEstimate, String> {
+pub async fn estimate_compression(input_path: String) -> CmdResult<CompressEstimate> {
     tauri::async_runtime::spawn_blocking(move || estimate_file(&input_path))
         .await
         .map_err(|e| e.to_string())?
@@ -302,7 +305,7 @@ mod tests {
         flag.store(true, Ordering::Relaxed);
         let stopped = tmp("big-picture-cancelled.pdf");
         let err = compress_file(&input, &stopped, "target", Some(1), &Job { cancel: &flag, progress: &|_| {} }).unwrap_err();
-        assert_eq!(err, CANCELLED);
+        assert_eq!(err.code, ErrorCode::Cancelled);
         assert!(!std::path::Path::new(&stopped).exists());
 
         for p in [input, out, target, watched] {

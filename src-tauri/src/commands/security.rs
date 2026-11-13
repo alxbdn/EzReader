@@ -1,5 +1,6 @@
 //! Password protection: AES-256 encryption (PDF 2.0, revision 6) and its removal.
 
+use crate::error::{CmdResult, ErrorCode, PdfError};
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
@@ -11,13 +12,13 @@ use crate::fsutil;
 /// Writes `input` to `output` encrypted with `password` (needed to open it).
 /// Everything stays allowed once it is open: printing, copying, editing.
 #[tauri::command]
-pub fn encrypt_pdf(input_path: String, output_path: String, password: String) -> Result<(), String> {
+pub fn encrypt_pdf(input_path: String, output_path: String, password: String) -> CmdResult<()> {
     if password.is_empty() {
-        return Err("The password is empty".into());
+        return Err(PdfError::new(ErrorCode::EmptyPassword, "The password is empty"));
     }
     let mut doc = Document::load(&input_path).map_err(|e| e.to_string())?;
     if doc.is_encrypted() {
-        return Err("This PDF is already encrypted".into());
+        return Err(PdfError::new(ErrorCode::AlreadyEncrypted, "This PDF is already encrypted"));
     }
     let mut key = [0u8; 32];
     getrandom::fill(&mut key).map_err(|e| format!("No randomness available: {e}"))?;
@@ -34,27 +35,27 @@ pub fn encrypt_pdf(input_path: String, output_path: String, password: String) ->
     })
     .map_err(|e| e.to_string())?;
     doc.encrypt(&state).map_err(|e| e.to_string())?;
-    fsutil::save_document(&mut doc, &output_path)
+    fsutil::save_document(&mut doc, &output_path).map_err(PdfError::from)
 }
 
 /// Writes `input` to `output` without its password. Fails with
-/// "wrong password" when `password` does not open it.
+/// [`ErrorCode::WrongPassword`] when `password` does not open it.
 #[tauri::command]
-pub fn decrypt_pdf(input_path: String, output_path: String, password: String) -> Result<(), String> {
+pub fn decrypt_pdf(input_path: String, output_path: String, password: String) -> CmdResult<()> {
     let mut doc = Document::load_with_password(&input_path, &password).map_err(|e| {
         let text = e.to_string();
         if text.to_lowercase().contains("password") || text.to_lowercase().contains("decrypt") {
-            "wrong password".to_string()
+            PdfError::new(ErrorCode::WrongPassword, "wrong password")
         } else {
-            text
+            PdfError::from(text)
         }
     })?;
     if doc.is_encrypted() {
         // Loaded but still locked: the password did not open it.
-        doc.decrypt(&password).map_err(|_| "wrong password".to_string())?;
+        doc.decrypt(&password).map_err(|_| PdfError::new(ErrorCode::WrongPassword, "wrong password"))?;
     }
     doc.trailer.remove(b"Encrypt");
-    fsutil::save_document(&mut doc, &output_path)
+    fsutil::save_document(&mut doc, &output_path).map_err(PdfError::from)
 }
 
 #[cfg(test)]
@@ -71,7 +72,7 @@ mod tests {
 
         let raw = Document::load(&locked);
         assert!(raw.is_err() || raw.unwrap().is_encrypted(), "the file needs its password");
-        assert!(decrypt_pdf(locked.clone(), open.clone(), "nope".into()).unwrap_err().contains("wrong password"));
+        assert!(decrypt_pdf(locked.clone(), open.clone(), "nope".into()).unwrap_err().code == ErrorCode::WrongPassword);
 
         decrypt_pdf(locked.clone(), open.clone(), pw.into()).unwrap();
         let doc = Document::load(&open).unwrap();

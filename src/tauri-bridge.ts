@@ -1,19 +1,30 @@
 import { invoke } from "@tauri-apps/api/core";
+import { toCommandError } from "./errors";
 import { listen } from "@tauri-apps/api/event";
 import type { Mat3 } from "./warp";
 import type { TextRun } from "./straighten";
+
+/** Runs a Rust command; its errors come back as `CommandError` (see errors.ts). */
+async function call<T>(cmd: string, args?: Record<string, unknown>): Promise<T> {
+  try {
+    return await invoke<T>(cmd, args);
+  } catch (e) {
+    throw toCommandError(e);
+  }
+}
+
 import type { FormFieldValue, StoredAnnotation } from "./models";
 
 /** Opens a file-picker dialog filtered to PDF files. Returns the path or null. */
 export async function openPdfDialog(): Promise<string | null> {
-  return invoke<string | null>("open_pdf_dialog");
+  return call<string | null>("open_pdf_dialog");
 }
 
 /** Opens a Save As dialog. Returns the chosen path or null. */
 export async function savePdfDialog(
   currentPath: string
 ): Promise<string | null> {
-  return invoke<string | null>("save_pdf_dialog", {
+  return call<string | null>("save_pdf_dialog", {
     currentPath,
   });
 }
@@ -23,12 +34,12 @@ export async function savePdfDialog(
  * has that name, or "invalid" for an unusable name.
  */
 export async function renameFile(from: string, to: string): Promise<void> {
-  return invoke<void>("rename_file", { from, to });
+  return call<void>("rename_file", { from, to });
 }
 
 /** Returns the number of pages in the PDF at `filePath`. */
 export async function getPageCount(filePath: string): Promise<number> {
-  return invoke<number>("get_page_count", { filePath });
+  return call<number>("get_page_count", { filePath });
 }
 
 /**
@@ -43,7 +54,7 @@ export async function saveAnnotatedPdf(
   rotationDelta = 0,
   formFields: FormFieldValue[] = [],
 ): Promise<void> {
-  return invoke<void>("save_annotated_pdf", {
+  return call<void>("save_annotated_pdf", {
     inputPath,
     outputPath,
     annotations,
@@ -58,7 +69,7 @@ export async function stripAnnotationStreams(
   inputPath: string,
   outputPath: string,
 ): Promise<boolean> {
-  return invoke<boolean>("strip_annotation_streams", { inputPath, outputPath });
+  return call<boolean>("strip_annotation_streams", { inputPath, outputPath });
 }
 
 /**
@@ -68,7 +79,7 @@ export async function stripAnnotationStreams(
 export async function readAnnotations(
   filePath: string
 ): Promise<StoredAnnotation[]> {
-  return invoke<StoredAnnotation[]>("read_annotations", { filePath });
+  return call<StoredAnnotation[]>("read_annotations", { filePath });
 }
 
 export interface StartupArgs {
@@ -80,27 +91,27 @@ export interface StartupArgs {
 
 /** Returns the CLI arguments parsed at startup (file path and print flag). */
 export async function getStartupArgs(): Promise<StartupArgs> {
-  return invoke<StartupArgs>("get_startup_args");
+  return call<StartupArgs>("get_startup_args");
 }
 
 /** Returns true if our ProgID is already registered in HKCU. */
 export async function checkPdfAssociation(): Promise<boolean> {
-  return invoke<boolean>("check_pdf_association");
+  return call<boolean>("check_pdf_association");
 }
 
 /** Writes ProgID and .pdf association into HKCU (no admin required). */
 export async function registerPdfHandler(): Promise<void> {
-  return invoke<void>("register_pdf_handler");
+  return call<void>("register_pdf_handler");
 }
 
 /** Removes all HKCU registry entries created by registerPdfHandler. */
 export async function unregisterPdfHandler(): Promise<void> {
-  return invoke<void>("unregister_pdf_handler");
+  return call<void>("unregister_pdf_handler");
 }
 
 /** Registers the print verb under both ProgIDs. */
 export async function registerPrintVerb(): Promise<void> {
-  return invoke<void>("register_print_verb");
+  return call<void>("register_print_verb");
 }
 
 /** Extracts selected pages from a PDF into a new file, preserving vector text. */
@@ -109,7 +120,7 @@ export async function extractPdfPages(
   outputPath: string,
   pages: number[],
 ): Promise<void> {
-  return invoke<void>("extract_pdf_pages", { inputPath, outputPath, pages });
+  return call<void>("extract_pdf_pages", { inputPath, outputPath, pages });
 }
 
 export interface SplitRange {
@@ -126,12 +137,12 @@ export async function splitPdf(
   baseName: string,
   ranges: SplitRange[],
 ): Promise<string[]> {
-  return invoke<string[]>("split_pdf", { inputPath, outputDir, baseName, ranges });
+  return call<string[]>("split_pdf", { inputPath, outputDir, baseName, ranges });
 }
 
 /** Opens a folder-picker dialog. Returns the chosen path or null. */
 export async function pickDirectoryDialog(): Promise<string | null> {
-  return invoke<string | null>("pick_directory_dialog");
+  return call<string | null>("pick_directory_dialog");
 }
 
 export interface PrinterList {
@@ -141,7 +152,7 @@ export interface PrinterList {
 
 /** Returns the list of available printers and the default printer name. */
 export async function listPrinters(): Promise<PrinterList> {
-  return invoke<PrinterList>("list_printers");
+  return call<PrinterList>("list_printers");
 }
 
 /** Sends pre-rendered page images (base64 JPEG) to a printer. */
@@ -152,7 +163,7 @@ export async function printPages(
   orientation?: string,
   fitMode?: string,
 ): Promise<void> {
-  return invoke<void>("print_pages", {
+  return call<void>("print_pages", {
     pagesB64,
     printerName: printerName ?? null,
     copies: copies ?? null,
@@ -163,12 +174,12 @@ export async function printPages(
 
 /** Opens Windows Settings → Default Apps. */
 export async function openDefaultAppsSettings(): Promise<void> {
-  return invoke<void>("open_default_apps_settings");
+  return call<void>("open_default_apps_settings");
 }
 
 /** Opens an http/https URL in the system default browser. */
 export async function openUrl(url: string): Promise<void> {
-  return invoke<void>("open_url", { url });
+  return call<void>("open_url", { url });
 }
 
 /** One page of the document built by `rearrangePages`, in output order. */
@@ -188,7 +199,7 @@ export async function rearrangePages(
   outputPath: string,
   slots: PageSlot[],
 ): Promise<void> {
-  return invoke<void>("rearrange_pages", { inputPath, outputPath, slots });
+  return call<void>("rearrange_pages", { inputPath, outputPath, slots });
 }
 
 export interface CompressResult {
@@ -211,7 +222,7 @@ export async function compressPdf(
   level: CompressLevel,
   targetBytes?: number,
 ): Promise<CompressResult> {
-  return invoke<CompressResult>("compress_pdf", { inputPath, outputPath, level, targetBytes: targetBytes ?? null });
+  return call<CompressResult>("compress_pdf", { inputPath, outputPath, level, targetBytes: targetBytes ?? null });
 }
 
 /**
@@ -220,12 +231,12 @@ export async function compressPdf(
  * stays editable (links excepted).
  */
 export async function exportFlattenedPages(inputPath: string, outputPath: string, pages: number[]): Promise<void> {
-  return invoke<void>("export_flattened_pages", { inputPath, outputPath, pages });
+  return call<void>("export_flattened_pages", { inputPath, outputPath, pages });
 }
 
 /** Stops the compression in progress: `compressPdf` then fails with "cancelled". */
 export async function cancelCompression(): Promise<void> {
-  return invoke<void>("cancel_compression");
+  return call<void>("cancel_compression");
 }
 
 /** Calls `cb` with the share of the running compression done (0 to 1). */
@@ -242,7 +253,7 @@ export interface CompressEstimate {
 
 /** Sizes the three levels would give, computed without writing anything. */
 export async function estimateCompression(inputPath: string): Promise<CompressEstimate> {
-  return invoke<CompressEstimate>("estimate_compression", { inputPath });
+  return call<CompressEstimate>("estimate_compression", { inputPath });
 }
 
 /** A page rendered with its redacted areas blacked out, ready to replace the original. */
@@ -275,7 +286,7 @@ export interface StraightenedPage extends RedactedPage {
  * their text (invisible, searchable), links, form fields and annotations.
  */
 export async function straightenPages(inputPath: string, outputPath: string, pages: StraightenedPage[]): Promise<void> {
-  return invoke<void>("straighten_pages", { inputPath, outputPath, pages });
+  return call<void>("straighten_pages", { inputPath, outputPath, pages });
 }
 
 export async function redactPages(
@@ -283,17 +294,17 @@ export async function redactPages(
   outputPath: string,
   pages: RedactedPage[],
 ): Promise<void> {
-  return invoke<void>("redact_pages", { inputPath, outputPath, pages });
+  return call<void>("redact_pages", { inputPath, outputPath, pages });
 }
 
 /** Opens a file picker for pictures; null if cancelled. */
 export async function openImageDialog(): Promise<string | null> {
-  return invoke<string | null>("open_image_dialog");
+  return call<string | null>("open_image_dialog");
 }
 
 /** The bytes of the picture at `path`, as base64. */
 export async function readImageFile(path: string): Promise<string> {
-  return invoke<string>("read_image_file", { path });
+  return call<string>("read_image_file", { path });
 }
 
 /** How one page is cropped and flipped (see `adjust_pages`). */
@@ -308,42 +319,42 @@ export interface PageAdjust {
 
 /** Crops and flips pages, as an incremental update (the content stays vector). */
 export async function adjustPages(inputPath: string, outputPath: string, pages: PageAdjust[]): Promise<void> {
-  return invoke<void>("adjust_pages", { inputPath, outputPath, pages });
+  return call<void>("adjust_pages", { inputPath, outputPath, pages });
 }
 
 /** Writes `inputPath` to `outputPath` protected by `password` (AES-256). */
 export async function encryptPdf(inputPath: string, outputPath: string, password: string): Promise<void> {
-  return invoke<void>("encrypt_pdf", { inputPath, outputPath, password });
+  return call<void>("encrypt_pdf", { inputPath, outputPath, password });
 }
 
 /** Writes `inputPath` to `outputPath` without its password; rejects with "wrong password". */
 export async function decryptPdf(inputPath: string, outputPath: string, password: string): Promise<void> {
-  return invoke<void>("decrypt_pdf", { inputPath, outputPath, password });
+  return call<void>("decrypt_pdf", { inputPath, outputPath, password });
 }
 
 /** Opens a file picker for several pictures; empty if cancelled. */
 export async function openImagesDialog(): Promise<string[]> {
-  return invoke<string[]>("open_images_dialog");
+  return call<string[]>("open_images_dialog");
 }
 
 /** Makes a PDF with one page per picture. */
 export async function imagesToPdf(imagePaths: string[], outputPath: string): Promise<void> {
-  return invoke<void>("images_to_pdf", { imagePaths, outputPath });
+  return call<void>("images_to_pdf", { imagePaths, outputPath });
 }
 
 /** Which of `paths` already exist. */
 export async function existingFiles(paths: string[]): Promise<string[]> {
-  return invoke<string[]>("existing_files", { paths });
+  return call<string[]>("existing_files", { paths });
 }
 
 /** Writes a PNG or JPEG picture (base64, or a data: URL) to `path`. */
 export async function writeImageFile(path: string, data: string): Promise<void> {
-  return invoke<void>("write_image_file", { path, data });
+  return call<void>("write_image_file", { path, data });
 }
 
 /** Opens `pages` of `inputPath` as a new document `name` in a new window near the screen point. */
 export async function openPagesInNewWindow(
   inputPath: string, pages: number[], name: string, x: number, y: number,
 ): Promise<void> {
-  return invoke<void>("open_pages_in_new_window", { inputPath, pages, name, x, y });
+  return call<void>("open_pages_in_new_window", { inputPath, pages, name, x, y });
 }
