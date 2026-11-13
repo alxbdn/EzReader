@@ -227,6 +227,7 @@ export interface Translations {
   infoKeywords?: string;
   settingsRealSize?: string;
   settingsRealSizeHint?: string;
+  settingsBrightness?: string;
   wcMinimize?: string;
   wcMaximize?: string;
   wcRestore?: string;
@@ -707,6 +708,7 @@ const EN: Translations = {
   infoModified:         "Modified",
   infoKeywords:         "Keywords",
   settingsRealSize:     "Actual size calibration",
+  settingsBrightness: "Page brightness",
   settingsRealSizeHint: "Drag the slider until the card on screen is the size of a real bank card.",
   wcMinimize:           "Minimize",
   wcMaximize:           "Maximize",
@@ -1182,6 +1184,7 @@ const FR: Translations = {
   infoModified:         "Modification",
   infoKeywords:         "Mots-clés",
   settingsRealSize:     "Calibrage de la taille réelle",
+  settingsBrightness: "Luminosité des pages",
   settingsRealSizeHint: "Ajuste le curseur jusqu'à ce que la carte à l'écran ait la taille d'une vraie carte bancaire.",
   wcMinimize:           "Réduire",
   wcMaximize:           "Agrandir",

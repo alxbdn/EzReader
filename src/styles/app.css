@@ -541,6 +541,16 @@ input::placeholder { color: var(--muted-foreground); }
   transition: background-color 160ms ease, color 160ms ease;
 }
 .mode-btn:hover { color: var(--foreground); }
+.mode-btn { display: inline-flex; align-items: center; gap: 6px; }
+.mode-icon { display: none; }
+.mode-icon svg { width: 16px; height: 16px; display: block; }
+/* Narrow window: the main row stays on one line (src/toolbar.ts fitMainRow). */
+.tb-compact .mode-btn { padding: 0 8px; }
+.tb-compact .mode-icon { display: inline-flex; }
+.tb-compact .mode-label { display: none; }
+.tb-compact-2 { gap: 5px; }
+.tb-compact-2 .tb-save-label, .tb-compact-2 > .toolbar-sep { display: none; }
+.tb-compact-3 .tb-columns { display: none; }
 .mode-btn.active { background: var(--primary); color: var(--primary-foreground); }
 
 /* ── Annotate / Edit tools (src/tool-row.ts) ───────────────────────────── */
@@ -814,7 +824,8 @@ input::placeholder { color: var(--muted-foreground); }
 }
 
 .search-pill.open {
-  width: 250px;
+  /* Narrower on a narrow window (src/toolbar.ts fitMainRow). */
+  width: var(--search-open-w, 250px);
   background: var(--background);
   border-color: var(--ring);
 }
@@ -2632,3 +2643,9 @@ body.read-only .page-form-layer { pointer-events: none; }
 :root[data-theme="dark"] .ez-warn { color: #fbbf24; }
 .ez-progress { display: flex; flex-direction: column; gap: 6px; }
 .compress-box.running .ez-list, .compress-box.running .ez-compare, .compress-box.running .ez-warn { opacity: 0.5; pointer-events: none; }.ez-warn.hidden, .ez-progress.hidden { display: none; }
+
+/* Page brightness (Settings): dims too-bright pages on screen only. */
+.dim-pages .page-wrapper, .dim-pages .page-sidebar-frame canvas { filter: brightness(var(--page-brightness, 1)); }
+.settings-brightness { display: flex; align-items: center; gap: 8px; }
+.settings-brightness .settings-range { width: 140px; }
+@media print { .dim-pages .page-wrapper { filter: none; } }

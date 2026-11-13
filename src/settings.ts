@@ -19,6 +19,8 @@ export interface AppSettings {
   defaultZoom: string;
   /** CSS pixels per real inch on this screen, used by the 1:1 zoom. */
   pxPerInch: number;
+  /** Brightness of the pages on screen, 40–100 % (dims too-bright PDFs). */
+  pageBrightness: number;
 }
 
 export const ZOOM_CHOICES = ["fit-width", "fit-page", "50", "75", "100", "125", "150", "200"] as const;
@@ -26,7 +28,7 @@ export const ZOOM_CHOICES = ["fit-width", "fit-page", "50", "75", "100", "125", 
 // ── Persistence ───────────────────────────────────────────────────────────────
 
 const STORAGE_KEY = "pdf-rider-settings";
-const DEFAULTS: AppSettings = { language: "en", theme: "system", defaultZoom: "100", pxPerInch: 96 };
+const DEFAULTS: AppSettings = { language: "en", theme: "system", defaultZoom: "100", pxPerInch: 96, pageBrightness: 100 };
 
 const CARD_W_MM = 85.6;
 const CARD_H_MM = 53.98;
@@ -34,6 +36,13 @@ const CARD_H_MM = 53.98;
 // ── Theme ─────────────────────────────────────────────────────────────────────
 
 const darkQuery = window.matchMedia("(prefers-color-scheme: dark)");
+
+/** Dims the pages on screen (not what is saved or printed). */
+export function applyPageBrightness(pct: number): void {
+  const v = Number.isFinite(pct) ? Math.min(100, Math.max(40, pct)) : 100;
+  document.documentElement.style.setProperty("--page-brightness", String(v / 100));
+  document.documentElement.classList.toggle("dim-pages", v < 100);
+}
 
 /** Sets the resolved theme ("light" or "dark") on <html data-theme>. */
 export function applyTheme(pref: ThemePref): void {
@@ -90,6 +99,7 @@ export class SettingsModal {
   constructor() {
     this.settings = loadSettings();
     applyTheme(this.settings.theme);
+    applyPageBrightness(this.settings.pageBrightness);
     darkQuery.addEventListener("change", () => applyTheme(this.settings.theme));
     this.backdrop = document.getElementById("settings-modal")!;
     this.populateLangSelect();
@@ -191,6 +201,17 @@ export class SettingsModal {
     drawCard(ppi0);
     ppiInput.addEventListener("input", () => drawCard(parseFloat(ppiInput.value)));
     ppiInput.addEventListener("change", () => this.set("pxPerInch", parseFloat(ppiInput.value)));
+
+    // Page brightness: applied live while dragging.
+    const brightInput = document.getElementById("settings-brightness") as HTMLInputElement | null;
+    const brightVal = document.getElementById("settings-brightness-val");
+    if (brightInput) {
+      const show = (v: number) => { if (brightVal) brightVal.textContent = `${v} %`; applyPageBrightness(v); };
+      brightInput.value = String(this.settings.pageBrightness);
+      show(this.settings.pageBrightness);
+      brightInput.addEventListener("input", () => show(Number(brightInput.value)));
+      brightInput.addEventListener("change", () => this.set("pageBrightness", Number(brightInput.value)));
+    }
 
     // Default app button
     const defaultBtn = document.getElementById("settings-default-btn") as HTMLButtonElement;
