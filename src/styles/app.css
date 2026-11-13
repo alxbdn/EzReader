@@ -2634,3 +2634,9 @@ body.custom-titlebar #menubar-row {
    fields look unavailable until the password is removed (the padlock). */
 body.read-only .mode-btn:not([data-mode="read"]) { opacity: 0.45; }
 body.read-only .page-form-layer { pointer-events: none; }
+
+/* Compress: "won't shrink" warning and the progress while it runs. */
+.ez-warn { font-size: 12px; color: #b45309; padding: 0 2px; }
+:root[data-theme="dark"] .ez-warn { color: #fbbf24; }
+.ez-progress { display: flex; flex-direction: column; gap: 6px; }
+.compress-box.running .ez-list, .compress-box.running .ez-compare, .compress-box.running .ez-warn { opacity: 0.5; pointer-events: none; }.ez-warn.hidden, .ez-progress.hidden { display: none; }

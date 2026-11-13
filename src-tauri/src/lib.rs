@@ -71,8 +71,10 @@ pub fn run() {
             startup_args: Mutex::new(startup),
             window_args: Mutex::new(HashMap::new()),
         })
+        .manage(commands::compress::CompressCancel::default())
         .invoke_handler(tauri::generate_handler![
             commands::compress::compress_pdf,
+            commands::compress::cancel_compression,
             commands::compress::estimate_compression,
             commands::security::encrypt_pdf,
             commands::security::decrypt_pdf,

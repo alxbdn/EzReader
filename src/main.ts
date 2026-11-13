@@ -37,6 +37,8 @@ import {
   saveAnnotatedPdf,
   stripAnnotationStreams,
   compressPdf,
+  cancelCompression,
+  onCompressProgress,
   readAnnotations,
   getStartupArgs,
   printPages,
@@ -868,11 +870,16 @@ async function openCompress(): Promise<void> {
 compressModal.onConfirm(async (level: CompressLevel, targetBytes?: number) => {
   const source = session.sourcePath;
   if (!source) return;
+  if (compressModal.wontShrink()
+    && !await ask(msg("msgCompressNoGain"), { kind: "warning" })) return;
   const out = await savePdfDialog(source);
   if (!out) return;
+  const stopListening = await onCompressProgress((share) => compressModal.setProgress(share));
+  compressModal.startRunning(() => { void cancelCompression(); });
   try {
     const input = await (compressInput ?? session.materialize());
     const result = await compressPdf(input, out, level, targetBytes);
+    compressModal.finishRunning();
     const fromMB = (result.originalBytes / 1_048_576).toFixed(1);
     const toMB = (result.compressedBytes / 1_048_576).toFixed(1);
     const pct = result.originalBytes > 0
@@ -884,7 +891,11 @@ compressModal.onConfirm(async (level: CompressLevel, targetBytes?: number) => {
       showToast(msg("msgCompressed", { from: fromMB, to: toMB, pct }));
     }
   } catch (err) {
-    showToast(msg("msgCompressFailed", { err: String(err) }), true);
+    compressModal.finishRunning();
+    if (String(err) === "cancelled") showToast(msg("msgCompressCancelled"));
+    else showToast(msg("msgCompressFailed", { err: String(err) }), true);
+  } finally {
+    stopListening();
   }
 });
 

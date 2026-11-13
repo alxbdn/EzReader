@@ -175,6 +175,10 @@ export interface Translations {
   msgSaveFailed?: string;
   msgCompressed?: string;
   msgCompressFailed?: string;
+  msgCompressCancelled?: string;
+  msgCompressNoGain?: string;
+  cmpNoGain?: string;
+  cmpRunning?: string;
   msgPagesUpdated?: string;
   msgPagesFailed?: string;
   msgPdfSaved?: string;
@@ -649,6 +653,10 @@ const EN: Translations = {
   msgSaveFailed:          "Save failed: {err}",
   msgCompressed:          "Compressed: {from} MB → {to} MB ({pct}% smaller)",
   msgCompressFailed:      "Compression failed: {err}",
+  msgCompressCancelled:   "Compression cancelled. Nothing was saved.",
+  msgCompressNoGain:      "This level won't make the file smaller. Save the copy anyway?",
+  cmpNoGain:              "This level won't make the file smaller.",
+  cmpRunning:             "Compressing… {pct} %",
   msgPagesUpdated:        "Pages updated.",
   msgPagesFailed:         "Page modification failed: {err}",
   msgPdfSaved:            "PDF saved.",
@@ -1116,6 +1124,10 @@ const FR: Translations = {
   msgSaveFailed:          "Échec de l'enregistrement : {err}",
   msgCompressed:          "Compressé : {from} Mo → {to} Mo ({pct} % plus léger)",
   msgCompressFailed:      "Échec de la compression : {err}",
+  msgCompressCancelled:   "Compression annulée. Rien n'a été enregistré.",
+  msgCompressNoGain:      "Ce niveau ne rendra pas le fichier plus léger. Enregistrer la copie quand même ?",
+  cmpNoGain:              "Ce niveau ne rendra pas le fichier plus léger.",
+  cmpRunning:             "Compression… {pct} %",
   msgPagesUpdated:        "Pages mises à jour.",
   msgPagesFailed:         "Échec de la modification des pages : {err}",
   msgPdfSaved:            "PDF enregistré.",
