@@ -798,13 +798,16 @@ export class Toolbar {
     right.className = "toolbar-group tb-right";
     right.append(exportBtn, compressBtn, this.lockBtn, this.infoBtn, this.fullscreenBtn, this.sep(), this.search.el);
 
-    main.append(
+    // Left group, Read / Annotate / Edit in the middle of the bar, right group.
+    const left = document.createElement("div");
+    left.className = "toolbar-group tb-left";
+    left.append(
       this.sidebarBtn, this.saveBtn, this.segment(undo, redo), this.sep(),
       this.segment(...this.pointerBtns),
       this.segment(zoomOut, this.zoomLabel, this.zoomInput, zoomIn, realSizeBtn),
-      brightnessSeg, columnsSeg, this.sep(),
-      modeSeg, right,
+      brightnessSeg, columnsSeg,
     );
+    main.append(left, modeSeg, right);
     this.updateLayout(null, "vertical");
     this.syncModeBtns();
 
@@ -829,14 +832,22 @@ export class Toolbar {
     const pill = this.search.el;
     const open = pill.classList.contains("open");
     // Laid out on one line, how much wider than the row the content is, with
-    // the search box at its final width (not the one mid-animation).
-    const right = main.lastElementChild as HTMLElement;
-    const gap = parseFloat(getComputedStyle(main).columnGap) || 0;
+    // the search box at its final width (not the one mid-animation). The side
+    // groups stretch to keep the modes centred, so add up what they hold.
+    const [left, modes, right] = Array.from(main.children) as HTMLElement[];
+    const gapOf = (el: HTMLElement) => parseFloat(getComputedStyle(el).columnGap) || 0;
+    const held = (group: HTMLElement): number => {
+      const shown = (Array.from(group.children) as HTMLElement[]).filter((c) => c.offsetWidth > 0);
+      return shown.reduce((sum, c) => sum + c.offsetWidth, 0) + gapOf(group) * Math.max(0, shown.length - 1);
+    };
     const overflow = (level: number): number => {
-      const prev = right.previousElementSibling as HTMLElement;
-      // Free room: the auto margin that pushes the right group to the end.
-      const slack = Math.max(0, right.offsetLeft - (prev.offsetLeft + prev.offsetWidth) - gap);
-      return main.scrollWidth - main.clientWidth - slack - pill.offsetWidth + (open ? searchOpen[level] : 34);
+      const style = getComputedStyle(main);
+      const room = main.clientWidth - (parseFloat(style.paddingLeft) || 0) - (parseFloat(style.paddingRight) || 0);
+      const rightW = held(right) - pill.offsetWidth + (open ? searchOpen[level] : 34);
+      // The modes sit in the middle when both sides fit in half of what is
+      // left; otherwise they slide over (CSS), and only a row too full for
+      // everything gets compacted.
+      return held(left) + modes.offsetWidth + rightW + 2 * gapOf(main) - room;
     };
     main.style.flexWrap = "nowrap";
     main.classList.remove(...levels);
