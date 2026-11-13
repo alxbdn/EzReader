@@ -1,4 +1,5 @@
 mod commands;
+mod convert;
 mod error;
 mod fsutil;
 mod pdf;
@@ -88,6 +89,8 @@ pub fn run() {
             commands::files::load_picture,
             commands::files::existing_files,
             commands::files::write_image_file,
+            commands::convert::convert_text,
+            commands::convert::save_as_dialog,
             commands::pdf::get_page_count,
             commands::pdf::save_annotated_pdf,
             commands::pdf::strip_annotation_streams,

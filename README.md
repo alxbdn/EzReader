@@ -77,6 +77,7 @@ Extracted, split and rearranged files contain nothing from the pages you left ou
 ### Export, compress and protect
 
 - **Export** pages as PNG or JPEG images (96, 150 or 300 dpi), or as a flattened PDF copy, with or without annotations
+- **Convert** the text of a PDF to Word (.docx), Excel (.xlsx, one sheet per page), RTF, a web page (HTML), plain text or XML. Paragraphs, titles and tables are kept; pictures and the exact layout are not
 - **Images to PDF**: turn a set of pictures into a PDF, one picture per page
 - **Compress** with a Lossless, Balanced or Maximum preset, or give a target size and let EzReader find the best quality under it. The estimated result is shown before you save
 - **Password**: protect a PDF with a password (with a strength meter and tips), open protected PDFs, or remove the protection

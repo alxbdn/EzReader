@@ -3,6 +3,7 @@ import { createMessages } from "./messages";
 import { Protection } from "./protection";
 import { setUpCompress } from "./compress-flow";
 import { setUpExport } from "./export-flow";
+import { extractText } from "./text-extract";
 import { fileNameOf, withFileName } from "./file-paths";
 import { mountWelcomeDots } from "./welcome-dots";
 import { PdfViewer, PdfPageView, renderRedactedPages, renderStraightenedPages } from "./pdf-viewer";
@@ -44,6 +45,8 @@ import {
   stripAnnotationStreams,
   compressPdf,
   exportFlattenedPages,
+  convertText,
+  saveAsDialog,
   cancelCompression,
   onCompressProgress,
   readAnnotations,
@@ -186,6 +189,9 @@ const exportFlow = setUpExport({
   writeImageFile,
   imagesToPdf,
   exportFlattenedPages,
+  extractText,
+  saveAsDialog,
+  convertText,
 });
 
 async function applyFitMode(): Promise<void> {

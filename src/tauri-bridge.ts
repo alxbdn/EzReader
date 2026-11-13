@@ -3,6 +3,8 @@ import { toCommandError } from "./errors";
 import { listen } from "@tauri-apps/api/event";
 import type { Mat3 } from "./warp";
 import type { TextRun } from "./straighten";
+import type { TextDoc } from "./text-layout";
+import type { DocFormat } from "./export-modal";
 
 /** Runs a Rust command; its errors come back as `CommandError` (see errors.ts). */
 async function call<T>(cmd: string, args?: Record<string, unknown>): Promise<T> {
@@ -354,6 +356,16 @@ export async function existingFiles(paths: string[]): Promise<string[]> {
 /** Writes a PNG or JPEG picture (base64, or a data: URL) to `path`. */
 export async function writeImageFile(path: string, data: string): Promise<void> {
   return call<void>("write_image_file", { path, data });
+}
+
+/** Writes `doc` (text extracted from a PDF) to `output` as Word, Excel, RTF, HTML, text or XML. */
+export async function convertText(doc: TextDoc, format: DocFormat, output: string): Promise<void> {
+  return call<void>("convert_text", { doc, format, output });
+}
+
+/** Save As dialog for a converted file of `format`, pre-filled with `suggested`. */
+export async function saveAsDialog(suggested: string, format: DocFormat): Promise<string | null> {
+  return call<string | null>("save_as_dialog", { suggested, format });
 }
 
 /** Opens `pages` of `inputPath` as a new document `name` in a new window near the screen point. */
