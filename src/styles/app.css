@@ -1304,12 +1304,18 @@ input[type="color"].color-picker.is-off::-webkit-color-swatch {
   position: relative;
 }
 
-.page-sidebar-list::-webkit-scrollbar { width: 10px; }
+/* A wide grab area; the thumb looks slim until you point at it or drag it. */
+.page-sidebar-list::-webkit-scrollbar { width: 14px; }
 .page-sidebar-list::-webkit-scrollbar-thumb {
   background: color-mix(in srgb, var(--muted-foreground) 35%, transparent);
-  border: 3px solid transparent;
+  border: 4px solid transparent;
   border-radius: 999px;
   background-clip: content-box;
+}
+.page-sidebar-list::-webkit-scrollbar-thumb:hover,
+.page-sidebar-list::-webkit-scrollbar-thumb:active {
+  border-width: 2px;
+  background-color: color-mix(in srgb, var(--muted-foreground) 60%, transparent);
 }
 
 .page-sidebar-thumb {
