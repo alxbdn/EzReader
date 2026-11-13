@@ -319,6 +319,20 @@ export class Toolbar {
 
   hideShapeStyles(): void { this.tools.hideShapeStyles(); }
 
+  /** While a save runs: the Save button pulses. */
+  setSaving(on: boolean): void {
+    this.saveBtn.classList.toggle("saving", on);
+  }
+
+  /** After a save: a green ring (saved) or a red shake (failed) around Save. */
+  flashSave(result: "ok" | "error"): void {
+    const cls = result === "ok" ? "save-ok" : "save-error";
+    this.saveBtn.classList.remove("save-ok", "save-error");
+    void this.saveBtn.offsetWidth; // restart the animation
+    this.saveBtn.classList.add(cls);
+    window.setTimeout(() => this.saveBtn.classList.remove(cls), 1200);
+  }
+
   private fullscreenBtn!: HTMLButtonElement;
 
   /** Shows whether the window is full screen (the button then exits it). */

@@ -740,6 +740,7 @@ async function saveFile(forceDialog: boolean): Promise<void> {
     const ok = await ask(msg("msgRedactConfirm"), { title: msg("msgRedactTitle"), kind: "warning" });
     if (!ok) return;
   }
+  toolbar.setSaving(true);
   try {
     await session.saveTo(target);
     if (forceDialog) { pendingRename = null; unsavedCopy = false; }
@@ -754,6 +755,7 @@ async function saveFile(forceDialog: boolean): Promise<void> {
         showToast(code === "exists" ? msg("msgRenameExists")
           : code === "invalid-name" ? msg("msgRenameInvalid")
           : msg("msgRenameFailed", { err: errText(err) }), true);
+        toolbar.flashSave("ok"); // the content was saved, only the rename failed
         return;
       }
       // Show the file under its new name (pdf.js reads it from its path).
@@ -762,6 +764,7 @@ async function saveFile(forceDialog: boolean): Promise<void> {
       await loadPdf(renameTo, password);
       viewer.goToPage(page, "instant");
       showToast(msg("msgRenamed", { name: fileNameOf(renameTo) }));
+      toolbar.flashSave("ok");
       return;
     }
     setDirty(false);
@@ -775,8 +778,12 @@ async function saveFile(forceDialog: boolean): Promise<void> {
     // Saved with a new password: the file is now protected, so read-only.
     syncProtection();
     showToast(msg(session.isProtected ? "msgSavedProtected" : "msgSaved"));
+    toolbar.flashSave("ok");
   } catch (err: unknown) {
     showToast(msg("msgSaveFailed", { err: errText(err) }), true);
+    toolbar.flashSave("error");
+  } finally {
+    toolbar.setSaving(false);
   }
 }
 
