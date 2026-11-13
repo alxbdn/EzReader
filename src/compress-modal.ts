@@ -7,6 +7,18 @@ type ConfirmHandler = (level: CompressLevel, targetBytes?: number) => void;
 const MB = 1024 * 1024;
 
 /**
+ * True when `level` is estimated to give a file at least as big as the
+ * current one (FR-009: say so before saving). Unknown until estimated.
+ */
+export function wontShrink(level: CompressLevel, estimate: CompressEstimate | null, currentBytes: number): boolean {
+  if (!estimate || level === "target" || currentBytes <= 0) return false;
+  const size = level === "lossless" ? estimate.losslessBytes
+    : level === "balanced" ? estimate.balancedBytes
+    : estimate.maximumBytes;
+  return size >= currentBytes;
+}
+
+/**
  * Compress: three levels with the size each gives (computed when the
  * dialog opens), or a target size that EzReader meets with the best quality.
  */
@@ -23,6 +35,12 @@ export class CompressModal extends Modal {
   private beforeVal: HTMLElement;
   private afterVal: HTMLElement;
   private bar: HTMLElement;
+  private warn: HTMLElement;
+  private progress: HTMLElement;
+  private progressBar: HTMLElement;
+  private progressLabel: HTMLElement;
+  /** Set while a compression runs: Cancel / Escape stop it instead of closing. */
+  private onStop: (() => void) | null = null;
 
   constructor() {
     super("compress-box", "compressTitle", "Compress", "cmpOk", "Compress", ICON_COMPRESS_LAYERS);
@@ -86,8 +104,48 @@ export class CompressModal extends Modal {
     track.append(this.bar);
     compare.append(before, full, after, track);
 
-    this.body.append(this.current, list, compare);
+    this.warn = this.el("div", "ez-warn hidden", "cmpNoGain", "This level won't make the file smaller.");
+
+    this.progress = this.el("div", "ez-progress hidden");
+    this.progressLabel = this.el("span", "ez-card-sub");
+    const progressTrack = this.el("div", "ez-bar");
+    this.progressBar = this.el("div", "ez-bar-fill");
+    progressTrack.append(this.progressBar);
+    this.progress.append(this.progressLabel, progressTrack);
+
+    this.body.append(this.current, list, compare, this.warn, this.progress);
     this.okBtn.addEventListener("click", () => this.confirm());
+  }
+
+  /** True when the chosen level would not make the file smaller. */
+  wontShrink(): boolean { return wontShrink(this.level, this.estimate, this.currentBytes); }
+
+  /** Shows the progress bar; Cancel, ✕ and Escape now call `onStop`. */
+  startRunning(onStop: () => void): void {
+    this.onStop = onStop;
+    this.box.classList.add("running");
+    this.progress.classList.remove("hidden");
+    this.okBtn.disabled = true;
+    this.setProgress(0);
+  }
+
+  setProgress(share: number): void {
+    const pct = Math.round(Math.min(1, Math.max(0, share)) * 100);
+    this.progressBar.style.width = `${pct}%`;
+    this.progressLabel.textContent = this.tr("cmpRunning", "Compressing… {pct} %").replace("{pct}", String(pct));
+  }
+
+  /** The compression ended (done, failed or cancelled): closes the dialog. */
+  finishRunning(): void {
+    this.onStop = null;
+    this.box.classList.remove("running");
+    this.progress.classList.add("hidden");
+    this.close();
+  }
+
+  override close(): void {
+    if (this.onStop) { this.onStop(); return; }
+    super.close();
   }
 
   onConfirm(cb: ConfirmHandler): void { this.handlers.push(cb); }
@@ -113,10 +171,10 @@ export class CompressModal extends Modal {
     return Number.isFinite(v) && v > 0 ? Math.round(v * MB) : null;
   }
 
+  /** The dialog stays open: the handler shows the progress, then closes it. */
   private confirm(): void {
     if (this.okBtn.disabled) return;
     const target = this.level === "target" ? this.targetBytes() ?? undefined : undefined;
-    this.close();
     for (const h of this.handlers) h(this.level, target);
   }
 
@@ -163,6 +221,7 @@ export class CompressModal extends Modal {
     this.afterVal.textContent = after === null ? (this.failed ? "—" : "…") : `${this.level === "target" ? "≤ " : ""}${this.size(after)}`;
     const pct = after === null || cur === 0 ? 100 : Math.max(2, Math.min(100, (after / cur) * 100));
     this.bar.style.width = `${pct}%`;
-    this.okBtn.disabled = this.level === "target" && this.targetBytes() === null;
+    this.okBtn.disabled = this.onStop !== null || (this.level === "target" && this.targetBytes() === null);
+    this.warn.classList.toggle("hidden", !this.wontShrink());
   }
 }

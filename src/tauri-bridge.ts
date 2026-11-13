@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 import type { FormFieldValue, StoredAnnotation } from "./models";
 
 /** Opens a file-picker dialog filtered to PDF files. Returns the path or null. */
@@ -209,6 +210,16 @@ export async function compressPdf(
   targetBytes?: number,
 ): Promise<CompressResult> {
   return invoke<CompressResult>("compress_pdf", { inputPath, outputPath, level, targetBytes: targetBytes ?? null });
+}
+
+/** Stops the compression in progress: `compressPdf` then fails with "cancelled". */
+export async function cancelCompression(): Promise<void> {
+  return invoke<void>("cancel_compression");
+}
+
+/** Calls `cb` with the share of the running compression done (0 to 1). */
+export async function onCompressProgress(cb: (share: number) => void): Promise<() => void> {
+  return listen<number>("compress-progress", (e) => cb(e.payload));
 }
 
 export interface CompressEstimate {

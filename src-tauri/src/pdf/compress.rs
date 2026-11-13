@@ -131,20 +131,34 @@ fn encode_jpeg(img: &DynamicImage, quality: u8) -> Option<Vec<u8>> {
 /// largest page. A picture is only replaced when it gets smaller; masks
 /// and other colour spaces are left as they are.
 ///
+/// `on_image(done, total)` is called before each picture; returning false
+/// stops the work (the user cancelled) and gives `Err(Cancelled)`.
+///
 /// Returns `(original_image_bytes, compressed_image_bytes)`.
-pub fn compress_images(doc: &mut Document, settings: ImageSettings) -> (u64, u64) {
+pub fn compress_images(
+    doc: &mut Document,
+    settings: ImageSettings,
+    on_image: &mut dyn FnMut(usize, usize) -> bool,
+) -> Result<(u64, u64), Cancelled> {
     let max_side = ((longest_page_side(doc) / 72.0) * settings.dpi).ceil().max(16.0) as u32;
     let masks = mask_ids(doc);
-    let ids: Vec<_> = doc.objects.keys().copied().filter(|id| !masks.contains(id)).collect();
+    let is_image = |o: &Object| matches!(o, Object::Stream(s)
+        if s.dict.get(b"Subtype").ok().and_then(|o| o.as_name().ok()) == Some(b"Image".as_slice()));
+    let ids: Vec<_> = doc
+        .objects
+        .iter()
+        .filter(|(id, o)| !masks.contains(id) && is_image(o))
+        .map(|(id, _)| *id)
+        .collect();
 
     let mut original_total: u64 = 0;
     let mut compressed_total: u64 = 0;
-    for id in ids {
-        let Some(Object::Stream(stream)) = doc.objects.get_mut(&id) else { continue };
-        let is_image = stream.dict.get(b"Subtype").ok().and_then(|o| o.as_name().ok()) == Some(b"Image".as_slice());
-        if !is_image {
-            continue;
+    let total = ids.len();
+    for (done, id) in ids.into_iter().enumerate() {
+        if !on_image(done, total) {
+            return Err(Cancelled);
         }
+        let Some(Object::Stream(stream)) = doc.objects.get_mut(&id) else { continue };
         let Some(mut img) = decode_picture(stream) else { continue };
         let original_size = stream.content.len() as u64;
         original_total += original_size;
@@ -171,8 +185,12 @@ pub fn compress_images(doc: &mut Document, settings: ImageSettings) -> (u64, u64
             _ => compressed_total += original_size,
         }
     }
-    (original_total, compressed_total)
+    Ok((original_total, compressed_total))
 }
+
+/// The user cancelled a compression.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Cancelled;
 
 /// Apply FlateDecode to all streams not already compressed.
 /// Uses lopdf's built-in Document::compress().
@@ -225,72 +243,3 @@ pub fn prune_dead_objects(doc: &mut Document) {
     doc.delete_zero_length_streams();
 }
 
-/// Remove the AcroForm and all widget annotations from the document.
-/// Static page content (labels, layout) is preserved; interactive form
-/// fields and any values stored only in their appearance streams are lost.
-pub fn flatten_forms(doc: &mut Document) {
-    // Remove /AcroForm from catalog
-    let catalog_id = doc.trailer.get(b"Root").and_then(|o| o.as_reference()).ok();
-    if let Some(cid) = catalog_id {
-        let acroform_id = doc
-            .objects
-            .get(&cid)
-            .and_then(|o| o.as_dict().ok())
-            .and_then(|d| d.get(b"AcroForm").ok())
-            .and_then(|o| o.as_reference().ok());
-        if let Some(obj) = doc.objects.get_mut(&cid) {
-            if let Ok(dict) = obj.as_dict_mut() {
-                dict.remove(b"AcroForm");
-            }
-        }
-        if let Some(afid) = acroform_id {
-            doc.objects.remove(&afid);
-        }
-    }
-
-    // Remove widget annotations from every page
-    let page_ids: Vec<_> = doc.get_pages().into_values().collect();
-    for page_id in page_ids {
-        let annot_ids: Vec<_> = doc
-            .objects
-            .get(&page_id)
-            .and_then(|o| o.as_dict().ok())
-            .and_then(|d| d.get(b"Annots").ok())
-            .and_then(|o| o.as_array().ok())
-            .map(|arr| arr.iter().filter_map(|o| o.as_reference().ok()).collect())
-            .unwrap_or_default();
-
-        if annot_ids.is_empty() {
-            continue;
-        }
-
-        let mut keep: Vec<_> = Vec::new();
-        for &id in &annot_ids {
-            let is_widget = doc
-                .objects
-                .get(&id)
-                .and_then(|o| o.as_dict().ok())
-                .and_then(|d| d.get(b"Subtype").ok())
-                .map(|o| matches!(o, Object::Name(n) if n.as_slice() == b"Widget"))
-                .unwrap_or(false);
-            if is_widget {
-                doc.objects.remove(&id);
-            } else {
-                keep.push(id);
-            }
-        }
-
-        if let Some(obj) = doc.objects.get_mut(&page_id) {
-            if let Ok(dict) = obj.as_dict_mut() {
-                if keep.is_empty() {
-                    dict.remove(b"Annots");
-                } else {
-                    dict.set(
-                        b"Annots",
-                        Object::Array(keep.iter().map(|&id| Object::Reference(id)).collect()),
-                    );
-                }
-            }
-        }
-    }
-}
