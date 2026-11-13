@@ -1,3 +1,11 @@
+import type { PageAdjust } from "./tauri-bridge";
+
+/**
+ * Page geometry for Crop / Flip / Straighten, in one place: the projective
+ * maps, the conversion from what the adjust view collects (fractions of the
+ * page as shown) to PDF user space, and how straightening moves text runs.
+ */
+
 /** Pixels as in ImageData: RGBA, row by row. */
 export interface Pixels {
   data: Uint8ClampedArray;
@@ -160,4 +168,141 @@ export function contentBounds(src: Pixels, tolerance = 40, margin = 0.015): { l:
     l: clamp(l / width - margin), t: clamp(t / height - margin),
     r: clamp((r + 1) / width + margin), b: clamp((b + 1) / height + margin),
   };
+}
+
+// ── Straighten: where text runs go ───────────────────────────────────────────
+
+/** A run of text after straightening, in PDF user space (see `straighten_pages`). */
+export interface TextRun {
+  text: string;
+  x0: number;
+  y0: number;
+  x1: number;
+  y1: number;
+  size: number;
+}
+
+/** What pdf.js's getTextContent gives for a run of text. */
+export interface TextItemLike {
+  str: string;
+  /** [a, b, c, d, e, f] in PDF user space; (e, f) is where the baseline starts. */
+  transform: number[];
+  width: number;
+  height: number;
+}
+
+/**
+ * Where straightening moves each point of the page, in PDF user space.
+ * `shownTransform` is the viewport transform the page was rendered with
+ * (user space → pixels of a `width` × `height` picture) and `quad` the area
+ * stretched over that whole picture (fractions of it).
+ */
+export function pageMap(shownTransform: number[], quad: [Point, Point, Point, Point], width: number, height: number): Mat3 {
+  const toPixels = affine3(shownTransform);
+  return mul3(invert3(toPixels), mul3(straightenMap(quad, width, height), toPixels));
+}
+
+/** The text runs of a page, moved by `map`; empty runs are left out. */
+export function moveTextRuns(items: TextItemLike[], map: Mat3): TextRun[] {
+  const runs: TextRun[] = [];
+  for (const item of items) {
+    if (!item.str.trim()) continue;
+    const [a, b, c, d, e, f] = item.transform;
+    const along = Math.hypot(a, b), up = Math.hypot(c, d);
+    if (along === 0 || up === 0 || item.width <= 0) continue;
+    const height = item.height > 0 ? item.height : up;
+    const start: Point = [e, f];
+    const end: Point = [e + (a / along) * item.width, f + (b / along) * item.width];
+    const top: Point = [e + (c / up) * height, f + (d / up) * height];
+    const [x0, y0] = apply3(map, start);
+    const [x1, y1] = apply3(map, end);
+    const [tx, ty] = apply3(map, top);
+    runs.push({ text: item.str, x0, y0, x1, y1, size: Math.hypot(tx - x0, ty - y0) });
+  }
+  return runs;
+}
+
+// ── Affine transforms (pdf.js / canvas form [a, b, c, d, e, f]) ─────────────
+
+/** The [a, b, c, d, e, f] form of the affine 3×3 matrix `m`. */
+export function affine6(m: Mat3): [number, number, number, number, number, number] {
+  return [m[0], m[3], m[1], m[4], m[2], m[5]];
+}
+
+/**
+ * The canvas transform that redraws a picture rendered with viewport
+ * transform `from` as if it had been rendered with `to` (same page).
+ */
+export function reproject(from: number[], to: number[]): [number, number, number, number, number, number] {
+  return affine6(mul3(affine3(to), invert3(affine3(from))));
+}
+
+// ── Crop / Flip ──────────────────────────────────────────────────────────────
+
+/** What the adjust view sets for a page (see `PageSetting`). */
+export interface AdjustSetting {
+  page: number;
+  mode: "crop" | "straighten";
+  /** Fractions of the page as shown, after the flips. */
+  crop: { l: number; t: number; r: number; b: number };
+  flipH: boolean;
+  flipV: boolean;
+  quad: [Point, Point, Point, Point];
+}
+
+/** The part of a pdf.js viewport the crop conversion needs. */
+export interface ViewportLike {
+  width: number;
+  height: number;
+  convertToPdfPoint(x: number, y: number): number[];
+}
+
+/** The part of a pdf.js document the adjustments need. */
+export interface DocLike {
+  getPage(n: number): Promise<{ rotate: number; getViewport(o: { scale: number; rotation: number }): ViewportLike }>;
+}
+
+/**
+ * A crop and flips set on the page as shown (with `rotation`, its own
+ * /Rotate plus the view rotation) as `adjust_pages` takes them: the box in
+ * PDF user space (left out when the whole page is kept) and the flips on the
+ * page's own axes.
+ */
+export function cropAdjustment(s: AdjustSetting, vp: ViewportLike, rotation: number): PageAdjust {
+  const { l, t, r, b } = s.crop;
+  const full = l <= 1e-4 && t <= 1e-4 && r >= 1 - 1e-4 && b >= 1 - 1e-4;
+  const [x1, y1] = vp.convertToPdfPoint(l * vp.width, t * vp.height);
+  const [x2, y2] = vp.convertToPdfPoint(r * vp.width, b * vp.height);
+  // On a page shown sideways, left-right on screen is the page's up-down.
+  const sideways = rotation % 180 !== 0;
+  return {
+    page: s.page,
+    ...(full ? {} : { crop: [Math.min(x1, x2), Math.min(y1, y2), Math.max(x1, x2), Math.max(y1, y2)] as [number, number, number, number] }),
+    flipH: sideways ? s.flipV : s.flipH,
+    flipV: sideways ? s.flipH : s.flipV,
+  };
+}
+
+/**
+ * Splits the adjust view's settings into the vector crops / flips
+ * (`adjust_pages`) and the pages to straighten, for `doc` shown with
+ * `viewerRotation` on top of each page's /Rotate.
+ */
+export async function buildPageAdjustments(
+  doc: DocLike,
+  viewerRotation: number,
+  settings: AdjustSetting[],
+): Promise<{ crops: PageAdjust[]; warps: { page: number; quad: [Point, Point, Point, Point] }[] }> {
+  const crops: PageAdjust[] = [];
+  const warps: { page: number; quad: [Point, Point, Point, Point] }[] = [];
+  for (const s of settings) {
+    if (s.mode === "straighten") {
+      warps.push({ page: s.page, quad: s.quad });
+      continue;
+    }
+    const page = await doc.getPage(s.page);
+    const rotation = (page.rotate + viewerRotation) % 360;
+    crops.push(cropAdjustment(s, page.getViewport({ scale: 1, rotation }), rotation));
+  }
+  return { crops, warps };
 }

@@ -21,7 +21,8 @@ import { PageSidebar } from "./page-sidebar";
 import { DocSearch, type SearchMatch } from "./doc-search";
 import { moveItems } from "./page-order";
 import { formatPageRange } from "./page-range";
-import type { PageAdjust, PageSlot } from "./tauri-bridge";
+import type { PageSlot } from "./tauri-bridge";
+import { buildPageAdjustments } from "./page-adjustment";
 import { SplitModal } from "./split-modal";
 import { getTranslations, applyTranslationsToDOM, fmt, type Translations } from "./i18n";
 import { DocumentSession, uniqueTempName, isMicrosoftPrintToPdf } from "./document-session";
@@ -911,25 +912,7 @@ async function applyAdjust(settings: PageSetting[]): Promise<boolean> {
   if (!source || !doc) return false;
   if (settings.length === 0) return true;
   try {
-    const crops: PageAdjust[] = [];
-    for (const s of settings) {
-      if (s.mode !== "crop") continue;
-      const page = await doc.getPage(s.page);
-      const rotation = (page.rotate + viewer.rotation) % 360;
-      const vp = page.getViewport({ scale: 1, rotation });
-      const { l, t, r, b } = s.crop;
-      const full = l <= 1e-4 && t <= 1e-4 && r >= 1 - 1e-4 && b >= 1 - 1e-4;
-      const [x1, y1] = vp.convertToPdfPoint(l * vp.width, t * vp.height);
-      const [x2, y2] = vp.convertToPdfPoint(r * vp.width, b * vp.height);
-      // On a page shown sideways, left-right on screen is the page's up-down.
-      const sideways = rotation % 180 !== 0;
-      crops.push({
-        page: s.page,
-        ...(full ? {} : { crop: [Math.min(x1, x2), Math.min(y1, y2), Math.max(x1, x2), Math.max(y1, y2)] as [number, number, number, number] }),
-        flipH: sideways ? s.flipV : s.flipH,
-        flipV: sideways ? s.flipH : s.flipV,
-      });
-    }
+    const { crops, warps } = await buildPageAdjustments(doc, viewer.rotation, settings);
     const name = await basename(source);
     let out = await session.materialize();
     if (crops.length > 0) {
@@ -937,13 +920,12 @@ async function applyAdjust(settings: PageSetting[]): Promise<boolean> {
       await adjustPages(out, tmp, crops);
       out = tmp;
     }
-    const warps = settings.filter((s) => s.mode === "straighten");
     if (warps.length > 0) {
       // Pictures are taken without our annotation layer: the annotations
       // stay editable on top, where they were.
       const bare = await newTempPath(`straighten-src-${name}`);
       await stripAnnotationStreams(out, bare);
-      const pictures = await renderStraightenedPages(bare, warps.map((s) => ({ page: s.page, quad: s.quad })));
+      const pictures = await renderStraightenedPages(bare, warps);
       const tmp = await newTempPath(`straighten-${name}`);
       await straightenPages(out, tmp, pictures);
       out = tmp;

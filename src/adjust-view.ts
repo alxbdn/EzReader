@@ -1,6 +1,6 @@
 import type { PDFDocumentProxy } from "pdfjs-dist";
 import type { Translations } from "./i18n";
-import { contentBounds, type Point } from "./warp";
+import { contentBounds, type Point } from "./page-adjustment";
 import { ICON_CHECK, ICON_CROP, ICON_DISCARD, ICON_FLIP_H, ICON_FLIP_V, ICON_STRAIGHTEN } from "./icons";
 
 export type AdjustKind = "crop" | "straighten";
