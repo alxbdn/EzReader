@@ -212,6 +212,15 @@ export async function compressPdf(
   return invoke<CompressResult>("compress_pdf", { inputPath, outputPath, level, targetBytes: targetBytes ?? null });
 }
 
+/**
+ * Writes `pages` (1-based) of `inputPath` to `outputPath` as a flattened
+ * copy: annotations and form fields are drawn into the pages and nothing
+ * stays editable (links excepted).
+ */
+export async function exportFlattenedPages(inputPath: string, outputPath: string, pages: number[]): Promise<void> {
+  return invoke<void>("export_flattened_pages", { inputPath, outputPath, pages });
+}
+
 /** Stops the compression in progress: `compressPdf` then fails with "cancelled". */
 export async function cancelCompression(): Promise<void> {
   return invoke<void>("cancel_compression");

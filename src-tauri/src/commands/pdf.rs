@@ -1484,6 +1484,28 @@ mod tests {
         std::fs::remove_dir_all(&dir).ok();
     }
 
+    /// Export › PDF: EzReader's annotations stay drawn but can't be edited
+    /// again, and only the chosen pages are in the copy.
+    #[test]
+    fn flattened_export_keeps_the_drawing_but_nothing_editable() {
+        let annotated = tmp("flat-in.pdf");
+        let out = tmp("flat-out.pdf");
+        save_annotated_pdf(fixture("objstm-indirect-length.pdf"), annotated.clone(), vec![rect(1, 200.0)], 0, vec![]).unwrap();
+        assert_eq!(read_annotations(annotated.clone()).unwrap().len(), 1);
+
+        export_flattened_pages(annotated.clone(), out.clone(), vec![1]).unwrap();
+        crate::test_util::assert_lengths_consistent(&out);
+        assert!(read_annotations(out.clone()).unwrap().is_empty(), "nothing to edit after reopening");
+        let doc = Document::load(&out).unwrap();
+        assert_eq!(doc.get_pages().len(), 1);
+        assert!(doc.extract_text(&[1]).unwrap().contains("Page 1"));
+        let content = String::from_utf8_lossy(&doc.get_page_content(doc.get_pages()[&1])).into_owned();
+        assert!(content.contains(" re"), "the rectangle is still drawn: {content}");
+        for p in [annotated, out] {
+            std::fs::remove_file(p).ok();
+        }
+    }
+
     /// The real-world shape (object streams + indirect /Length): the kept
     /// page still reads as text, and the dropped page's stream is gone.
     #[test]
@@ -1527,6 +1549,28 @@ pub fn extract_pdf_pages(
 ) -> Result<(), String> {
     let keep: HashSet<u32> = pages.into_iter().collect();
     extract_pages(&input_path, &output_path, &keep)
+}
+
+/// Export › PDF: the selected pages as a flattened copy. What annotations
+/// and form fields show is drawn into the pages; nothing in the copy is
+/// interactive or editable any more (links excepted).
+#[tauri::command]
+pub fn export_flattened_pages(
+    input_path: String,
+    output_path: String,
+    pages: Vec<u32>,
+) -> Result<(), String> {
+    let keep: HashSet<u32> = pages.into_iter().collect();
+    let mut inc = IncrementalDocument::load(&input_path).map_err(|e| e.to_string())?;
+    let total = inc.get_prev_documents().get_pages().len() as u32;
+    let delete_set: HashSet<u32> = (1..=total).filter(|p| !keep.contains(p)).collect();
+    if delete_set.len() as u32 >= total {
+        return Err("No page to export".into());
+    }
+    apply_page_deletions(&mut inc, &delete_set)?;
+    let mut doc = fsutil::compacted(&mut inc)?;
+    crate::pdf::flatten::flatten(&mut doc)?;
+    fsutil::save_document(&mut doc, &output_path)
 }
 
 /// Keeps only the pages in `keep` (1-based) and writes a compacted file.

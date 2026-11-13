@@ -62,11 +62,17 @@ pub fn save_document(doc: &mut Document, dst: impl AsRef<Path>) -> Result<(), St
 /// pages): an incremental save keeps the left-out objects in the original
 /// bytes, where anyone with a text editor can still read them.
 pub fn save_compacted(inc: &mut IncrementalDocument, dst: impl AsRef<Path>) -> Result<(), String> {
+    let mut doc = compacted(inc)?;
+    save_document(&mut doc, dst)
+}
+
+/// `inc` merged into one document, without the objects nothing points at.
+pub fn compacted(inc: &mut IncrementalDocument) -> Result<Document, String> {
     let mut merged = Vec::new();
     inc.save_to(&mut merged).map_err(|e| e.to_string())?;
     let mut doc = Document::load_mem(&merged).map_err(|e| e.to_string())?;
     doc.prune_objects();
-    save_document(&mut doc, dst)
+    Ok(doc)
 }
 
 /// Saves an incremental update to `dst`, atomically.
