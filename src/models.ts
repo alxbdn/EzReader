@@ -134,7 +134,11 @@ export interface TextAnnotation extends BaseAnnotation {
   fontFamily?: FontFamilyValue;
   /** Box colour behind the text; null or absent means none. */
   backgroundColor?: RgbColor | null;
+  /** Edited text: the original words' area, painted with the page colour first. */
+  cover?: TextCover;
 }
+
+export interface TextCover { x: number; y: number; width: number; height: number; color: RgbColor }
 
 export interface SignatureAnnotation extends BaseAnnotation {
   kind: "signature";
@@ -143,6 +147,29 @@ export interface SignatureAnnotation extends BaseAnnotation {
   /** Base64-encoded PNG (no data: URI prefix) */
   imageData: string;
 }
+
+/** A picture placed on the page; same fields as a signature. */
+export interface ImageAnnotation extends BaseAnnotation {
+  kind: "image";
+  width: number;
+  height: number;
+  /** Base64-encoded PNG or JPEG (no data: URI prefix) */
+  imageData: string;
+}
+
+export type StampMark = "check" | "cross";
+
+/** A check mark or a cross. */
+export interface StampAnnotation extends BaseAnnotation {
+  kind: "stamp";
+  width: number;
+  height: number;
+  mark: StampMark;
+  color: RgbColor;
+}
+
+/** Outline of a redaction area. */
+export type RedactShape = "rect" | "ellipse" | "lasso" | "poly";
 
 /**
  * An area to black out. Until the document is saved it is an ordinary,
@@ -154,6 +181,10 @@ export interface RedactAnnotation extends BaseAnnotation {
   kind: "redact";
   width: number;
   height: number;
+  /** Absent means a rectangle. */
+  shape?: RedactShape;
+  /** Outline of a freeform or stretchable area, relative to the box (0–1 from its left and bottom edges). */
+  points?: [number, number][];
 }
 
 export type Annotation =
@@ -164,6 +195,8 @@ export type Annotation =
   | NoteAnnotation
   | TextAnnotation
   | SignatureAnnotation
+  | ImageAnnotation
+  | StampAnnotation
   | RedactAnnotation;
 
 /** Annotations the backend stores as editable metadata (everything but redactions). */
@@ -186,10 +219,12 @@ export interface FormFieldValue {
 
 export type ToolKind =
   | "select" | "rect" | "circle" | "arrow" | "ink" | "line" | "highlight" | "note"
-  | "text" | "signature" | "redact";
+  | "text" | "signature" | "redact"
+  /** Edit mode: replace existing text, place pictures, redact selected text, stamp. */
+  | "etext" | "image" | "redact-text" | "stamp";
 
 /** Tools that draw by dragging on the page (the overlay takes the mouse). */
-export const DRAW_TOOLS: readonly ToolKind[] = ["rect", "circle", "arrow", "ink", "line", "note", "text", "redact"];
+export const DRAW_TOOLS: readonly ToolKind[] = ["rect", "circle", "arrow", "ink", "line", "note", "text", "redact", "stamp"];
 
 export interface ActiveToolState {
   tool: ToolKind;
@@ -212,6 +247,10 @@ export interface ActiveToolState {
   highlightColor: RgbColor;
   highlightOpacity: number;
   noteColor: RgbColor;
+  /** Outline of new redaction areas. */
+  redactShape: RedactShape;
+  stampMark: StampMark;
+  stampColor: RgbColor;
 }
 
 export function defaultToolState(): ActiveToolState {
@@ -233,6 +272,9 @@ export function defaultToolState(): ActiveToolState {
     highlightColor: { r: 250, g: 204, b: 21 },
     highlightOpacity: 0.45,
     noteColor: { r: 253, g: 224, b: 71 },
+    redactShape: "rect",
+    stampMark: "check",
+    stampColor: { r: 0, g: 0, b: 0 },
   };
 }
 

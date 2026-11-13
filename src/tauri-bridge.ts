@@ -170,7 +170,8 @@ export async function openUrl(url: string): Promise<void> {
 export type PageSlot =
   | { kind: "original"; page: number; rotation: number }
   | { kind: "blank"; width: number; height: number; rotation: number }
-  | { kind: "imported"; path: string; page: number; rotation: number };
+  | { kind: "imported"; path: string; page: number; rotation: number }
+  | { kind: "image"; data: string; rotation: number };
 
 /**
  * Writes `inputPath` with its pages replaced by `slots` (reordered, rotated,
@@ -225,4 +226,14 @@ export async function redactPages(
   pages: RedactedPage[],
 ): Promise<void> {
   return invoke<void>("redact_pages", { inputPath, outputPath, pages });
+}
+
+/** Opens a file picker for pictures; null if cancelled. */
+export async function openImageDialog(): Promise<string | null> {
+  return invoke<string | null>("open_image_dialog");
+}
+
+/** The bytes of the picture at `path`, as base64. */
+export async function readImageFile(path: string): Promise<string> {
+  return invoke<string>("read_image_file", { path });
 }

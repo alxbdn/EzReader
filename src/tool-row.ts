@@ -3,6 +3,7 @@ import {
   FONT_FAMILIES,
   type ActiveToolState,
   type FontFamilyValue,
+  type RedactShape,
   type RgbColor,
   type ToolKind,
 } from "./models";
@@ -27,11 +28,19 @@ import {
   ICON_OPT_COLOR,
   ICON_CHECK,
   ICON_DISCARD,
-  ICON_REDACT,
+  ICON_EDIT_TEXT,
+  ICON_IMAGE,
+  ICON_REDACT_TEXT,
+  ICON_REDACT_AREA,
+  ICON_STAMP_CHECK,
+  ICON_STAMP_CROSS,
+  ICON_SHAPE_LASSO,
+  ICON_SHAPE_POLY,
 } from "./icons";
 
 /** A button of the tool row; pencil and shapes each cover several tools. */
-export type ToolGroup = "text" | "pencil" | "shapes" | "note" | "highlight" | "sign" | "redact";
+export type ToolGroup = "text" | "pencil" | "shapes" | "note" | "highlight" | "sign"
+  | "etext" | "image" | "redact-text" | "redact" | "check" | "cross";
 type PencilStyle = "ink" | "line";
 type ShapeStyle = "rect" | "circle" | "arrow";
 type Key = keyof Translations;
@@ -48,9 +57,12 @@ const NOTE_COLORS: [string, string][] = [
 const HIGHLIGHT_COLORS: [string, string][] = [
   ["#facc15", "Yellow"], ["#4ade80", "Green"], ["#f472b6", "Pink"], ["#60a5fa", "Blue"], ["#fb923c", "Orange"],
 ];
+const STAMP_COLORS: [string, string][] = [
+  ["#000000", "Black"], ["#1e3a8a", "Ink blue"], ["#16a34a", "Green"], ["#dc2626", "Red"], ["#2563eb", "Blue"],
+];
 const COLOR_KEYS: Record<string, Key> = {
   Black: "colBlack", Red: "colRed", Blue: "colBlue", Green: "colGreen", Yellow: "colYellow",
-  White: "colWhite", Pink: "colPink", Orange: "colOrange",
+  White: "colWhite", Pink: "colPink", Orange: "colOrange", "Ink blue": "colInkBlue",
 };
 const FONT_SIZES = [8, 9, 10, 11, 12, 14, 16, 18, 20, 24, 28, 32, 36, 48, 60, 72];
 
@@ -105,6 +117,10 @@ export class ToolRow {
   private noteColor!: ColorRow;
   private hlColor!: ColorRow;
   private hlOpacity!: SliderRow;
+  // Edit mode
+  private textTitle!: HTMLElement;
+  private textBgWrap!: HTMLElement;
+  private stampColor!: ColorRow;
   // Signatures
   private sigList!: HTMLElement;
   private sigNew!: HTMLButtonElement;
@@ -129,8 +145,25 @@ export class ToolRow {
     ];
     this.annotateSeg = this.segment("tool-seg");
     for (const [g, icon, key, fb] of defs) this.annotateSeg.append(this.groupButton(g, icon, key, fb));
-    this.editSeg = this.segment("tool-seg");
-    this.editSeg.append(this.groupButton("redact", ICON_REDACT, "btnRedact", "Redact"));
+    // Edit tools are icons only, in three groups: page content, redaction, stamps.
+    this.editSeg = document.createElement("div");
+    this.editSeg.className = "tool-seg edit-tools";
+    const contentSeg = this.segment("");
+    contentSeg.append(
+      this.groupButton("etext", ICON_EDIT_TEXT, "toolEditText", "Edit text"),
+      this.groupButton("image", ICON_IMAGE, "toolImage", "Image"),
+    );
+    const redactSeg = this.segment("");
+    redactSeg.append(
+      this.groupButton("redact-text", ICON_REDACT_TEXT, "toolRedactText", "Redact text"),
+      this.groupButton("redact", ICON_REDACT_AREA, "toolRedactArea", "Redact an area"),
+    );
+    const stampSeg = this.segment("");
+    stampSeg.append(
+      this.groupButton("check", ICON_STAMP_CHECK, "toolCheck", "Check mark"),
+      this.groupButton("cross", ICON_STAMP_CROSS, "toolCross", "Cross"),
+    );
+    this.editSeg.append(contentSeg, this.groupLabel("grpRedact", "Redact"), redactSeg, this.groupLabel("grpStamps", "Stamps"), stampSeg);
 
     this.hint = document.createElement("span");
     this.hint.className = "tb-hint";
@@ -152,7 +185,10 @@ export class ToolRow {
     this.buildNotePanel();
     this.buildHighlightPanel();
     this.buildSignPanel();
-    for (const p of this.panels.values()) this.options.append(p);
+    this.buildImagePanel();
+    this.buildRedactPanel();
+    this.buildStampPanel();
+    for (const p of new Set(this.panels.values())) this.options.append(p);
 
     this.syncAll();
   }
@@ -202,12 +238,15 @@ export class ToolRow {
     this.state.italic = st.italic;
     this.state.underline = st.underline;
     if (st.backgroundColor !== undefined) this.state.textBackground = st.backgroundColor ? { ...st.backgroundColor } : null;
-    this.selectionPanel = "text";
-    this.panel = "text";
+    this.selectionPanel = this.mode === "edit" ? "etext" : "text";
+    this.panel = this.selectionPanel;
     this.syncAll();
   }
 
-  hideTextStyles(): void { this.hideSelectionPanel("text"); }
+  hideTextStyles(): void {
+    this.hideSelectionPanel("text");
+    this.hideSelectionPanel("etext");
+  }
 
   /** Options of the selected shape or pencil stroke. */
   showShapeStyles(st: { color: RgbColor; strokeWidth: number; fillColor?: RgbColor | null; opacity?: number }, panel: "pencil" | "shapes" = "shapes"): void {
@@ -265,6 +304,10 @@ export class ToolRow {
       case "highlight": return "highlight";
       case "sign": return "signature";
       case "redact": return "redact";
+      case "etext": return "etext";
+      case "image": return "image";
+      case "redact-text": return "redact-text";
+      case "check": case "cross": return "stamp";
     }
   }
 
@@ -275,8 +318,11 @@ export class ToolRow {
     this.selectionPanel = null;
     this.panel = this.panels.has(g) ? g : null;
     this.state.tool = this.toolFor(g);
+    if (g === "check" || g === "cross") this.state.stampMark = g;
     this.syncAll();
     this.emit({ type: "tool-change", tool: this.state.tool });
+    // The pages draw a check or a cross from the style.
+    if (g === "check" || g === "cross") this.emit({ type: "style-change", style: this.getStyle() });
   }
 
   /** Freeform / straight, or rectangle / ellipse / arrow: same tool button, another drawing. */
@@ -299,6 +345,9 @@ export class ToolRow {
 
   private buildTextPanel(): void {
     const p = this.panelEl("text", "toolText", "Text");
+    // Edit text shows the same options, without the background.
+    this.panels.set("etext", p);
+    this.textTitle = p.querySelector(".opt-title")!;
     this.fontSelect = document.createElement("select");
     this.fontSelect.className = "opt-select";
     this.title(this.fontSelect, "optFont", "Font");
@@ -351,7 +400,10 @@ export class ToolRow {
       this.state.textBackground = c;
       this.changed();
     });
-    p.append(this.fontSelect, this.sizeSelect, biuSeg, this.divider(), this.textColor.el, this.divider(), this.textBg.el);
+    this.textBgWrap = document.createElement("div");
+    this.textBgWrap.className = "opt-group";
+    this.textBgWrap.append(this.divider(), this.textBg.el);
+    p.append(this.fontSelect, this.sizeSelect, biuSeg, this.divider(), this.textColor.el, this.textBgWrap);
   }
 
   /** Pencil and shapes: drawing style, outline, background, thickness, opacity. */
@@ -429,6 +481,54 @@ export class ToolRow {
     p.append(this.sigList, this.sigNew, this.sigCount);
   }
 
+  private buildImagePanel(): void {
+    const p = this.panelEl("image", "toolImage", "Image");
+    const browse = document.createElement("button");
+    browse.type = "button";
+    browse.className = "opt-browse";
+    this.text(browse, "optBrowse", "Browse…");
+    browse.addEventListener("click", () => this.emit({ type: "image-browse" }));
+    const note = document.createElement("span");
+    note.className = "opt-note";
+    this.text(note, "optImageDrop", "or drop a picture on the page to place it, or in the side panel to add it as a new page");
+    p.append(browse, note);
+  }
+
+  /** Redaction areas: rectangle, ellipse, freeform or stretchable. */
+  private buildRedactPanel(): void {
+    const p = this.panelEl("redact", "optAreaShape", "Area shape");
+    const shapes: [RedactShape, string, Key, string][] = [
+      ["rect", ICON_SHAPE_RECT, "shapeRect", "Rectangle"],
+      ["ellipse", ICON_SHAPE_ELLIPSE, "shapeEllipse", "Ellipse"],
+      ["lasso", ICON_SHAPE_LASSO, "styleFreeform", "Freeform"],
+      ["poly", ICON_SHAPE_POLY, "shapeStretch", "Stretchable"],
+    ];
+    const seg = this.segment("opt-seg");
+    for (const [shape, icon, key, fb] of shapes) {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "opt-btn opt-style";
+      b.innerHTML = icon;
+      const label = document.createElement("span");
+      this.text(label, key, fb);
+      b.append(label);
+      b.addEventListener("click", () => { this.state.redactShape = shape; this.changed(); });
+      this.styleBtns.set(`redact:${shape}`, b);
+      seg.append(b);
+    }
+    p.append(seg);
+  }
+
+  private buildStampPanel(): void {
+    const p = this.panelEl("check", "optStampColor", "Stamp color");
+    this.panels.set("cross", p);
+    this.stampColor = this.colorRow(ICON_OPT_COLOR, "optColor", STAMP_COLORS, null, (c) => {
+      if (c) this.state.stampColor = c;
+      this.changed();
+    });
+    p.append(this.stampColor.el);
+  }
+
   private renderSignatures(): void {
     if (!this.sigList) return;
     this.sigList.replaceChildren();
@@ -470,7 +570,11 @@ export class ToolRow {
     }
     const show = this.mode !== "read" && this.panel !== null && this.panels.has(this.panel);
     this.options.hidden = !show;
-    for (const [g, el] of this.panels) el.hidden = g !== this.panel;
+    const shown = this.panel ? this.panels.get(this.panel) : undefined;
+    for (const el of this.panels.values()) el.hidden = el !== shown;
+    const editText = this.panel === "etext";
+    this.textTitle.textContent = editText ? this.tr("toolEditText", "Edit text") : this.tr("toolText", "Text");
+    this.textBgWrap.hidden = editText;
 
     const st = this.state;
     this.fontSelect.value = st.fontFamily;
@@ -494,8 +598,10 @@ export class ToolRow {
     this.hlOpacity.set(st.highlightOpacity * 100);
     for (const [k, b] of this.styleBtns) {
       const [g, style] = k.split(":");
-      b.classList.toggle("active", style === (g === "pencil" ? this.pencilStyle : this.shapeStyle));
+      const current = g === "pencil" ? this.pencilStyle : g === "shapes" ? this.shapeStyle : st.redactShape;
+      b.classList.toggle("active", style === current);
     }
+    this.stampColor.set(st.stampColor);
     // Straight lines and arrows have no inside to fill.
     this.pencilFillWrap.hidden = this.pencilStyle !== "ink" && this.selectionPanel !== "pencil";
     this.shapeFillWrap.hidden = this.shapeStyle === "arrow" && this.selectionPanel !== "shapes";
@@ -511,6 +617,11 @@ export class ToolRow {
       highlight: ["hintHighlight", "Select text to highlight it. Select it again to remove the highlight."],
       sign: ["hintSign", "Pick a signature, then click where it goes."],
       redact: ["hintRedact", "Drag over what must disappear."],
+      etext: ["hintEditText", "Click existing text to replace it."],
+      image: ["hintImage", "Browse for a picture, or drop one on the page."],
+      "redact-text": ["hintRedactText", "Select text to redact it. Select it again to undo."],
+      check: ["hintStamp", "Click on the page to stamp."],
+      cross: ["hintStamp", "Click on the page to stamp."],
     };
     const [key, fb] = this.pending ? ["hintPending", "Validate or discard your changes to continue."] as [Key, string]
       : this.group ? hints[this.group] : ["hintPick", "Pick a tool."] as [Key, string];
@@ -541,6 +652,13 @@ export class ToolRow {
     return d;
   }
 
+  private groupLabel(key: Key, fb: string): HTMLElement {
+    const l = document.createElement("span");
+    l.className = "tool-group-label";
+    this.text(l, key, fb);
+    return l;
+  }
+
   private divider(): HTMLElement {
     const d = document.createElement("span");
     d.className = "opt-divider";
@@ -556,6 +674,7 @@ export class ToolRow {
     const label = document.createElement("span");
     this.text(label, key, fb);
     b.append(label);
+    this.title(b, key, fb);
     b.addEventListener("click", () => this.pickGroup(g));
     this.groupBtns.set(g, b);
     return b;

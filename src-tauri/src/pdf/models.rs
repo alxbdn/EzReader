@@ -88,6 +88,20 @@ pub struct TextAnnotation {
     /// Box colour behind the text.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub background_color: Option<RgbColor>,
+    /// Edited text: the area of the original words, painted over first.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cover: Option<TextCover>,
+}
+
+/// Area painted with the page's own colour under edited text, so the
+/// original words no longer show.
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct TextCover {
+    pub x: f64,
+    pub y: f64,
+    pub width: f64,
+    pub height: f64,
+    pub color: RgbColor,
 }
 
 /// Pencil stroke, straight line or arrow. `points` are relative to the box
@@ -158,6 +172,26 @@ pub struct SignatureAnnotation {
     pub image_data: String,
 }
 
+#[derive(Debug, Serialize, Deserialize, Clone, Copy, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub enum StampMark {
+    Check,
+    Cross,
+}
+
+/// A check mark or a cross, drawn in its box.
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct StampAnnotation {
+    pub page: u32,
+    pub x: f64,
+    pub y: f64,
+    pub width: f64,
+    pub height: f64,
+    pub mark: StampMark,
+    pub color: RgbColor,
+}
+
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(tag = "kind", rename_all = "camelCase")]
 pub enum Annotation {
@@ -168,6 +202,9 @@ pub enum Annotation {
     Note(NoteAnnotation),
     Text(TextAnnotation),
     Signature(SignatureAnnotation),
+    /// A picture placed on the page (same fields as a signature).
+    Image(SignatureAnnotation),
+    Stamp(StampAnnotation),
 }
 
 impl Annotation {
@@ -179,7 +216,8 @@ impl Annotation {
             Annotation::Highlight(a) => a.page,
             Annotation::Note(a) => a.page,
             Annotation::Text(a) => a.page,
-            Annotation::Signature(a) => a.page,
+            Annotation::Signature(a) | Annotation::Image(a) => a.page,
+            Annotation::Stamp(a) => a.page,
         }
     }
 
@@ -191,7 +229,8 @@ impl Annotation {
             Annotation::Highlight(a) => a.page = p,
             Annotation::Note(a) => a.page = p,
             Annotation::Text(a) => a.page = p,
-            Annotation::Signature(a) => a.page = p,
+            Annotation::Signature(a) | Annotation::Image(a) => a.page = p,
+            Annotation::Stamp(a) => a.page = p,
         }
     }
 }
