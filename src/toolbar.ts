@@ -310,6 +310,8 @@ export class Toolbar {
 
   hideShapeStyles(): void { this.tools.hideShapeStyles(); }
 
+  setActiveSignature(id: string | null): void { this.tools.setActiveSignature(id); }
+
   setSignatures(list: SignatureChip[]): void { this.tools.setSignatures(list); }
 
   private sep(): HTMLElement {
