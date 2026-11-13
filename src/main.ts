@@ -18,7 +18,7 @@ import { PrintModal } from "./print-modal";
 import { SignatureModal } from "./signature-modal";
 import { SignatureStore } from "./signature-store";
 import { SettingsModal, applyPageBrightness } from "./settings";
-import { confirmDialog } from "./confirm-dialog";
+import { saveChangesDialog } from "./confirm-dialog";
 import { PageSidebar } from "./page-sidebar";
 import { DocSearch, type SearchMatch } from "./doc-search";
 import { planDelete, planInsert, planMove, planRotate, type PagePlan } from "./page-layout";
@@ -466,6 +466,8 @@ function discardDraft(): void {
 }
 
 let closeGuardBusy = false;
+/** "Save before closing?" was answered Yes and the save is running. */
+let savingBeforeLeaving = false;
 
 async function registerCloseGuard(): Promise<void> {
   // guardRegistering is a synchronous flag that prevents a second async call
@@ -475,6 +477,8 @@ async function registerCloseGuard(): Promise<void> {
   try {
     unlistenClose = await appWindow.onCloseRequested(async (event) => {
       if (!session.isDirty) { return; }
+      // Saving before closing: wait for it.
+      if (savingBeforeLeaving) { event.preventDefault(); return; }
       // If the dialog is already open (e.g. user clicked close twice), force-close.
       if (closeGuardBusy) {
         setDirty(false);
@@ -484,7 +488,7 @@ async function registerCloseGuard(): Promise<void> {
       event.preventDefault();
       closeGuardBusy = true;
       try {
-        const ok = await askLoseChanges("msgCloseWithoutSaving");
+        const ok = await settleUnsaved("msgSaveBeforeClose");
         if (ok) {
           setDirty(false);
           await appWindow.destroy();
@@ -517,13 +521,29 @@ function syncAllPageOverlays(): void {
 }
 
 async function confirmUnsaved(): Promise<boolean> {
-  if (!session.isDirty) return true;
-  return askLoseChanges("msgDiscardChanges");
+  return settleUnsaved("msgSaveBeforeOpen");
 }
 
-/** "Lose your changes?": No is the default answer (Enter and Escape keep them). */
-function askLoseChanges(key: "msgCloseWithoutSaving" | "msgDiscardChanges"): Promise<boolean> {
-  return confirmDialog({ title: msg("msgUnsavedTitle"), text: msg(key), yes: msg("msgYes"), no: msg("msgNo") });
+/**
+ * "Save the changes before …?" Yes saves and goes on once the save went
+ * through, No goes on without saving, Cancel stays. True when it may go on.
+ */
+async function settleUnsaved(key: "msgSaveBeforeClose" | "msgSaveBeforeOpen"): Promise<boolean> {
+  if (!session.isDirty) return true;
+  const answer = await saveChangesDialog({
+    title: msg("msgUnsavedTitle"),
+    text: msg(key, { name: session.displayName ?? "" }),
+    yes: msg("msgYes"), no: msg("msgNo"), cancel: msg("msgCancel"),
+  });
+  if (answer === "cancel") return false;
+  if (answer === "discard") return true;
+  savingBeforeLeaving = true;
+  try {
+    await saveFile(false);
+  } finally {
+    savingBeforeLeaving = false;
+  }
+  return !session.isDirty;
 }
 
 // ── Load / Save ───────────────────────────────────────────────────────────────

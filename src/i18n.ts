@@ -162,8 +162,9 @@ export interface Translations {
   welcomeFeatMerge?: string;
   // Messages (toasts and dialogs; optional, English fallback)
   msgUnsavedTitle?: string;
-  msgCloseWithoutSaving?: string;
-  msgDiscardChanges?: string;
+  msgSaveBeforeClose?: string;
+  msgSaveBeforeOpen?: string;
+  msgCancel?: string;
   msgYes?: string;
   msgNo?: string;
   msgPasswordPrompt?: string;
@@ -389,6 +390,7 @@ export interface Translations {
   adjWarpHint?: string;
   adjValidateHint?: string;
   adjEach?: string;
+  adjPreview?: string;
   adjPageCrop?: string;
   adjPageStraighten?: string;
   adjCropCaption?: string;
@@ -678,8 +680,9 @@ const EN: Translations = {
   welcomeFeatResize:        "Resize Scans",
   welcomeFeatMerge:         "Merge Files",
   msgUnsavedTitle:        "Unsaved changes",
-  msgCloseWithoutSaving:  "Close without saving?",
-  msgDiscardChanges:      "Discard unsaved changes and continue?",
+  msgSaveBeforeClose:     "Save the changes to \u201c{name}\u201d before closing?",
+  msgSaveBeforeOpen:      "Save the changes to \u201c{name}\u201d before opening another document?",
+  msgCancel:              "Cancel",
   msgYes:                 "Yes",
   msgNo:                  "No",
   msgPasswordPrompt:      "This PDF is password-protected. Enter password:",
@@ -899,6 +902,7 @@ const EN: Translations = {
   adjWarpHint: "Click a corner: an offset loupe opens so you can place it to the pixel. Arrow keys nudge it.",
   adjValidateHint: "Validate or discard",
   adjEach: "Each page is set on its own",
+  adjPreview: "Result",
   adjPageCrop: "p. {n} · Crop",
   adjPageStraighten: "p. {n} · Straighten",
   adjCropCaption: "Drag the handles to crop · {size}",
@@ -1187,8 +1191,9 @@ const FR: Translations = {
   welcomeFeatResize:        "Redresser des scans",
   welcomeFeatMerge:         "Fusionner des fichiers",
   msgUnsavedTitle:        "Modifications non enregistrées",
-  msgCloseWithoutSaving:  "Fermer sans enregistrer ?",
-  msgDiscardChanges:      "Abandonner les modifications non enregistrées et continuer ?",
+  msgSaveBeforeClose:     "Enregistrer les modifications apportées à « {name} » avant de fermer ?",
+  msgSaveBeforeOpen:      "Enregistrer les modifications apportées à « {name} » avant d'ouvrir un autre document ?",
+  msgCancel:              "Annuler",
   msgYes:                 "Oui",
   msgNo:                  "Non",
   msgPasswordPrompt:      "Ce PDF est protégé par un mot de passe. Saisissez le mot de passe :",
@@ -1408,6 +1413,7 @@ const FR: Translations = {
   adjWarpHint: "Cliquez un coin : une loupe décalée s'ouvre pour le placer au pixel près. Les flèches l'ajustent.",
   adjValidateHint: "Valider ou annuler",
   adjEach: "Chaque page se règle à part",
+  adjPreview: "Résultat",
   adjPageCrop: "p. {n} · Recadrer",
   adjPageStraighten: "p. {n} · Redresser",
   adjCropCaption: "Faites glisser les poignées pour recadrer · {size}",
