@@ -152,17 +152,14 @@ export interface Translations {
   welcomeOpen?: string;
   welcomeDropHint?: string;
   welcomeFeatAnnotate?: string;
-  welcomeFeatAnnotateDesc?: string;
   welcomeFeatSign?: string;
-  welcomeFeatSignDesc?: string;
+  welcomeFeatRedact?: string;
   welcomeFeatPages?: string;
-  welcomeFeatPagesDesc?: string;
-  welcomeFeatSplit?: string;
-  welcomeFeatSplitDesc?: string;
+  welcomeFeatToImage?: string;
   welcomeFeatCompress?: string;
-  welcomeFeatCompressDesc?: string;
-  welcomeFeatPrint?: string;
-  welcomeFeatPrintDesc?: string;
+  welcomeFeatProtect?: string;
+  welcomeFeatResize?: string;
+  welcomeFeatMerge?: string;
   // Messages (toasts and dialogs; optional, English fallback)
   msgUnsavedTitle?: string;
   msgCloseWithoutSaving?: string;
@@ -634,21 +631,18 @@ const EN: Translations = {
   menuSignature:     "Signature",
   menuPrint:         "Print",
   menuSettings:      "Settings",
-  welcomeTagline:           "Read, annotate, sign and edit your PDFs.",
+  welcomeTagline:           "Read, annotate, sign and edit your Files",
   welcomeOpen:              "Open a PDF",
-  welcomeDropHint:          "…or drop a PDF anywhere in this window",
-  welcomeFeatAnnotate:      "Annotate",
-  welcomeFeatAnnotateDesc:  "Text, shapes & highlights",
-  welcomeFeatSign:          "Sign",
-  welcomeFeatSignDesc:      "Add your signature",
-  welcomeFeatPages:         "Manage pages",
-  welcomeFeatPagesDesc:     "Reorder, rotate, delete",
-  welcomeFeatSplit:         "Split",
-  welcomeFeatSplitDesc:     "Extract page ranges",
-  welcomeFeatCompress:      "Compress",
-  welcomeFeatCompressDesc:  "Shrink file size",
-  welcomeFeatPrint:         "Print",
-  welcomeFeatPrintDesc:     "Select pages & printer",
+  welcomeDropHint:          "Drop a file to begin",
+  welcomeFeatAnnotate:      "Annotate Files",
+  welcomeFeatSign:          "Sign Documents",
+  welcomeFeatRedact:        "Redact Content",
+  welcomeFeatPages:         "Manage Pages",
+  welcomeFeatToImage:       "Convert to img",
+  welcomeFeatCompress:      "Compress Files",
+  welcomeFeatProtect:       "Protect Files",
+  welcomeFeatResize:        "Resize Scans",
+  welcomeFeatMerge:         "Merge Files",
   msgUnsavedTitle:        "Unsaved changes",
   msgCloseWithoutSaving:  "Close without saving?",
   msgDiscardChanges:      "Discard unsaved changes and continue?",
@@ -1112,21 +1106,18 @@ const FR: Translations = {
   menuSignature:     "Signature",
   menuPrint:         "Imprimer",
   menuSettings:      "Param\u00e8tres",
-  welcomeTagline:           "Lisez, annotez, signez et modifiez vos PDF.",
+  welcomeTagline:           "Lisez, annotez, signez et modifiez vos fichiers",
   welcomeOpen:              "Ouvrir un PDF",
-  welcomeDropHint:          "\u2026ou d\u00e9posez un PDF n\u2019importe o\u00f9 dans la fen\u00eatre",
-  welcomeFeatAnnotate:      "Annoter",
-  welcomeFeatAnnotateDesc:  "Texte, formes et surlignage",
-  welcomeFeatSign:          "Signer",
-  welcomeFeatSignDesc:      "Ajoutez votre signature",
+  welcomeDropHint:          "D\u00e9posez un fichier pour commencer",
+  welcomeFeatAnnotate:      "Annoter des fichiers",
+  welcomeFeatSign:          "Signer des documents",
+  welcomeFeatRedact:        "Caviarder du contenu",
   welcomeFeatPages:         "G\u00e9rer les pages",
-  welcomeFeatPagesDesc:     "R\u00e9organiser, pivoter, supprimer",
-  welcomeFeatSplit:         "Diviser",
-  welcomeFeatSplitDesc:     "Extraire des pages",
-  welcomeFeatCompress:      "Compresser",
-  welcomeFeatCompressDesc:  "R\u00e9duire la taille du fichier",
-  welcomeFeatPrint:         "Imprimer",
-  welcomeFeatPrintDesc:     "Choisir pages et imprimante",
+  welcomeFeatToImage:       "Convertir en image",
+  welcomeFeatCompress:      "Compresser des fichiers",
+  welcomeFeatProtect:       "Prot\u00e9ger des fichiers",
+  welcomeFeatResize:        "Redresser des scans",
+  welcomeFeatMerge:         "Fusionner des fichiers",
   msgUnsavedTitle:        "Modifications non enregistrées",
   msgCloseWithoutSaving:  "Fermer sans enregistrer ?",
   msgDiscardChanges:      "Abandonner les modifications non enregistrées et continuer ?",
