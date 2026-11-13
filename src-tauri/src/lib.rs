@@ -120,3 +120,18 @@ pub fn run() {
         .run(tauri::generate_context!())
         .expect("error while running tauri application")
 }
+
+#[cfg(test)]
+mod icon_tests {
+    /// Tauri makes the window (and so the taskbar) icon from the first image
+    /// of icon.ico: it must be the biggest one, or Windows blows up a 16 px
+    /// picture and the icon looks blurry.
+    #[test]
+    fn the_window_icon_is_the_biggest_image_of_icon_ico() {
+        let d = include_bytes!("../icons/icon.ico");
+        let count = u16::from_le_bytes([d[4], d[5]]) as usize;
+        let side = |i: usize| match d[6 + 16 * i] { 0 => 256, w => u32::from(w) };
+        assert!(count > 1);
+        assert_eq!(side(0), (0..count).map(side).max().unwrap());
+    }
+}
