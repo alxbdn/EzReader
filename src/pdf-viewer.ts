@@ -5,7 +5,7 @@ import { convertFileSrc } from "@tauri-apps/api/core";
 import workerUrl from "pdfjs-dist/build/pdf.worker.min.mjs?url";
 import { CanvasOverlay } from "./canvas-overlay";
 import { AnnotationStore } from "./annotation-store";
-import { defaultToolState, type ActiveToolState, type RedactAnnotation, CSS_UNITS } from "./models";
+import { defaultToolState, type ActiveToolState, type RedactAnnotation, CSS_UNITS, MIN_SCALE, MAX_SCALE } from "./models";
 import type { TextItem } from "pdfjs-dist/types/src/display/api";
 import { openUrl, type RedactedPage, type StraightenedPage } from "./tauri-bridge";
 import { warpToRect, type Point } from "./warp";
@@ -726,7 +726,22 @@ export class PdfViewer {
     await this._openDoc(convertFileSrc(filePath) + `?t=${Date.now()}`, password);
   }
 
-  private async _openDoc(url: string, password?: string): Promise<void> {
+  /**
+   * Shows a new version of the same document (after a page edit) without
+   * moving: the view rotation and the scroll position are kept.
+   */
+  async reload(filePath: string): Promise<void> {
+    const top = this.scrollEl.scrollTop;
+    const left = this.scrollEl.scrollLeft;
+    await this._openDoc(convertFileSrc(filePath) + `?t=${Date.now()}`, undefined, this._rotation);
+    this.scrollEl.scrollTop = top;
+    this.scrollEl.scrollLeft = left;
+    this._updateFocusedPage();
+    this._currentPage = this._focusedPage;
+    this._renderVisible();
+  }
+
+  private async _openDoc(url: string, password?: string, rotation = 0): Promise<void> {
     if (this.pdfDoc) {
       await this.pdfDoc.destroy();
       this.pdfDoc = null;
@@ -740,7 +755,7 @@ export class PdfViewer {
     this._pageCount   = this.pdfDoc.numPages;
     this._currentPage = 1;
     this._focusedPage = 1;
-    this._rotation    = 0;
+    this._rotation    = rotation;
 
     // Pre-fetch page dimensions (T010)
     this.pageDimensions = [];
@@ -936,9 +951,41 @@ export class PdfViewer {
 
   // ── Zoom / Rotate / Reflow (T022-T026) ──────────────────────────────────────
 
-  async setScale(scale: number): Promise<void> {
-    this._scale = Math.max(0.25 * CSS_UNITS, Math.min(5.0 * CSS_UNITS, scale));
+  /**
+   * Zooms to `scale`. With `anchor` (a point on screen, e.g. the mouse), the
+   * spot of the page under it stays under it, instead of jumping to the top
+   * of the current page.
+   */
+  async setScale(scale: number, anchor?: { x: number; y: number }): Promise<void> {
+    const next = Math.max(MIN_SCALE * CSS_UNITS, Math.min(MAX_SCALE * CSS_UNITS, scale));
+    const spot = anchor ? this._spotAt(anchor) : null;
+    this._scale = next;
     this.reflow();
+    if (spot && anchor) {
+      const r = this.pageViews[spot.page - 1]?.wrapper.getBoundingClientRect();
+      if (r) {
+        this.scrollEl.scrollLeft += r.left + spot.fx * r.width - anchor.x;
+        this.scrollEl.scrollTop  += r.top  + spot.fy * r.height - anchor.y;
+        this._renderVisible();
+      }
+    }
+  }
+
+  /** The page under a screen point and where on it (0–1), or the nearest page. */
+  private _spotAt(at: { x: number; y: number }): { page: number; fx: number; fy: number } | null {
+    let best: { page: number; fx: number; fy: number; d: number } | null = null;
+    for (const view of this.pageViews) {
+      const r = view.wrapper.getBoundingClientRect();
+      if (r.width <= 0 || r.height <= 0) continue;
+      const dx = at.x < r.left ? r.left - at.x : at.x > r.right ? at.x - r.right : 0;
+      const dy = at.y < r.top ? r.top - at.y : at.y > r.bottom ? at.y - r.bottom : 0;
+      const d = dx + dy;
+      if (!best || d < best.d) {
+        best = { page: view.pageNum, fx: (at.x - r.left) / r.width, fy: (at.y - r.top) / r.height, d };
+        if (d === 0) break;
+      }
+    }
+    return best;
   }
 
   async rotate(): Promise<void> {
@@ -984,19 +1031,26 @@ export class PdfViewer {
           this.scrollEl.scrollTop = savedScroll;
           this.scrollEl.scrollLeft = savedScrollX;
         }
-        const scrollRect = this.scrollEl.getBoundingClientRect();
-        for (const view of this.pageViews) {
-          const r = view.wrapper.getBoundingClientRect();
-          if (r.bottom > scrollRect.top - 200 && r.top < scrollRect.bottom + 200) {
-            void this._renderPage(view);
-          }
-        }
+        this._renderVisible();
         return;
       }
     }
 
     this.buildLayout();
     this.goToPage(savedPage, "instant");
+  }
+
+  /** Renders the pages on screen (and just around it) that need it. */
+  private _renderVisible(): void {
+    const scrollRect = this.scrollEl.getBoundingClientRect();
+    for (const view of this.pageViews) {
+      if (view.rendered) continue;
+      const r = view.wrapper.getBoundingClientRect();
+      if (r.bottom > scrollRect.top - 200 && r.top < scrollRect.bottom + 200 &&
+          r.right > scrollRect.left - 200 && r.left < scrollRect.right + 200) {
+        void this._renderPage(view);
+      }
+    }
   }
 
   restoreRotation(degrees: number): void {

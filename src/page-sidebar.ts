@@ -313,7 +313,8 @@ export class PageSidebar {
   }
 
   /** Highlights the page shown in the viewer and keeps it in view. */
-  setCurrentPage(page: number): void {
+  /** Marks the page shown in the viewer; `reveal` scrolls the panel to it. */
+  setCurrentPage(page: number, reveal = true): void {
     if (page === this.current) return;
     this.thumbs[this.current - 1]?.card.classList.remove("current");
     this.current = page;
@@ -322,7 +323,7 @@ export class PageSidebar {
     const t = this.thumbs[page - 1];
     if (!t) return;
     t.card.classList.add("current");
-    if (this._visible && !this.drag) this.scrollIntoViewIfNeeded(t.card);
+    if (reveal && this._visible && !this.drag) this.scrollIntoViewIfNeeded(t.card);
   }
 
   applyTranslations(t: Translations): void {

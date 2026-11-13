@@ -4,6 +4,8 @@ import {
   type FontFamilyValue,
   type RgbColor,
   CSS_UNITS,
+  MIN_SCALE,
+  MAX_SCALE,
 } from "./models";
 import { ToolRow, type SignatureChip } from "./tool-row";
 import type { Translations } from "./i18n";
@@ -683,11 +685,10 @@ export class Toolbar {
     this.reg(zoomIn, undefined, "ttZoomIn");
     zoomIn.addEventListener("click", () => this.emit({ type: "zoom-in" }));
 
-    // The percentage resets the zoom; a double click lets you type a value.
-    this.zoomLabel = this.btn("100 %", "Click to reset the zoom, double-click to type a value", "zoom-label");
+    // Clicking the percentage lets you type a value (Ctrl+0 resets the zoom).
+    this.zoomLabel = this.btn("100 %", "Click to type a zoom level (Ctrl+0 resets it)", "zoom-label");
     this.reg(this.zoomLabel, undefined, "ttZoomLabel");
-    this.zoomLabel.addEventListener("click", () => this.emit({ type: "zoom-reset" }));
-    this.zoomLabel.addEventListener("dblclick", () => this.startZoomEdit());
+    this.zoomLabel.addEventListener("click", () => this.startZoomEdit());
     this.zoomInput = document.createElement("input");
     this.zoomInput.type = "text";
     this.zoomInput.className = "zoom-input";
@@ -810,7 +811,7 @@ export class Toolbar {
   private commitZoomInput(): void {
     const raw = this.zoomInput.value.replace("%", "").trim();
     const pct = parseFloat(raw);
-    if (!isNaN(pct) && pct >= 10 && pct <= 500) {
+    if (!isNaN(pct) && pct >= MIN_SCALE * 100 && pct <= MAX_SCALE * 100) {
       const scale = Math.round(pct) / 100 * CSS_UNITS;
       this.updateZoom(scale);
       this.emit({ type: "zoom-set", scale });

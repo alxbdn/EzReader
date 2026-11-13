@@ -76,7 +76,7 @@ import { ask } from "@tauri-apps/plugin-dialog";
 // ── Zoom levels ───────────────────────────────────────────────────────────────
 
 // Zoom levels in internal (pdf.js) scale.  Each entry = user-visible fraction × CSS_UNITS.
-const ZOOM_LEVELS = [0.25, 0.33, 0.5, 0.67, 0.75, 0.9, 1.0, 1.1, 1.25, 1.5, 1.75, 2.0, 2.5, 3.0, 4.0, 5.0]
+const ZOOM_LEVELS = [0.1, 0.15, 0.2, 0.25, 0.33, 0.5, 0.67, 0.75, 0.9, 1.0, 1.1, 1.25, 1.5, 1.75, 2.0, 2.5, 3.0, 4.0, 5.0, 6.0, 8.0]
   .map(z => Math.round(z * CSS_UNITS * 1000) / 1000);
 
 function snapZoom(current: number, dir: 1 | -1): number {
@@ -559,10 +559,11 @@ async function openProtected(fp: string, password?: string | null): Promise<void
 }
 
 /** Fills the thumbnails sidebar from the document the viewer just opened. */
-function showThumbnails(): void {
+function showThumbnails(reload = false): void {
   if (!viewer.document) return;
   pageSidebar.load(viewer.document, viewer.pageDimensions, viewer.rotation);
-  pageSidebar.setCurrentPage(viewer.currentPage);
+  // After an edit the panel stays where the user left it.
+  pageSidebar.setCurrentPage(viewer.currentPage, !reload);
   // The text changed: search again (without jumping) if a term is entered.
   docSearch.reset(viewer.document);
   void runSearch(toolbar.search.query, false);
@@ -630,7 +631,7 @@ function setWelcomeVisible(visible: boolean): void {
  * Loads `path` into the viewer with its saved annotations. Returns the
  * working copy actually displayed, or null when `path` itself is shown.
  */
-async function showInViewer(path: string): Promise<string | null> {
+async function showInViewer(path: string, reload = false): Promise<string | null> {
   store.clear();
   formValues.clear();
 
@@ -646,8 +647,9 @@ async function showInViewer(path: string): Promise<string | null> {
     await stripAnnotationStreams(path, workingCopy);
   }
 
-  await viewer.load(workingCopy ?? path);
-  showThumbnails();
+  if (reload) await viewer.reload(workingCopy ?? path);
+  else await viewer.load(workingCopy ?? path);
+  showThumbnails(reload);
 
   history.clear();
   setWelcomeVisible(false);
@@ -815,7 +817,8 @@ async function renderForPrint(pages: number[]): Promise<string[]> {
  * Replaces the open document's pages with `slots` and shows the result.
  * Returns false when it failed (a toast says why).
  */
-async function applyPageLayout(slots: PageSlot[], keepPage = 1, select: number[] = []): Promise<boolean> {
+/** `keepPage` is the page to show afterwards; null stays exactly where the view is. */
+async function applyPageLayout(slots: PageSlot[], keepPage: number | null = 1, select: number[] = []): Promise<boolean> {
   const source = session.sourcePath;
   if (!source) return false;
   try {
@@ -825,10 +828,10 @@ async function applyPageLayout(slots: PageSlot[], keepPage = 1, select: number[]
     const tmpPath = await newTempPath(`pages-${await basename(source)}`);
     await rearrangePages(input, tmpPath, slots);
     // Still the same document: Save keeps writing to the source / Save As target.
-    const workingCopy = await showInViewer(tmpPath);
+    const workingCopy = await showInViewer(tmpPath, true);
     session.replacedWorkingCopy(workingCopy ?? tmpPath);
     setDirty(true);
-    if (keepPage > 1) viewer.goToPage(keepPage, "instant");
+    if (keepPage !== null && keepPage !== viewer.currentPage) viewer.goToPage(keepPage, "instant");
     pageSidebar.setSelection(select);
     return true;
   } catch (err) {
@@ -838,7 +841,7 @@ async function applyPageLayout(slots: PageSlot[], keepPage = 1, select: number[]
 }
 
 /** Runs a page edit from the panel, with the panel locked meanwhile. */
-async function editPages(slots: PageSlot[], keepPage: number, select: number[] = []): Promise<boolean> {
+async function editPages(slots: PageSlot[], keepPage: number | null, select: number[] = []): Promise<boolean> {
   if (!session.isOpen || !viewer.isLoaded()) return false;
   if (refuseIfProtected() || !toolbar.allowed()) return false;
   pageSidebar.setBusy(true);
@@ -932,7 +935,7 @@ async function applyAdjust(settings: PageSetting[]): Promise<boolean> {
       await straightenPages(out, tmp, pictures);
       out = tmp;
     }
-    const workingCopy = await showInViewer(out);
+    const workingCopy = await showInViewer(out, true);
     session.replacedWorkingCopy(workingCopy ?? out);
     setDirty(true);
     const pages = settings.map((s) => s.page);
@@ -973,7 +976,8 @@ pageSidebar.onRotate(async (pages, quarterTurns) => {
   const turn = new Set(pages);
   const rotation = (((quarterTurns * 90) % 360) + 360) % 360;
   const slots = currentSlots().map((s) => (s.kind === "original" && turn.has(s.page) ? { ...s, rotation } : s));
-  await editPages(slots, viewer.currentPage, pages);
+  // Same pages in the same order: nothing moves, neither the view nor the panel.
+  await editPages(slots, null, pages);
 });
 
 pageSidebar.onMove(async (pages, insertAt) => {
@@ -1145,7 +1149,7 @@ toolbar.on(async (e) => {
     case "zoom-out":
       if (viewer.isLoaded()) {
         fitMode = "none"; toolbar.updateFitMode(fitMode);
-        await viewer.setScale(snapZoom(viewer.scale, e.type === "zoom-in" ? 1 : -1));
+        await viewer.setScale(snapZoom(viewer.scale, e.type === "zoom-in" ? 1 : -1), viewerCenter());
         toolbar.updateZoom(viewer.scale);
       }
       break;
@@ -1157,7 +1161,7 @@ toolbar.on(async (e) => {
     case "zoom-set":
       if (viewer.isLoaded()) {
         fitMode = "none"; toolbar.updateFitMode(fitMode);
-        await viewer.setScale(e.scale);
+        await viewer.setScale(e.scale, viewerCenter());
         toolbar.updateZoom(viewer.scale);
       }
       break;
@@ -1534,7 +1538,7 @@ window.addEventListener("keydown", async (e: KeyboardEvent) => {
     if (!viewer.isLoaded()) return;
     e.preventDefault();
     fitMode = "none"; toolbar.updateFitMode(fitMode);
-    await viewer.setScale(snapZoom(viewer.scale, e.key === "-" ? -1 : 1));
+    await viewer.setScale(snapZoom(viewer.scale, e.key === "-" ? -1 : 1), viewerCenter());
     toolbar.updateZoom(viewer.scale);
     return;
   }
@@ -1719,10 +1723,32 @@ document.getElementById("viewer-scroll")!.addEventListener("wheel", async (e: Wh
   }
   if (!e.ctrlKey || !viewer.isLoaded()) return;
   e.preventDefault();
-  fitMode = "none"; toolbar.updateFitMode(fitMode);
-  await viewer.setScale(snapZoom(viewer.scale, e.deltaY < 0 ? 1 : -1));
-  toolbar.updateZoom(viewer.scale);
+  // Smooth zoom around the mouse: each wheel step scales a little, and the
+  // steps of one frame are applied together so a touchpad stays fluid.
+  const px = e.deltaMode === 1 ? e.deltaY * 40 : e.deltaMode === 2 ? e.deltaY * 400 : e.deltaY;
+  wheelZoom.factor *= Math.min(1.25, Math.max(0.8, Math.exp(-px * 0.0015)));
+  wheelZoom.anchor = { x: e.clientX, y: e.clientY };
+  if (wheelZoom.pending) return;
+  wheelZoom.pending = true;
+  requestAnimationFrame(async () => {
+    const { factor, anchor } = wheelZoom;
+    wheelZoom.factor = 1;
+    wheelZoom.pending = false;
+    fitMode = "none"; toolbar.updateFitMode(fitMode);
+    await viewer.setScale(viewer.scale * factor, anchor ?? undefined);
+    toolbar.updateZoom(viewer.scale);
+  });
 }, { passive: false });
+
+/** Ctrl+wheel steps waiting for the next frame. */
+const wheelZoom: { factor: number; anchor: { x: number; y: number } | null; pending: boolean } =
+  { factor: 1, anchor: null, pending: false };
+
+/** The middle of the page area: buttons and keys zoom around it. */
+function viewerCenter(): { x: number; y: number } {
+  const r = document.getElementById("viewer-scroll")!.getBoundingClientRect();
+  return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+}
 
 // ── Drag-drop ─────────────────────────────────────────────────────────────────
 
