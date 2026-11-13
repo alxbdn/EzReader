@@ -214,7 +214,10 @@ export class PasswordModal extends Modal {
       strong.textContent = this.tr("pwPassphrase", "passphrase");
       const ex = this.el("code");
       ex.textContent = this.tr("pwExample", "turtle-orange-jumps-7-times");
-      this.tip.append(a, strong, b1 ?? "", ex, b2 ?? "");
+      // "For example …" goes on its own line, after the first sentence.
+      const cut = (b1 ?? "").search(/[.。!！](?=[^.。!！]*$)/);
+      const [first, rest] = cut >= 0 ? [(b1 ?? "").slice(0, cut + 1), (b1 ?? "").slice(cut + 1).trimStart()] : [b1 ?? "", ""];
+      this.tip.append(a, strong, first, this.el("br"), rest, ex, b2 ?? "");
       const mismatch = this.confirmInput.value !== "" && this.confirmInput.value !== this.pw.value;
       this.confirmInput.classList.toggle("invalid", mismatch);
       this.okBtn.disabled = this.pw.value === "" || this.confirmInput.value !== this.pw.value;
