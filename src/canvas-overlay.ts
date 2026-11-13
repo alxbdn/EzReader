@@ -9,15 +9,18 @@ import {
   type Annotation,
   type CircleAnnotation,
   type HighlightAnnotation,
+  type ImageAnnotation,
   type InkAnnotation,
   type NoteAnnotation,
   type RectAnnotation,
   type RedactAnnotation,
   type RgbColor,
   type SignatureAnnotation,
+  type StampAnnotation,
   type TextAlignmentValue,
   type TextAnnotation,
   type ToolKind,
+  type FontFamilyValue,
   DRAW_TOOLS,
 } from "./models";
 
@@ -29,6 +32,33 @@ const NOTE_W = 150;
 const NOTE_H = 100;
 const NOTE_FONT = 10;
 const NOTE_PAD = 6;
+
+/** Size of a new check mark or cross, in PDF points. */
+const STAMP_SIZE = 22;
+
+/** Pictures keep their proportions when resized from a corner. */
+const KEEPS_RATIO = new Set<Annotation["kind"]>(["signature", "image", "stamp"]);
+
+/** Decoded pictures, by their base64 data, so redraws don't decode again. */
+const pictures = new Map<string, HTMLImageElement>();
+
+/** A picture's base64 data as an image URL (JPEG or PNG). */
+export function pictureSrc(b64: string): string {
+  return `data:image/${b64.startsWith("/9j/") ? "jpeg" : "png"};base64,${b64}`;
+}
+
+/** Text of the page under the Edit text tool, in PDF points. */
+export interface PageTextItem {
+  text: string;
+  /** Baseline start. */
+  x: number;
+  y: number;
+  width: number;
+  fontSize: number;
+  family: FontFamilyValue;
+  /** Page colour around the words, to paint them over. */
+  background: RgbColor;
+}
 
 /** Average glyph width (em) the PDF writer assumes when wrapping text. */
 const PDF_CHAR_W: Record<string, number> = { helvetica: 0.5, times: 0.45, courier: 0.6 };
@@ -101,6 +131,8 @@ export class CanvasOverlay {
   private dragStartPdfY = 0;
   /** Whether the current drag has reported "about to modify" yet. */
   private changeNotified = true;
+  /** Corner of a stretchable redaction being dragged, as page points. */
+  private vertexDrag: { ann: RedactAnnotation; index: number; pts: [number, number][] } | null = null;
 
   // ── Page state ──────────────────────────────────────────────────────────────
   private currentPage = 1;
@@ -178,6 +210,9 @@ export class CanvasOverlay {
   private emitShapeSelected (a: ShapeAnnotation | null): void { this.shapeSelectedHandlers.forEach(h => h(a)); }
 
   get currentTool(): ToolKind { return this.activeTool; }
+
+  /** Drawing a freeform redaction area. */
+  private get lassoing(): boolean { return this.activeTool === "redact" && this.style.redactShape === "lasso"; }
 
   /** Where the page's annotation layer is on screen. */
   get screenRect(): DOMRect { return this.canvas.getBoundingClientRect(); }
@@ -272,7 +307,8 @@ export class CanvasOverlay {
     this.pageHeightPt = pageHeightPt;
     this.viewport         = viewport ?? null;
     this.viewportRotation = viewport?.rotation ?? 0;
-    this.selected = null;
+    // A re-render (zoom, layout) keeps the selection if the annotation is still there.
+    if (this.selected && !annotations.includes(this.selected)) this.selected = null;
     this.dragging = false;
     this.resizing = false;
     this.dragTarget = null;
@@ -351,9 +387,36 @@ export class CanvasOverlay {
   }
 
   private handlesFor(ann: Annotation): ResizeHandle[] {
-    return ann.kind === "text"
-      ? ["w", "e"]
-      : ["nw", "n", "ne", "e", "se", "s", "sw", "w"];
+    if (ann.kind === "text") return ["w", "e"];
+    if (ann.kind === "redact" && ann.shape === "poly") return []; // its corners are the handles
+    if (KEEPS_RATIO.has(ann.kind)) return ["nw", "ne", "se", "sw"];
+    return ["nw", "n", "ne", "e", "se", "s", "sw", "w"];
+  }
+
+  /** Page points of a freeform or stretchable redaction's outline. */
+  private outlineOf(ann: RedactAnnotation): [number, number][] {
+    return (ann.points ?? []).map(([u, v]) => [ann.x + u * ann.width, ann.y + v * ann.height]);
+  }
+
+  /** Index of the stretchable redaction's corner under the cursor, if any. */
+  private hitVertex(cx: number, cy: number, ann: Annotation): number | null {
+    if (ann.kind !== "redact" || ann.shape !== "poly") return null;
+    const pts = this.outlineOf(ann);
+    for (let i = 0; i < pts.length; i++) {
+      const [x, y] = this.toCanvas(pts[i][0], pts[i][1]);
+      if (Math.hypot(cx - x, cy - y) <= HANDLE_HIT + 1) return i;
+    }
+    return null;
+  }
+
+  /** Stores page points as the box and points of `ann` (relative to the box). */
+  private setOutline(ann: RedactAnnotation, pts: [number, number][]): void {
+    const xs = pts.map(p => p[0]), ys = pts.map(p => p[1]);
+    const x0 = Math.min(...xs), y0 = Math.min(...ys);
+    const w = Math.max(Math.max(...xs) - x0, 1), h = Math.max(Math.max(...ys) - y0, 1);
+    const round = (n: number) => Math.round(n * 10000) / 10000;
+    ann.x = x0; ann.y = y0; ann.width = w; ann.height = h;
+    ann.points = pts.map(([x, y]) => [round((x - x0) / w), round((y - y0) / h)]);
   }
 
   private hitHandle(cx: number, cy: number, ann: Annotation): ResizeHandle | null {
@@ -439,6 +502,14 @@ export class CanvasOverlay {
         ann.y      = newBottom;
         ann.height = this.resizeAnchorY - newBottom;
       }
+      if (KEEPS_RATIO.has(ann.kind) && this.dragOrigW > 0 && this.dragOrigH > 0) {
+        // Follow the larger change and keep the proportions.
+        const k = Math.max(ann.width / this.dragOrigW, ann.height / this.dragOrigH);
+        ann.width = this.dragOrigW * k;
+        ann.height = this.dragOrigH * k;
+        if (h === "w" || h === "nw" || h === "sw") ann.x = this.resizeAnchorX - ann.width;
+        if (h === "s" || h === "se" || h === "sw") ann.y = this.resizeAnchorY - ann.height;
+      }
     }
   }
 
@@ -467,6 +538,19 @@ export class CanvasOverlay {
     this.ctx.setLineDash([5, 3]);
     this.ctx.strokeRect(box.left, box.top, box.right - box.left, box.bottom - box.top);
     this.ctx.setLineDash([]);
+
+    if (ann.kind === "redact" && ann.shape === "poly") {
+      this.ctx.fillStyle = "#fff";
+      this.ctx.strokeStyle = "#4d9eff";
+      this.ctx.lineWidth = 1.5;
+      for (const [px, py] of this.outlineOf(ann)) {
+        const [x, y] = this.toCanvas(px, py);
+        this.ctx.beginPath();
+        this.ctx.arc(x, y, HANDLE_R + 1, 0, Math.PI * 2);
+        this.ctx.fill();
+        this.ctx.stroke();
+      }
+    }
 
     // Draw resize handles
     const positions = this.handlePositions(box);
@@ -572,6 +656,11 @@ export class CanvasOverlay {
       this.drawNote(ann);
 
     } else if (ann.kind === "text") {
+      if (ann.cover) {
+        const c = this.boxOf(ann.cover);
+        ctx.fillStyle = rgbToCss(ann.cover.color);
+        ctx.fillRect(c.l, c.t, c.w, c.h);
+      }
       const [x, y] = this.toCanvas(ann.x, ann.y);
       const rotRad = (this.viewportRotation * Math.PI) / 180;
       ctx.save();
@@ -612,31 +701,78 @@ export class CanvasOverlay {
     } else if (ann.kind === "redact") {
       // Solid black like the saved result, with a red outline marking it as
       // a redaction that is still pending (not yet applied by a save).
-      const [x1, y1] = this.toCanvas(ann.x, ann.y + ann.height);
-      const [x2, y2] = this.toCanvas(ann.x + ann.width, ann.y);
-      const l = Math.min(x1, x2), t = Math.min(y1, y2);
-      const w = Math.abs(x2 - x1), h = Math.abs(y2 - y1);
+      this.redactPath(ann);
       ctx.fillStyle = "#000";
-      ctx.fillRect(l, t, w, h);
+      ctx.fill();
       ctx.strokeStyle = "#dc2626";
       ctx.lineWidth   = 1.5;
-      ctx.strokeRect(l + 0.75, t + 0.75, w - 1.5, h - 1.5);
+      ctx.stroke();
 
-    } else if (ann.kind === "signature") {
-      const [x, y] = this.toCanvas(ann.x, ann.y + ann.height); // PDF top-left → canvas anchor
-      const rotRad = (this.viewportRotation * Math.PI) / 180;
-      const w = ann.width * scale;
-      const h = ann.height * scale;
-      const img = new Image();
-      img.onload = () => {
-        this.ctx.save();
-        this.ctx.translate(x, y);
-        if (rotRad !== 0) this.ctx.rotate(rotRad);
-        this.ctx.drawImage(img, 0, 0, w, h);
-        this.ctx.restore();
-      };
-      img.src = `data:image/png;base64,${ann.imageData}`;
+    } else if (ann.kind === "signature" || ann.kind === "image") {
+      this.drawPicture(ann);
+
+    } else if (ann.kind === "stamp") {
+      this.drawStamp(ann);
     }
+  }
+
+  /** Outline of a redaction area as the current canvas path. */
+  private redactPath(ann: RedactAnnotation): void {
+    const ctx = this.ctx;
+    const b = this.boxOf(ann);
+    ctx.beginPath();
+    if (ann.shape === "ellipse") {
+      ctx.ellipse(b.l + b.w / 2, b.t + b.h / 2, b.w / 2, b.h / 2, 0, 0, Math.PI * 2);
+    } else if ((ann.shape === "lasso" || ann.shape === "poly") && ann.points && ann.points.length > 2) {
+      this.outlineOf(ann).forEach(([px, py], i) => {
+        const [x, y] = this.toCanvas(px, py);
+        if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+      });
+      ctx.closePath();
+    } else {
+      ctx.rect(b.l, b.t, b.w, b.h);
+    }
+  }
+
+  private drawPicture(ann: SignatureAnnotation | ImageAnnotation): void {
+    let img = pictures.get(ann.imageData);
+    if (!img) {
+      img = new Image();
+      img.onload = () => this.redrawCommitted();
+      img.src = pictureSrc(ann.imageData);
+      pictures.set(ann.imageData, img);
+    }
+    if (!img.complete || img.naturalWidth === 0) return;
+    const [x, y] = this.toCanvas(ann.x, ann.y + ann.height); // PDF top-left → canvas anchor
+    const rotRad = (this.viewportRotation * Math.PI) / 180;
+    this.ctx.save();
+    this.ctx.translate(x, y);
+    if (rotRad !== 0) this.ctx.rotate(rotRad);
+    this.ctx.drawImage(img, 0, 0, ann.width * this.scale, ann.height * this.scale);
+    this.ctx.restore();
+  }
+
+  /** Same strokes as the PDF writer: a check is one stroke, a cross two. */
+  private drawStamp(ann: StampAnnotation): void {
+    const ctx = this.ctx;
+    const at = (u: number, v: number) => this.toCanvas(ann.x + u * ann.width, ann.y + v * ann.height);
+    const strokes: [number, number][][] = ann.mark === "check"
+      ? [[[0.12, 0.52], [0.4, 0.22], [0.9, 0.82]]]
+      : [[[0.15, 0.85], [0.85, 0.15]], [[0.85, 0.85], [0.15, 0.15]]];
+    ctx.save();
+    ctx.strokeStyle = rgbToCss(ann.color);
+    ctx.lineWidth = Math.max(0.5, Math.min(ann.width, ann.height) * 0.14) * this.scale;
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+    for (const stroke of strokes) {
+      ctx.beginPath();
+      stroke.forEach(([u, v], i) => {
+        const [x, y] = at(u, v);
+        if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+      });
+      ctx.stroke();
+    }
+    ctx.restore();
   }
 
   /** Draws a stroke through canvas points, with an optional fill or arrowhead. */
@@ -755,11 +891,20 @@ export class CanvasOverlay {
     if (this.activeTool === "rect") {
       ctx.strokeRect(x0, y0, w, h);
     } else if (this.activeTool === "redact") {
+      ctx.beginPath();
+      if (this.lassoing) {
+        this.inkPts.forEach(([x, y], i) => (i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y)));
+        ctx.closePath();
+      } else if (this.style.redactShape === "ellipse") {
+        ctx.ellipse(x0 + w / 2, y0 + h / 2, w / 2, h / 2, 0, 0, Math.PI * 2);
+      } else {
+        ctx.rect(x0, y0, w, h);
+      }
       ctx.fillStyle = "rgba(0, 0, 0, 0.6)";
-      ctx.fillRect(x0, y0, w, h);
+      ctx.fill();
       ctx.strokeStyle = "#dc2626";
       ctx.lineWidth   = 1.5;
-      ctx.strokeRect(x0, y0, w, h);
+      ctx.stroke();
     } else if (this.activeTool === "circle") {
       ctx.beginPath();
       ctx.ellipse(x0 + w / 2, y0 + h / 2, w / 2, h / 2, 0, 0, Math.PI * 2);
@@ -789,10 +934,11 @@ export class CanvasOverlay {
 
     const hitAnn = this.hitTest(cx, cy);
     const hitH   = this.selected ? this.hitHandle(cx, cy, this.selected) : null;
-    const over   = hitAnn !== null || hitH !== null;
+    const hitV   = this.selected ? this.hitVertex(cx, cy, this.selected) : null;
+    const over   = hitAnn !== null || hitH !== null || hitV !== null;
 
     this.canvas.style.pointerEvents = over ? "auto" : "none";
-    this.canvas.style.cursor = over
+    this.canvas.style.cursor = hitV !== null ? "move" : over
       ? (hitH ? HANDLE_CURSORS[hitH] : "grab")
       : "default";
   };
@@ -808,7 +954,7 @@ export class CanvasOverlay {
 
     const hitAnn = this.hitTest(cx, cy);
     const hitH   = this.hitHandle(cx, cy, this.selected);
-    if (!hitAnn && !hitH) {
+    if (!hitAnn && !hitH && this.hitVertex(cx, cy, this.selected) === null) {
       this.selected = null;
       this.redrawCommitted();
       this.emitTextSelected(null);
@@ -820,6 +966,15 @@ export class CanvasOverlay {
     if (this.activeTool === "signature") return;
 
     if (this.activeTool === "select") {
+      // 0. A corner of the selected stretchable redaction
+      if (this.selected?.kind === "redact") {
+        const v = this.hitVertex(e.offsetX, e.offsetY, this.selected);
+        if (v !== null) {
+          this.changeNotified = false;
+          this.vertexDrag = { ann: this.selected, index: v, pts: this.outlineOf(this.selected) };
+          return;
+        }
+      }
       // 1. Check resize handle on selected annotation first
       if (this.selected) {
         const h = this.hitHandle(e.offsetX, e.offsetY, this.selected);
@@ -861,7 +1016,7 @@ export class CanvasOverlay {
       return;
     }
 
-    if (this.activeTool === "ink") this.inkPts = [[e.offsetX, e.offsetY]];
+    if (this.activeTool === "ink" || this.lassoing) this.inkPts = [[e.offsetX, e.offsetY]];
     this.isDrawing = true;
     this.startX = e.offsetX;
     this.startY = e.offsetY;
@@ -869,6 +1024,14 @@ export class CanvasOverlay {
 
   private onMouseMove = (e: MouseEvent): void => {
     if (this.activeTool === "select") {
+      if (this.vertexDrag) {
+        this.notifyChangeOnce();
+        const { ann, index, pts } = this.vertexDrag;
+        pts[index] = this.toPdf(e.offsetX, e.offsetY) as [number, number];
+        this.setOutline(ann, pts);
+        this.redrawCommitted();
+        return;
+      }
       if (this.resizing && this.dragTarget) {
         this.notifyChangeOnce();
         this.applyResize(e.offsetX, e.offsetY);
@@ -898,7 +1061,7 @@ export class CanvasOverlay {
     }
 
     if (!this.isDrawing) return;
-    if (this.activeTool === "ink") {
+    if (this.activeTool === "ink" || this.lassoing) {
       const last = this.inkPts[this.inkPts.length - 1];
       if (!last || Math.hypot(e.offsetX - last[0], e.offsetY - last[1]) >= 1.5) this.inkPts.push([e.offsetX, e.offsetY]);
     }
@@ -907,6 +1070,11 @@ export class CanvasOverlay {
 
   private onMouseUp = (e: MouseEvent): void => {
     if (this.activeTool === "select") {
+      if (this.vertexDrag) {
+        if (this.changeNotified) this.emitMoved(this.vertexDrag.ann);
+        this.vertexDrag = null;
+        return;
+      }
       if (this.resizing && this.dragTarget) {
         this.emitMoved(this.dragTarget);
         this.resizing     = false;
@@ -935,6 +1103,33 @@ export class CanvasOverlay {
       this.inkPts = [];
       const ann = this.makeInk(pts, this.activeTool === "arrow");
       if (ann) { this.committed.push(ann); this.emit(ann); }
+      this.redrawCommitted();
+      return;
+    }
+
+    if (this.activeTool === "stamp") {
+      const [px, py] = this.toPdf(this.startX, this.startY);
+      const ann: StampAnnotation = {
+        kind: "stamp", page: this.currentPage,
+        x: px - STAMP_SIZE / 2, y: py - STAMP_SIZE / 2, width: STAMP_SIZE, height: STAMP_SIZE,
+        mark: this.style.stampMark, color: { ...this.style.stampColor },
+      };
+      this.committed.push(ann);
+      this.redrawCommitted();
+      this.emit(ann);
+      return;
+    }
+
+    if (this.lassoing) {
+      const pts: [number, number][] = [...this.inkPts, [e.offsetX, e.offsetY]];
+      this.inkPts = [];
+      const xs = pts.map(p => p[0]), ys = pts.map(p => p[1]);
+      if (pts.length > 2 && Math.max(...xs) - Math.min(...xs) >= 4 && Math.max(...ys) - Math.min(...ys) >= 4) {
+        const ann: RedactAnnotation = { kind: "redact", page: this.currentPage, x: 0, y: 0, width: 1, height: 1, shape: "lasso" };
+        this.setOutline(ann, pts.map(([cx, cy]) => this.toPdf(cx, cy) as [number, number]));
+        this.committed.push(ann);
+        this.emit(ann);
+      }
       this.redrawCommitted();
       return;
     }
@@ -991,9 +1186,13 @@ export class CanvasOverlay {
       this.redrawCommitted();
       this.emit(ann);
     } else if (this.activeTool === "redact") {
+      const shape = this.style.redactShape;
       const ann: RedactAnnotation = {
         kind: "redact", page: this.currentPage,
         x: px, y: py, width: pw, height: ph,
+        ...(shape === "rect" ? {} : { shape }),
+        // A stretchable area starts as the rectangle drawn; drag its corners.
+        ...(shape === "poly" ? { points: [[0, 1], [1, 1], [1, 0], [0, 0]] as [number, number][] } : {}),
       };
       this.committed.push(ann);
       this.redrawCommitted();
@@ -1013,6 +1212,10 @@ export class CanvasOverlay {
   };
 
   private onMouseLeave = (): void => {
+    if (this.vertexDrag) {
+      if (this.changeNotified) this.emitMoved(this.vertexDrag.ann);
+      this.vertexDrag = null;
+    }
     if ((this.resizing || this.dragging) && this.dragTarget) {
       // Restore original geometry
       this.dragTarget.x     = this.dragOrigX;
@@ -1383,6 +1586,156 @@ export class CanvasOverlay {
     this.selected = ann;
     this.redrawCommitted();
     this.emitTextSelected(ann);
+  }
+
+  /** Places a picture centred on the given canvas point and selects it. */
+  placeImage(canvasX: number, canvasY: number, imageData: string, widthPt: number, heightPt: number): ImageAnnotation {
+    const [pdfX, pdfY] = this.toPdf(canvasX, canvasY);
+    const ann: ImageAnnotation = {
+      kind: "image", page: this.currentPage,
+      x: pdfX - widthPt / 2, y: pdfY - heightPt / 2,
+      width: widthPt, height: heightPt, imageData,
+    };
+    this.committed.push(ann);
+    this.selected = ann;
+    this.redrawCommitted();
+    return ann;
+  }
+
+  /** Size of the page in PDF points, as shown (rotation included). */
+  get pageSizePt(): { width: number; height: number } {
+    const r = this.canvas.getBoundingClientRect();
+    return { width: r.width / this.scale, height: r.height / this.scale };
+  }
+
+  // ── Redact text ─────────────────────────────────────────────────────────────
+
+  /**
+   * Marks the text under `rects` (canvas px, one per selected line) for
+   * redaction. Selecting text that is already marked takes the mark off.
+   */
+  applyRedactText(rects: { left: number; top: number; right: number; bottom: number }[]): void {
+    const pdfRects = rects
+      .filter(r => r.right - r.left > 0.5 && r.bottom - r.top > 0.5)
+      .map(r => {
+        const [x1, y1] = this.toPdf(r.left - 1, r.bottom + 1);
+        const [x2, y2] = this.toPdf(r.right + 1, r.top - 1);
+        return { x: Math.min(x1, x2), y: Math.min(y1, y2), width: Math.abs(x2 - x1), height: Math.abs(y2 - y1) };
+      });
+    if (pdfRects.length === 0) return;
+    const area = (r: { width: number; height: number }) => r.width * r.height;
+    const overlap = (a: typeof pdfRects[number], b: typeof pdfRects[number]) =>
+      Math.max(0, Math.min(a.x + a.width, b.x + b.width) - Math.max(a.x, b.x)) *
+      Math.max(0, Math.min(a.y + a.height, b.y + b.height) - Math.max(a.y, b.y));
+    const marked = this.committed.filter((a): a is RedactAnnotation => a.kind === "redact" && (a.shape ?? "rect") === "rect");
+    const touched = marked.filter(m => pdfRects.some(r => overlap(m, r) > 0));
+    const total = pdfRects.reduce((acc, r) => acc + area(r), 0);
+    const covered = pdfRects.reduce((acc, r) => acc + Math.min(area(r), touched.reduce((s2, m) => s2 + overlap(m, r), 0)), 0);
+
+    if (touched.length > 0 && covered >= total * 0.6) {
+      this.emitBeforeModify();
+      for (const m of touched) {
+        this.committed.splice(this.committed.indexOf(m), 1);
+        this.emitRemoved(m);
+      }
+      this.redrawCommitted();
+      return;
+    }
+    for (const r of pdfRects) {
+      const ann: RedactAnnotation = { kind: "redact", page: this.currentPage, ...r };
+      this.committed.push(ann);
+      this.emit(ann);
+    }
+    this.redrawCommitted();
+  }
+
+  // ── Edit text ───────────────────────────────────────────────────────────────
+
+  /** Opens text already added (or replaced) at the screen point for editing. */
+  editTextAt(clientX: number, clientY: number): boolean {
+    const r = this.canvas.getBoundingClientRect();
+    const hit = this.hitTest(clientX - r.left, clientY - r.top);
+    if (hit?.kind !== "text") return false;
+    this.handleTextEdit(hit);
+    return true;
+  }
+
+  /**
+   * Opens a box over existing text of the page to type its replacement.
+   * The result is text drawn over a patch of the page's own colour.
+   */
+  replaceText(item: PageTextItem): void {
+    const st = this.style;
+    const fs = st.fontSize * this.scale;
+    const [bx, by] = this.toCanvas(item.x, item.y); // baseline start
+    // Area of the original words: descent below the baseline, ascent above.
+    const cover = {
+      x: item.x - 1, y: item.y - item.fontSize * 0.28,
+      width: item.width + 2, height: item.fontSize * 1.18,
+      color: { ...item.background },
+    };
+    const c = this.boxOf(cover);
+
+    const input = document.createElement("div");
+    input.contentEditable = "true";
+    input.className = "etext-input";
+    input.textContent = item.text;
+    input.style.cssText = `
+      position: absolute; left: ${bx - 4}px; top: ${by - fs - 2}px; min-width: ${c.w + 8}px;
+      font-size: ${fs}px; line-height: 1.2; font-family: ${fontCss(st.fontFamily)};
+      font-weight: ${st.bold ? "bold" : "300"}; font-style: ${st.italic ? "italic" : "normal"};
+      text-decoration: ${st.underline ? "underline" : "none"};
+      color: ${rgbToCss(st.color)}; background: ${rgbToCss(item.background)};
+      outline: 1.5px dashed #4d9eff; padding: 2px 4px; white-space: pre; z-index: 20;
+    `;
+    const patch = document.createElement("div");
+    patch.style.cssText = `position: absolute; left: ${c.l}px; top: ${c.t}px; width: ${c.w}px; height: ${c.h}px;
+      background: ${rgbToCss(item.background)}; z-index: 19; pointer-events: none;`;
+
+    const close = (): void => {
+      input.remove();
+      patch.remove();
+      document.removeEventListener("mousedown", outside, true);
+    };
+    const commit = (): void => {
+      if (!input.isConnected) return;
+      const content = (input.innerText ?? input.textContent ?? "").replace(/\s+$/, "");
+      close();
+      if (content === item.text) return;
+      const s2 = this.style;
+      const ann: TextAnnotation = {
+        kind: "text", page: this.currentPage,
+        x: item.x, y: item.y,
+        width: Math.max(1, this.fitTextWidth(content || " ", s2)),
+        content: content || " ",
+        color: { ...s2.color }, fontSize: s2.fontSize,
+        bold: s2.bold, italic: s2.italic, underline: s2.underline,
+        alignment: "left", fontFamily: s2.fontFamily, backgroundColor: null,
+        cover,
+      };
+      this.committed.push(ann);
+      this.selected = ann;
+      this.redrawCommitted();
+      this.emit(ann);
+      this.emitTextSelected(ann);
+    };
+    const outside = (ev: MouseEvent): void => {
+      if (input.contains(ev.target as Node)) return;
+      // Clicking other text of the page moves on to that text.
+      commit();
+    };
+    input.addEventListener("keydown", (ev) => {
+      ev.stopPropagation();
+      if (ev.key === "Escape") { ev.preventDefault(); close(); }
+      else if (ev.key === "Enter") { ev.preventDefault(); commit(); }
+    });
+    this.container.append(patch, input);
+    input.focus();
+    const range = document.createRange();
+    range.selectNodeContents(input);
+    window.getSelection()?.removeAllRanges();
+    window.getSelection()?.addRange(range);
+    setTimeout(() => document.addEventListener("mousedown", outside, true), 0);
   }
 
   /** Place a signature image centred on the given canvas coordinates. */

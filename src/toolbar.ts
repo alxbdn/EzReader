@@ -56,6 +56,7 @@ export type ToolbarEvent =
   | { type: "signature-use"; id: string }
   | { type: "signature-delete"; id: string }
   | { type: "draft-apply" }
+  | { type: "image-browse" }
   | { type: "draft-discard" }
   | { type: "pages" }
   | { type: "toggle-sidebar" }

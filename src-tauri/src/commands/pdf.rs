@@ -343,6 +343,52 @@ pub enum PageSlot {
     Blank { width: f64, height: f64, rotation: i64 },
     /// Page `page` (1-based) of another PDF file at `path`.
     Imported { path: String, page: u32, rotation: i64 },
+    /// A new page showing a picture (base64 PNG or JPEG), sized to it.
+    Image { data: String, rotation: i64 },
+}
+
+/// Longest side of a page made from a picture (A4), in PDF points.
+const IMAGE_PAGE_LONG: f64 = 842.0;
+const IMAGE_PAGE_SHORT: f64 = 595.0;
+
+/// Size of the page that shows a `w` × `h` px picture: the picture fitted
+/// into A4 in its own orientation, with no margin.
+fn image_page_size(w: u32, h: u32) -> (f64, f64) {
+    let (w, h) = (f64::from(w.max(1)), f64::from(h.max(1)));
+    let (box_w, box_h) = if w > h { (IMAGE_PAGE_LONG, IMAGE_PAGE_SHORT) } else { (IMAGE_PAGE_SHORT, IMAGE_PAGE_LONG) };
+    let k = (box_w / w).min(box_h / h);
+    ((w * k * 100.0).round() / 100.0, (h * k * 100.0).round() / 100.0)
+}
+
+/// Adds a page showing the base64 picture `data` to `doc` and returns its id.
+fn image_page(doc: &mut Document, data: &str) -> Result<ObjectId, String> {
+    use base64::Engine;
+    let b64 = data.split_once(',').map_or(data, |(_, d)| d);
+    let bytes = base64::engine::general_purpose::STANDARD
+        .decode(b64)
+        .map_err(|e| format!("invalid image data: {e}"))?;
+    let (w, h) = image::ImageReader::new(std::io::Cursor::new(&bytes))
+        .with_guessed_format()
+        .map_err(|e| e.to_string())?
+        .into_dimensions()
+        .map_err(|e| format!("invalid image: {e}"))?;
+    let (img_id, _) = writer::embed_image(doc, &bytes)?;
+    let (pw, ph) = image_page_size(w, h);
+    let ops = format!("q\n{pw:.2} 0 0 {ph:.2} 0 0 cm\n/Im0 Do\nQ\n");
+    let contents = doc.add_object(lopdf::Stream::new(lopdf::Dictionary::new(), ops.into_bytes()));
+    let mut xobjects = lopdf::Dictionary::new();
+    xobjects.set("Im0", Object::Reference(img_id));
+    let mut resources = lopdf::Dictionary::new();
+    resources.set("XObject", Object::Dictionary(xobjects));
+    let mut dict = lopdf::Dictionary::new();
+    dict.set("Type", Object::Name(b"Page".to_vec()));
+    dict.set(
+        "MediaBox",
+        Object::Array(vec![0.into(), 0.into(), Object::Real(pw as f32), Object::Real(ph as f32)]),
+    );
+    dict.set("Resources", Object::Dictionary(resources));
+    dict.set("Contents", Object::Reference(contents));
+    Ok(doc.add_object(dict))
 }
 
 /// Attributes a page may inherit from its ancestors in the page tree
@@ -457,6 +503,7 @@ pub fn rearrange_pages(
                 dict.set("Contents", Object::Reference(contents));
                 (inc.new_document.add_object(dict), *rotation)
             }
+            PageSlot::Image { data, rotation } => (image_page(&mut inc.new_document, data)?, *rotation),
             PageSlot::Imported { path, rotation, .. } => {
                 let page_id = imported_ids[index].expect("reserved above");
                 importers
@@ -659,6 +706,13 @@ impl Importer {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn image_pages_fit_a4_in_their_orientation() {
+        assert_eq!(image_page_size(1000, 2000), (421.0, 842.0));
+        assert_eq!(image_page_size(3000, 2000), (842.0, 561.33));
+        assert_eq!(image_page_size(100, 100), (595.0, 595.0));
+    }
     use lopdf::{dictionary, ObjectId};
 
     use crate::test_util::{fixture, tmp};

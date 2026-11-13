@@ -26,6 +26,21 @@ pub fn open_pdf_dialog(app: AppHandle) -> Result<Option<String>, String> {
     Ok(picked)
 }
 
+/// Picture types that can be placed on a page or added as a page.
+pub const IMAGE_EXTENSIONS: [&str; 6] = ["png", "jpg", "jpeg", "webp", "gif", "bmp"];
+
+/// Opens a native file-picker dialog filtered to pictures.
+/// Returns the selected absolute path, or null if cancelled.
+#[tauri::command]
+pub fn open_image_dialog(app: AppHandle) -> Result<Option<String>, String> {
+    let result = app
+        .dialog()
+        .file()
+        .add_filter("Images", &IMAGE_EXTENSIONS)
+        .blocking_pick_file();
+    Ok(result.map(filepath_to_string))
+}
+
 /// Opens a native Save As dialog.
 /// Pre-fills the filename from `current_path` basename.
 /// Returns the chosen absolute path, or null if cancelled.

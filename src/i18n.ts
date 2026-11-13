@@ -333,6 +333,27 @@ export interface Translations {
   hintRedact?: string;
   hintPending?: string;
   hintPick?: string;
+  // Edit tools (optional, English fallback)
+  colInkBlue?: string;
+  toolEditText?: string;
+  toolImage?: string;
+  toolRedactText?: string;
+  toolRedactArea?: string;
+  toolCheck?: string;
+  toolCross?: string;
+  grpRedact?: string;
+  grpStamps?: string;
+  optBrowse?: string;
+  optImageDrop?: string;
+  optAreaShape?: string;
+  shapeStretch?: string;
+  optStampColor?: string;
+  hintEditText?: string;
+  hintImage?: string;
+  hintRedactText?: string;
+  hintStamp?: string;
+  msgImageFailed?: string;
+  msgDropImageOnPage?: string;
 }
 
 // ── English ───────────────────────────────────────────────────────────────────
@@ -495,7 +516,7 @@ const EN: Translations = {
   msgPasswordPrompt:      "This PDF is password-protected. Enter password:",
   msgWrongPassword:       "Wrong password or could not open file.",
   msgOpenFailed:          "Could not open file: {err}",
-  msgOnlyPdf:             "Only PDF files can be opened.",
+  msgOnlyPdf:             "Only PDF files and pictures can be dropped here.",
   msgSaved:               "Saved.",
   msgSaveFailed:          "Save failed: {err}",
   msgCompressed:          "Compressed: {from} MB → {to} MB ({pct}% smaller)",
@@ -654,6 +675,26 @@ const EN: Translations = {
   hintRedact: "Drag over what must disappear.",
   hintPending: "Validate or discard your changes to continue.",
   hintPick: "Pick a tool.",
+  colInkBlue: "Ink blue",
+  toolEditText: "Edit text",
+  toolImage: "Image",
+  toolRedactText: "Redact text",
+  toolRedactArea: "Redact an area",
+  toolCheck: "Check mark",
+  toolCross: "Cross",
+  grpRedact: "Redact",
+  grpStamps: "Stamps",
+  optBrowse: "Browse…",
+  optImageDrop: "or drop a picture on the page to place it, or in the side panel to add it as a new page",
+  optAreaShape: "Area shape",
+  shapeStretch: "Stretchable",
+  optStampColor: "Stamp color",
+  hintEditText: "Click existing text to replace it.",
+  hintImage: "Browse for a picture, or drop one on the page.",
+  hintRedactText: "Select text to redact it. Select it again to undo.",
+  hintStamp: "Click on the page to stamp.",
+  msgImageFailed: "Couldn't open this picture: {err}",
+  msgDropImageOnPage: "Drop the picture on a page to place it, or in the side panel to add it as a page.",
 };
 
 // ── French ────────────────────────────────────────────────────────────────────
@@ -816,7 +857,7 @@ const FR: Translations = {
   msgPasswordPrompt:      "Ce PDF est protégé par un mot de passe. Saisissez le mot de passe :",
   msgWrongPassword:       "Mot de passe incorrect ou fichier impossible à ouvrir.",
   msgOpenFailed:          "Impossible d'ouvrir le fichier : {err}",
-  msgOnlyPdf:             "Seuls les fichiers PDF peuvent être ouverts.",
+  msgOnlyPdf:             "Seuls les fichiers PDF et les images peuvent être déposés ici.",
   msgSaved:               "Enregistré.",
   msgSaveFailed:          "Échec de l'enregistrement : {err}",
   msgCompressed:          "Compressé : {from} Mo → {to} Mo ({pct} % plus léger)",
@@ -975,6 +1016,26 @@ const FR: Translations = {
   hintRedact: "Faites glisser sur ce qui doit disparaître.",
   hintPending: "Validez ou annulez vos modifications pour continuer.",
   hintPick: "Choisissez un outil.",
+  colInkBlue: "Bleu encre",
+  toolEditText: "Modifier le texte",
+  toolImage: "Image",
+  toolRedactText: "Caviarder du texte",
+  toolRedactArea: "Caviarder une zone",
+  toolCheck: "Coche",
+  toolCross: "Croix",
+  grpRedact: "Caviarder",
+  grpStamps: "Tampons",
+  optBrowse: "Parcourir…",
+  optImageDrop: "ou déposez une image sur la page pour la placer, ou dans le panneau latéral pour l'ajouter comme nouvelle page",
+  optAreaShape: "Forme de la zone",
+  shapeStretch: "Étirable",
+  optStampColor: "Couleur du tampon",
+  hintEditText: "Cliquez sur un texte existant pour le remplacer.",
+  hintImage: "Choisissez une image, ou déposez-en une sur la page.",
+  hintRedactText: "Sélectionnez du texte pour le caviarder. Resélectionnez-le pour annuler.",
+  hintStamp: "Cliquez sur la page pour tamponner.",
+  msgImageFailed: "Impossible d'ouvrir cette image : {err}",
+  msgDropImageOnPage: "Déposez l'image sur une page pour la placer, ou dans le panneau latéral pour l'ajouter comme page.",
 };
 
 // ── Chinese (Mandarin) ────────────────────────────────────────────────────────

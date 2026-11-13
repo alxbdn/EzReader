@@ -713,15 +713,39 @@ export class PageSidebar {
   private updateDropTarget(): void {
     const d = this.drag;
     if (!d) return;
+    d.insertAt = this.showGapAt(d.lastY);
+  }
+
+  /**
+   * Files dragged in from outside: the gap (number of pages before it) under
+   * the screen point, shown with the drop line, or null when the point is
+   * not over the panel (the line is hidden then).
+   */
+  externalDropAt(x: number, y: number): number | null {
+    const r = this.root.getBoundingClientRect();
+    if (this.root.hidden || this.thumbs.length === 0 || x < r.left || x > r.right || y < r.top || y > r.bottom) {
+      this.dropIndicator.classList.add("hidden");
+      return null;
+    }
+    return this.showGapAt(y);
+  }
+
+  hideExternalDrop(): void { this.dropIndicator.classList.add("hidden"); }
+
+  private showGapAt(y: number): number {
     let at = this.thumbs.length;
     for (const t of this.thumbs) {
       const r = t.card.getBoundingClientRect();
-      if (d.lastY < r.top + r.height / 2) {
+      if (y < r.top + r.height / 2) {
         at = t.page - 1;
         break;
       }
     }
-    d.insertAt = at;
+    this.placeDropLine(at);
+    return at;
+  }
+
+  private placeDropLine(at: number): void {
     const gap = 7; // half of the list's row gap
     const ref = this.thumbs[at] ?? this.thumbs[at - 1];
     if (!ref) return;

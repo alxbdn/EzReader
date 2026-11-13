@@ -105,3 +105,13 @@ export const ICON_OPT_FILL = lucide(`<path d="m19 11-8-8-8.6 8.6a2 2 0 0 0 0 2.8
 export const ICON_OPT_COLOR = lucide(`<circle cx="13.5" cy="6.5" r=".5" fill="currentColor"/><circle cx="17.5" cy="10.5" r=".5" fill="currentColor"/><circle cx="8.5" cy="7.5" r=".5" fill="currentColor"/><circle cx="6.5" cy="12.5" r=".5" fill="currentColor"/><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.93 0 1.65-.75 1.65-1.69 0-.44-.18-.84-.44-1.13-.29-.29-.44-.65-.44-1.13a1.64 1.64 0 0 1 1.67-1.67h2c3.05 0 5.56-2.5 5.56-5.55C21.97 6.01 17.46 2 12 2z"/>`);
 export const ICON_CHECK = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m4 12 5 5L20 6"/></svg>`;
 export const ICON_DISCARD = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" aria-hidden="true"><path d="M5 5l14 14M19 5 5 19"/></svg>`;
+
+// ── Edit tools ────────────────────────────────────────────────────────────────
+export const ICON_EDIT_TEXT = lucide(`<path d="M4 7V4h16v3"/><path d="M9 20h6"/><path d="M12 4v16"/>`);
+export const ICON_IMAGE = lucide(`<rect x="3" y="4" width="18" height="16" rx="2"/><path d="m21 15-5-5-9 9"/><circle cx="8.5" cy="9.5" r="1.5"/>`);
+export const ICON_REDACT_TEXT = lucide(`<path d="M4 6h16"/><rect x="4" y="10" width="16" height="5" rx="1" fill="currentColor" stroke="none"/><path d="M4 19h10"/>`);
+export const ICON_REDACT_AREA = lucide(`<rect x="4" y="4" width="16" height="16" rx="2" fill="currentColor" stroke="none"/>`);
+export const ICON_STAMP_CHECK = lucide(`<path d="m4 12 5 5L20 6"/>`);
+export const ICON_STAMP_CROSS = lucide(`<path d="M6 6l12 12"/><path d="M18 6 6 18"/>`);
+export const ICON_SHAPE_LASSO = lucide(`<path d="M6 5c5-3 13-1 13 5s-6 9-11 8-6-10-2-13z"/>`);
+export const ICON_SHAPE_POLY = lucide(`<path d="M4 7l9-3 7 8-5 8-9-2z"/><circle cx="4" cy="7" r="1.2" fill="currentColor"/><circle cx="13" cy="4" r="1.2" fill="currentColor"/><circle cx="20" cy="12" r="1.2" fill="currentColor"/><circle cx="15" cy="20" r="1.2" fill="currentColor"/><circle cx="6" cy="18" r="1.2" fill="currentColor"/>`);

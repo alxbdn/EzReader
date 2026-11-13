@@ -6,7 +6,8 @@ use lopdf::{dictionary, Document, Object, ObjectId, Stream, StringFormat};
 
 use super::models::{
     Annotation, CircleAnnotation, FontFamily, HighlightAnnotation, InkAnnotation, NoteAnnotation,
-    RectAnnotation, RgbColor, SignatureAnnotation, TextAlignment, TextAnnotation,
+    RectAnnotation, RgbColor, SignatureAnnotation, StampAnnotation, StampMark, TextAlignment,
+    TextAnnotation,
 };
 
 // ── Annotation metadata (JSON + stream-ID tracking) ──────────────────────────
@@ -319,6 +320,7 @@ pub fn write_note(buf: &mut Vec<u8>, ann: &NoteAnnotation) -> (&'static str, &'s
         alignment: TextAlignment::Left,
         font_family: FontFamily::Helvetica,
         background_color: None,
+        cover: None,
     };
     let font = write_text(buf, &text);
     buf.extend_from_slice(b"Q\n");
@@ -424,6 +426,12 @@ pub fn write_text(buf: &mut Vec<u8>, ann: &TextAnnotation) -> (&'static str, &'s
     let lines   = wrap_text(&ann.content, ann.width, char_w);
 
     let mut ops = String::from("q\n");
+    if let Some(c) = &ann.cover {
+        ops.push_str(&format!(
+            "{}{:.4} {:.4} {:.4} {:.4} re\nf\n",
+            rgb_fill(&c.color), c.x, c.y, c.width, c.height,
+        ));
+    }
     if let Some(bg) = &ann.background_color {
         // Box behind all lines, from the first line's ascent to the last one's descent.
         let n = lines.len().max(1) as f64;
@@ -480,8 +488,10 @@ pub fn write_text(buf: &mut Vec<u8>, ann: &TextAnnotation) -> (&'static str, &'s
     (fkey, fname)
 }
 
-/// Decode base64 PNG, embed as an image XObject with SMask for transparency,
-/// append `Do` operators to `buf`.
+/// Decode a base64 picture (PNG, JPEG, …), embed it as an image XObject and
+/// append the `Do` operators that draw it in `ann`'s box to `buf`.
+/// An opaque JPEG is embedded as is; anything else is decoded, with its
+/// transparency as an SMask, and Flate-compressed.
 /// Returns `(xobj_name, xobj_id, smask_id)` so the caller can add page resources.
 pub fn write_image(
     buf: &mut Vec<u8>,
@@ -491,60 +501,13 @@ pub fn write_image(
     // Decode base64 (strip data URI prefix if present)
     let b64 = ann
         .image_data
-        .splitn(2, ',')
-        .last()
-        .unwrap_or(&ann.image_data);
-    let png_bytes = base64::engine::general_purpose::STANDARD
+        .split_once(',')
+        .map_or(ann.image_data.as_str(), |(_, data)| data);
+    let bytes = base64::engine::general_purpose::STANDARD
         .decode(b64)
         .map_err(|e| format!("base64 decode error: {e}"))?;
 
-    // Decode image → RGBA
-    let img = ImageReader::new(std::io::Cursor::new(&png_bytes))
-        .with_guessed_format()
-        .map_err(|e| e.to_string())?
-        .decode()
-        .map_err(|e| e.to_string())?
-        .to_rgba8();
-
-    let (w, h) = img.dimensions();
-    let mut rgb_data: Vec<u8> = Vec::with_capacity((w * h * 3) as usize);
-    let mut alpha_data: Vec<u8> = Vec::with_capacity((w * h) as usize);
-
-    for pixel in img.pixels() {
-        rgb_data.push(pixel[0]);
-        rgb_data.push(pixel[1]);
-        rgb_data.push(pixel[2]);
-        alpha_data.push(pixel[3]);
-    }
-
-    // Create SMask (alpha channel XObject)
-    let smask_stream = Stream::new(
-        dictionary! {
-            "Type" => Object::Name(b"XObject".to_vec()),
-            "Subtype" => Object::Name(b"Image".to_vec()),
-            "Width" => Object::Integer(w as i64),
-            "Height" => Object::Integer(h as i64),
-            "ColorSpace" => Object::Name(b"DeviceGray".to_vec()),
-            "BitsPerComponent" => Object::Integer(8),
-        },
-        alpha_data,
-    );
-    let smask_id = doc.add_object(Object::Stream(smask_stream));
-
-    // Create main Image XObject
-    let img_stream = Stream::new(
-        dictionary! {
-            "Type" => Object::Name(b"XObject".to_vec()),
-            "Subtype" => Object::Name(b"Image".to_vec()),
-            "Width" => Object::Integer(w as i64),
-            "Height" => Object::Integer(h as i64),
-            "ColorSpace" => Object::Name(b"DeviceRGB".to_vec()),
-            "BitsPerComponent" => Object::Integer(8),
-            "SMask" => Object::Reference(smask_id),
-        },
-        rgb_data,
-    );
-    let img_id = doc.add_object(Object::Stream(img_stream));
+    let (img_id, smask_id) = embed_image(doc, &bytes)?;
 
     // A unique resource name for this image
     static IMG_COUNTER: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
@@ -558,7 +521,102 @@ pub fn write_image(
     );
     buf.extend_from_slice(ops.as_bytes());
 
-    Ok((xobj_name, img_id, Some(smask_id)))
+    Ok((xobj_name, img_id, smask_id))
+}
+
+/// Adds the picture in `bytes` to `doc` as an image XObject (and its SMask).
+pub fn embed_image(doc: &mut Document, bytes: &[u8]) -> Result<(ObjectId, Option<ObjectId>), String> {
+    let reader = ImageReader::new(std::io::Cursor::new(bytes))
+        .with_guessed_format()
+        .map_err(|e| e.to_string())?;
+    if reader.format() == Some(image::ImageFormat::Jpeg) {
+        // Photos stay as they are: no re-encoding, no loss, no growth.
+        // CMYK and grey JPEGs are converted to RGB below; plain RGB passes through.
+        use image::ImageDecoder;
+        let dec = image::codecs::jpeg::JpegDecoder::new(std::io::Cursor::new(bytes)).map_err(|e| e.to_string())?;
+        let (w, h) = dec.dimensions();
+        if dec.color_type() == image::ColorType::Rgb8 {
+            let mut img = Stream::new(
+                dictionary! {
+                    "Type" => "XObject",
+                    "Subtype" => "Image",
+                    "Width" => i64::from(w),
+                    "Height" => i64::from(h),
+                    "ColorSpace" => "DeviceRGB",
+                    "BitsPerComponent" => 8,
+                    "Filter" => "DCTDecode",
+                },
+                bytes.to_vec(),
+            );
+            img.allows_compression = false;
+            return Ok((doc.add_object(img), None));
+        }
+    }
+
+    let img = ImageReader::new(std::io::Cursor::new(bytes))
+        .with_guessed_format()
+        .map_err(|e| e.to_string())?
+        .decode()
+        .map_err(|e| e.to_string())?
+        .to_rgba8();
+
+    let (w, h) = img.dimensions();
+    let mut rgb_data: Vec<u8> = Vec::with_capacity((w * h * 3) as usize);
+    let mut alpha_data: Vec<u8> = Vec::with_capacity((w * h) as usize);
+    for pixel in img.pixels() {
+        rgb_data.extend_from_slice(&pixel.0[..3]);
+        alpha_data.push(pixel[3]);
+    }
+    let opaque = alpha_data.iter().all(|&a| a == 255);
+
+    let smask_id = if opaque {
+        None
+    } else {
+        let mut smask = Stream::new(
+            dictionary! {
+                "Type" => "XObject",
+                "Subtype" => "Image",
+                "Width" => i64::from(w),
+                "Height" => i64::from(h),
+                "ColorSpace" => "DeviceGray",
+                "BitsPerComponent" => 8,
+            },
+            alpha_data,
+        );
+        let _ = smask.compress();
+        Some(doc.add_object(smask))
+    };
+
+    let mut dict = dictionary! {
+        "Type" => "XObject",
+        "Subtype" => "Image",
+        "Width" => i64::from(w),
+        "Height" => i64::from(h),
+        "ColorSpace" => "DeviceRGB",
+        "BitsPerComponent" => 8,
+    };
+    if let Some(id) = smask_id {
+        dict.set("SMask", Object::Reference(id));
+    }
+    let mut stream = Stream::new(dict, rgb_data);
+    let _ = stream.compress();
+    Ok((doc.add_object(stream), smask_id))
+}
+
+/// Append a check mark or a cross, drawn with round strokes in its box.
+pub fn write_stamp(buf: &mut Vec<u8>, ann: &StampAnnotation) {
+    let (x, y, w, h) = (ann.x, ann.y, ann.width, ann.height);
+    let lw = (w.min(h) * 0.14).max(0.5);
+    let pt = |u: f64, v: f64| format!("{:.4} {:.4}", x + u * w, y + v * h);
+    let path = match ann.mark {
+        StampMark::Check => format!("{} m\n{} l\n{} l\nS\n", pt(0.12, 0.52), pt(0.4, 0.22), pt(0.9, 0.82)),
+        StampMark::Cross => format!(
+            "{} m\n{} l\nS\n{} m\n{} l\nS\n",
+            pt(0.15, 0.85), pt(0.85, 0.15), pt(0.85, 0.85), pt(0.15, 0.15),
+        ),
+    };
+    let ops = format!("q\n{}{:.4} w\n1 J\n1 j\n{}Q\n", rgb_stroke(&ann.color), lw, path);
+    buf.extend_from_slice(ops.as_bytes());
 }
 
 // ── Resource helpers ──────────────────────────────────────────────────────────
@@ -762,9 +820,13 @@ pub fn write_annotations_for_page(
                 fonts_needed.insert(fkey, fname);
                 None
             }
-            Annotation::Signature(s) => {
+            Annotation::Signature(s) | Annotation::Image(s) => {
                 let (name, img_id, _smask_id) = write_image(&mut ops, s, doc)?;
                 xobjects.push((name, img_id));
+                None
+            }
+            Annotation::Stamp(st) => {
+                write_stamp(&mut ops, st);
                 None
             }
         };
@@ -1033,6 +1095,86 @@ mod tests {
     fn red() -> RgbColor { RgbColor { r: 255, g: 0, b: 0 } }
     fn black() -> RgbColor { RgbColor { r: 0, g: 0, b: 0 } }
 
+    fn text_ann(content: &str) -> TextAnnotation {
+        TextAnnotation {
+            page: 1, x: 100.0, y: 500.0, width: 80.0,
+            content: content.into(), color: black(), font_size: 12.0,
+            bold: false, italic: false, underline: false,
+            alignment: TextAlignment::Left, font_family: FontFamily::Helvetica,
+            background_color: None, cover: None,
+        }
+    }
+
+    #[test]
+    fn test_edited_text_paints_its_cover_first() {
+        let mut ann = text_ann("New words");
+        ann.cover = Some(crate::pdf::models::TextCover {
+            x: 99.0, y: 496.0, width: 120.0, height: 14.0,
+            color: RgbColor { r: 250, g: 250, b: 245 },
+        });
+        let mut buf = Vec::new();
+        write_text(&mut buf, &ann);
+        let s = String::from_utf8(buf).unwrap();
+        let cover = s.find("99.0000 496.0000 120.0000 14.0000 re").expect("cover rectangle");
+        assert!(cover < s.find("BT").unwrap(), "cover must be painted under the text");
+        assert!(s.contains("0.9804 0.9804 0.9608 rg"), "cover uses the page colour: {s}");
+    }
+
+    #[test]
+    fn test_stamps_are_round_strokes() {
+        let mut ann = StampAnnotation {
+            page: 1, x: 10.0, y: 20.0, width: 20.0, height: 20.0,
+            mark: StampMark::Check, color: RgbColor { r: 30, g: 58, b: 138 },
+        };
+        let mut buf = Vec::new();
+        write_stamp(&mut buf, &ann);
+        let check = String::from_utf8(buf).unwrap();
+        assert!(check.contains("1 J\n1 j"), "round caps and joins: {check}");
+        assert!(check.contains("2.8000 w"), "line width from the box: {check}");
+        assert_eq!(check.matches(" m\n").count(), 1, "a check is one stroke");
+        assert!(check.contains("0.1176 0.2275 0.5412 RG"));
+
+        ann.mark = StampMark::Cross;
+        let mut buf = Vec::new();
+        write_stamp(&mut buf, &ann);
+        let cross = String::from_utf8(buf).unwrap();
+        assert_eq!(cross.matches(" m\n").count(), 2, "a cross is two strokes");
+    }
+
+    fn encode(img: image::DynamicImage, fmt: image::ImageFormat) -> Vec<u8> {
+        let mut out = std::io::Cursor::new(Vec::new());
+        img.write_to(&mut out, fmt).unwrap();
+        out.into_inner()
+    }
+
+    #[test]
+    fn test_jpeg_is_embedded_as_is() {
+        let jpeg = encode(image::DynamicImage::new_rgb8(40, 30), image::ImageFormat::Jpeg);
+        let mut doc = Document::with_version("1.7");
+        let (id, smask) = embed_image(&mut doc, &jpeg).unwrap();
+        assert!(smask.is_none());
+        let st = doc.get_object(id).unwrap().as_stream().unwrap();
+        assert_eq!(st.dict.get(b"Filter").unwrap().as_name().unwrap(), b"DCTDecode");
+        assert_eq!(st.content, jpeg, "the JPEG bytes pass through untouched");
+        assert_eq!(st.dict.get(b"Width").unwrap().as_i64().unwrap(), 40);
+    }
+
+    #[test]
+    fn test_png_gets_an_smask_only_when_translucent() {
+        let opaque = encode(image::DynamicImage::new_rgb8(8, 8), image::ImageFormat::Png);
+        let mut doc = Document::with_version("1.7");
+        let (id, smask) = embed_image(&mut doc, &opaque).unwrap();
+        assert!(smask.is_none(), "an opaque picture needs no mask");
+        let st = doc.get_object(id).unwrap().as_stream().unwrap();
+        assert_eq!(st.dict.get(b"Filter").unwrap().as_name().unwrap(), b"FlateDecode");
+
+        let clear = encode(image::DynamicImage::new_rgba8(8, 8), image::ImageFormat::Png);
+        let (id, smask) = embed_image(&mut doc, &clear).unwrap();
+        let smask = smask.expect("transparent picture keeps its alpha");
+        let st = doc.get_object(id).unwrap().as_stream().unwrap();
+        assert_eq!(st.dict.get(b"SMask").unwrap().as_reference().unwrap(), smask);
+    }
+
     #[test]
     fn test_write_rect_contains_operators() {
         let ann = RectAnnotation {
@@ -1161,6 +1303,7 @@ mod tests {
             color: black(), font_size: 12.0, bold: false, italic: false, underline: false,
             alignment: TextAlignment::Left, font_family: FontFamily::Helvetica,
             background_color: Some(red()),
+            cover: None,
         };
         let mut buf = Vec::new();
         write_text(&mut buf, &ann);
@@ -1205,6 +1348,7 @@ mod tests {
             alignment: TextAlignment::Left,
             font_family: FontFamily::Helvetica,
             background_color: None,
+            cover: None,
         };
         let mut buf = Vec::new();
         let (fkey, fname) = write_text(&mut buf, &ann);
@@ -1234,6 +1378,7 @@ mod tests {
             alignment: TextAlignment::Center,
             font_family: FontFamily::Helvetica,
             background_color: None,
+            cover: None,
         };
         let mut buf = Vec::new();
         let (fkey, fname) = write_text(&mut buf, &ann);
@@ -1256,6 +1401,7 @@ mod tests {
             alignment: TextAlignment::Left,
             font_family: FontFamily::Times,
             background_color: None,
+            cover: None,
         };
         let mut buf = Vec::new();
         let (fkey, fname) = write_text(&mut buf, &ann);
@@ -1564,6 +1710,7 @@ mod tests {
             alignment: TextAlignment::Left,
             font_family: FontFamily::Helvetica,
             background_color: None,
+            cover: None,
         });
 
         let mut meta = load_meta(&doc);
@@ -1633,6 +1780,7 @@ mod tests {
             bold: false, italic: false, underline: false, alignment: TextAlignment::Left,
             font_family: FontFamily::Helvetica,
             background_color: None,
+            cover: None,
         });
 
         // 2. First save (no existing meta)

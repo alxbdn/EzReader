@@ -767,6 +767,37 @@ input::placeholder { color: var(--muted-foreground); }
 
 #viewer-scroll .page-wrapper textarea { font-family: inherit; }
 
+/* Edit tools: icons only, in labelled groups */
+.edit-tools { display: flex; align-items: center; gap: 8px; }
+.edit-tools[hidden] { display: none; }
+.edit-tools .toolbar-segment { gap: 2px; }
+.edit-tools .tool-btn { padding: 0; width: 32px; justify-content: center; }
+.edit-tools .tool-btn > span { display: none; }
+.tool-group-label {
+  margin-left: 4px;
+  color: var(--muted-foreground);
+  font-size: 11px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.opt-browse {
+  height: 28px;
+  padding: 0 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--background);
+  color: var(--foreground);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+.opt-browse:hover { background: var(--accent); }
+
+/* Edit text: the words that can be clicked */
+#viewer-scroll.etext-mode .page-text-layer span { cursor: pointer; border-radius: 2px; }
+#viewer-scroll.etext-mode .page-text-layer span:hover { outline: 1.5px dashed #4d9eff; outline-offset: 1px; }
+
 /* ── Search pill (src/search-pill.ts) ──────────────────────────────────── */
 
 .search-pill {

@@ -232,7 +232,7 @@ export class PdfPageView {
 
     for (const rawItem of textContent.items) {
       if (!("str" in rawItem)) continue;
-      const item = rawItem as { str: string; transform: number[]; width: number; height: number };
+      const item = rawItem as { str: string; transform: number[]; width: number; height: number; fontName?: string };
       if (!item.str) continue;
 
       const [a, b, , , tx, ty] = item.transform;
@@ -257,6 +257,10 @@ export class PdfPageView {
       span.style.cursor          = "text";
       span.style.pointerEvents   = "auto";
       span.style.transformOrigin = "0% 100%";
+      // Where the words are on the page, for the Edit text tool.
+      span.dataset.pdf = [tx, ty, Math.hypot(a, b), item.width].map((n) => n.toFixed(2)).join(",");
+      const family = item.fontName ? textContent.styles[item.fontName]?.fontFamily : undefined;
+      if (family) span.dataset.family = family;
       span.style.setProperty("user-select",        "text");
       span.style.setProperty("-webkit-user-select", "text");
 
@@ -1132,13 +1136,32 @@ export async function renderRedactedPages(
       await page.render({ canvasContext: ctx, viewport }).promise;
 
       ctx.fillStyle = "#000";
+      ctx.strokeStyle = "#000";
+      // A 2 px stroke along curved outlines leaves no anti-aliased sliver.
+      ctx.lineWidth = 2;
       for (const a of areas) {
         const [x1, y1] = viewport.convertToViewportPoint(a.x, a.y);
         const [x2, y2] = viewport.convertToViewportPoint(a.x + a.width, a.y + a.height);
-        // Round outwards so no anti-aliased sliver of the content survives.
-        const left = Math.floor(Math.min(x1, x2)) - 1, top = Math.floor(Math.min(y1, y2)) - 1;
-        const right = Math.ceil(Math.max(x1, x2)) + 1, bottom = Math.ceil(Math.max(y1, y2)) + 1;
-        ctx.fillRect(left, top, right - left, bottom - top);
+        const shape = a.shape ?? "rect";
+        if (shape === "rect" || ((shape === "lasso" || shape === "poly") && (a.points?.length ?? 0) < 3)) {
+          // Round outwards so no anti-aliased sliver of the content survives.
+          const left = Math.floor(Math.min(x1, x2)) - 1, top = Math.floor(Math.min(y1, y2)) - 1;
+          const right = Math.ceil(Math.max(x1, x2)) + 1, bottom = Math.ceil(Math.max(y1, y2)) + 1;
+          ctx.fillRect(left, top, right - left, bottom - top);
+          continue;
+        }
+        ctx.beginPath();
+        if (shape === "ellipse") {
+          ctx.ellipse((x1 + x2) / 2, (y1 + y2) / 2, Math.abs(x2 - x1) / 2, Math.abs(y2 - y1) / 2, 0, 0, Math.PI * 2);
+        } else {
+          a.points!.forEach(([u, v], i) => {
+            const [x, y] = viewport.convertToViewportPoint(a.x + u * a.width, a.y + v * a.height);
+            if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+          });
+          ctx.closePath();
+        }
+        ctx.fill();
+        ctx.stroke();
       }
 
       const [v0, v1, v2, v3] = page.view;

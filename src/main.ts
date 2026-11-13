@@ -20,9 +20,12 @@ import {
   type Annotation,
   type FormFieldValue,
   type TextAnnotation,
+  type FontFamilyValue,
+  type RgbColor,
   CSS_UNITS,
 } from "./models";
-import type { ShapeAnnotation } from "./canvas-overlay";
+import type { PageTextItem, ShapeAnnotation } from "./canvas-overlay";
+import { fitWithin, isImagePath, loadPicture, type Picture } from "./pictures";
 import {
   openPdfDialog,
   getPageCount,
@@ -39,6 +42,7 @@ import {
   pickDirectoryDialog,
   redactPages,
   renameFile,
+  openImageDialog,
 } from "./tauri-bridge";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { mountWindowControls } from "./window-controls";
@@ -813,7 +817,11 @@ pageSidebar.onInsertBlank(async (after) => {
 
 pageSidebar.onInsertPdf(async (after) => {
   const path = await openPdfDialog();
-  if (!path) return;
+  if (path) await insertPdfAt(after, path);
+});
+
+/** Inserts every page of the PDF at `path` after page `after`. */
+async function insertPdfAt(after: number, path: string): Promise<void> {
   let count: number;
   try {
     count = await getPageCount(path);
@@ -823,7 +831,7 @@ pageSidebar.onInsertPdf(async (after) => {
   }
   if (count < 1) return;
   await insertSlots(after, Array.from({ length: count }, (_, i): PageSlot => ({ kind: "imported", path, page: i + 1, rotation: 0 })));
-});
+}
 
 pageSidebar.onExport(async (pages) => {
   const source = session.sourcePath;
@@ -1039,6 +1047,7 @@ toolbar.on(async (e) => {
 
     case "tool-change":
       toolState.tool = e.tool;
+      document.getElementById("viewer-scroll")!.classList.toggle("etext-mode", e.tool === "etext");
       updateHandMode();
       for (const pv of viewer.pageViews) pv.overlay.setTool(e.tool);
       editingTextAnn  = null;
@@ -1073,6 +1082,19 @@ toolbar.on(async (e) => {
     case "signature":
       sigModal.open();
       break;
+
+    case "image-browse": {
+      const path = await openImageDialog();
+      if (!path) break;
+      const pv = viewer.pageViews.find((p) => p.pageNum === viewer.currentPage);
+      if (!pv) break;
+      // Centred on the part of the page in view.
+      const r = pv.overlay.screenRect;
+      const view = document.getElementById("viewer-scroll")!.getBoundingClientRect();
+      const top = Math.max(r.top, view.top), bottom = Math.min(r.bottom, view.bottom);
+      await placePicture(path, pv, r.width / 2, (top + bottom) / 2 - r.top);
+      break;
+    }
 
     case "signature-use": {
       const sig = sigStore.getAll().find((x) => x.id === e.id);
@@ -1328,10 +1350,111 @@ window.addEventListener("keydown", async (e: KeyboardEvent) => {
   }
 });
 
+// ── Edit text: click existing words to replace them ──────────────────────────
+
+/** PDF font family that looks like the one pdf.js reports for the text. */
+function familyOf(css: string | undefined): FontFamilyValue {
+  if (!css) return "helvetica";
+  if (/mono|courier/i.test(css)) return "courier";
+  if (/serif/i.test(css) && !/sans/i.test(css)) return "times";
+  return "helvetica";
+}
+
+/** The page's colour around `r` (screen px), read from the rendered page. */
+function backgroundAround(wrapper: HTMLElement, r: DOMRect): RgbColor {
+  const canvas = wrapper.querySelector<HTMLCanvasElement>(".page-canvas");
+  const ctx = canvas?.getContext("2d", { willReadFrequently: true });
+  if (!canvas || !ctx) return { r: 255, g: 255, b: 255 };
+  const box = canvas.getBoundingClientRect();
+  const kx = canvas.width / box.width, ky = canvas.height / box.height;
+  const counts = new Map<string, number>();
+  const points = [
+    [r.left - 3, r.top - 2], [r.right + 3, r.top - 2], [r.left - 3, r.bottom + 2], [r.right + 3, r.bottom + 2],
+    [r.left + r.width / 2, r.top - 2], [r.left + r.width / 2, r.bottom + 2],
+  ];
+  let best: RgbColor = { r: 255, g: 255, b: 255 }, bestN = 0;
+  for (const [x, y] of points) {
+    const px = Math.round((x - box.left) * kx), py = Math.round((y - box.top) * ky);
+    if (px < 0 || py < 0 || px >= canvas.width || py >= canvas.height) continue;
+    const [cr, cg, cb] = ctx.getImageData(px, py, 1, 1).data;
+    const key = `${cr},${cg},${cb}`;
+    const n = (counts.get(key) ?? 0) + 1;
+    counts.set(key, n);
+    if (n > bestN) { bestN = n; best = { r: cr, g: cg, b: cb }; }
+  }
+  return best;
+}
+
+document.getElementById("viewer-scroll")!.addEventListener("click", (e: MouseEvent) => {
+  if (toolState.tool !== "etext") return;
+  const wrapper = (e.target as HTMLElement).closest<HTMLElement>(".page-wrapper");
+  const pv = wrapper && viewer.pageViews.find((p) => p.pageNum === Number(wrapper.dataset.page));
+  if (!wrapper || !pv) return;
+  // Text replaced earlier is edited again, not the original under it.
+  if (pv.overlay.editTextAt(e.clientX, e.clientY)) { e.preventDefault(); return; }
+  const span = (e.target as HTMLElement).closest<HTMLElement>(".page-text-layer span");
+  if (!span || !span.dataset.pdf) return;
+  e.preventDefault();
+  window.getSelection()?.removeAllRanges();
+  const [x, y, fontSize, width] = span.dataset.pdf.split(",").map(Number);
+  const item: PageTextItem = {
+    text: span.dataset.text ?? span.textContent ?? "",
+    x, y, width, fontSize,
+    family: familyOf(span.dataset.family),
+    background: backgroundAround(wrapper, span.getBoundingClientRect()),
+  };
+  // The new text starts out like the old one; the options can change it.
+  const style = {
+    color: { r: 0, g: 0, b: 0 }, fontSize: Math.max(4, Math.round(fontSize)),
+    bold: false, italic: false, underline: false, fontFamily: item.family, backgroundColor: null,
+  };
+  Object.assign(toolState, { ...style, textBackground: null });
+  for (const p of viewer.pageViews) p.overlay.setStyle(toolState);
+  toolbar.showTextStyles(style);
+  pv.overlay.replaceText(item);
+});
+
+// ── Pictures: placed on a page, or added as a page ───────────────────────────
+
+/** Reads the picture at `path`; shows an error and returns null if it can't. */
+async function readPicture(path: string): Promise<Picture | null> {
+  try {
+    return await loadPicture(path);
+  } catch (err) {
+    showToast(msg("msgImageFailed", { err: String(err) }), true);
+    return null;
+  }
+}
+
+/** Places the picture at `path` centred on (x, y), canvas px of `pv`'s page. */
+async function placePicture(path: string, pv: PdfPageView, x: number, y: number): Promise<void> {
+  const pic = await readPicture(path);
+  if (!pic) return;
+  // Natural size at 96 dpi, at most 60 % of the page.
+  const page = pv.overlay.pageSizePt;
+  const size = fitWithin(pic.width * 0.75, pic.height * 0.75, page.width * 0.6, page.height * 0.6);
+  beginChange();
+  const ann = pv.overlay.placeImage(x, y, pic.data, size.width, size.height);
+  store.add(ann);
+  setDirty(true);
+  // Ready to move and resize right away.
+  if (toolState.tool !== "select") toolbar.clearActiveTool();
+}
+
+/** Adds each picture as a new page, after page `after`. */
+async function insertPictures(after: number, paths: string[]): Promise<void> {
+  const slots: PageSlot[] = [];
+  for (const path of paths) {
+    const pic = await readPicture(path);
+    if (pic) slots.push({ kind: "image", data: pic.data, rotation: 0 });
+  }
+  if (slots.length > 0) await insertSlots(after, slots);
+}
+
 // ── Highlighter: applies to the text selected while it is on ─────────────────
 
 document.getElementById("viewer-scroll")!.addEventListener("mouseup", () => {
-  if (toolState.tool !== "highlight") return;
+  if (toolState.tool !== "highlight" && toolState.tool !== "redact-text") return;
   // Let the browser finish the selection first.
   setTimeout(() => {
     const sel = window.getSelection();
@@ -1367,7 +1490,10 @@ document.getElementById("viewer-scroll")!.addEventListener("mouseup", () => {
       } else list.push(next);
       byPage.set(pv, list);
     }
-    for (const [pv, list] of byPage) pv.overlay.applyHighlight(list, toolState.highlightColor, toolState.highlightOpacity);
+    for (const [pv, list] of byPage) {
+      if (toolState.tool === "redact-text") pv.overlay.applyRedactText(list);
+      else pv.overlay.applyHighlight(list, toolState.highlightColor, toolState.highlightOpacity);
+    }
   }, 0);
 });
 
@@ -1391,21 +1517,57 @@ document.getElementById("viewer-scroll")!.addEventListener("wheel", async (e: Wh
 
 // ── Drag-drop ─────────────────────────────────────────────────────────────────
 
+/**
+ * Files dropped on the window. In the side panel, PDFs and pictures are
+ * inserted where they land; a picture dropped on a page is placed there;
+ * otherwise a PDF is opened.
+ */
+async function handleDrop(paths: string[], at: { x: number; y: number } | null, gap: number | null): Promise<void> {
+  const pdfs = paths.filter((p) => p.toLowerCase().endsWith(".pdf"));
+  const images = paths.filter(isImagePath);
+  if (pdfs.length === 0 && images.length === 0) {
+    if (paths.length > 0) showToast(msg("msgOnlyPdf"), true);
+    return;
+  }
+  if (gap !== null && viewer.isLoaded()) {
+    if (!toolbar.allowed()) return;
+    if (images.length > 0) await insertPictures(gap, images);
+    else await insertPdfAt(gap, pdfs[0]);
+    return;
+  }
+  if (images.length > 0 && at && viewer.isLoaded()) {
+    const wrapper = document.elementFromPoint(at.x, at.y)?.closest<HTMLElement>(".page-wrapper");
+    const pv = wrapper && viewer.pageViews.find((v) => v.pageNum === Number(wrapper.dataset.page));
+    if (pv) {
+      const r = pv.overlay.screenRect;
+      await placePicture(images[0], pv, at.x - r.left, at.y - r.top);
+      return;
+    }
+  }
+  if (pdfs.length > 0) {
+    if (await confirmUnsaved()) void loadPdf(pdfs[0]);
+  } else {
+    showToast(msg("msgDropImageOnPage"));
+  }
+}
+
 (async () => {
   try {
     await appWindow.onDragDropEvent(async (event) => {
-      if (event.payload.type === "over") {
+      const p = event.payload;
+      // Physical pixels → CSS pixels of the page.
+      const at = "position" in p ? { x: p.position.x / devicePixelRatio, y: p.position.y / devicePixelRatio } : null;
+      if (p.type === "over" || p.type === "enter") {
         document.body.classList.add("drag-over");
-      } else if (event.payload.type === "leave") {
+        if (at && viewer.isLoaded()) pageSidebar.externalDropAt(at.x, at.y);
+      } else if (p.type === "leave") {
         document.body.classList.remove("drag-over");
-      } else if (event.payload.type === "drop") {
+        pageSidebar.hideExternalDrop();
+      } else if (p.type === "drop") {
         document.body.classList.remove("drag-over");
-        const pdfPath = event.payload.paths.find((p: string) => p.toLowerCase().endsWith(".pdf"));
-        if (pdfPath) {
-          if (await confirmUnsaved()) void loadPdf(pdfPath);
-        } else if (event.payload.paths.length > 0) {
-          showToast(msg("msgOnlyPdf"), true);
-        }
+        const gap = at && viewer.isLoaded() ? pageSidebar.externalDropAt(at.x, at.y) : null;
+        pageSidebar.hideExternalDrop();
+        await handleDrop(p.paths, at, gap);
       }
     });
   } catch {

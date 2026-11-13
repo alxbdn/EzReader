@@ -88,3 +88,27 @@ mod tests {
         let _ = std::fs::remove_dir_all(d);
     }
 }
+
+/// Largest picture accepted from disk.
+const MAX_IMAGE_BYTES: u64 = 64 * 1024 * 1024;
+
+/// Reads a picture (by its extension) and returns its bytes as base64.
+#[tauri::command]
+pub fn read_image_file(path: String) -> Result<String, String> {
+    use base64::Engine;
+    let p = std::path::Path::new(&path);
+    let ext = p
+        .extension()
+        .and_then(|e| e.to_str())
+        .map(str::to_ascii_lowercase)
+        .unwrap_or_default();
+    if !crate::commands::dialog::IMAGE_EXTENSIONS.contains(&ext.as_str()) {
+        return Err("not an image".into());
+    }
+    let len = std::fs::metadata(p).map_err(|e| e.to_string())?.len();
+    if len > MAX_IMAGE_BYTES {
+        return Err("too large".into());
+    }
+    let bytes = std::fs::read(p).map_err(|e| e.to_string())?;
+    Ok(base64::engine::general_purpose::STANDARD.encode(bytes))
+}
