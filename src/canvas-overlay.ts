@@ -1756,7 +1756,7 @@ export class CanvasOverlay implements SelectionOwner {
       border: ${0.75 * scale}px solid ${rgbToCss(darker)}; border-radius: 0; outline: none;
       background: ${rgbToCss(ann.color)}; box-shadow: 0 2px 6px rgba(0,0,0,0.18); color: #262626;
       font: ${NOTE_FONT * scale}px/1.2 ${fontCss("helvetica")}; z-index: 20;
-      overflow-x: hidden; overflow-y: auto; overflow-wrap: break-word; scrollbar-width: thin;
+      overflow-x: hidden; overflow-y: auto; overflow-wrap: break-word;
     `;
     const done = (keep: boolean): void => {
       if (!area.isConnected) return;
