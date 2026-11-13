@@ -5,7 +5,7 @@ use image::ImageReader;
 use lopdf::{dictionary, Document, Object, ObjectId, Stream, StringFormat};
 
 use super::models::{
-    Annotation, CircleAnnotation, FontFamily, HighlightAnnotation, InkAnnotation, NoteAnnotation,
+    Annotation, CircleAnnotation, FontFamily, HighlightAnnotation, InkAnnotation, InkVector, NoteAnnotation,
     RectAnnotation, RgbColor, SignatureAnnotation, StampAnnotation, StampMark, TextAlignment,
     TextAnnotation,
 };
@@ -524,6 +524,33 @@ pub fn write_image(
     Ok((xobj_name, img_id, smask_id))
 }
 
+/// A vector that can be drawn: a non-empty box and whole, finite segments.
+fn write_vector_ok(v: &InkVector) -> bool {
+    v.w > 0.0 && v.h > 0.0 && !v.segs.is_empty() && v.segs.len().is_multiple_of(9)
+        && v.segs.iter().all(|n| n.is_finite())
+}
+
+/// A drawn signature as curves: each segment stroked with its own width,
+/// round caps, the box mapped onto the annotation (y flipped), like the canvas.
+pub fn write_signature_vector(buf: &mut Vec<u8>, ann: &SignatureAnnotation) {
+    let Some(v) = ann.vector.as_ref() else { return };
+    let mut ops = format!(
+        "q\n0.0588 0.0588 0.1373 RG\n1 J\n1 j\n{:.6} 0 0 {:.6} {:.4} {:.4} cm\n",
+        ann.width / v.w,
+        -ann.height / v.h,
+        ann.x,
+        ann.y + ann.height,
+    );
+    for s in v.segs.chunks_exact(9) {
+        ops.push_str(&format!(
+            "{:.3} w\n{:.2} {:.2} m\n{:.2} {:.2} {:.2} {:.2} {:.2} {:.2} c\nS\n",
+            s[8], s[0], s[1], s[2], s[3], s[4], s[5], s[6], s[7],
+        ));
+    }
+    ops.push_str("Q\n");
+    buf.extend_from_slice(ops.as_bytes());
+}
+
 /// Adds the picture in `bytes` to `doc` as an image XObject (and its SMask).
 pub fn embed_image(doc: &mut Document, bytes: &[u8]) -> Result<(ObjectId, Option<ObjectId>), String> {
     let reader = ImageReader::new(std::io::Cursor::new(bytes))
@@ -818,6 +845,10 @@ pub fn write_annotations_for_page(
             Annotation::Text(t) => {
                 let (fkey, fname) = write_text(&mut ops, t);
                 fonts_needed.insert(fkey, fname);
+                None
+            }
+            Annotation::Signature(s) if s.vector.as_ref().is_some_and(write_vector_ok) => {
+                write_signature_vector(&mut ops, s);
                 None
             }
             Annotation::Signature(s) | Annotation::Image(s) => {
@@ -1439,6 +1470,7 @@ mod tests {
             x: 10.0, y: 10.0,
             width: 50.0, height: 20.0,
             image_data: b64,
+            vector: None,
         };
 
         let mut doc = Document::new();
@@ -1449,6 +1481,43 @@ mod tests {
         assert!(s.contains("Do"), "missing XObject Do operator");
         assert!(s.contains(" cm\n"), "missing transformation matrix");
         assert!(s.contains(&name), "resource name not in content stream");
+    }
+
+    #[test]
+    fn a_drawn_signature_is_written_as_curves_not_a_picture() {
+        let ann = SignatureAnnotation {
+            page: 1,
+            x: 10.0, y: 20.0,
+            width: 100.0, height: 40.0,
+            image_data: String::new(),
+            vector: Some(InkVector { w: 50.0, h: 20.0, segs: vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 2.5] }),
+        };
+        assert!(write_vector_ok(ann.vector.as_ref().unwrap()));
+        let mut buf = Vec::new();
+        write_signature_vector(&mut buf, &ann);
+        let s = String::from_utf8(buf).unwrap();
+        // Box 50 × 20 onto 100 × 40 at (10, 20), y flipped from the top edge.
+        assert!(s.contains("2.000000 0 0 -2.000000 10.0000 60.0000 cm"), "{s}");
+        assert!(s.contains("2.500 w\n1.00 2.00 m\n3.00 4.00 5.00 6.00 7.00 8.00 c\nS"), "{s}");
+        assert!(s.contains("1 J"));
+        assert!(!s.contains("Do"));
+    }
+
+    #[test]
+    fn a_broken_vector_falls_back_to_the_picture() {
+        let bad = |w: f64, segs: Vec<f64>| InkVector { w, h: 1.0, segs };
+        assert!(!write_vector_ok(&bad(0.0, vec![0.0; 9])));
+        assert!(!write_vector_ok(&bad(1.0, vec![0.0; 8])));
+        assert!(!write_vector_ok(&bad(1.0, vec![])));
+        assert!(!write_vector_ok(&bad(1.0, [vec![0.0; 8], vec![f64::NAN]].concat())));
+    }
+
+    #[test]
+    fn signatures_without_a_vector_still_read() {
+        let json = r#"{"page":1,"x":0,"y":0,"width":1,"height":1,"imageData":"AAAA"}"#;
+        let ann: SignatureAnnotation = serde_json::from_str(json).unwrap();
+        assert!(ann.vector.is_none());
+        assert!(!serde_json::to_string(&ann).unwrap().contains("vector"));
     }
 
     /// Helper: create a minimal valid PDF document with a catalog that has a Root

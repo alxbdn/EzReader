@@ -144,12 +144,25 @@ export interface TextAnnotation extends BaseAnnotation {
 
 export interface TextCover { x: number; y: number; width: number; height: number; color: RgbColor }
 
+/**
+ * A drawn signature as vectors: round-capped Bézier segments in a `w` × `h`
+ * box (y down), sharp at any size on screen and in the saved PDF.
+ */
+export interface InkVector {
+  w: number;
+  h: number;
+  /** x0 y0 c1x c1y c2x c2y x1 y1 lineWidth, 9 numbers per segment. */
+  segs: number[];
+}
+
 export interface SignatureAnnotation extends BaseAnnotation {
   kind: "signature";
   width: number;
   height: number;
-  /** Base64-encoded PNG (no data: URI prefix) */
+  /** Base64-encoded PNG (no data: URI prefix); a picture of `vector` when there is one. */
   imageData: string;
+  /** The pen strokes of a drawn signature; drawn instead of `imageData`. */
+  vector?: InkVector;
 }
 
 /** A picture placed on the page; same fields as a signature. */

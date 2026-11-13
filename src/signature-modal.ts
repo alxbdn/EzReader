@@ -1,130 +1,14 @@
 import { SignatureStore } from "./signature-store";
+import type { InkVector } from "./models";
+import { drawVector, fitVector, strokeSegments, vectorToPng } from "./signature-ink";
 
-type SignatureReadyHandler = (imageData: string) => void;
+/** `imageData` is base64 PNG; `vector` is set for a drawn signature. */
+type SignatureReadyHandler = (imageData: string, vector?: InkVector) => void;
 
-// ── Smoothing algorithms (ported from full-rust branch) ──────────────────────
-
-/** Douglas-Peucker polyline simplification. */
-function douglasPeucker(points: [number, number][], epsilon: number): [number, number][] {
-  const n = points.length;
-  if (n <= 2) return points.slice();
-
-  const [ax, ay] = points[0];
-  const [bx, by] = points[n - 1];
-  const lineLen = Math.max(Math.hypot(bx - ax, by - ay), 0.001);
-
-  let maxDist = 0;
-  let maxIdx = 0;
-  for (let i = 1; i < n - 1; i++) {
-    const [px, py] = points[i];
-    const dist = Math.abs((by - ay) * px - (bx - ax) * py + bx * ay - by * ax) / lineLen;
-    if (dist > maxDist) { maxDist = dist; maxIdx = i; }
-  }
-
-  if (maxDist > epsilon) {
-    const left = douglasPeucker(points.slice(0, maxIdx + 1), epsilon);
-    const right = douglasPeucker(points.slice(maxIdx), epsilon);
-    left.pop();
-    return left.concat(right);
-  }
-  return [points[0], points[n - 1]];
-}
-
-/** Smooth point positions with moving average, keeping endpoints fixed. */
-function smoothPoints(points: [number, number][], window: number): [number, number][] {
-  const n = points.length;
-  if (n <= 2) return points.slice();
-  const half = Math.floor(window / 2);
-  const result: [number, number][] = [points[0]];
-  for (let i = 1; i < n - 1; i++) {
-    const start = Math.max(0, i - half);
-    const end = Math.min(n, i + half + 1);
-    let sx = 0, sy = 0;
-    for (let j = start; j < end; j++) { sx += points[j][0]; sy += points[j][1]; }
-    const count = end - start;
-    result.push([sx / count, sy / count]);
-  }
-  result.push(points[n - 1]);
-  return result;
-}
-
-/** Smooth a float array with moving average, keeping endpoints fixed. */
-function smoothValues(values: number[], window: number): number[] {
-  const n = values.length;
-  if (n <= 2) return values.slice();
-  const half = Math.floor(window / 2);
-  const result = [values[0]];
-  for (let i = 1; i < n - 1; i++) {
-    const start = Math.max(0, i - half);
-    const end = Math.min(n, i + half + 1);
-    let sum = 0;
-    for (let j = start; j < end; j++) sum += values[j];
-    result.push(sum / (end - start));
-  }
-  result.push(values[n - 1]);
-  return result;
-}
-
-/** Render strokes with smooth Catmull-Rom splines on an arbitrary canvas context. */
-function renderSmoothStrokes(
-  ctx: CanvasRenderingContext2D,
-  width: number,
-  height: number,
-  strokes: [number, number][][],
-): void {
-  ctx.clearRect(0, 0, width, height);
-
-  for (const rawPoints of strokes) {
-    if (rawPoints.length < 2) continue;
-
-    let pts = douglasPeucker(rawPoints, 1.0);
-    if (pts.length < 2) continue;
-
-    for (let p = 0; p < 2; p++) pts = smoothPoints(pts, 3);
-    if (pts.length < 2) continue;
-
-    const n = pts.length;
-
-    const rawWidths: number[] = [];
-    for (let i = 0; i < n; i++) {
-      const [dx, dy] = i === 0
-        ? [pts[1][0] - pts[0][0], pts[1][1] - pts[0][1]]
-        : i === n - 1
-          ? [pts[n - 1][0] - pts[n - 2][0], pts[n - 1][1] - pts[n - 2][1]]
-          : [pts[i + 1][0] - pts[i - 1][0], pts[i + 1][1] - pts[i - 1][1]];
-      const len = Math.max(Math.hypot(dx, dy), 0.001);
-      const verticality = Math.abs(dy / len);
-      const minW = 0.8;
-      const maxW = 4.0;
-      rawWidths.push(minW + verticality * (maxW - minW));
-    }
-
-    let widths = rawWidths;
-    for (let p = 0; p < 4; p++) widths = smoothValues(widths, 7);
-
-    ctx.strokeStyle = "#0f0f23";
-    ctx.lineCap = "round";
-    ctx.lineJoin = "round";
-
-    for (let i = 0; i < n - 1; i++) {
-      const p0 = i > 0 ? pts[i - 1] : pts[i];
-      const p1 = pts[i];
-      const p2 = pts[i + 1];
-      const p3 = i + 2 < n ? pts[i + 2] : pts[i + 1];
-
-      const cp1x = p1[0] + (p2[0] - p0[0]) / 6;
-      const cp1y = p1[1] + (p2[1] - p0[1]) / 6;
-      const cp2x = p2[0] - (p3[0] - p1[0]) / 6;
-      const cp2y = p2[1] - (p3[1] - p1[1]) / 6;
-
-      ctx.lineWidth = (widths[i] + widths[i + 1]) * 0.5;
-      ctx.beginPath();
-      ctx.moveTo(p1[0], p1[1]);
-      ctx.bezierCurveTo(cp1x, cp1y, cp2x, cp2y, p2[0], p2[1]);
-      ctx.stroke();
-    }
-  }
-}
+/** Pixels per pad unit of the PNG kept beside a vector signature (thumbnails, preview). */
+const THUMB_SCALE = 3;
+/** Longest side of an imported signature picture, in pixels. */
+const MAX_PICTURE_SIDE = 1200;
 
 // ── SignatureModal ────────────────────────────────────────────────────────────
 
@@ -143,6 +27,9 @@ export class SignatureModal {
   private savedSectionEl: HTMLElement;
   private savedListEl: HTMLElement;
   private selectedSavedId: string | null = null;
+  /** The picture shown on the pad (imported or saved), as a data URL; null when the pad has only strokes. */
+  private picture: string | null = null;
+  private pictureImg: HTMLImageElement | null = null;
 
   private handlers: SignatureReadyHandler[] = [];
 
@@ -164,22 +51,16 @@ export class SignatureModal {
     const oldStrokes = this.store.consumeOldStrokes();
     if (!oldStrokes || oldStrokes.length === 0) return;
 
-    // Render strokes on an offscreen canvas to produce a base64 image
-    const offscreen = document.createElement("canvas");
-    offscreen.width = this.canvas.width;
-    offscreen.height = this.canvas.height;
-    const offCtx = offscreen.getContext("2d")!;
-    renderSmoothStrokes(offCtx, offscreen.width, offscreen.height, oldStrokes);
-    const dataUrl = offscreen.toDataURL("image/png");
-    this.store.add(dataUrl);
+    const vector = fitVector(strokeSegments(oldStrokes));
+    if (vector) this.store.add(vectorToPng(vector, THUMB_SCALE), vector);
   }
 
   onSignatureReady(handler: SignatureReadyHandler): void {
     this.handlers.push(handler);
   }
 
-  private emit(imageData: string): void {
-    this.handlers.forEach((h) => h(imageData));
+  private emit(imageData: string, vector?: InkVector): void {
+    this.handlers.forEach((h) => h(imageData, vector));
   }
 
   open(): void {
@@ -187,6 +68,8 @@ export class SignatureModal {
     this.strokes = [];
     this.hasContent = false;
     this.selectedSavedId = null;
+    this.picture = null;
+    this.pictureImg = null;
     this.renderSavedList();
     this.backdrop.classList.remove("hidden");
     this.canvas.focus();
@@ -201,6 +84,8 @@ export class SignatureModal {
     this.strokes = [];
     this.hasContent = false;
     this.selectedSavedId = null;
+    this.picture = null;
+    this.pictureImg = null;
     this.updateSelectedCard();
   }
 
@@ -247,18 +132,15 @@ export class SignatureModal {
   private onSavedCardClick(id: string, imageDataUrl: string): void {
     this.selectedSavedId = id;
     this.strokes = [];
+    this.picture = imageDataUrl;
     this.updateSelectedCard();
 
     // Draw the saved image on the canvas
     const img = new Image();
     img.onload = () => {
-      this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
-      const scaleX = this.canvas.width / img.width;
-      const scaleY = this.canvas.height / img.height;
-      const s = Math.min(scaleX, scaleY, 1);
-      const dx = (this.canvas.width - img.width * s) / 2;
-      const dy = (this.canvas.height - img.height * s) / 2;
-      this.ctx.drawImage(img, dx, dy, img.width * s, img.height * s);
+      if (this.picture !== imageDataUrl) return; // another card was picked meanwhile
+      this.pictureImg = img;
+      this.redrawPad();
       this.hasContent = true;
     };
     img.src = imageDataUrl;
@@ -281,6 +163,20 @@ export class SignatureModal {
   }
 
   // ── Drawing ──────────────────────────────────────────────────────────────
+
+  /** The pad: the picture (fitted, centred), then the strokes. */
+  private redrawPad(): void {
+    const { width, height } = this.canvas;
+    this.ctx.clearRect(0, 0, width, height);
+    const img = this.picture ? this.pictureImg : null;
+    if (img && img.width > 0) {
+      const s = Math.min(width / img.width, height / img.height, 1);
+      const dx = (width - img.width * s) / 2;
+      const dy = (height - img.height * s) / 2;
+      this.ctx.drawImage(img, dx, dy, img.width * s, img.height * s);
+    }
+    drawVector(this.ctx, { w: width, h: height, segs: strokeSegments(this.strokes) });
+  }
 
   private initDrawing(): void {
     this.canvas.style.touchAction = "none";
@@ -322,8 +218,8 @@ export class SignatureModal {
     const stopDrawing = (): void => {
       if (!this.isDrawing) return;
       this.isDrawing = false;
-      // Re-render all strokes with smooth curves
-      renderSmoothStrokes(this.ctx, this.canvas.width, this.canvas.height, this.strokes);
+      // Re-render all strokes with smooth curves (over the picture, if any)
+      this.redrawPad();
     };
     this.canvas.addEventListener("pointerup", stopDrawing);
     this.canvas.addEventListener("pointercancel", stopDrawing);
@@ -343,19 +239,31 @@ export class SignatureModal {
     document.getElementById("sig-place-btn")!.addEventListener("click", () => {
       if (!this.hasContent) return;
 
-      const dataUrl = this.canvas.toDataURL("image/png");
-      const b64 = dataUrl.split(",")[1]; // strip data:image/png;base64,
-
-      if (this.selectedSavedId) {
+      const saved = this.selectedSavedId
+        ? this.store.getAll().find((x) => x.id === this.selectedSavedId)
+        : undefined;
+      let dataUrl: string;
+      let vector: InkVector | undefined;
+      if (saved) {
         // Re-using an existing saved signature — update its last-used time
-        this.store.touch(this.selectedSavedId);
+        this.store.touch(saved.id);
+        dataUrl = saved.imageDataUrl;
+        vector = saved.vector;
       } else {
-        // New signature (drawn or image) — save it
-        this.store.add(dataUrl);
+        // New signature — save it. Pen strokes alone stay vectors (sharp at
+        // any size); a picture keeps its own resolution; strokes over a
+        // picture are kept as the pad shows them.
+        vector = this.picture ? undefined : fitVector(strokeSegments(this.strokes)) ?? undefined;
+        dataUrl = vector
+          ? vectorToPng(vector, THUMB_SCALE)
+          : this.picture && this.strokes.length === 0
+            ? this.picture
+            : this.canvas.toDataURL("image/png");
+        this.store.add(dataUrl, vector);
       }
 
       this.close();
-      this.emit(b64);
+      this.emit(dataUrl.split(",")[1] ?? dataUrl, vector); // strip data:image/png;base64,
     });
 
     document
@@ -381,13 +289,16 @@ export class SignatureModal {
         const img = new Image();
         img.onload = () => {
           this.clearCanvas();
-          // Scale to fit the canvas while preserving aspect ratio
-          const scaleX = this.canvas.width / img.width;
-          const scaleY = this.canvas.height / img.height;
-          const s = Math.min(scaleX, scaleY, 1);
-          const dx = (this.canvas.width - img.width * s) / 2;
-          const dy = (this.canvas.height - img.height * s) / 2;
-          this.ctx.drawImage(img, dx, dy, img.width * s, img.height * s);
+          // The picture keeps its own resolution (at most MAX_PICTURE_SIDE);
+          // the pad only shows it.
+          const k = Math.min(1, MAX_PICTURE_SIDE / Math.max(img.width, img.height));
+          const c = document.createElement("canvas");
+          c.width = Math.max(1, Math.round(img.width * k));
+          c.height = Math.max(1, Math.round(img.height * k));
+          c.getContext("2d")!.drawImage(img, 0, 0, c.width, c.height);
+          this.picture = c.toDataURL("image/png");
+          this.pictureImg = img;
+          this.redrawPad();
           this.hasContent = true;
         };
         img.src = dataUrl;

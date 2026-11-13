@@ -36,6 +36,7 @@ import {
   type FontFamilyValue,
   type RgbColor,
   CSS_UNITS,
+  type InkVector,
 } from "./models";
 import type { PageTextItem, ShapeAnnotation } from "./canvas-overlay";
 import { fitWithin, isImagePath, type Picture } from "./pictures";
@@ -94,6 +95,8 @@ const formValues = new Map<string, string>();
 let guardRegistering = false;
 let fitMode: "none" | "fit-width" | "fit-height" = "none";
 let pendingSignature: string | null = null;
+/** The pen strokes of the pending signature, when it was drawn. */
+let pendingSignatureVector: InkVector | undefined;
 let editingTextAnn:  TextAnnotation | null = null;
 let editingShapeAnn: ShapeAnnotation | null = null;
 
@@ -1246,7 +1249,7 @@ toolbar.on(async (e) => {
       const sig = sigStore.getAll().find((x) => x.id === e.id);
       if (sig) {
         sigStore.touch(sig.id);
-        startSignaturePlacement(sig.imageDataUrl.split(",")[1] ?? sig.imageDataUrl);
+        startSignaturePlacement(sig.imageDataUrl.split(",")[1] ?? sig.imageDataUrl, sig.vector);
         refreshSignatures();
         toolbar.setActiveSignature(sig.id);
       }
@@ -1416,9 +1419,10 @@ document.addEventListener("mousemove", (e: MouseEvent) => {
 /** Height / width of the signature being placed (0 until its picture loads). */
 let pendingSignatureRatio = 0;
 
-function startSignaturePlacement(imageData: string): void {
+function startSignaturePlacement(imageData: string, vector?: InkVector): void {
   pendingSignature = imageData;
-  pendingSignatureRatio = 0;
+  pendingSignatureVector = vector;
+  pendingSignatureRatio = vector && vector.w > 0 ? vector.h / vector.w : 0;
   const probe = new Image();
   probe.onload = () => {
     if (pendingSignature === imageData && probe.naturalWidth > 0) pendingSignatureRatio = probe.naturalHeight / probe.naturalWidth;
@@ -1433,6 +1437,7 @@ function startSignaturePlacement(imageData: string): void {
 function cancelSignaturePlacement(): void {
   if (!pendingSignature) return;
   pendingSignature = null;
+  pendingSignatureVector = undefined;
   toolbar.setActiveSignature(null);
   hideSigPreview();
   document.getElementById("viewer-scroll")!.style.cursor = "";
@@ -1445,9 +1450,9 @@ function refreshSignatures(): void {
 }
 refreshSignatures();
 
-sigModal.onSignatureReady((imageData: string) => {
+sigModal.onSignatureReady((imageData, vector) => {
   refreshSignatures();
-  startSignaturePlacement(imageData);
+  startSignaturePlacement(imageData, vector);
 });
 
 // Click on a page wrapper to place signature
@@ -1468,7 +1473,7 @@ document.getElementById("viewer-scroll")!.addEventListener("click", (e: MouseEve
   const ratio = pendingSignatureRatio > 0 ? pendingSignatureRatio : 0.4;
   const h = Math.min(75, 150 * ratio);
   const w = h / ratio;
-  pv.overlay.placeSignature(x, y, pendingSignature, w, h);
+  pv.overlay.placeSignature(x, y, pendingSignature, w, h, pendingSignatureVector);
   cancelSignaturePlacement();
   // Ready to move and resize right away.
   if (toolState.tool !== "select") toolbar.clearActiveTool();
