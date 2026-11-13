@@ -29,6 +29,7 @@ import { SplitModal } from "./split-modal";
 import { getTranslations, applyTranslationsToDOM, fmt, type Translations } from "./i18n";
 import { DocumentSession, uniqueTempName, isMicrosoftPrintToPdf } from "./document-session";
 import { AnnotationSession } from "./annotation-session";
+import { PageHistory } from "./page-history";
 import { ToolSelection } from "./tool-selection";
 import {
   type Annotation,
@@ -113,8 +114,12 @@ const annotations: AnnotationSession = new AnnotationSession({
   gateEnabled: () => toolbar.currentMode !== "read",
   isDirty: (): boolean => session.isDirty,
 });
-annotations.onChange(() => setDirty(true));
+annotations.onChange(() => { setDirty(true); pageHistory.clearRedo(); });
 annotations.onPendingChange((pending) => toolbar.setPending(pending));
+/** Page edits of the open document, undone once its annotation changes are. */
+const pageHistory = new PageHistory();
+/** A page edit or its undo is being applied. */
+let pageEditBusy = false;
 const compressModal      = new CompressModal();
 const exportModal        = new ExportModal();
 const ocrModal = new OcrModal({
@@ -419,12 +424,35 @@ function dropStaleSelection(): void {
   toolbar.hideShapeStyles();
 }
 
-/** Ctrl+Z / Ctrl+Y: the overlays show the restored annotations. */
-function undoRedo(redo: boolean): void {
-  if (!(redo ? annotations.redo() : annotations.undo())) return;
-  dropStaleSelection();
-  syncAllPageOverlays();
-  setDirty(true);
+/**
+ * Ctrl+Z / Ctrl+Y: annotation changes first; once there are none left, the
+ * page edits (delete, move, rotate, insert, crop, straighten) before them.
+ */
+async function undoRedo(redo: boolean): Promise<void> {
+  if (redo ? annotations.redo() : annotations.undo()) {
+    dropStaleSelection();
+    syncAllPageOverlays();
+    setDirty(true);
+    return;
+  }
+  if (!(redo ? pageHistory.canRedo : pageHistory.canUndo) || pageEditBusy) return;
+  pageEditBusy = true;
+  pageSidebar.setBusy(true);
+  try {
+    const current = { path: await session.materialize(), page: viewer.currentPage, dirty: session.isDirty };
+    const target = redo ? pageHistory.redo(current) : pageHistory.undo(current);
+    if (!target) return;
+    const workingCopy = await showInViewer(target.path, true);
+    session.replacedWorkingCopy(workingCopy ?? target.path);
+    dropStaleSelection();
+    setDirty(target.dirty);
+    if (target.page !== viewer.currentPage) viewer.goToPage(Math.min(target.page, viewer.pageCount), "instant");
+  } catch (err) {
+    showToast(msg("msgPagesFailed", { err: errText(err) }), true);
+  } finally {
+    pageEditBusy = false;
+    pageSidebar.setBusy(false);
+  }
 }
 
 /** ✕: the pending changes are thrown away. */
@@ -546,6 +574,7 @@ async function openProtected(fp: string, password?: string | null): Promise<void
   }
   try {
     const workingCopy = await showInViewer(plain);
+    pageHistory.clear();
     session.opened(fp, workingCopy ?? plain, used);
     syncProtection();
     setDirty(false);
@@ -662,6 +691,7 @@ async function loadPdf(path: string, password?: string | null): Promise<void> {
   if (password) { await openProtected(path, password); return; }
   try {
     const workingCopy = await showInViewer(path);
+    pageHistory.clear();
     session.opened(path, workingCopy);
     syncProtection();
     setDirty(false);
@@ -826,11 +856,13 @@ async function applyPageLayout({ slots, keepPage, select }: PagePlan): Promise<b
     // Burn pending edits first (no-op when there are none: the viewed file is
     // used as is), then apply the new page layout as an incremental update.
     const input   = await session.materialize();
+    const before  = { path: input, page: viewer.currentPage, dirty: session.isDirty };
     const tmpPath = await newTempPath(`pages-${await basename(source)}`);
     await rearrangePages(input, tmpPath, slots);
     // Still the same document: Save keeps writing to the source / Save As target.
     const workingCopy = await showInViewer(tmpPath, true);
     session.replacedWorkingCopy(workingCopy ?? tmpPath);
+    pageHistory.record(before); // Ctrl+Z shows `input` again
     setDirty(true);
     if (keepPage !== null && keepPage !== viewer.currentPage) viewer.goToPage(keepPage, "instant");
     pageSidebar.setSelection(select);
@@ -843,7 +875,7 @@ async function applyPageLayout({ slots, keepPage, select }: PagePlan): Promise<b
 
 /** Runs a page edit from the panel, with the panel locked meanwhile. */
 async function editPages(plan: PagePlan): Promise<boolean> {
-  if (!session.isOpen || !viewer.isLoaded()) return false;
+  if (!session.isOpen || !viewer.isLoaded() || pageEditBusy) return false;
   if (refuseIfProtected() || !toolbar.allowed()) return false;
   pageSidebar.setBusy(true);
   try {
@@ -890,6 +922,7 @@ async function applyAdjust(settings: PageSetting[]): Promise<boolean> {
     const { crops, warps } = await buildPageAdjustments(doc, viewer.rotation, settings);
     const name = await basename(source);
     let out = await session.materialize();
+    const before = { path: out, page: viewer.currentPage, dirty: session.isDirty };
     if (crops.length > 0) {
       const tmp = await newTempPath(`adjust-${name}`);
       await adjustPages(out, tmp, crops);
@@ -907,6 +940,7 @@ async function applyAdjust(settings: PageSetting[]): Promise<boolean> {
     }
     const workingCopy = await showInViewer(out, true);
     session.replacedWorkingCopy(workingCopy ?? out);
+    pageHistory.record(before);
     setDirty(true);
     const pages = settings.map((s) => s.page);
     viewer.goToPage(pages[0], "instant");
@@ -1294,11 +1328,11 @@ toolbar.on(async (e) => {
       break;
 
     case "undo":
-      undoRedo(false);
+      await undoRedo(false);
       break;
 
     case "redo":
-      undoRedo(true);
+      await undoRedo(true);
       break;
   }
 });
@@ -1337,12 +1371,12 @@ document.addEventListener("keydown", async (e) => {
 
   if (ctrl && !shift && e.key === "z") {
     e.preventDefault();
-    undoRedo(false);
+    void undoRedo(false);
     return;
   }
   if (ctrl && (e.key === "y" || (shift && e.key === "Z"))) {
     e.preventDefault();
-    undoRedo(true);
+    void undoRedo(true);
     return;
   }
   if (ctrl && !shift && e.key === "o") {
