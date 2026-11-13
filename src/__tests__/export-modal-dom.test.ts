@@ -32,7 +32,7 @@ describe("export dialog: convert", () => {
     expect(modal.box.querySelector<HTMLElement>(".ez-check")!.hidden).toBe(true);
     modal.box.querySelector<HTMLInputElement>(".ez-input")!.value = "2-3";
     modal.okBtn.click();
-    expect(requests).toEqual([{ kind: "pages", format: "docx", pages: [2, 3], dpi: 150, annotations: false }]);
+    expect(requests).toEqual([{ kind: "pages", format: "docx", pages: [2, 3], dpi: 300, annotations: false }]);
   });
 
   it("brings the picture options back for PNG", () => {
