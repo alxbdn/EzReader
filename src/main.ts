@@ -67,7 +67,8 @@ import {
   encryptPdf,
   decryptPdf,
 } from "./tauri-bridge";
-import { getCurrentWindow } from "@tauri-apps/api/window";
+import { currentMonitor, getCurrentWindow } from "@tauri-apps/api/window";
+import { PhysicalPosition, PhysicalSize } from "@tauri-apps/api/dpi";
 import { mountWindowControls } from "./window-controls";
 import { InfoPanel } from "./info-panel";
 import { tempDir, basename } from "@tauri-apps/api/path";
@@ -1344,22 +1345,64 @@ let fullscreen = false;
 /** Full screen on / off: the title bar hides, the toolbar stays. */
 /** The window was maximized when full screen began: it is maximized again after. */
 let maximizedBeforeFullscreen = false;
+/**
+ * Bounds to put back when full screen was done by hand (the window stretched
+ * over its monitor because the system's own full screen did not cover it).
+ */
+let boundsBeforeFullscreen: { x: number; y: number; width: number; height: number } | null = null;
+
+/** True when the window covers the whole monitor it is on. */
+async function coversMonitor(): Promise<boolean> {
+  const monitor = await currentMonitor();
+  if (!monitor) return true;
+  const pos = await appWindow.outerPosition();
+  const size = await appWindow.outerSize();
+  const m = monitor.position, ms = monitor.size;
+  return pos.x <= m.x && pos.y <= m.y
+    && pos.x + size.width >= m.x + ms.width
+    && pos.y + size.height >= m.y + ms.height;
+}
+
+const nextFrames = () => new Promise<void>((resolve) => setTimeout(resolve, 150));
 
 async function toggleFullscreen(on = !fullscreen): Promise<void> {
   try {
-    // Windows keeps a maximized frameless window at its maximized size
-    // (taskbar still showing) when asked to go full screen: restore it
-    // first, and maximize it again on the way out.
     if (on) {
+      // Windows keeps a maximized frameless window at its maximized size
+      // (taskbar still showing) when asked to go full screen: restore it
+      // first, and maximize it again on the way out.
       maximizedBeforeFullscreen = await appWindow.isMaximized();
       if (maximizedBeforeFullscreen) await appWindow.unmaximize();
+      const pos = await appWindow.outerPosition();
+      const size = await appWindow.outerSize();
+      const before = { x: pos.x, y: pos.y, width: size.width, height: size.height };
+      await appWindow.setFullscreen(true);
+      await nextFrames();
+      if (!(await appWindow.isFullscreen()) || !(await coversMonitor())) {
+        // The system did not make it full screen (seen on Windows 10 with a
+        // frameless window): stretch the window over its monitor instead.
+        // A borderless window covering the screen hides the taskbar.
+        const monitor = await currentMonitor();
+        if (monitor) {
+          boundsBeforeFullscreen = before;
+          await appWindow.setPosition(new PhysicalPosition(monitor.position.x, monitor.position.y));
+          await appWindow.setSize(new PhysicalSize(monitor.size.width, monitor.size.height));
+          await appWindow.setFocus();
+        }
+      }
+    } else {
+      await appWindow.setFullscreen(false);
+      const bounds = boundsBeforeFullscreen;
+      boundsBeforeFullscreen = null;
+      if (bounds) {
+        await appWindow.setSize(new PhysicalSize(bounds.width, bounds.height));
+        await appWindow.setPosition(new PhysicalPosition(bounds.x, bounds.y));
+      }
+      if (maximizedBeforeFullscreen) {
+        maximizedBeforeFullscreen = false;
+        await appWindow.maximize();
+      }
     }
-    await appWindow.setFullscreen(on);
-    if (!on && maximizedBeforeFullscreen) {
-      maximizedBeforeFullscreen = false;
-      await appWindow.maximize();
-    }
-    on = await appWindow.isFullscreen();
   } catch (err) {
     // Browser preview: no window to resize.
     console.warn("full screen:", err);
