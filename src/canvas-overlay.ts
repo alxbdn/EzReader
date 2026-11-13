@@ -41,6 +41,8 @@ const NOTE_PAD = 6;
 const STAMP_SIZE = 22;
 
 /** Pictures keep their proportions when resized from a corner. */
+/** Pixels of an annotation (each way) that a drag keeps on its page. */
+const REACHABLE = 24;
 const KEEPS_RATIO = new Set<Annotation["kind"]>(["signature", "image", "stamp"]);
 
 /** Decoded pictures, by their base64 data, so redraws don't decode again. */
@@ -1254,10 +1256,13 @@ export class CanvasOverlay implements SelectionOwner {
     return [e.clientX - r.left, e.clientY - r.top];
   }
 
-  /** `p` held inside the page. */
-  private clampToPage([x, y]: [number, number]): [number, number] {
+  /**
+   * `p` held within one page size around the page: an annotation may be
+   * stretched past the edge (the page cuts it off), not without end.
+   */
+  private clampNearPage([x, y]: [number, number]): [number, number] {
     const w = this.canvas.clientWidth, h = this.canvas.clientHeight;
-    return [Math.min(Math.max(x, 0), w), Math.min(Math.max(y, 0), h)];
+    return [Math.min(Math.max(x, -w), 2 * w), Math.min(Math.max(y, -h), 2 * h)];
   }
 
   /** Moves `ann` by (dx, dy) canvas pixels. */
@@ -1276,6 +1281,22 @@ export class CanvasOverlay implements SelectionOwner {
     const b = this.getAnnBounds(ann);
     const fit = (lo: number, hi: number, size: number): number =>
       lo < 0 || hi - lo >= size ? -lo : hi > size ? size - hi : 0;
+    this.shiftBy(ann, fit(b.left, b.right, w), fit(b.top, b.bottom, h));
+  }
+
+  /**
+   * Shifts `ann` just enough that some of it stays on the page (REACHABLE
+   * pixels each way, or all of it when smaller): it may hang off the edge,
+   * where the page cuts it off, but can't be lost off the page.
+   */
+  private keepReachable(ann: Annotation): void {
+    const w = this.canvas.clientWidth, h = this.canvas.clientHeight;
+    if (w <= 0 || h <= 0) return;
+    const b = this.getAnnBounds(ann);
+    const fit = (lo: number, hi: number, size: number): number => {
+      const m = Math.min(REACHABLE, hi - lo, size);
+      return hi < m ? m - hi : lo > size - m ? size - m - lo : 0;
+    };
     this.shiftBy(ann, fit(b.left, b.right, w), fit(b.top, b.bottom, h));
   }
 
@@ -1301,7 +1322,7 @@ export class CanvasOverlay implements SelectionOwner {
     if (this.vertexDrag) {
       this.notifyChangeOnce();
       const { ann, index, pts } = this.vertexDrag;
-      pts[index] = this.toPdf(...this.clampToPage(this.canvasPoint(e))) as [number, number];
+      pts[index] = this.toPdf(...this.clampNearPage(this.canvasPoint(e))) as [number, number];
       this.setOutline(ann, pts);
       this.session.settle();
       this.redrawCommitted();
@@ -1309,7 +1330,7 @@ export class CanvasOverlay implements SelectionOwner {
     }
     if (this.resizing && this.dragTarget) {
       this.notifyChangeOnce();
-      this.applyResize(...this.clampToPage(this.canvasPoint(e)));
+      this.applyResize(...this.clampNearPage(this.canvasPoint(e)));
       this.session.settle();
       this.redrawCommitted();
       return;
@@ -1324,7 +1345,7 @@ export class CanvasOverlay implements SelectionOwner {
       const [curPdfX, curPdfY] = this.toPdf(...this.canvasPoint(e));
       this.dragTarget.x = this.dragBaseX + (curPdfX - this.dragStartPdfX);
       this.dragTarget.y = this.dragBaseY + (curPdfY - this.dragStartPdfY);
-      this.keepInside(this.dragTarget);
+      this.keepReachable(this.dragTarget);
       this.session.settle();
       this.redrawCommitted();
     }
@@ -1369,7 +1390,7 @@ export class CanvasOverlay implements SelectionOwner {
     const [cx, cy] = this.canvasPoint(e);
     const b = this.getAnnBounds(ann);
     this.shiftBy(ann, cx - offX - b.left, cy - offY - b.top);
-    this.keepInside(ann);
+    this.keepReachable(ann);
     this.session.settle();
 
     this.selected = ann; // the other page stops drawing it as selected
