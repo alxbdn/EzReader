@@ -22,6 +22,35 @@ pub struct StartupArgs {
     pub unsaved: bool,
 }
 
+/**
+ * Puts the window in the middle of the screen it opens on, shrunk (keeping
+ * its shape) when it would not fit in the screen's work area: a small or
+ * scaled screen must not hide its bottom behind the taskbar.
+ */
+fn fit_to_screen(window: &tauri::WebviewWindow) -> tauri::Result<()> {
+    let Some(monitor) = window.current_monitor()? else { return Ok(()) };
+    let area = monitor.work_area();
+    let outer = window.outer_size()?;
+    let inner = window.inner_size()?;
+    let k = fit_scale((outer.width, outer.height), (area.size.width, area.size.height));
+    let (w, h) = if k < 1.0 {
+        let size = tauri::PhysicalSize::new((inner.width as f64 * k).round() as u32, (inner.height as f64 * k).round() as u32);
+        window.set_size(size)?;
+        ((outer.width as f64 * k).round() as i64, (outer.height as f64 * k).round() as i64)
+    } else {
+        (outer.width as i64, outer.height as i64)
+    };
+    let x = area.position.x as i64 + (area.size.width as i64 - w) / 2;
+    let y = area.position.y as i64 + (area.size.height as i64 - h) / 2;
+    window.set_position(tauri::PhysicalPosition::new(x as i32, y as i32))
+}
+
+/// How much a `size` window must shrink to fit in 95 % of `area` (1: it fits).
+fn fit_scale(size: (u32, u32), area: (u32, u32)) -> f64 {
+    let room = |a: u32, s: u32| if s == 0 { 1.0 } else { a as f64 * 0.95 / s as f64 };
+    room(area.0, size.0).min(room(area.1, size.1)).min(1.0)
+}
+
 pub struct AppState {
     pub startup_args: Mutex<StartupArgs>,
     /// What each extra window opens, by window label.
@@ -60,6 +89,10 @@ pub fn run() {
         .setup(move |app| {
             if let Some(path) = &startup_file {
                 allow_viewing(app, path);
+            }
+            if let Some(main) = app.get_webview_window("main") {
+                // Best effort: a window that cannot be measured stays as it is.
+                let _ = fit_to_screen(&main);
             }
             Ok(())
         })
@@ -133,5 +166,22 @@ mod icon_tests {
         let side = |i: usize| match d[6 + 16 * i] { 0 => 256, w => u32::from(w) };
         assert!(count > 1);
         assert_eq!(side(0), (0..count).map(side).max().unwrap());
+    }
+}
+
+#[cfg(test)]
+mod fit_tests {
+    use super::fit_scale;
+
+    #[test]
+    fn a_window_that_fits_keeps_its_size() {
+        assert_eq!(fit_scale((1100, 840), (1920, 1040)), 1.0);
+    }
+
+    #[test]
+    fn a_window_too_tall_shrinks_keeping_its_shape() {
+        let k = fit_scale((1100, 840), (1366, 728));
+        assert!((k - 728.0 * 0.95 / 840.0).abs() < 1e-9);
+        assert!(k < 1.0);
     }
 }

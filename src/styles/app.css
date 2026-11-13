@@ -110,6 +110,15 @@ html, body {
   -webkit-font-smoothing: antialiased;
 }
 
+/* The interface's own text (buttons, labels, titles) cannot be selected,
+   so the pointer stays an arrow over it. Text fields and the page's text
+   stay selectable. */
+body { user-select: none; -webkit-user-select: none; }
+input, textarea, [contenteditable="true"], .page-text-layer {
+  user-select: text;
+  -webkit-user-select: text;
+}
+
 button, input, select, textarea {
   font-family: inherit;
   color: inherit;
@@ -1679,6 +1688,17 @@ kbd,
 
 @media (max-width: 640px) {
   .welcome-features { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+/* A short window (small or scaled screen): tighter, so it needs no scrolling. */
+@media (max-height: 700px) {
+  #welcome-screen { padding: 16px 24px; }
+  .welcome-inner { gap: 8px; }
+  .welcome-logo { margin-bottom: 0; }
+  .welcome-logo svg { width: 72px; height: 72px; }
+  .welcome-tagline { margin-bottom: 6px; }
+  .welcome-hint { margin-bottom: 14px; }
+  .welcome-feature { padding: 10px 14px; }
 }
 
 .welcome-feature {
