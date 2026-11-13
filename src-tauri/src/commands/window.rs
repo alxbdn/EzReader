@@ -1,3 +1,4 @@
+use crate::error::{CmdResult, PdfError};
 use std::sync::atomic::{AtomicU32, Ordering};
 
 use tauri::{AppHandle, Manager, WebviewUrl, WebviewWindowBuilder};
@@ -27,7 +28,7 @@ pub async fn open_pages_in_new_window(
     name: String,
     x: Option<f64>,
     y: Option<f64>,
-) -> Result<(), String> {
+) -> CmdResult<()> {
     let n = NEXT_WINDOW.fetch_add(1, Ordering::Relaxed);
     let dir = std::env::temp_dir().join(format!("ezreader-window-{}-{n}", std::process::id()));
     std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
@@ -60,7 +61,7 @@ pub async fn open_pages_in_new_window(
     }
     if let Err(e) = builder.build() {
         app.state::<AppState>().window_args.lock().unwrap().remove(&label);
-        return Err(e.to_string());
+        return Err(PdfError::from(e.to_string()));
     }
     Ok(())
 }

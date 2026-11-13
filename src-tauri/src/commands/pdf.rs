@@ -1,3 +1,4 @@
+use crate::error::{CmdResult, ErrorCode, PdfError};
 use std::collections::{HashMap, HashSet};
 
 use lopdf::{Document, IncrementalDocument, Object, ObjectId};
@@ -8,7 +9,7 @@ use crate::pdf::{models::Annotation, redact, writer, writer::FormFieldValue};
 
 /// Returns the total number of pages in the given PDF file.
 #[tauri::command]
-pub fn get_page_count(file_path: String) -> Result<u32, String> {
+pub fn get_page_count(file_path: String) -> CmdResult<u32> {
     let doc = Document::load(&file_path).map_err(|e| e.to_string())?;
     Ok(doc.get_pages().len() as u32)
 }
@@ -25,7 +26,7 @@ pub fn save_annotated_pdf(
     annotations: Vec<Annotation>,
     rotation_delta: i64,
     form_fields: Vec<FormFieldValue>,
-) -> Result<(), String> {
+) -> CmdResult<()> {
     // Fast-path: nothing to apply → byte-perfect copy. Avoids any PDF rewrite.
     if annotations.is_empty() && rotation_delta == 0 && form_fields.is_empty() {
         let prev_meta_empty = Document::load(&input_path)
@@ -282,7 +283,7 @@ fn clone_acroform_tree(inc: &mut IncrementalDocument, cat_id: ObjectId) -> lopdf
 pub fn strip_annotation_streams(
     input_path: String,
     output_path: String,
-) -> Result<bool, String> {
+) -> CmdResult<bool> {
     let meta_empty = Document::load(&input_path)
         .map(|d| writer::load_meta(&d).stream_ids.is_empty())
         .unwrap_or(true);
@@ -315,14 +316,14 @@ pub fn redact_pages(
     input_path: String,
     output_path: String,
     pages: Vec<redact::RedactedPage>,
-) -> Result<(), String> {
+) -> CmdResult<()> {
     let mut doc = Document::load(&input_path).map_err(|e| e.to_string())?;
     let page_count = doc.get_pages().len();
     redact::redact_pages(&mut doc, &pages)?;
     if doc.get_pages().len() != page_count {
-        return Err("Redaction aborted: page count changed".into());
+        return Err(PdfError::new(ErrorCode::PageCountChanged, "Redaction aborted: page count changed"));
     }
-    fsutil::save_document(&mut doc, &output_path)
+    fsutil::save_document(&mut doc, &output_path).map_err(PdfError::from)
 }
 
 /// Straighten: replaces `pages` with their straightened pictures, keeping
@@ -332,20 +333,20 @@ pub fn straighten_pages(
     input_path: String,
     output_path: String,
     pages: Vec<crate::pdf::straighten::StraightenedPage>,
-) -> Result<(), String> {
+) -> CmdResult<()> {
     let mut doc = Document::load(&input_path).map_err(|e| e.to_string())?;
     let page_count = doc.get_pages().len();
     crate::pdf::straighten::straighten_pages(&mut doc, &pages)?;
     if doc.get_pages().len() != page_count {
-        return Err("Straighten aborted: page count changed".into());
+        return Err(PdfError::new(ErrorCode::PageCountChanged, "Straighten aborted: page count changed"));
     }
-    fsutil::save_document(&mut doc, &output_path)
+    fsutil::save_document(&mut doc, &output_path).map_err(PdfError::from)
 }
 
 /// Reads editable annotations from the PDF's `CCAnnot` catalog entry.
 /// Returns an empty array if the file has no stored annotations.
 #[tauri::command]
-pub fn read_annotations(file_path: String) -> Result<Vec<Annotation>, String> {
+pub fn read_annotations(file_path: String) -> CmdResult<Vec<Annotation>> {
     let doc = Document::load(&file_path).map_err(|e| e.to_string())?;
     Ok(writer::load_meta(&doc).annotations)
 }
@@ -370,7 +371,7 @@ pub struct PageAdjust {
 /// Crops and flips pages, as an incremental update (the content stays
 /// vector and selectable; a crop only sets the page's CropBox).
 #[tauri::command]
-pub fn adjust_pages(input_path: String, output_path: String, pages: Vec<PageAdjust>) -> Result<(), String> {
+pub fn adjust_pages(input_path: String, output_path: String, pages: Vec<PageAdjust>) -> CmdResult<()> {
     let mut inc = IncrementalDocument::load(&input_path).map_err(|e| e.to_string())?;
     let prev_pages = inc.get_prev_documents().get_pages();
     let meta = writer::load_meta(inc.get_prev_documents());
@@ -432,7 +433,7 @@ pub fn adjust_pages(input_path: String, output_path: String, pages: Vec<PageAdju
             let x1 = c[0].max(c[2]).min(mx1);
             let y1 = c[1].max(c[3]).min(my1);
             if x1 - x0 < 1.0 || y1 - y0 < 1.0 {
-                return Err(format!("page {}: crop area is empty", adj.page));
+                return Err(PdfError::from(format!("page {}: crop area is empty", adj.page)));
             }
             let real = |v: f64| Object::Real(v as f32);
             dict.set("CropBox", Object::Array(vec![real(x0), real(y0), real(x1), real(y1)]));
@@ -441,7 +442,7 @@ pub fn adjust_pages(input_path: String, output_path: String, pages: Vec<PageAdju
             }
         }
     }
-    fsutil::save_incremental(&mut inc, &output_path)
+    fsutil::save_incremental(&mut inc, &output_path).map_err(PdfError::from)
 }
 
 /// A page box (own or inherited), as [x0, y0, x1, y1] with x0 < x1, y0 < y1.
@@ -554,7 +555,7 @@ fn image_page_from_bytes(doc: &mut Document, bytes: &[u8]) -> Result<ObjectId, S
 /// Makes a new PDF with one page per picture of `image_paths`, in order
 /// (each page fits A4 in the picture's orientation).
 #[tauri::command]
-pub fn images_to_pdf(image_paths: Vec<String>, output_path: String) -> Result<(), String> {
+pub fn images_to_pdf(image_paths: Vec<String>, output_path: String) -> CmdResult<()> {
     if image_paths.is_empty() {
         return Err("No pictures given".into());
     }
@@ -580,7 +581,7 @@ pub fn images_to_pdf(image_paths: Vec<String>, output_path: String) -> Result<()
     let catalog_id = doc.add_object(catalog);
     doc.trailer.set("Root", Object::Reference(catalog_id));
     doc.compress();
-    fsutil::save_document(&mut doc, &output_path)
+    fsutil::save_document(&mut doc, &output_path).map_err(PdfError::from)
 }
 
 /// Attributes a page may inherit from its ancestors in the page tree
@@ -612,9 +613,9 @@ pub fn rearrange_pages(
     input_path: String,
     output_path: String,
     slots: Vec<PageSlot>,
-) -> Result<(), String> {
+) -> CmdResult<()> {
     if slots.is_empty() {
-        return Err("A document needs at least one page".to_string());
+        return Err(PdfError::new(ErrorCode::InvalidPages, "A document needs at least one page"));
     }
     let mut inc = IncrementalDocument::load(&input_path).map_err(|e| e.to_string())?;
     let prev_pages = inc.get_prev_documents().get_pages();
@@ -668,7 +669,7 @@ pub fn rearrange_pages(
                     .get(page)
                     .ok_or_else(|| format!("Page {page} does not exist"))?;
                 if renumber.insert(*page, new_num).is_some() {
-                    return Err(format!("Page {page} is listed twice"));
+                    return Err(PdfError::new(ErrorCode::InvalidPages, format!("Page {page} is listed twice")));
                 }
                 let inherited = inherited_attributes(inc.get_prev_documents(), page_id);
                 inc.opt_clone_object_to_new_document(page_id)
@@ -940,7 +941,7 @@ mod tests {
         delete: bool,
     }
 
-    fn modify_pages(input: String, output: String, ops: Vec<PageOperation>) -> Result<(), String> {
+    fn modify_pages(input: String, output: String, ops: Vec<PageOperation>) -> CmdResult<()> {
         let total = Document::load(&input).unwrap().get_pages().len() as u32;
         let slots = (1..=total)
             .filter_map(|page| {
@@ -1284,7 +1285,7 @@ mod tests {
             PageSlot::Original { page: 1, rotation: 0 },
             PageSlot::Original { page: 1, rotation: 0 },
         ];
-        assert!(rearrange_pages(input.clone(), out.clone(), dup).unwrap_err().contains("twice"));
+        assert!(rearrange_pages(input.clone(), out.clone(), dup).unwrap_err().code == ErrorCode::InvalidPages);
         std::fs::remove_file(input).ok();
     }
 
@@ -1356,7 +1357,7 @@ mod tests {
             vec![SplitRange { start: 1, end: 99 }],
         )
         .unwrap_err();
-        assert!(err.contains("Invalid range"), "got: {err}");
+        assert_eq!(err.code, ErrorCode::InvalidPages, "got: {err}");
 
         let _ = std::fs::remove_dir_all(&dir);
     }
@@ -1563,9 +1564,9 @@ pub fn extract_pdf_pages(
     input_path: String,
     output_path: String,
     pages: Vec<u32>,
-) -> Result<(), String> {
+) -> CmdResult<()> {
     let keep: HashSet<u32> = pages.into_iter().collect();
-    extract_pages(&input_path, &output_path, &keep)
+    extract_pages(&input_path, &output_path, &keep).map_err(PdfError::from)
 }
 
 /// Export › PDF: the selected pages as a flattened copy. What annotations
@@ -1576,18 +1577,18 @@ pub fn export_flattened_pages(
     input_path: String,
     output_path: String,
     pages: Vec<u32>,
-) -> Result<(), String> {
+) -> CmdResult<()> {
     let keep: HashSet<u32> = pages.into_iter().collect();
     let mut inc = IncrementalDocument::load(&input_path).map_err(|e| e.to_string())?;
     let total = inc.get_prev_documents().get_pages().len() as u32;
     let delete_set: HashSet<u32> = (1..=total).filter(|p| !keep.contains(p)).collect();
     if delete_set.len() as u32 >= total {
-        return Err("No page to export".into());
+        return Err(PdfError::new(ErrorCode::InvalidPages, "No page to export"));
     }
     apply_page_deletions(&mut inc, &delete_set)?;
     let mut doc = fsutil::compacted(&mut inc)?;
     crate::pdf::flatten::flatten(&mut doc)?;
-    fsutil::save_document(&mut doc, &output_path)
+    fsutil::save_document(&mut doc, &output_path).map_err(PdfError::from)
 }
 
 /// Keeps only the pages in `keep` (1-based) and writes a compacted file.
@@ -1738,9 +1739,9 @@ pub fn split_pdf(
     output_dir: String,
     base_name: String,
     ranges: Vec<SplitRange>,
-) -> Result<Vec<String>, String> {
+) -> CmdResult<Vec<String>> {
     if ranges.is_empty() {
-        return Err("No ranges to split".to_string());
+        return Err(PdfError::new(ErrorCode::InvalidPages, "No ranges to split"));
     }
 
     let total = Document::load(&input_path)
@@ -1750,7 +1751,7 @@ pub fn split_pdf(
 
     let out_dir = std::path::PathBuf::from(&output_dir);
     if !out_dir.is_dir() {
-        return Err(format!("Output directory not found: {output_dir}"));
+        return Err(PdfError::from(format!("Output directory not found: {output_dir}")));
     }
 
     let safe_base = sanitize_filename(&base_name);
@@ -1758,12 +1759,11 @@ pub fn split_pdf(
 
     for range in &ranges {
         if range.start == 0 || range.end < range.start || range.end > total {
-            return Err(format!(
-                "Invalid range {}-{} (document has {total} page{})",
+            return Err(PdfError::new(ErrorCode::InvalidPages, format!("Invalid range {}-{} (document has {total} page{})",
                 range.start,
                 range.end,
                 if total == 1 { "" } else { "s" },
-            ));
+            )));
         }
 
         let stem = if range.start == range.end {
