@@ -197,3 +197,39 @@ describe("AnnotationSession redaction gate", () => {
     expect(pending).toHaveBeenLastCalledWith(false);
   });
 });
+
+describe("AnnotationSession.relocate", () => {
+  it("moves an annotation to the top of another page as part of one undo step", () => {
+    const { s } = setup();
+    const a = rect(1), b = rect(2, 2);
+    s.add(a); s.add(b);
+    s.beginEdit();
+    a.x = 5;
+    s.relocate(a, 2);
+    s.edited();
+    expect(s.forPage(1)).toEqual([]);
+    expect(s.forPage(2)).toEqual([b, a]);
+    expect(a.page).toBe(2);
+    s.undo();
+    expect(s.forPage(1).map(x => [x.width, x.x])).toEqual([[1, 0]]);
+    expect(s.forPage(2).map(x => x.width)).toEqual([2]);
+  });
+
+  it("ignores an annotation that is not in the session", () => {
+    const { s } = setup();
+    const a = rect(1);
+    s.relocate(a, 4);
+    expect(a.page).toBe(1);
+    expect(s.isEmpty()).toBe(true);
+  });
+
+  it("moving a redaction to another page opens the gate", () => {
+    const { s } = setup();
+    const r = redact(0);
+    s.add(r); s.apply();
+    s.beginEdit();
+    s.relocate(r, 3);
+    s.settle();
+    expect(s.pending).toBe(true);
+  });
+});
