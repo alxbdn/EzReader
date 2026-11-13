@@ -25,8 +25,7 @@ import type { PageAdjust, PageSlot } from "./tauri-bridge";
 import { SplitModal } from "./split-modal";
 import { getTranslations, applyTranslationsToDOM, fmt, type Translations } from "./i18n";
 import { DocumentSession, uniqueTempName, isMicrosoftPrintToPdf } from "./document-session";
-import { AnnotationStore } from "./annotation-store";
-import { AnnotationHistory } from "./annotation-history";
+import { AnnotationSession } from "./annotation-session";
 import {
   defaultToolState,
   type Annotation,
@@ -109,10 +108,15 @@ let editingShapeAnn: ShapeAnnotation | null = null;
 // ── Instances ─────────────────────────────────────────────────────────────────
 
 const viewer = new PdfViewer();
-const store  = new AnnotationStore();
 const toolState = defaultToolState();
 const toolbar   = new Toolbar();
-const history   = new AnnotationHistory();
+/** Annotations, undo / redo and the ✓ / ✕ gate for redactions. */
+const annotations: AnnotationSession = new AnnotationSession({
+  gateEnabled: () => toolbar.currentMode !== "read",
+  isDirty: (): boolean => session.isDirty,
+});
+annotations.onChange(() => setDirty(true));
+annotations.onPendingChange((pending) => toolbar.setPending(pending));
 const compressModal      = new CompressModal();
 const exportModal        = new ExportModal();
 const ocrModal = new OcrModal({
@@ -158,7 +162,7 @@ async function newTempPath(suffix: string): Promise<string> {
 /** The open document: paths, dirty flag and the edits not yet written to disk. */
 const session = new DocumentSession(
   {
-    annotations: () => store.getAll(),
+    annotations: () => annotations.all(),
     formFields:  () => [...formValues.entries()].map(([name, value]): FormFieldValue => ({ name, value })),
     rotation:    () => viewer.rotation,
   },
@@ -258,36 +262,16 @@ function onFormChange(name: string, val: string): void {
   setDirty(true);
 }
 
-viewer.setup(toolState, store, formValues, onFormChange);
+viewer.setup(toolState, annotations, formValues, onFormChange);
 
 // ── Per-page overlay event wiring ─────────────────────────────────────────────
 
 function wirePageOverlay(pv: PdfPageView): void {
   const ov = pv.overlay;
 
-  ov.onAnnotationCreated((ann: Annotation) => {
-    beginChange();
-    store.add(ann);
-    setDirty(true);
-  });
-
-  ov.onBeforeModify(() => beginChange());
-
   ov.onPick((ann) => {
     if (toolState.tool !== "select") toolbar.clearActiveTool();
     ov.select(ann);
-  });
-
-  ov.onAnnotationMoved(() => setDirty(true));
-
-  ov.onAnnotationRemoved((ann: Annotation) => {
-    store.removeRef(ann);
-    setDirty(true);
-  });
-
-  ov.onAnnotationReordered((ann: Annotation, dir) => {
-    store.moveLayer(ann, dir === "up" ? 1 : -1);
-    setDirty(true);
   });
 
   ov.onTextAnnotationSelected((ann: TextAnnotation | null) => {
@@ -444,68 +428,29 @@ function setDirty(val: boolean): void {
 
 // ── Changes waiting for ✓ / ✕ ───────────────────────────────────────────────
 
-/** Annotations (and dirty flag) as they were before the pending changes. */
-let draft: { annotations: string; dirty: boolean } | null = null;
-
-/** The redactions among `anns`, as text to compare. */
-function redactionsOf(anns: Annotation[]): string {
-  return JSON.stringify(anns.filter((a) => a.kind === "redact"));
-}
-
-/**
- * Call before any annotation change: records undo history. Most changes
- * apply at once (Ctrl+Z takes them back); only redactions, which destroy
- * content when saved, wait for ✓ / ✕.
- */
-function beginChange(): void {
-  const before = store.getAll();
-  history.push(before);
-  if (draft || toolbar.currentMode === "read") return;
-  const snapshot = { annotations: JSON.stringify(before), dirty: session.isDirty };
-  const redactions = redactionsOf(before);
-  // The change itself runs right after this call (a drag on its first moves).
-  setTimeout(() => {
-    if (draft || redactionsOf(store.getAll()) === redactions) return;
-    draft = snapshot;
-    toolbar.setPending(true);
-  }, 0);
-}
-
-/** After Ctrl+Z / Ctrl+Y: the overlays show the restored annotations. */
-function restoreAnnotations(anns: Annotation[]): void {
-  store.replaceAll(anns);
-  // The selected annotation objects were replaced: drop the stale ones.
+/** The selected annotation objects were replaced: drop the stale ones. */
+function dropStaleSelection(): void {
   editingTextAnn = null;
   editingShapeAnn = null;
   toolbar.hideTextStyles();
   toolbar.hideShapeStyles();
-  syncAllPageOverlays();
-  setDirty(true);
-  // Undoing every pending redaction leaves nothing to validate.
-  if (draft && redactionsOf(anns) === redactionsOf(JSON.parse(draft.annotations) as Annotation[])) applyDraft();
 }
 
-/** ✓: the pending changes are kept. */
-function applyDraft(): void {
-  if (!draft) return;
-  draft = null;
-  toolbar.setPending(false);
+/** Ctrl+Z / Ctrl+Y: the overlays show the restored annotations. */
+function undoRedo(redo: boolean): void {
+  if (!(redo ? annotations.redo() : annotations.undo())) return;
+  dropStaleSelection();
+  syncAllPageOverlays();
+  setDirty(true);
 }
 
 /** ✕: the pending changes are thrown away. */
 function discardDraft(): void {
-  if (!draft) return;
-  history.push(store.getAll()); // Ctrl+Z brings them back
-  store.replaceAll(JSON.parse(draft.annotations) as Annotation[]);
-  const dirty = draft.dirty || pendingRename !== null;
-  draft = null;
-  toolbar.setPending(false);
-  editingTextAnn = null;
-  editingShapeAnn = null;
-  toolbar.hideTextStyles();
-  toolbar.hideShapeStyles();
+  const dirty = annotations.discard();
+  if (dirty === null) return;
+  dropStaleSelection();
   syncAllPageOverlays();
-  setDirty(dirty);
+  setDirty(dirty || pendingRename !== null);
 }
 
 let closeGuardBusy = false;
@@ -554,7 +499,6 @@ function syncAllPageOverlays(): void {
       pv.pageNum,
       viewer.scale,
       pv.viewport.height / viewer.scale,
-      store.getForPage(pv.pageNum),
       pv.viewport
     );
   }
@@ -698,12 +642,12 @@ function setWelcomeVisible(visible: boolean): void {
  * working copy actually displayed, or null when `path` itself is shown.
  */
 async function showInViewer(path: string, reload = false): Promise<string | null> {
-  store.clear();
+  annotations.clear();
   formValues.clear();
 
   // Read annotations BEFORE viewer.load() so IntersectionObserver finds them populated
   const saved = await readAnnotations(path);
-  for (const ann of saved) store.add(ann);
+  annotations.load(saved);
 
   // A file with saved annotations is shown from a copy whose burned layer
   // is stripped, so the overlay can draw the annotations editable.
@@ -717,7 +661,6 @@ async function showInViewer(path: string, reload = false): Promise<string | null
   else await viewer.load(workingCopy ?? path);
   showThumbnails(reload);
 
-  history.clear();
   setWelcomeVisible(false);
   toolbar.setLoaded(true);
   toolbar.updateZoom(viewer.scale);
@@ -727,8 +670,8 @@ async function showInViewer(path: string, reload = false): Promise<string | null
 async function loadPdf(path: string, password?: string | null): Promise<void> {
   pendingRename = null;
   unsavedCopy = false;
-  draft = null;
-  toolbar.setPending(false);
+  // Changes still waiting for ✓ / ✕ are kept as they are.
+  annotations.apply();
   if (password) { await openProtected(path, password); return; }
   try {
     const workingCopy = await showInViewer(path);
@@ -1404,7 +1347,7 @@ toolbar.on(async (e) => {
       break;
 
     case "draft-apply":
-      applyDraft();
+      annotations.apply();
       break;
 
     case "draft-discard":
@@ -1419,17 +1362,13 @@ toolbar.on(async (e) => {
       settingsModal.open();
       break;
 
-    case "undo": {
-      const prev = history.undo(store.getAll());
-      if (prev) restoreAnnotations(prev);
+    case "undo":
+      undoRedo(false);
       break;
-    }
 
-    case "redo": {
-      const next = history.redo(store.getAll());
-      if (next) restoreAnnotations(next);
+    case "redo":
+      undoRedo(true);
       break;
-    }
   }
 });
 
@@ -1467,14 +1406,12 @@ document.addEventListener("keydown", async (e) => {
 
   if (ctrl && !shift && e.key === "z") {
     e.preventDefault();
-    const prev = history.undo(store.getAll());
-    if (prev) restoreAnnotations(prev);
+    undoRedo(false);
     return;
   }
   if (ctrl && (e.key === "y" || (shift && e.key === "Z"))) {
     e.preventDefault();
-    const next = history.redo(store.getAll());
-    if (next) restoreAnnotations(next);
+    undoRedo(true);
     return;
   }
   if (ctrl && !shift && e.key === "o") {
@@ -1615,10 +1552,7 @@ document.getElementById("viewer-scroll")!.addEventListener("click", (e: MouseEve
   const ratio = pendingSignatureRatio > 0 ? pendingSignatureRatio : 0.4;
   const h = Math.min(75, 150 * ratio);
   const w = h / ratio;
-  beginChange();
-  const ann = pv.overlay.placeSignature(x, y, pendingSignature, w, h);
-  store.add(ann);
-  setDirty(true);
+  pv.overlay.placeSignature(x, y, pendingSignature, w, h);
   cancelSignaturePlacement();
   // Ready to move and resize right away.
   if (toolState.tool !== "select") toolbar.clearActiveTool();
@@ -1665,7 +1599,7 @@ window.addEventListener("keydown", async (e: KeyboardEvent) => {
   if (e.key === "Enter" && toolbar.isPending) {
     // Enter validates the pending changes (✓).
     e.preventDefault();
-    applyDraft();
+    annotations.apply();
     return;
   }
   if (e.key !== "Escape") return;
@@ -1765,10 +1699,7 @@ async function placePicture(path: string, pv: PdfPageView, x: number, y: number)
   // Natural size at 96 dpi, at most 60 % of the page.
   const page = pv.overlay.pageSizePt;
   const size = fitWithin(pic.width * 0.75, pic.height * 0.75, page.width * 0.6, page.height * 0.6);
-  beginChange();
-  const ann = pv.overlay.placeImage(x, y, pic.data, size.width, size.height);
-  store.add(ann);
-  setDirty(true);
+  pv.overlay.placeImage(x, y, pic.data, size.width, size.height);
   // Ready to move and resize right away.
   if (toolState.tool !== "select") toolbar.clearActiveTool();
 }

@@ -23,6 +23,7 @@ import {
   type FontFamilyValue,
   DRAW_TOOLS,
 } from "./models";
+import type { AnnotationSession } from "./annotation-session";
 
 /** Shapes whose outline, fill, thickness and opacity can be changed. */
 export type ShapeAnnotation = RectAnnotation | CircleAnnotation | InkAnnotation;
@@ -70,10 +71,6 @@ interface PdfViewport {
   rotation: number;
 }
 
-type AnnotationCreatedHandler      = (ann: Annotation) => void;
-type AnnotationMovedHandler        = (ann: Annotation) => void;
-type AnnotationRemovedHandler      = (ann: Annotation) => void;
-type AnnotationReorderHandler      = (ann: Annotation, dir: "up" | "down") => void;
 type TextAnnotationSelectedHandler  = (ann: TextAnnotation | null) => void;
 type ShapeAnnotationSelectedHandler = (ann: ShapeAnnotation | null) => void;
 type ResizeHandle = "nw" | "n" | "ne" | "e" | "se" | "s" | "sw" | "w";
@@ -142,22 +139,26 @@ export class CanvasOverlay {
   private viewportRotation = 0;
 
   // ── Callbacks ───────────────────────────────────────────────────────────────
-  private createdHandlers:      AnnotationCreatedHandler[]      = [];
-  private movedHandlers:        AnnotationMovedHandler[]        = [];
-  private removedHandlers:      AnnotationRemovedHandler[]      = [];
-  private reorderHandlers:      AnnotationReorderHandler[]      = [];
   private textSelectedHandlers:  TextAnnotationSelectedHandler[]  = [];
   private shapeSelectedHandlers: ShapeAnnotationSelectedHandler[] = [];
 
   /** Called on hover when no annotation is hit; return the desired cursor string (e.g. "pointer") or "" for default. */
   onHoverCursor: ((offsetX: number, offsetY: number) => string) | null = null;
 
-  private committed: Annotation[] = [];
+  /** False while the page is cleared (scrolled out of range): nothing is drawn. */
+  private shown = false;
 
-  // ── Before-modify callbacks ──────────────────────────────────────────────────
-  private beforeModifyHandlers: (() => void)[] = [];
+  /** This page's annotations, straight from the session (the single source of truth). */
+  private get committed(): readonly Annotation[] {
+    return this.shown ? this.session.forPage(this.currentPage) : [];
+  }
 
-  constructor(canvas: HTMLCanvasElement, container: HTMLElement, initialStyle: ActiveToolState) {
+  constructor(
+    canvas: HTMLCanvasElement,
+    container: HTMLElement,
+    initialStyle: ActiveToolState,
+    private readonly session: AnnotationSession,
+  ) {
     this.style = { ...initialStyle };
     this.canvas = canvas;
     this.container = container;
@@ -181,30 +182,14 @@ export class CanvasOverlay {
     this.applyPointerEvents(this.activeTool);
   }
 
-  onAnnotationCreated    (h: AnnotationCreatedHandler):      void { this.createdHandlers.push(h); }
-  onAnnotationMoved      (h: AnnotationMovedHandler):        void { this.movedHandlers.push(h); }
-  onAnnotationRemoved    (h: AnnotationRemovedHandler):      void { this.removedHandlers.push(h); }
-  onAnnotationReordered  (h: AnnotationReorderHandler):      void { this.reorderHandlers.push(h); }
   onTextAnnotationSelected (h: TextAnnotationSelectedHandler):  void { this.textSelectedHandlers.push(h); }
   onShapeAnnotationSelected(h: ShapeAnnotationSelectedHandler): void { this.shapeSelectedHandlers.push(h); }
-
-  /** Register a callback invoked just before any annotation is mutated (move,
-   *  resize, delete, style change, text edit). Use to snapshot history. */
-  onBeforeModify(h: () => void): void { this.beforeModifyHandlers.push(h); }
-  private emitBeforeModify(): void { this.beforeModifyHandlers.forEach(h => h()); }
 
   /** A click only selects; the first actual move or resize opens the change. */
   private notifyChangeOnce(): void {
     if (this.changeNotified) return;
     this.changeNotified = true;
-    this.emitBeforeModify();
-  }
-
-  private emit             (a: Annotation): void { this.createdHandlers.forEach(h => h(a)); }
-  private emitMoved        (a: Annotation): void { this.movedHandlers.forEach(h => h(a)); }
-  private emitRemoved      (a: Annotation): void { this.removedHandlers.forEach(h => h(a)); }
-  private emitReordered    (a: Annotation, dir: "up" | "down"): void {
-    this.reorderHandlers.forEach(h => h(a, dir));
+    this.session.beginEdit();
   }
   private emitTextSelected  (a: TextAnnotation | null):                void { this.textSelectedHandlers.forEach(h => h(a)); }
   private emitShapeSelected (a: ShapeAnnotation | null): void { this.shapeSelectedHandlers.forEach(h => h(a)); }
@@ -241,13 +226,13 @@ export class CanvasOverlay {
     fillColor: RgbColor | null,
     opacity: number,
   ): void {
-    this.emitBeforeModify();
+    this.session.beginEdit();
     ann.color = { ...color };
     ann.strokeWidth = strokeWidth;
     ann.fillColor = fillColor ? { ...fillColor } : null;
     ann.opacity = opacity;
     this.redrawCommitted();
-    this.emitMoved(ann);
+    this.session.edited();
   }
 
   /** Apply text style fields to an existing annotation and redraw. */
@@ -255,7 +240,7 @@ export class CanvasOverlay {
     ann: TextAnnotation,
     style: Pick<ActiveToolState, "color" | "fontSize" | "bold" | "italic" | "underline" | "alignment" | "fontFamily" | "textBackground">
   ): void {
-    this.emitBeforeModify();
+    this.session.beginEdit();
     ann.color     = { ...style.color };
     ann.backgroundColor = style.textBackground ? { ...style.textBackground } : null;
     ann.fontFamily = style.fontFamily;
@@ -265,7 +250,7 @@ export class CanvasOverlay {
     ann.underline = style.underline;
     ann.alignment = style.alignment;
     this.redrawCommitted();
-    this.emitMoved(ann);
+    this.session.edited();
   }
 
   setStyle(style: ActiveToolState): void {
@@ -297,6 +282,14 @@ export class CanvasOverlay {
     this.canvas.style.pointerEvents = DRAW_TOOLS.includes(tool) ? "auto" : "none";
   }
 
+  /** The page was cleared (scrolled out of range): draws nothing until the next sync. */
+  hide(): void {
+    this.syncToPage(this.currentPage, 1, 841);
+    this.shown = false;
+    this.selected = null;
+    this.redrawCommitted();
+  }
+
   /** Convert PDF user-space point → canvas pixel coords (handles rotation via viewport). */
   private toCanvas(pdfX: number, pdfY: number): [number, number] {
     if (this.viewport) {
@@ -317,19 +310,20 @@ export class CanvasOverlay {
     return [p.x, p.y];
   }
 
-  syncToPage(page: number, scale: number, pageHeightPt: number, annotations: Annotation[], viewport?: PdfViewport): void {
+  /** Shows page `page`'s annotations at this scale (after a render). */
+  syncToPage(page: number, scale: number, pageHeightPt: number, viewport?: PdfViewport): void {
+    this.shown        = true;
     this.currentPage  = page;
     this.scale        = scale;
     this.pageHeightPt = pageHeightPt;
     this.viewport         = viewport ?? null;
     this.viewportRotation = viewport?.rotation ?? 0;
     // A re-render (zoom, layout) keeps the selection if the annotation is still there.
-    if (this.selected && !annotations.includes(this.selected)) this.selected = null;
+    if (this.selected && !this.committed.includes(this.selected)) this.selected = null;
     this.dragging = false;
     this.resizing = false;
     this.dragTarget = null;
 
-    this.committed = [...annotations];
     this.redrawCommitted();
     // Always reset pointer-events to the correct state for the current tool.
     // Without this, if the canvas was left with pointer-events:auto (from a draw
@@ -1049,12 +1043,14 @@ export class CanvasOverlay {
         const { ann, index, pts } = this.vertexDrag;
         pts[index] = this.toPdf(e.offsetX, e.offsetY) as [number, number];
         this.setOutline(ann, pts);
+        this.session.settle();
         this.redrawCommitted();
         return;
       }
       if (this.resizing && this.dragTarget) {
         this.notifyChangeOnce();
         this.applyResize(e.offsetX, e.offsetY);
+        this.session.settle();
         this.redrawCommitted();
         return;
       }
@@ -1063,6 +1059,7 @@ export class CanvasOverlay {
         const [curPdfX, curPdfY] = this.toPdf(e.offsetX, e.offsetY);
         this.dragTarget.x = this.dragOrigX + (curPdfX - this.dragStartPdfX);
         this.dragTarget.y = this.dragOrigY + (curPdfY - this.dragStartPdfY);
+        this.session.settle();
         this.redrawCommitted();
         return;
       }
@@ -1091,12 +1088,12 @@ export class CanvasOverlay {
   private onMouseUp = (e: MouseEvent): void => {
     if (this.activeTool === "select") {
       if (this.vertexDrag) {
-        if (this.changeNotified) this.emitMoved(this.vertexDrag.ann);
+        if (this.changeNotified) this.session.edited();
         this.vertexDrag = null;
         return;
       }
       if (this.resizing && this.dragTarget) {
-        this.emitMoved(this.dragTarget);
+        this.session.edited();
         this.resizing     = false;
         this.resizeHandle = null;
         this.dragTarget   = null;
@@ -1105,7 +1102,7 @@ export class CanvasOverlay {
       }
       if (this.dragging && this.dragTarget) {
         const moved = this.dragTarget.x !== this.dragOrigX || this.dragTarget.y !== this.dragOrigY;
-        if (moved) this.emitMoved(this.dragTarget);
+        if (moved) this.session.edited();
         this.dragging   = false;
         this.dragTarget = null;
         this.canvas.style.cursor = "grab";
@@ -1133,7 +1130,7 @@ export class CanvasOverlay {
         : [[this.startX, this.startY], [e.offsetX, e.offsetY]];
       this.inkPts = [];
       const ann = this.makeInk(pts, this.activeTool === "arrow");
-      if (ann) { this.committed.push(ann); this.emit(ann); }
+      if (ann) this.session.add(ann);
       this.redrawCommitted();
       return;
     }
@@ -1145,9 +1142,8 @@ export class CanvasOverlay {
         x: px - STAMP_SIZE / 2, y: py - STAMP_SIZE / 2, width: STAMP_SIZE, height: STAMP_SIZE,
         mark: this.style.stampMark, color: { ...this.style.stampColor },
       };
-      this.committed.push(ann);
+      this.session.add(ann);
       this.redrawCommitted();
-      this.emit(ann);
       return;
     }
 
@@ -1158,8 +1154,7 @@ export class CanvasOverlay {
       if (pts.length > 2 && Math.max(...xs) - Math.min(...xs) >= 4 && Math.max(...ys) - Math.min(...ys) >= 4) {
         const ann: RedactAnnotation = { kind: "redact", page: this.currentPage, x: 0, y: 0, width: 1, height: 1, shape: "lasso" };
         this.setOutline(ann, pts.map(([cx, cy]) => this.toPdf(cx, cy) as [number, number]));
-        this.committed.push(ann);
-        this.emit(ann);
+        this.session.add(ann);
       }
       this.redrawCommitted();
       return;
@@ -1176,8 +1171,7 @@ export class CanvasOverlay {
         x: Math.min(ax, bx), y: Math.min(ay, by), width: Math.abs(bx - ax), height: Math.abs(by - ay),
         content: "", color: { ...this.style.noteColor },
       };
-      this.committed.push(ann);
-      this.emit(ann);
+      this.session.add(ann);
       this.editNote(ann, true);
       return;
     }
@@ -1216,9 +1210,8 @@ export class CanvasOverlay {
         fillColor: this.style.fillColor ? { ...this.style.fillColor } : null,
         opacity: this.style.opacity,
       };
-      this.committed.push(ann);
+      this.session.add(ann);
       this.redrawCommitted();
-      this.emit(ann);
     } else if (this.activeTool === "redact") {
       const shape = this.style.redactShape;
       const ann: RedactAnnotation = {
@@ -1228,9 +1221,8 @@ export class CanvasOverlay {
         // A stretchable area starts as the rectangle drawn; drag its corners.
         ...(shape === "poly" ? { points: [[0, 1], [1, 1], [1, 0], [0, 0]] as [number, number][] } : {}),
       };
-      this.committed.push(ann);
+      this.session.add(ann);
       this.redrawCommitted();
-      this.emit(ann);
     } else if (this.activeTool === "circle") {
       const ann: CircleAnnotation = {
         kind: "circle", page: this.currentPage,
@@ -1239,15 +1231,14 @@ export class CanvasOverlay {
         fillColor: this.style.fillColor ? { ...this.style.fillColor } : null,
         opacity: this.style.opacity,
       };
-      this.committed.push(ann);
+      this.session.add(ann);
       this.redrawCommitted();
-      this.emit(ann);
     }
   };
 
   private onMouseLeave = (): void => {
     if (this.vertexDrag) {
-      if (this.changeNotified) this.emitMoved(this.vertexDrag.ann);
+      if (this.changeNotified) this.session.edited();
       this.vertexDrag = null;
     }
     if ((this.resizing || this.dragging) && this.dragTarget) {
@@ -1322,11 +1313,9 @@ export class CanvasOverlay {
 
     if (touched.length > 0 && covered >= total * 0.6) {
       // Already highlighted: highlighting it again takes the highlight off.
-      this.emitBeforeModify();
-      for (const h of touched) {
-        this.committed.splice(this.committed.indexOf(h), 1);
-        this.emitRemoved(h);
-      }
+      this.session.change(() => {
+        for (const h of touched) this.session.remove(h);
+      });
       this.redrawCommitted();
       return;
     }
@@ -1339,9 +1328,8 @@ export class CanvasOverlay {
       width: Math.max(...xs) - Math.min(...xs), height: Math.max(...ys) - Math.min(...ys),
       rects: pdfRects, color: { ...color }, opacity,
     };
-    this.committed.push(ann);
+    this.session.add(ann);
     this.redrawCommitted();
-    this.emit(ann);
   }
 
   private onKeyDown = (e: KeyboardEvent): void => {
@@ -1351,13 +1339,10 @@ export class CanvasOverlay {
         (document.activeElement as HTMLElement)?.isContentEditable) return;
     if ((e.key === "Delete" || e.key === "Backspace") &&
         this.selected && this.activeTool === "select") {
-      this.emitBeforeModify();
-      const idx = this.committed.indexOf(this.selected);
-      if (idx !== -1) this.committed.splice(idx, 1);
       const removed = this.selected;
       this.selected = null;
+      this.session.remove(removed);
       this.redrawCommitted();
-      this.emitRemoved(removed);
     }
   };
 
@@ -1425,9 +1410,8 @@ export class CanvasOverlay {
           fontFamily: this.style.fontFamily,
           backgroundColor: this.style.textBackground ? { ...this.style.textBackground } : null,
         };
-        this.committed.push(ann);
+        this.session.add(ann);
         this.redrawCommitted();
-        this.emit(ann);
       }
     };
 
@@ -1468,13 +1452,7 @@ export class CanvasOverlay {
 
   /** Moves `ann` one layer up or down among this page's annotations. */
   reorderAnnotation(ann: Annotation, dir: "up" | "down"): void {
-    const idx = this.committed.indexOf(ann);
-    const to = idx + (dir === "up" ? 1 : -1);
-    if (idx === -1 || to < 0 || to >= this.committed.length) return;
-    this.emitBeforeModify();
-    [this.committed[idx], this.committed[to]] = [this.committed[to], this.committed[idx]];
-    this.redrawCommitted();
-    this.emitReordered(ann, dir);
+    if (this.session.moveLayer(ann, dir === "up" ? 1 : -1)) this.redrawCommitted();
   }
 
   private handleTextEdit(ann: TextAnnotation): void {
@@ -1524,11 +1502,11 @@ export class CanvasOverlay {
       const content = (input.innerText ?? input.textContent ?? "").trim();
       finish();
       if (content && content !== ann.content) {
-        this.emitBeforeModify();
+        this.session.beginEdit();
         ann.content = content;
         // Text placed with a click grows with what is typed.
         ann.width = Math.max(ann.width, this.fitTextWidth(content, { ...ann, fontFamily: ann.fontFamily ?? "helvetica" }));
-        this.emitMoved(ann);
+        this.session.edited();
       }
       this.redrawCommitted();
     };
@@ -1591,9 +1569,9 @@ export class CanvasOverlay {
       area.remove();
       this.editingAnn = null;
       if (keep && area.value !== ann.content) {
-        this.emitBeforeModify();
+        this.session.beginEdit();
         ann.content = area.value.replace(/\s+$/, "");
-        this.emitMoved(ann);
+        this.session.edited();
       }
       this.redrawCommitted();
       // A new note stays (even empty) and is selected, ready to move or
@@ -1629,7 +1607,7 @@ export class CanvasOverlay {
       x: pdfX - widthPt / 2, y: pdfY - heightPt / 2,
       width: widthPt, height: heightPt, imageData,
     };
-    this.committed.push(ann);
+    this.session.add(ann);
     this.selected = ann;
     this.redrawCommitted();
     return ann;
@@ -1666,19 +1644,15 @@ export class CanvasOverlay {
     const covered = pdfRects.reduce((acc, r) => acc + Math.min(area(r), touched.reduce((s2, m) => s2 + overlap(m, r), 0)), 0);
 
     if (touched.length > 0 && covered >= total * 0.6) {
-      this.emitBeforeModify();
-      for (const m of touched) {
-        this.committed.splice(this.committed.indexOf(m), 1);
-        this.emitRemoved(m);
-      }
+      this.session.change(() => {
+        for (const m of touched) this.session.remove(m);
+      });
       this.redrawCommitted();
       return;
     }
-    for (const r of pdfRects) {
-      const ann: RedactAnnotation = { kind: "redact", page: this.currentPage, ...r };
-      this.committed.push(ann);
-      this.emit(ann);
-    }
+    this.session.change(() => {
+      for (const r of pdfRects) this.session.add({ kind: "redact", page: this.currentPage, ...r });
+    });
     this.redrawCommitted();
   }
 
@@ -1746,10 +1720,9 @@ export class CanvasOverlay {
         alignment: "left", fontFamily: s2.fontFamily, backgroundColor: null,
         cover,
       };
-      this.committed.push(ann);
+      this.session.add(ann);
       this.selected = ann;
       this.redrawCommitted();
-      this.emit(ann);
       this.emitTextSelected(ann);
     };
     const outside = (ev: MouseEvent): void => {
@@ -1779,7 +1752,7 @@ export class CanvasOverlay {
       x: pdfX - widthPt / 2, y: pdfY - heightPt / 2,
       width: widthPt, height: heightPt, imageData,
     };
-    this.committed.push(ann);
+    this.session.add(ann);
     this.selected = ann;
     this.redrawCommitted();
     return ann;
