@@ -164,6 +164,8 @@ export interface Translations {
   msgUnsavedTitle?: string;
   msgCloseWithoutSaving?: string;
   msgDiscardChanges?: string;
+  msgYes?: string;
+  msgNo?: string;
   msgPasswordPrompt?: string;
   msgWrongPassword?: string;
   msgOpenFailed?: string;
@@ -678,6 +680,8 @@ const EN: Translations = {
   msgUnsavedTitle:        "Unsaved changes",
   msgCloseWithoutSaving:  "Close without saving?",
   msgDiscardChanges:      "Discard unsaved changes and continue?",
+  msgYes:                 "Yes",
+  msgNo:                  "No",
   msgPasswordPrompt:      "This PDF is password-protected. Enter password:",
   msgWrongPassword:       "Wrong password or could not open file.",
   msgOpenFailed:          "Could not open file: {err}",
@@ -1185,6 +1189,8 @@ const FR: Translations = {
   msgUnsavedTitle:        "Modifications non enregistrées",
   msgCloseWithoutSaving:  "Fermer sans enregistrer ?",
   msgDiscardChanges:      "Abandonner les modifications non enregistrées et continuer ?",
+  msgYes:                 "Oui",
+  msgNo:                  "Non",
   msgPasswordPrompt:      "Ce PDF est protégé par un mot de passe. Saisissez le mot de passe :",
   msgWrongPassword:       "Mot de passe incorrect ou fichier impossible à ouvrir.",
   msgOpenFailed:          "Impossible d'ouvrir le fichier : {err}",
