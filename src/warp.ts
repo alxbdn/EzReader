@@ -35,6 +35,70 @@ export function squareToQuad(quad: [Point, Point, Point, Point]): (u: number, v:
   };
 }
 
+/** A 3×3 matrix, row by row, acting on column vectors [x, y, 1]. */
+export type Mat3 = [number, number, number, number, number, number, number, number, number];
+
+/** The 3×3 form of a pdf.js / canvas affine transform [a, b, c, d, e, f]. */
+export function affine3([a, b, c, d, e, f]: number[]): Mat3 {
+  return [a, c, e, b, d, f, 0, 0, 1];
+}
+
+export function mul3(p: Mat3, q: Mat3): Mat3 {
+  const r = new Array(9).fill(0) as Mat3;
+  for (let i = 0; i < 3; i++) for (let j = 0; j < 3; j++) for (let k = 0; k < 3; k++) r[i * 3 + j] += p[i * 3 + k] * q[k * 3 + j];
+  return r;
+}
+
+export function invert3(m: Mat3): Mat3 {
+  const [a, b, c, d, e, f, g, h, i] = m;
+  const A = e * i - f * h, B = -(d * i - f * g), C = d * h - e * g;
+  const det = a * A + b * B + c * C;
+  if (Math.abs(det) < 1e-12) throw new Error("Matrix cannot be inverted");
+  const k = 1 / det;
+  return [
+    A * k, -(b * i - c * h) * k, (b * f - c * e) * k,
+    B * k, (a * i - c * g) * k, -(a * f - c * d) * k,
+    C * k, -(a * h - b * g) * k, (a * e - b * d) * k,
+  ];
+}
+
+export function apply3(m: Mat3, [x, y]: Point): Point {
+  const w = m[6] * x + m[7] * y + m[8];
+  return [(m[0] * x + m[1] * y + m[2]) / w, (m[3] * x + m[4] * y + m[5]) / w];
+}
+
+/**
+ * Where straightening moves each point: `quad` (fractions of a `width` ×
+ * `height` picture, as for `warpToRect`) becomes the whole picture. Returns
+ * the map in picture pixels: a point inside the quad goes to where
+ * `warpToRect` draws it.
+ */
+export function straightenMap(quad: [Point, Point, Point, Point], width: number, height: number): Mat3 {
+  // warpToRect samples pixel (u·width, v·height) at H·(u, v): invert it.
+  const px = quad.map(([x, y]) => [x * width, y * height] as Point) as [Point, Point, Point, Point];
+  const H = quadMatrix(px);
+  const toPixels: Mat3 = [width, 0, 0, 0, height, 0, 0, 0, 1];
+  return mul3(toPixels, invert3(H));
+}
+
+/** The projective matrix sending the unit square's corners (0,0) (1,0) (1,1) (0,1) to `q`. */
+function quadMatrix(q: [Point, Point, Point, Point]): Mat3 {
+  const [[x0, y0], [x1, y1], [x2, y2], [x3, y3]] = q;
+  const dx1 = x1 - x2, dx2 = x3 - x2, dx3 = x0 - x1 + x2 - x3;
+  const dy1 = y1 - y2, dy2 = y3 - y2, dy3 = y0 - y1 + y2 - y3;
+  let g = 0, h = 0;
+  if (Math.abs(dx3) > 1e-9 || Math.abs(dy3) > 1e-9) {
+    const den = dx1 * dy2 - dx2 * dy1;
+    g = (dx3 * dy2 - dx2 * dy3) / den;
+    h = (dx1 * dy3 - dx3 * dy1) / den;
+  }
+  return [
+    x1 - x0 + g * x1, x3 - x0 + h * x3, x0,
+    y1 - y0 + g * y1, y3 - y0 + h * y3, y0,
+    g, h, 1,
+  ];
+}
+
 /**
  * Straightens the area of `src` inside `quad` (pixel corners: top left,
  * top right, bottom right, bottom left) into a `width` × `height` picture,

@@ -52,47 +52,10 @@ pub fn redact_pages(doc: &mut Document, pages: &[RedactedPage]) -> Result<(), St
             .get(&rp.page)
             .ok_or_else(|| format!("page {} not found in document", rp.page))?;
 
-        let jpeg = base64::engine::general_purpose::STANDARD
-            .decode(&rp.jpeg_base64)
-            .map_err(|e| format!("page {}: invalid image data: {e}", rp.page))?;
-        let (w, h) = image::ImageReader::with_format(Cursor::new(&jpeg), image::ImageFormat::Jpeg)
-            .into_dimensions()
-            .map_err(|e| format!("page {}: invalid JPEG: {e}", rp.page))?;
-        if w != rp.width_px || h != rp.height_px {
-            return Err(format!("page {}: image size mismatch", rp.page));
-        }
-
-        let mut img = Stream::new(
-            dictionary! {
-                "Type" => "XObject",
-                "Subtype" => "Image",
-                "Width" => i64::from(w),
-                "Height" => i64::from(h),
-                "ColorSpace" => "DeviceRGB",
-                "BitsPerComponent" => 8,
-                "Filter" => "DCTDecode",
-            },
-            jpeg,
-        );
-        img.allows_compression = false;
-        let img_id = doc.add_object(img);
-
-        let [x0, y0, x1, y1] = rp.view;
-        let ops = format!(
-            "q {} 0 0 {} {} {} cm /{IMAGE_NAME} Do Q\n",
-            fmt(x1 - x0), fmt(y1 - y0), fmt(x0), fmt(y0)
-        );
+        let (img_id, ops) = add_picture(doc, rp)?;
         let content_id = doc.add_object(Stream::new(dictionary! {}, ops.into_bytes()));
-
-        // Our own annotation layer (emptied in the display copy, refilled on
-        // save) stays so its metadata keeps pointing at a live stream.
-        let mut contents = vec![Object::Reference(content_id)];
-        if let Some(arr) = meta.stream_ids.get(&rp.page) {
-            let sid = (arr[0], arr[1] as u16);
-            if doc.get_object(sid).is_ok() {
-                contents.push(Object::Reference(sid));
-            }
-        }
+        let contents = with_annotation_layer(doc, &meta, rp.page, content_id);
+        let [x0, y0, x1, y1] = rp.view;
 
         let annots = doc
             .get_dictionary(page_id)
@@ -126,7 +89,60 @@ pub fn redact_pages(doc: &mut Document, pages: &[RedactedPage]) -> Result<(), St
     Ok(())
 }
 
-fn fmt(v: f64) -> String {
+/// Adds the page picture of `rp` as an image XObject. Returns its id and
+/// the content that draws it over the page's view as `/EzRedacted`.
+pub(crate) fn add_picture(doc: &mut Document, rp: &RedactedPage) -> Result<(ObjectId, String), String> {
+    let jpeg = base64::engine::general_purpose::STANDARD
+        .decode(&rp.jpeg_base64)
+        .map_err(|e| format!("page {}: invalid image data: {e}", rp.page))?;
+    let (w, h) = image::ImageReader::with_format(Cursor::new(&jpeg), image::ImageFormat::Jpeg)
+        .into_dimensions()
+        .map_err(|e| format!("page {}: invalid JPEG: {e}", rp.page))?;
+    if w != rp.width_px || h != rp.height_px {
+        return Err(format!("page {}: image size mismatch", rp.page));
+    }
+
+    let mut img = Stream::new(
+        dictionary! {
+            "Type" => "XObject",
+            "Subtype" => "Image",
+            "Width" => i64::from(w),
+            "Height" => i64::from(h),
+            "ColorSpace" => "DeviceRGB",
+            "BitsPerComponent" => 8,
+            "Filter" => "DCTDecode",
+        },
+        jpeg,
+    );
+    img.allows_compression = false;
+    let img_id = doc.add_object(img);
+
+    let [x0, y0, x1, y1] = rp.view;
+    let ops = format!(
+        "q {} 0 0 {} {} {} cm /{IMAGE_NAME} Do Q\n",
+        fmt(x1 - x0), fmt(y1 - y0), fmt(x0), fmt(y0)
+    );
+    Ok((img_id, ops))
+}
+
+/// `content_id`, followed by EzReader's own annotation layer of `page` when
+/// it has one: that layer (emptied in the display copy, refilled on save)
+/// stays so its metadata keeps pointing at a live stream.
+pub(crate) fn with_annotation_layer(doc: &Document, meta: &writer::AnnotationMeta, page: u32, content_id: ObjectId) -> Vec<Object> {
+    let mut contents = vec![Object::Reference(content_id)];
+    if let Some(arr) = meta.stream_ids.get(&page) {
+        let sid = (arr[0], arr[1] as u16);
+        if doc.get_object(sid).is_ok() {
+            contents.push(Object::Reference(sid));
+        }
+    }
+    contents
+}
+
+/// Name of the page picture in the resources of a redacted or straightened page.
+pub(crate) const PICTURE_NAME: &str = IMAGE_NAME;
+
+pub(crate) fn fmt(v: f64) -> String {
     let s = format!("{v:.4}");
     s.trim_end_matches('0').trim_end_matches('.').to_string()
 }

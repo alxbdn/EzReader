@@ -1,5 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
+import type { Mat3 } from "./warp";
+import type { TextRun } from "./straighten";
 import type { FormFieldValue, StoredAnnotation } from "./models";
 
 /** Opens a file-picker dialog filtered to PDF files. Returns the path or null. */
@@ -260,6 +262,22 @@ export interface RedactedPage {
  * so the original content (text, images, links, form fields) of those pages
  * is gone, not just hidden.
  */
+/** A straightened page for `straightenPages`: its picture, the warp, its text. */
+export interface StraightenedPage extends RedactedPage {
+  /** Where the warp moves a point: 3×3, row by row, old → new PDF user space. */
+  map: Mat3;
+  /** The page's text, moved by the warp, laid back invisibly to stay searchable. */
+  text: TextRun[];
+}
+
+/**
+ * Replaces `pages` of `inputPath` with their straightened pictures, keeping
+ * their text (invisible, searchable), links, form fields and annotations.
+ */
+export async function straightenPages(inputPath: string, outputPath: string, pages: StraightenedPage[]): Promise<void> {
+  return invoke<void>("straighten_pages", { inputPath, outputPath, pages });
+}
+
 export async function redactPages(
   inputPath: string,
   outputPath: string,
