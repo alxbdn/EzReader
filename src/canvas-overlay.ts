@@ -136,6 +136,13 @@ export class CanvasOverlay implements SelectionOwner {
   /** PDF coords of the mouse at drag-start — used for delta-based dragging. */
   private dragStartPdfX = 0;
   private dragStartPdfY = 0;
+  /** Where the dragged annotation was when the drag started (on this page). */
+  private dragBaseX = 0;
+  private dragBaseY = 0;
+  /** A move, resize or corner drag follows the pointer anywhere (window listeners). */
+  private tracking = false;
+  /** The overlay of each page, by its page wrapper: a drag can hand over to another page. */
+  private static readonly byContainer = new WeakMap<HTMLElement, CanvasOverlay>();
   /** Whether the current drag has reported "about to modify" yet. */
   private changeNotified = true;
   /** Corner of a stretchable redaction being dragged, as page points. */
@@ -185,6 +192,7 @@ export class CanvasOverlay implements SelectionOwner {
     // selection works.  We listen on the container (always receives
     // events) to detect when the cursor is over an annotation and temporarily
     // flip pointer-events:auto so the canvas can handle clicks/drags.
+    CanvasOverlay.byContainer.set(container, this);
     container.addEventListener("mousemove", this.onContainerMouseMove);
     container.addEventListener("mousedown", this.onContainerMouseDown);
 
@@ -1000,6 +1008,7 @@ export class CanvasOverlay implements SelectionOwner {
         if (v !== null) {
           this.changeNotified = false;
           this.vertexDrag = { ann: this.selected, index: v, pts: this.outlineOf(this.selected) };
+          this.track();
           return;
         }
       }
@@ -1010,6 +1019,7 @@ export class CanvasOverlay implements SelectionOwner {
           this.changeNotified = false;
           this.startResize(this.selected, h);
           this.canvas.style.cursor = HANDLE_CURSORS[h];
+          this.track();
           return;
         }
       }
@@ -1023,12 +1033,15 @@ export class CanvasOverlay implements SelectionOwner {
         this.dragTarget  = hit;
         this.dragOrigX   = hit.x;
         this.dragOrigY   = hit.y;
+        this.dragBaseX   = hit.x;
+        this.dragBaseY   = hit.y;
         this.dragOrigW   = hit.width;
         this.dragOrigH   = hit.kind !== "text" ? hit.height : 0;
         this.dragOffsetX = e.offsetX - bounds.left;
         this.dragOffsetY = e.offsetY - bounds.top;
         [this.dragStartPdfX, this.dragStartPdfY] = this.toPdf(e.offsetX, e.offsetY);
         this.canvas.style.cursor = "grabbing";
+        this.track();
       }
       this.redrawCommitted();
       this.emitTextSelected(hit?.kind === "text" ? hit : null);
@@ -1052,31 +1065,7 @@ export class CanvasOverlay implements SelectionOwner {
 
   private onMouseMove = (e: MouseEvent): void => {
     if (this.activeTool === "select") {
-      if (this.vertexDrag) {
-        this.notifyChangeOnce();
-        const { ann, index, pts } = this.vertexDrag;
-        pts[index] = this.toPdf(e.offsetX, e.offsetY) as [number, number];
-        this.setOutline(ann, pts);
-        this.session.settle();
-        this.redrawCommitted();
-        return;
-      }
-      if (this.resizing && this.dragTarget) {
-        this.notifyChangeOnce();
-        this.applyResize(e.offsetX, e.offsetY);
-        this.session.settle();
-        this.redrawCommitted();
-        return;
-      }
-      if (this.dragging && this.dragTarget) {
-        this.notifyChangeOnce();
-        const [curPdfX, curPdfY] = this.toPdf(e.offsetX, e.offsetY);
-        this.dragTarget.x = this.dragOrigX + (curPdfX - this.dragStartPdfX);
-        this.dragTarget.y = this.dragOrigY + (curPdfY - this.dragStartPdfY);
-        this.session.settle();
-        this.redrawCommitted();
-        return;
-      }
+      if (this.tracking) return; // the window listener follows the gesture
       // Hover: check handle cursor, then grab cursor
       if (this.selected) {
         const h = this.hitHandle(e.offsetX, e.offsetY, this.selected);
@@ -1100,29 +1089,7 @@ export class CanvasOverlay implements SelectionOwner {
   };
 
   private onMouseUp = (e: MouseEvent): void => {
-    if (this.activeTool === "select") {
-      if (this.vertexDrag) {
-        if (this.changeNotified) this.session.edited();
-        this.vertexDrag = null;
-        return;
-      }
-      if (this.resizing && this.dragTarget) {
-        this.session.edited();
-        this.resizing     = false;
-        this.resizeHandle = null;
-        this.dragTarget   = null;
-        this.canvas.style.cursor = "default";
-        return;
-      }
-      if (this.dragging && this.dragTarget) {
-        const moved = this.dragTarget.x !== this.dragOrigX || this.dragTarget.y !== this.dragOrigY;
-        if (moved) this.session.edited();
-        this.dragging   = false;
-        this.dragTarget = null;
-        this.canvas.style.cursor = "grab";
-      }
-      return;
-    }
+    if (this.activeTool === "select") return; // gestures end in onGestureUp
 
     if (!this.isDrawing) return;
     this.isDrawing = false;
@@ -1156,7 +1123,7 @@ export class CanvasOverlay implements SelectionOwner {
         x: px - STAMP_SIZE / 2, y: py - STAMP_SIZE / 2, width: STAMP_SIZE, height: STAMP_SIZE,
         mark: this.style.stampMark, color: { ...this.style.stampColor },
       };
-      this.session.add(ann);
+      this.addInside(ann);
       this.redrawCommitted();
       return;
     }
@@ -1185,7 +1152,7 @@ export class CanvasOverlay implements SelectionOwner {
         x: Math.min(ax, bx), y: Math.min(ay, by), width: Math.abs(bx - ax), height: Math.abs(by - ay),
         content: "", color: { ...this.style.noteColor },
       };
-      this.session.add(ann);
+      this.addInside(ann);
       this.editNote(ann, true);
       return;
     }
@@ -1250,24 +1217,168 @@ export class CanvasOverlay implements SelectionOwner {
     }
   };
 
-  private onMouseLeave = (): void => {
+  // ── Move / resize / corner drag: followed anywhere on screen ────────────────
+
+  private track(): void {
+    if (this.tracking) return;
+    this.tracking = true;
+    window.addEventListener("mousemove", this.onGestureMove, true);
+    window.addEventListener("mouseup", this.onGestureUp, true);
+  }
+
+  private untrack(): void {
+    if (!this.tracking) return;
+    this.tracking = false;
+    window.removeEventListener("mousemove", this.onGestureMove, true);
+    window.removeEventListener("mouseup", this.onGestureUp, true);
+  }
+
+  /** The pointer in this canvas's pixels (it may be outside the page). */
+  private canvasPoint(e: MouseEvent): [number, number] {
+    const r = this.canvas.getBoundingClientRect();
+    return [e.clientX - r.left, e.clientY - r.top];
+  }
+
+  /** `p` held inside the page. */
+  private clampToPage([x, y]: [number, number]): [number, number] {
+    const w = this.canvas.clientWidth, h = this.canvas.clientHeight;
+    return [Math.min(Math.max(x, 0), w), Math.min(Math.max(y, 0), h)];
+  }
+
+  /** Moves `ann` by (dx, dy) canvas pixels. */
+  private shiftBy(ann: Annotation, dx: number, dy: number): void {
+    if (!dx && !dy) return;
+    const [x0, y0] = this.toPdf(0, 0);
+    const [x1, y1] = this.toPdf(dx, dy);
+    ann.x += x1 - x0;
+    ann.y += y1 - y0;
+  }
+
+  /** Shifts `ann` back inside the page, keeping its size (top left first when it is bigger). */
+  private keepInside(ann: Annotation): void {
+    const w = this.canvas.clientWidth, h = this.canvas.clientHeight;
+    if (w <= 0 || h <= 0) return;
+    const b = this.getAnnBounds(ann);
+    const fit = (lo: number, hi: number, size: number): number =>
+      lo < 0 || hi - lo >= size ? -lo : hi > size ? size - hi : 0;
+    this.shiftBy(ann, fit(b.left, b.right, w), fit(b.top, b.bottom, h));
+  }
+
+  /** Adds an annotation placed by a click, kept inside the page. */
+  private addInside(ann: Annotation): void {
+    this.keepInside(ann);
+    this.session.add(ann);
+  }
+
+  /** Text that replaces words of the page stays with them; anything else can go to another page. */
+  private static canChangePage(ann: Annotation): boolean {
+    return !(ann.kind === "text" && ann.cover);
+  }
+
+  /** The page overlay under the pointer, if any. */
+  private static overlayAt(e: MouseEvent): CanvasOverlay | null {
+    const el = document.elementFromPoint(e.clientX, e.clientY);
+    const wrap = el?.closest?.(".page-wrapper") as HTMLElement | null;
+    return wrap ? CanvasOverlay.byContainer.get(wrap) ?? null : null;
+  }
+
+  private onGestureMove = (e: MouseEvent): void => {
     if (this.vertexDrag) {
-      if (this.changeNotified) this.session.edited();
-      this.vertexDrag = null;
-    }
-    if ((this.resizing || this.dragging) && this.dragTarget) {
-      // Restore original geometry
-      this.dragTarget.x     = this.dragOrigX;
-      this.dragTarget.y     = this.dragOrigY;
-      this.dragTarget.width = this.dragOrigW;
-      if (this.dragTarget.kind !== "text") this.dragTarget.height = this.dragOrigH;
-      this.resizing     = false;
-      this.resizeHandle = null;
-      this.dragging     = false;
-      this.dragTarget   = null;
+      this.notifyChangeOnce();
+      const { ann, index, pts } = this.vertexDrag;
+      pts[index] = this.toPdf(...this.clampToPage(this.canvasPoint(e))) as [number, number];
+      this.setOutline(ann, pts);
+      this.session.settle();
       this.redrawCommitted();
       return;
     }
+    if (this.resizing && this.dragTarget) {
+      this.notifyChangeOnce();
+      this.applyResize(...this.clampToPage(this.canvasPoint(e)));
+      this.session.settle();
+      this.redrawCommitted();
+      return;
+    }
+    if (this.dragging && this.dragTarget) {
+      this.notifyChangeOnce();
+      const other = CanvasOverlay.overlayAt(e);
+      if (other && other !== this && other.shown && CanvasOverlay.canChangePage(this.dragTarget)) {
+        other.adoptDrag(this, this.dragTarget, e);
+        return;
+      }
+      const [curPdfX, curPdfY] = this.toPdf(...this.canvasPoint(e));
+      this.dragTarget.x = this.dragBaseX + (curPdfX - this.dragStartPdfX);
+      this.dragTarget.y = this.dragBaseY + (curPdfY - this.dragStartPdfY);
+      this.keepInside(this.dragTarget);
+      this.session.settle();
+      this.redrawCommitted();
+    }
+  };
+
+  private onGestureUp = (): void => {
+    this.untrack();
+    if (this.vertexDrag) {
+      if (this.changeNotified) this.session.edited();
+      this.vertexDrag = null;
+      return;
+    }
+    if (this.resizing && this.dragTarget) {
+      this.session.edited();
+      this.resizing     = false;
+      this.resizeHandle = null;
+      this.dragTarget   = null;
+      this.canvas.style.cursor = "default";
+      return;
+    }
+    if (this.dragging && this.dragTarget) {
+      const moved = this.dragTarget.x !== this.dragOrigX || this.dragTarget.y !== this.dragOrigY;
+      if (moved) this.session.edited();
+      this.dragging   = false;
+      this.dragTarget = null;
+      this.canvas.style.cursor = "grab";
+    }
+  };
+
+  /**
+   * A drag from page `from` reached this page: `ann` moves here, under the
+   * pointer at the same grab point, and this page carries on the drag.
+   */
+  private adoptDrag(from: CanvasOverlay, ann: Annotation, e: MouseEvent): void {
+    const offX = from.dragOffsetX, offY = from.dragOffsetY;
+    from.untrack();
+    from.dragging = false;
+    from.dragTarget = null;
+    from.canvas.style.cursor = "default";
+
+    this.session.relocate(ann, this.currentPage);
+    const [cx, cy] = this.canvasPoint(e);
+    const b = this.getAnnBounds(ann);
+    this.shiftBy(ann, cx - offX - b.left, cy - offY - b.top);
+    this.keepInside(ann);
+    this.session.settle();
+
+    this.selected = ann; // the other page stops drawing it as selected
+    this.changeNotified = true;
+    this.dragging = true;
+    this.dragTarget = ann;
+    // Never equal: the drop counts as a change even back at the same spot.
+    this.dragOrigX = Number.NaN;
+    this.dragOrigY = Number.NaN;
+    this.dragBaseX = ann.x;
+    this.dragBaseY = ann.y;
+    this.dragOffsetX = offX;
+    this.dragOffsetY = offY;
+    [this.dragStartPdfX, this.dragStartPdfY] = this.toPdf(cx, cy);
+    this.canvas.style.cursor = "grabbing";
+    this.track();
+    from.redrawCommitted();
+    this.redrawCommitted();
+    this.emitTextSelected(ann.kind === "text" ? ann : null);
+    this.emitShapeSelected((ann.kind === "rect" || ann.kind === "circle" || ann.kind === "ink") ? ann : null);
+  }
+
+  private onMouseLeave = (): void => {
+    // A move or resize carries on outside the page (see onGestureMove).
     if (this.isDrawing) {
       this.isDrawing = false;
       this.inkPts = [];
@@ -1424,7 +1535,7 @@ export class CanvasOverlay implements SelectionOwner {
           fontFamily: this.style.fontFamily,
           backgroundColor: this.style.textBackground ? { ...this.style.textBackground } : null,
         };
-        this.session.add(ann);
+        this.addInside(ann);
         this.redrawCommitted();
       }
     };
@@ -1626,7 +1737,7 @@ export class CanvasOverlay implements SelectionOwner {
       x: pdfX - widthPt / 2, y: pdfY - heightPt / 2,
       width: widthPt, height: heightPt, imageData,
     };
-    this.session.add(ann);
+    this.addInside(ann);
     this.selected = ann;
     this.redrawCommitted();
     return ann;
@@ -1771,7 +1882,7 @@ export class CanvasOverlay implements SelectionOwner {
       x: pdfX - widthPt / 2, y: pdfY - heightPt / 2,
       width: widthPt, height: heightPt, imageData,
     };
-    this.session.add(ann);
+    this.addInside(ann);
     this.selected = ann;
     this.redrawCommitted();
     return ann;

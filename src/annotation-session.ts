@@ -137,6 +137,23 @@ export class AnnotationSession {
     this.begin();
   }
 
+  /**
+   * Moves `ann` to 1-indexed `page` (on top of its annotations), as part of
+   * the in-place change opened by `beginEdit()`: no undo step of its own.
+   */
+  relocate(ann: Annotation, page: number): void {
+    if (ann.page === page) return;
+    const from = this.pages.get(ann.page);
+    const idx = from?.indexOf(ann) ?? -1;
+    if (!from || idx === -1) return;
+    from.splice(idx, 1);
+    if (from.length === 0) this.pages.delete(ann.page);
+    ann.page = page;
+    let to = this.pages.get(page);
+    if (!to) this.pages.set(page, (to = []));
+    to.push(ann);
+  }
+
   /** Re-checks the ✓ / ✕ gate after an in-place change (a drag step). */
   settle(): void {
     if (!this.candidate || this.draft) return;
