@@ -209,6 +209,22 @@ export class CanvasOverlay {
   private emitTextSelected  (a: TextAnnotation | null):                void { this.textSelectedHandlers.forEach(h => h(a)); }
   private emitShapeSelected (a: ShapeAnnotation | null): void { this.shapeSelectedHandlers.forEach(h => h(a)); }
 
+  private pickHandlers: ((ann: Annotation) => void)[] = [];
+  /**
+   * A click (no drag) with a drawing tool on an existing annotation: the app
+   * switches back to selecting, then calls `select(ann)`.
+   */
+  onPick(h: (ann: Annotation) => void): void { this.pickHandlers.push(h); }
+
+  /** Selects `ann` (ready to move, resize or restyle). */
+  select(ann: Annotation): void {
+    if (!this.committed.includes(ann)) return;
+    this.selected = ann;
+    this.redrawCommitted();
+    this.emitTextSelected(ann.kind === "text" ? ann : null);
+    this.emitShapeSelected((ann.kind === "rect" || ann.kind === "circle" || ann.kind === "ink") ? ann : null);
+  }
+
   get currentTool(): ToolKind { return this.activeTool; }
 
   /** Drawing a freeform redaction area. */
@@ -699,12 +715,11 @@ export class CanvasOverlay {
       ctx.restore();
 
     } else if (ann.kind === "redact") {
-      // Solid black like the saved result, with a red outline marking it as
-      // a redaction that is still pending (not yet applied by a save).
+      // Solid black, outline included, like the saved result.
       this.redactPath(ann);
       ctx.fillStyle = "#000";
       ctx.fill();
-      ctx.strokeStyle = "#dc2626";
+      ctx.strokeStyle = "#000";
       ctx.lineWidth   = 1.5;
       ctx.stroke();
 
@@ -890,6 +905,11 @@ export class CanvasOverlay {
     }
     if (this.activeTool === "rect") {
       ctx.strokeRect(x0, y0, w, h);
+    } else if (this.activeTool === "note") {
+      ctx.globalAlpha = 0.7;
+      ctx.fillStyle = rgbToCss(this.style.noteColor);
+      ctx.fillRect(x0, y0, w, h);
+      ctx.globalAlpha = 1;
     } else if (this.activeTool === "redact") {
       ctx.beginPath();
       if (this.lassoing) {
@@ -902,7 +922,7 @@ export class CanvasOverlay {
       }
       ctx.fillStyle = "rgba(0, 0, 0, 0.6)";
       ctx.fill();
-      ctx.strokeStyle = "#dc2626";
+      ctx.strokeStyle = "#000";
       ctx.lineWidth   = 1.5;
       ctx.stroke();
     } else if (this.activeTool === "circle") {
@@ -1096,6 +1116,17 @@ export class CanvasOverlay {
     if (!this.isDrawing) return;
     this.isDrawing = false;
 
+    // A plain click on an existing annotation picks it instead of adding one.
+    if (!this.lassoing && Math.hypot(e.offsetX - this.startX, e.offsetY - this.startY) < 4 && this.pickHandlers.length > 0) {
+      const hit = this.hitTest(this.startX, this.startY);
+      if (hit) {
+        this.inkPts = [];
+        this.redrawCommitted();
+        this.pickHandlers.forEach(h => h(hit));
+        return;
+      }
+    }
+
     if (this.activeTool === "ink" || this.activeTool === "line" || this.activeTool === "arrow") {
       const pts: [number, number][] = this.activeTool === "ink"
         ? [...this.inkPts, [e.offsetX, e.offsetY]]
@@ -1136,10 +1167,13 @@ export class CanvasOverlay {
 
     if (this.activeTool === "note") {
       this.redrawCommitted();
-      const [px, py] = this.toPdf(this.startX, this.startY);
+      // A click sticks a note of the default size; a drag sets its size.
+      const dragged = Math.abs(e.offsetX - this.startX) >= 12 && Math.abs(e.offsetY - this.startY) >= 12;
+      const [ax, ay] = this.toPdf(this.startX, this.startY);
+      const [bx, by] = dragged ? this.toPdf(e.offsetX, e.offsetY) : [ax + NOTE_W, ay - NOTE_H];
       const ann: NoteAnnotation = {
         kind: "note", page: this.currentPage,
-        x: px, y: py - NOTE_H, width: NOTE_W, height: NOTE_H,
+        x: Math.min(ax, bx), y: Math.min(ay, by), width: Math.abs(bx - ax), height: Math.abs(by - ay),
         content: "", color: { ...this.style.noteColor },
       };
       this.committed.push(ann);
@@ -1556,16 +1590,15 @@ export class CanvasOverlay {
       document.removeEventListener("mousedown", outside, true);
       area.remove();
       this.editingAnn = null;
-      if (fresh && !area.value.trim()) {
-        // A new note left empty goes away, like empty text.
-        this.committed = this.committed.filter(a => a !== ann);
-        this.emitRemoved(ann);
-      } else if (keep && area.value !== ann.content) {
+      if (keep && area.value !== ann.content) {
         this.emitBeforeModify();
         ann.content = area.value.replace(/\s+$/, "");
         this.emitMoved(ann);
       }
       this.redrawCommitted();
+      // A new note stays (even empty) and is selected, ready to move or
+      // resize; a double click writes in it again.
+      if (fresh) this.pickHandlers.forEach(h => h(ann));
     };
     const outside = (ev: MouseEvent): void => {
       if (ev.target === area) return;
@@ -1747,6 +1780,7 @@ export class CanvasOverlay {
       width: widthPt, height: heightPt, imageData,
     };
     this.committed.push(ann);
+    this.selected = ann;
     this.redrawCommitted();
     return ann;
   }

@@ -475,7 +475,6 @@ export class PageSidebar {
     hits.className = "page-sidebar-hits";
     frame.append(check, hits);
     frame.addEventListener("click", (e) => this.handleClick(page, e));
-    frame.addEventListener("dblclick", () => { for (const cb of this.goToHandlers) cb(page, false); });
     frame.addEventListener("pointerdown", (e) => this.handlePointerDown(page, e));
 
     const meta = document.createElement("div");
@@ -511,7 +510,7 @@ export class PageSidebar {
     const rotate = q(".page-sidebar-rotate");
     if (rotate) rotate.title = this.t("sbRotateLeft", "Rotate left");
     const frame = q(".page-sidebar-frame");
-    if (frame) frame.title = this.t("sbToggleHint", "Click to select · double-click to show");
+    if (frame) frame.title = this.t("sbToggleHint", "Click to show · check box or Ctrl+click to select");
   }
 
   private sizePlaceholder(thumb: Thumb, dim: { width: number; height: number } | undefined): void {
@@ -563,10 +562,18 @@ export class PageSidebar {
 
   // ── Selection ───────────────────────────────────────────────────────────────
 
-  /** A click checks or unchecks the page; Shift extends from the last one clicked. */
+  /**
+   * A click shows the page. The check box, Ctrl+click and Shift+click select
+   * (Shift extends from the last one checked).
+   */
   private handleClick(page: number, e: MouseEvent): void {
     if (this.suppressClick) {
       this.suppressClick = false;
+      return;
+    }
+    const onCheck = (e.target as HTMLElement | null)?.closest(".page-sidebar-check") !== null;
+    if (!onCheck && !e.shiftKey && !e.ctrlKey && !e.metaKey) {
+      for (const cb of this.goToHandlers) cb(page, false);
       return;
     }
     if (e.shiftKey && this.anchor !== null) {

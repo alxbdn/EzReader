@@ -243,6 +243,11 @@ function wirePageOverlay(pv: PdfPageView): void {
 
   ov.onBeforeModify(() => beginChange());
 
+  ov.onPick((ann) => {
+    if (toolState.tool !== "select") toolbar.clearActiveTool();
+    ov.select(ann);
+  });
+
   ov.onAnnotationMoved(() => setDirty(true));
 
   ov.onAnnotationRemoved((ann: Annotation) => {
@@ -410,13 +415,42 @@ function setDirty(val: boolean): void {
 /** Annotations (and dirty flag) as they were before the pending changes. */
 let draft: { annotations: string; dirty: boolean } | null = null;
 
-/** Call before any annotation change: records undo history and opens a draft. */
+/** The redactions among `anns`, as text to compare. */
+function redactionsOf(anns: Annotation[]): string {
+  return JSON.stringify(anns.filter((a) => a.kind === "redact"));
+}
+
+/**
+ * Call before any annotation change: records undo history. Most changes
+ * apply at once (Ctrl+Z takes them back); only redactions, which destroy
+ * content when saved, wait for ✓ / ✕.
+ */
 function beginChange(): void {
-  history.push(store.getAll());
-  if (!draft && toolbar.currentMode !== "read") {
-    draft = { annotations: JSON.stringify(store.getAll()), dirty: session.isDirty };
+  const before = store.getAll();
+  history.push(before);
+  if (draft || toolbar.currentMode === "read") return;
+  const snapshot = { annotations: JSON.stringify(before), dirty: session.isDirty };
+  const redactions = redactionsOf(before);
+  // The change itself runs right after this call (a drag on its first moves).
+  setTimeout(() => {
+    if (draft || redactionsOf(store.getAll()) === redactions) return;
+    draft = snapshot;
     toolbar.setPending(true);
-  }
+  }, 0);
+}
+
+/** After Ctrl+Z / Ctrl+Y: the overlays show the restored annotations. */
+function restoreAnnotations(anns: Annotation[]): void {
+  store.replaceAll(anns);
+  // The selected annotation objects were replaced: drop the stale ones.
+  editingTextAnn = null;
+  editingShapeAnn = null;
+  toolbar.hideTextStyles();
+  toolbar.hideShapeStyles();
+  syncAllPageOverlays();
+  setDirty(true);
+  // Undoing every pending redaction leaves nothing to validate.
+  if (draft && redactionsOf(anns) === redactionsOf(JSON.parse(draft.annotations) as Annotation[])) applyDraft();
 }
 
 /** ✓: the pending changes are kept. */
@@ -871,11 +905,8 @@ pageSidebar.onSelectionChange((pages) => toolbar.tools.setPageSelection(pages.le
 function openAdjust(kind: "crop" | "straighten"): void {
   const doc = viewer.document;
   if (!doc || adjustView.isOpen) return;
-  const pages = pageSidebar.selection;
-  if (pages.length === 0) {
-    showToast(msg(kind === "crop" ? "msgSelectPagesCrop" : "msgSelectPagesStraighten"));
-    return;
-  }
+  // The checked pages, or else the page shown.
+  const pages = pageSidebar.selection.length > 0 ? pageSidebar.selection : [viewer.currentPage];
   cancelSignaturePlacement();
   toolbar.search.close();
   appEl.classList.add("adjusting");
@@ -1311,6 +1342,7 @@ toolbar.on(async (e) => {
         sigStore.touch(sig.id);
         startSignaturePlacement(sig.imageDataUrl.split(",")[1] ?? sig.imageDataUrl);
         refreshSignatures();
+        toolbar.setActiveSignature(sig.id);
       }
       break;
     }
@@ -1338,13 +1370,13 @@ toolbar.on(async (e) => {
 
     case "undo": {
       const prev = history.undo(store.getAll());
-      if (prev) { store.replaceAll(prev); syncAllPageOverlays(); setDirty(true); }
+      if (prev) restoreAnnotations(prev);
       break;
     }
 
     case "redo": {
       const next = history.redo(store.getAll());
-      if (next) { store.replaceAll(next); syncAllPageOverlays(); setDirty(true); }
+      if (next) restoreAnnotations(next);
       break;
     }
   }
@@ -1363,13 +1395,13 @@ document.addEventListener("keydown", async (e) => {
   if (ctrl && !shift && e.key === "z") {
     e.preventDefault();
     const prev = history.undo(store.getAll());
-    if (prev) { store.replaceAll(prev); syncAllPageOverlays(); setDirty(true); }
+    if (prev) restoreAnnotations(prev);
     return;
   }
   if (ctrl && (e.key === "y" || (shift && e.key === "Z"))) {
     e.preventDefault();
     const next = history.redo(store.getAll());
-    if (next) { store.replaceAll(next); syncAllPageOverlays(); setDirty(true); }
+    if (next) restoreAnnotations(next);
     return;
   }
   if (ctrl && !shift && e.key === "o") {
@@ -1455,8 +1487,17 @@ document.addEventListener("mousemove", (e: MouseEvent) => {
   sigPreview.style.top  = `${e.clientY}px`;
 });
 
+/** Height / width of the signature being placed (0 until its picture loads). */
+let pendingSignatureRatio = 0;
+
 function startSignaturePlacement(imageData: string): void {
   pendingSignature = imageData;
+  pendingSignatureRatio = 0;
+  const probe = new Image();
+  probe.onload = () => {
+    if (pendingSignature === imageData && probe.naturalWidth > 0) pendingSignatureRatio = probe.naturalHeight / probe.naturalWidth;
+  };
+  probe.src = `data:image/png;base64,${imageData}`;
   showSigPreview(imageData);
   document.getElementById("viewer-scroll")!.style.cursor = "none";
   updateHandMode();
@@ -1466,6 +1507,7 @@ function startSignaturePlacement(imageData: string): void {
 function cancelSignaturePlacement(): void {
   if (!pendingSignature) return;
   pendingSignature = null;
+  toolbar.setActiveSignature(null);
   hideSigPreview();
   document.getElementById("viewer-scroll")!.style.cursor = "";
   updateHandMode();
@@ -1496,11 +1538,17 @@ document.getElementById("viewer-scroll")!.addEventListener("click", (e: MouseEve
   const x = e.clientX - rect.left;
   const y = e.clientY - rect.top;
 
+  // 150 pt wide in the picture's own proportions (at most 75 pt high).
+  const ratio = pendingSignatureRatio > 0 ? pendingSignatureRatio : 0.4;
+  const h = Math.min(75, 150 * ratio);
+  const w = h / ratio;
   beginChange();
-  const ann = pv.overlay.placeSignature(x, y, pendingSignature, 150, 60);
+  const ann = pv.overlay.placeSignature(x, y, pendingSignature, w, h);
   store.add(ann);
   setDirty(true);
   cancelSignaturePlacement();
+  // Ready to move and resize right away.
+  if (toolState.tool !== "select") toolbar.clearActiveTool();
 });
 
 // ── Context menu ──────────────────────────────────────────────────────────────

@@ -284,6 +284,17 @@ export class ToolRow {
     this.renderSignatures();
   }
 
+  /** The saved signature being placed (outlined in red), or null. */
+  private activeSignature: string | null = null;
+  setActiveSignature(id: string | null): void {
+    this.activeSignature = id;
+    this.sigList?.querySelectorAll<HTMLElement>(".sig-chip").forEach((c) => {
+      const on = c.dataset.id === id;
+      c.classList.toggle("active", on);
+      c.querySelector(".sig-chip-use")?.setAttribute("aria-pressed", String(on));
+    });
+  }
+
   applyTranslations(t: Translations): void {
     this.t = t;
     for (const [el, key, fb] of this.texts) el.textContent = this.tr(key, fb);
@@ -551,6 +562,8 @@ export class ToolRow {
     for (const s of this.signatures) {
       const chip = document.createElement("div");
       chip.className = "sig-chip";
+      chip.dataset.id = s.id;
+      chip.classList.toggle("active", s.id === this.activeSignature);
       const use = document.createElement("button");
       use.type = "button";
       use.className = "sig-chip-use";
@@ -629,7 +642,7 @@ export class ToolRow {
       text: ["hintText", "Click on the page to type. Enter places the text, Shift+Enter starts a new line."],
       pencil: ["hintPencil", "Draw on the page."],
       shapes: ["hintShapes", "Drag on the page to draw."],
-      note: ["hintNote", "Click on the page to stick a note."],
+      note: ["hintNote", "Click to stick a note, or drag to set its size. Double-click a note to write in it."],
       highlight: ["hintHighlight", "Select text to highlight it. Select it again to remove the highlight."],
       sign: ["hintSign", "Pick a signature, then click where it goes."],
       redact: ["hintRedact", "Drag over what must disappear."],

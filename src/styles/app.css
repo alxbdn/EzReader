@@ -740,6 +740,8 @@ input::placeholder { color: var(--muted-foreground); }
   background: #ffffff;
   overflow: hidden;
 }
+/* The signature being placed: red, like the selected pages of the side panel. */
+.sig-chip.active { border-color: #E53935; box-shadow: 0 0 0 1px #E53935; }
 .sig-chip-use { border: none; background: transparent; padding: 2px 8px; cursor: pointer; }
 .sig-chip-use img { height: 26px; max-width: 120px; display: block; }
 .sig-chip-del {
@@ -1317,6 +1319,9 @@ input[type="color"].color-picker.is-off::-webkit-color-swatch {
   transition: opacity 0.12s;
 }
 
+.page-sidebar-check { cursor: pointer; }
+/* A larger, invisible hit area around the check box. */
+.page-sidebar-check::after { content: ""; position: absolute; inset: -6px; }
 .page-sidebar-thumb:hover .page-sidebar-check,
 .page-sidebar.selecting .page-sidebar-check { opacity: 1; }
 
@@ -1392,7 +1397,7 @@ input[type="color"].color-picker.is-off::-webkit-color-swatch {
   pointer-events: none;
   padding: 4px 10px;
   border-radius: 999px;
-  background: var(--sidebar-select, #E53935); /* the ghost is on body, outside the panel */
+  background: #E53935; /* the ghost is on body, outside the panel */
   color: #fff;
   font-size: 12px;
   font-weight: 600;
