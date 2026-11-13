@@ -1,5 +1,6 @@
 import { mountWelcomeDots } from "./welcome-dots";
-import { PdfViewer, PdfPageView, renderRedactedPages } from "./pdf-viewer";
+import { PdfViewer, PdfPageView, renderRedactedPages, renderStraightenedPages } from "./pdf-viewer";
+import { AdjustView, type PageSetting } from "./adjust-view";
 import { Toolbar, isValidFileStem, splitFileName } from "./toolbar";
 import { CompressModal } from "./compress-modal";
 import { PrintModal } from "./print-modal";
@@ -9,7 +10,7 @@ import { SettingsModal } from "./settings";
 import { PageSidebar } from "./page-sidebar";
 import { DocSearch, type SearchMatch } from "./doc-search";
 import { moveItems } from "./page-order";
-import type { PageSlot } from "./tauri-bridge";
+import type { PageAdjust, PageSlot } from "./tauri-bridge";
 import { SplitModal } from "./split-modal";
 import { getTranslations, applyTranslationsToDOM, fmt, type Translations } from "./i18n";
 import { DocumentSession, uniqueTempName, isMicrosoftPrintToPdf } from "./document-session";
@@ -43,6 +44,7 @@ import {
   redactPages,
   renameFile,
   openImageDialog,
+  adjustPages,
 } from "./tauri-bridge";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { mountWindowControls } from "./window-controls";
@@ -92,6 +94,12 @@ const settingsModal      = new SettingsModal();
 const splitModal         = new SplitModal();
 const pageSidebar        = new PageSidebar(document.getElementById("page-sidebar")!);
 const docSearch          = new DocSearch();
+const appEl              = document.getElementById("app")!;
+const adjustView         = new AdjustView(appEl, applyAdjust, () => {
+  appEl.classList.remove("adjusting");
+  toolbar.setBlocker(null);
+});
+document.getElementById("viewer-area")!.after(adjustView.el);
 
 async function newTempPath(suffix: string): Promise<string> {
   return uniqueTempName(await tempDir(), suffix);
@@ -262,6 +270,7 @@ mountWindowControls(document.getElementById("menubar-row")!, () => {
   pageSidebar.applyTranslations(t);
   printModal.applyTranslations(t);
   splitModal.applyTranslations(t);
+  adjustView.applyTranslations(t);
   applyTranslationsToDOM(t);
 }
 settingsModal.onChange(s => {
@@ -271,6 +280,7 @@ settingsModal.onChange(s => {
   pageSidebar.applyTranslations(t);
   printModal.applyTranslations(t);
   splitModal.applyTranslations(t);
+  adjustView.applyTranslations(t);
   applyTranslationsToDOM(t);
 });
 
@@ -766,6 +776,87 @@ async function insertSlots(after: number, inserted: PageSlot[]): Promise<void> {
   if (await editPages(slots, first, select)) showToast(msg("msgPagesUpdated"));
 }
 
+pageSidebar.onSelectionChange((pages) => toolbar.tools.setPageSelection(pages.length));
+
+// ── Crop / Straighten ────────────────────────────────────────────────────────
+
+/** Opens Crop / Straighten on the pages selected in the side panel. */
+function openAdjust(kind: "crop" | "straighten"): void {
+  const doc = viewer.document;
+  if (!doc || adjustView.isOpen) return;
+  const pages = pageSidebar.selection;
+  if (pages.length === 0) {
+    showToast(msg(kind === "crop" ? "msgSelectPagesCrop" : "msgSelectPagesStraighten"));
+    return;
+  }
+  cancelSignaturePlacement();
+  toolbar.search.close();
+  appEl.classList.add("adjusting");
+  toolbar.setBlocker(() => adjustView.shake());
+  adjustView.open(doc, pages, kind, viewer.rotation);
+}
+
+/**
+ * ✓ of Crop / Straighten. Crops and flips stay vector (CropBox and a
+ * mirroring matrix); straightened pages become pictures of the page.
+ */
+async function applyAdjust(settings: PageSetting[]): Promise<boolean> {
+  const source = session.sourcePath;
+  const doc = viewer.document;
+  if (!source || !doc) return false;
+  if (settings.length === 0) return true;
+  try {
+    const crops: PageAdjust[] = [];
+    for (const s of settings) {
+      if (s.mode !== "crop") continue;
+      const page = await doc.getPage(s.page);
+      const rotation = (page.rotate + viewer.rotation) % 360;
+      const vp = page.getViewport({ scale: 1, rotation });
+      const { l, t, r, b } = s.crop;
+      const full = l <= 1e-4 && t <= 1e-4 && r >= 1 - 1e-4 && b >= 1 - 1e-4;
+      const [x1, y1] = vp.convertToPdfPoint(l * vp.width, t * vp.height);
+      const [x2, y2] = vp.convertToPdfPoint(r * vp.width, b * vp.height);
+      // On a page shown sideways, left-right on screen is the page's up-down.
+      const sideways = rotation % 180 !== 0;
+      crops.push({
+        page: s.page,
+        ...(full ? {} : { crop: [Math.min(x1, x2), Math.min(y1, y2), Math.max(x1, x2), Math.max(y1, y2)] as [number, number, number, number] }),
+        flipH: sideways ? s.flipV : s.flipH,
+        flipV: sideways ? s.flipH : s.flipV,
+      });
+    }
+    const name = await basename(source);
+    let out = await session.materialize();
+    if (crops.length > 0) {
+      const tmp = await newTempPath(`adjust-${name}`);
+      await adjustPages(out, tmp, crops);
+      out = tmp;
+    }
+    const warps = settings.filter((s) => s.mode === "straighten");
+    if (warps.length > 0) {
+      // Pictures are taken without our annotation layer: the annotations
+      // stay editable on top, where they were.
+      const bare = await newTempPath(`straighten-src-${name}`);
+      await stripAnnotationStreams(out, bare);
+      const pictures = await renderStraightenedPages(bare, warps.map((s) => ({ page: s.page, quad: s.quad })));
+      const tmp = await newTempPath(`straighten-${name}`);
+      await redactPages(out, tmp, pictures);
+      out = tmp;
+    }
+    const workingCopy = await showInViewer(out);
+    session.replacedWorkingCopy(workingCopy ?? out);
+    setDirty(true);
+    const pages = settings.map((s) => s.page);
+    viewer.goToPage(pages[0], "instant");
+    pageSidebar.setSelection(pages);
+    showToast(pages.length === 1 ? msg("msgPageAdjusted") : msg("msgPagesAdjusted", { n: pages.length }));
+    return true;
+  } catch (err) {
+    showToast(msg("msgAdjustFailed", { err: String(err) }), true);
+    return false;
+  }
+}
+
 pageSidebar.onGoTo((page, instant) => viewer.goToPage(page, instant ? "instant" : "smooth"));
 
 pageSidebar.onVisibilityChange((visible) => toolbar.updateSidebar(visible));
@@ -1081,6 +1172,10 @@ toolbar.on(async (e) => {
 
     case "signature":
       sigModal.open();
+      break;
+
+    case "adjust":
+      openAdjust(e.kind);
       break;
 
     case "image-browse": {

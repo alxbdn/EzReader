@@ -237,3 +237,18 @@ export async function openImageDialog(): Promise<string | null> {
 export async function readImageFile(path: string): Promise<string> {
   return invoke<string>("read_image_file", { path });
 }
+
+/** How one page is cropped and flipped (see `adjust_pages`). */
+export interface PageAdjust {
+  /** 1-based page number. */
+  page: number;
+  /** Visible area kept, in PDF user space: [x0, y0, x1, y1]. */
+  crop?: [number, number, number, number];
+  flipH?: boolean;
+  flipV?: boolean;
+}
+
+/** Crops and flips pages, as an incremental update (the content stays vector). */
+export async function adjustPages(inputPath: string, outputPath: string, pages: PageAdjust[]): Promise<void> {
+  return invoke<void>("adjust_pages", { inputPath, outputPath, pages });
+}

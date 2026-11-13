@@ -115,3 +115,9 @@ export const ICON_STAMP_CHECK = lucide(`<path d="m4 12 5 5L20 6"/>`);
 export const ICON_STAMP_CROSS = lucide(`<path d="M6 6l12 12"/><path d="M18 6 6 18"/>`);
 export const ICON_SHAPE_LASSO = lucide(`<path d="M6 5c5-3 13-1 13 5s-6 9-11 8-6-10-2-13z"/>`);
 export const ICON_SHAPE_POLY = lucide(`<path d="M4 7l9-3 7 8-5 8-9-2z"/><circle cx="4" cy="7" r="1.2" fill="currentColor"/><circle cx="13" cy="4" r="1.2" fill="currentColor"/><circle cx="20" cy="12" r="1.2" fill="currentColor"/><circle cx="15" cy="20" r="1.2" fill="currentColor"/><circle cx="6" cy="18" r="1.2" fill="currentColor"/>`);
+
+// ── Crop / Straighten ─────────────────────────────────────────────────────────
+export const ICON_CROP = lucide(`<path d="M6 2v14a2 2 0 0 0 2 2h14"/><path d="M2 6h14a2 2 0 0 1 2 2v14"/>`);
+export const ICON_STRAIGHTEN = lucide(`<path d="M5 6 19 4l1 15-15 1z"/><circle cx="5" cy="6" r="2" fill="currentColor" stroke="none"/><circle cx="19" cy="4" r="2" fill="currentColor" stroke="none"/><circle cx="20" cy="19" r="2" fill="currentColor" stroke="none"/><circle cx="5" cy="20" r="2" fill="currentColor" stroke="none"/>`);
+export const ICON_FLIP_V = lucide(`<path d="M3 12h18"/><path d="M7 8l5-5 5 5H7z"/><path d="M7 16l5 5 5-5H7z"/>`);
+export const ICON_FLIP_H = lucide(`<path d="M12 3v18"/><path d="M8 7l-5 5 5 5V7z"/><path d="M16 7l5 5-5 5V7z"/>`);

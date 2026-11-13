@@ -354,6 +354,37 @@ export interface Translations {
   hintStamp?: string;
   msgImageFailed?: string;
   msgDropImageOnPage?: string;
+  // Crop / Straighten (optional, English fallback)
+  toolCrop?: string;
+  toolStraighten?: string;
+  ttCropOff?: string;
+  ttStraightenOff?: string;
+  hintEditPages?: string;
+  hintEditPagesReady?: string;
+  adjTitleOne?: string;
+  adjTitleMany?: string;
+  adjFlipV?: string;
+  adjFlipH?: string;
+  ttFlipV?: string;
+  ttFlipH?: string;
+  adjAuto?: string;
+  ttAuto?: string;
+  adjWarpHint?: string;
+  adjValidateHint?: string;
+  adjEach?: string;
+  adjPageCrop?: string;
+  adjPageStraighten?: string;
+  adjCropCaption?: string;
+  adjUnit?: string;
+  adjCornerTL?: string;
+  adjCornerTR?: string;
+  adjCornerBR?: string;
+  adjCornerBL?: string;
+  msgSelectPagesCrop?: string;
+  msgSelectPagesStraighten?: string;
+  msgPageAdjusted?: string;
+  msgPagesAdjusted?: string;
+  msgAdjustFailed?: string;
 }
 
 // ── English ───────────────────────────────────────────────────────────────────
@@ -695,6 +726,36 @@ const EN: Translations = {
   hintStamp: "Click on the page to stamp.",
   msgImageFailed: "Couldn't open this picture: {err}",
   msgDropImageOnPage: "Drop the picture on a page to place it, or in the side panel to add it as a page.",
+  toolCrop: "Crop",
+  toolStraighten: "Straighten",
+  ttCropOff: "Crop: select pages in the side panel first",
+  ttStraightenOff: "Straighten: select pages in the side panel first",
+  hintEditPages: "Select pages to crop or straighten them.",
+  hintEditPagesReady: "{n} page(s) selected: Crop and Straighten are ready.",
+  adjTitleOne: "Adjust 1 page",
+  adjTitleMany: "Adjust {n} pages",
+  adjFlipV: "Flip vertical",
+  adjFlipH: "Flip horizontal",
+  ttFlipV: "Flip the page upside down",
+  ttFlipH: "Mirror the page left to right",
+  adjAuto: "Auto margins",
+  ttAuto: "Snap the crop to the content margins",
+  adjWarpHint: "Click a corner: an offset loupe opens so you can place it to the pixel. Arrow keys nudge it.",
+  adjValidateHint: "Validate or discard",
+  adjEach: "Each page is set on its own",
+  adjPageCrop: "p. {n} · Crop",
+  adjPageStraighten: "p. {n} · Straighten",
+  adjCropCaption: "Drag the handles to crop · {size}",
+  adjUnit: "in",
+  adjCornerTL: "Top left corner",
+  adjCornerTR: "Top right corner",
+  adjCornerBR: "Bottom right corner",
+  adjCornerBL: "Bottom left corner",
+  msgSelectPagesCrop: "Select pages in the side panel to crop them.",
+  msgSelectPagesStraighten: "Select pages in the side panel to straighten them.",
+  msgPageAdjusted: "1 page adjusted",
+  msgPagesAdjusted: "{n} pages adjusted",
+  msgAdjustFailed: "Couldn't adjust the pages: {err}",
 };
 
 // ── French ────────────────────────────────────────────────────────────────────
@@ -1036,6 +1097,36 @@ const FR: Translations = {
   hintStamp: "Cliquez sur la page pour tamponner.",
   msgImageFailed: "Impossible d'ouvrir cette image : {err}",
   msgDropImageOnPage: "Déposez l'image sur une page pour la placer, ou dans le panneau latéral pour l'ajouter comme page.",
+  toolCrop: "Recadrer",
+  toolStraighten: "Redresser",
+  ttCropOff: "Recadrer : sélectionnez d'abord des pages dans le panneau latéral",
+  ttStraightenOff: "Redresser : sélectionnez d'abord des pages dans le panneau latéral",
+  hintEditPages: "Sélectionnez des pages pour les recadrer ou les redresser.",
+  hintEditPagesReady: "{n} page(s) sélectionnée(s) : Recadrer et Redresser sont prêts.",
+  adjTitleOne: "Ajuster 1 page",
+  adjTitleMany: "Ajuster {n} pages",
+  adjFlipV: "Retourner verticalement",
+  adjFlipH: "Retourner horizontalement",
+  ttFlipV: "Retourner la page de haut en bas",
+  ttFlipH: "Retourner la page de gauche à droite",
+  adjAuto: "Marges auto",
+  ttAuto: "Caler le recadrage sur les marges du contenu",
+  adjWarpHint: "Cliquez un coin : une loupe décalée s'ouvre pour le placer au pixel près. Les flèches l'ajustent.",
+  adjValidateHint: "Valider ou annuler",
+  adjEach: "Chaque page se règle à part",
+  adjPageCrop: "p. {n} · Recadrer",
+  adjPageStraighten: "p. {n} · Redresser",
+  adjCropCaption: "Faites glisser les poignées pour recadrer · {size}",
+  adjUnit: "cm",
+  adjCornerTL: "Coin supérieur gauche",
+  adjCornerTR: "Coin supérieur droit",
+  adjCornerBR: "Coin inférieur droit",
+  adjCornerBL: "Coin inférieur gauche",
+  msgSelectPagesCrop: "Sélectionnez des pages dans le panneau latéral pour les recadrer.",
+  msgSelectPagesStraighten: "Sélectionnez des pages dans le panneau latéral pour les redresser.",
+  msgPageAdjusted: "1 page ajustée",
+  msgPagesAdjusted: "{n} pages ajustées",
+  msgAdjustFailed: "Impossible d'ajuster les pages : {err}",
 };
 
 // ── Chinese (Mandarin) ────────────────────────────────────────────────────────
