@@ -1,9 +1,13 @@
+import type { InkVector } from "./models";
+
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 export interface SavedSignature {
   id: string;
   /** Full data:image/png;base64,… string for thumbnail & reuse. */
   imageDataUrl: string;
+  /** The pen strokes of a drawn signature (older saves have none). */
+  vector?: InkVector;
   /** Epoch ms — used for sorting DESC (most-recently-used first). */
   lastUsedAt: number;
 }
@@ -31,7 +35,7 @@ export class SignatureStore {
   static readonly MAX = 3;
 
   /** Save a new signature and return the created entry. */
-  add(imageDataUrl: string): SavedSignature | null {
+  add(imageDataUrl: string, vector?: InkVector): SavedSignature | null {
     while (this.signatures.length >= SignatureStore.MAX) {
       const oldest = this.signatures.reduce((a, b) => (a.lastUsedAt <= b.lastUsedAt ? a : b));
       this.signatures = this.signatures.filter((s) => s !== oldest);
@@ -39,6 +43,7 @@ export class SignatureStore {
     const sig: SavedSignature = {
       id: crypto.randomUUID(),
       imageDataUrl,
+      ...(vector ? { vector } : {}),
       lastUsedAt: Date.now(),
     };
     this.signatures.push(sig);

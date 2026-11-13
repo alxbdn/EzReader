@@ -168,8 +168,20 @@ pub struct SignatureAnnotation {
     pub y: f64,
     pub width: f64,
     pub height: f64,
-    /// Base64-encoded PNG (no data: URI prefix).
+    /// Base64-encoded PNG (no data: URI prefix); a picture of `vector` when there is one.
     pub image_data: String,
+    /// The pen strokes of a drawn signature, written instead of the picture.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub vector: Option<InkVector>,
+}
+
+/// A drawn signature as round-capped Bézier segments in a `w` × `h` box (y down).
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct InkVector {
+    pub w: f64,
+    pub h: f64,
+    /// x0 y0 c1x c1y c2x c2y x1 y1 lineWidth, 9 numbers per segment.
+    pub segs: Vec<f64>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, Copy, PartialEq, Eq)]

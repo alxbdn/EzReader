@@ -16,6 +16,7 @@ import {
   type RedactAnnotation,
   type RgbColor,
   type SignatureAnnotation,
+  type InkVector,
   type StampAnnotation,
   type TextAlignmentValue,
   type TextAnnotation,
@@ -23,6 +24,7 @@ import {
   type FontFamilyValue,
   DRAW_TOOLS,
 } from "./models";
+import { drawVector } from "./signature-ink";
 import type { AnnotationSession } from "./annotation-session";
 import type { SelectionOwner, ToolSelection } from "./tool-selection";
 
@@ -766,6 +768,19 @@ export class CanvasOverlay implements SelectionOwner {
   }
 
   private drawPicture(ann: SignatureAnnotation | ImageAnnotation): void {
+    if (ann.kind === "signature" && ann.vector && ann.vector.w > 0 && ann.vector.h > 0) {
+      // Pen strokes: drawn as curves, sharp at any zoom.
+      const v = ann.vector;
+      const [x, y] = this.toCanvas(ann.x, ann.y + ann.height);
+      const rotRad = (this.viewportRotation * Math.PI) / 180;
+      this.ctx.save();
+      this.ctx.translate(x, y);
+      if (rotRad !== 0) this.ctx.rotate(rotRad);
+      this.ctx.scale((ann.width * this.scale) / v.w, (ann.height * this.scale) / v.h);
+      drawVector(this.ctx, v);
+      this.ctx.restore();
+      return;
+    }
     let img = pictures.get(ann.imageData);
     if (!img) {
       img = new Image();
@@ -1875,12 +1890,15 @@ export class CanvasOverlay implements SelectionOwner {
   }
 
   /** Place a signature image centred on the given canvas coordinates. */
-  placeSignature(canvasX: number, canvasY: number, imageData: string, widthPt: number, heightPt: number): SignatureAnnotation {
+  placeSignature(
+    canvasX: number, canvasY: number, imageData: string, widthPt: number, heightPt: number, vector?: InkVector,
+  ): SignatureAnnotation {
     const [pdfX, pdfY] = this.toPdf(canvasX, canvasY);
     const ann: SignatureAnnotation = {
       kind: "signature", page: this.currentPage,
       x: pdfX - widthPt / 2, y: pdfY - heightPt / 2,
       width: widthPt, height: heightPt, imageData,
+      ...(vector ? { vector } : {}),
     };
     this.addInside(ann);
     this.selected = ann;
