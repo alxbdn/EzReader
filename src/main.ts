@@ -19,7 +19,7 @@ import { SignatureStore } from "./signature-store";
 import { SettingsModal } from "./settings";
 import { PageSidebar } from "./page-sidebar";
 import { DocSearch, type SearchMatch } from "./doc-search";
-import { moveItems } from "./page-order";
+import { planDelete, planInsert, planMove, planRotate, type PagePlan } from "./page-layout";
 import { formatPageRange } from "./page-range";
 import type { PageSlot } from "./tauri-bridge";
 import { buildPageAdjustments } from "./page-adjustment";
@@ -835,7 +835,7 @@ async function renderForPrint(pages: number[]): Promise<string[]> {
  * Returns false when it failed (a toast says why).
  */
 /** `keepPage` is the page to show afterwards; null stays exactly where the view is. */
-async function applyPageLayout(slots: PageSlot[], keepPage: number | null = 1, select: number[] = []): Promise<boolean> {
+async function applyPageLayout({ slots, keepPage, select }: PagePlan): Promise<boolean> {
   const source = session.sourcePath;
   if (!source) return false;
   try {
@@ -858,29 +858,20 @@ async function applyPageLayout(slots: PageSlot[], keepPage: number | null = 1, s
 }
 
 /** Runs a page edit from the panel, with the panel locked meanwhile. */
-async function editPages(slots: PageSlot[], keepPage: number | null, select: number[] = []): Promise<boolean> {
+async function editPages(plan: PagePlan): Promise<boolean> {
   if (!session.isOpen || !viewer.isLoaded()) return false;
   if (refuseIfProtected() || !toolbar.allowed()) return false;
   pageSidebar.setBusy(true);
   try {
-    return await applyPageLayout(slots, keepPage, select);
+    return await applyPageLayout(plan);
   } finally {
     pageSidebar.setBusy(false);
   }
 }
 
-/** The document's pages unchanged, as slots to edit. */
-function currentSlots(): PageSlot[] {
-  return Array.from({ length: viewer.pageCount }, (_, i): PageSlot => ({ kind: "original", page: i + 1, rotation: 0 }));
-}
-
-/** Slots with `inserted` placed after page `after` (0 = at the start). */
+/** Inserts `inserted` after page `after` (0 = at the start). */
 async function insertSlots(after: number, inserted: PageSlot[]): Promise<void> {
-  const slots = currentSlots();
-  slots.splice(after, 0, ...inserted);
-  const first = after + 1;
-  const select = inserted.map((_, i) => first + i);
-  if (await editPages(slots, first, select)) showToast(msg("msgPagesUpdated"));
+  if (await editPages(planInsert(viewer.pageCount, after, inserted))) showToast(msg("msgPagesUpdated"));
 }
 
 pageSidebar.onSelectionChange((pages) => toolbar.tools.setPageSelection(pages.length));
@@ -951,41 +942,20 @@ toolbar.updateSidebar(pageSidebar.visible);
 
 pageSidebar.onDelete(async (pages) => {
   if (!viewer.isLoaded()) return;
-  const doomed = new Set(pages);
-  if (doomed.size >= viewer.pageCount) {
+  const plan = planDelete(viewer.pageCount, pages, viewer.currentPage);
+  if (!plan) {
     showToast(msg("msgCannotDeleteAll"), true);
     return;
   }
-  const slots: PageSlot[] = [];
-  for (let p = 1; p <= viewer.pageCount; p++) {
-    if (!doomed.has(p)) slots.push({ kind: "original", page: p, rotation: 0 });
-  }
-  // Stay on the page that was shown (or the one that took its place).
-  const current = viewer.currentPage;
-  const before  = pages.filter((p) => p < current).length;
-  const keep    = Math.max(1, Math.min(current - before, slots.length));
-  if (await editPages(slots, keep)) showToast(msg("msgPagesDeleted", { n: pages.length }));
+  if (await editPages(plan)) showToast(msg("msgPagesDeleted", { n: pages.length }));
 });
 
 pageSidebar.onRotate(async (pages, quarterTurns) => {
-  const turn = new Set(pages);
-  const rotation = (((quarterTurns * 90) % 360) + 360) % 360;
-  const slots = currentSlots().map((s) => (s.kind === "original" && turn.has(s.page) ? { ...s, rotation } : s));
-  // Same pages in the same order: nothing moves, neither the view nor the panel.
-  await editPages(slots, null, pages);
+  await editPages(planRotate(viewer.pageCount, pages, quarterTurns));
 });
 
 pageSidebar.onMove(async (pages, insertAt) => {
-  const order = moveItems(
-    Array.from({ length: viewer.pageCount }, (_, i) => i + 1),
-    pages.map((p) => p - 1),
-    insertAt,
-  );
-  const moved = new Set(pages);
-  const select = order.flatMap((p, i) => (moved.has(p) ? [i + 1] : []));
-  // Follow the page that was shown to wherever it ends up.
-  const keep = order.indexOf(viewer.currentPage) + 1;
-  await editPages(order.map((page): PageSlot => ({ kind: "original", page, rotation: 0 })), keep, select);
+  await editPages(planMove(viewer.pageCount, pages, insertAt, viewer.currentPage));
 });
 
 pageSidebar.onInsertBlank(async (after) => {
