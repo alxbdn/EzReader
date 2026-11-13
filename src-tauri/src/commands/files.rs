@@ -88,18 +88,47 @@ mod tests {
         assert!(a.exists());
         let _ = std::fs::remove_dir_all(d);
     }
+
+    fn picture_file(d: &std::path::Path, name: &str, w: u32, h: u32, format: image::ImageFormat) -> String {
+        let path = d.join(name);
+        image::RgbImage::from_pixel(w, h, image::Rgb([200, 40, 40])).save_with_format(&path, format).unwrap();
+        path.to_string_lossy().into_owned()
+    }
+
+    #[test]
+    fn a_small_png_is_kept_byte_for_byte() {
+        use base64::Engine;
+        let d = dir();
+        let path = picture_file(&d, "small.png", 30, 20, image::ImageFormat::Png);
+        let pic = load_picture(path.clone()).unwrap();
+        assert_eq!((pic.width, pic.height), (30, 20));
+        assert_eq!(base64::engine::general_purpose::STANDARD.decode(pic.data).unwrap(), std::fs::read(path).unwrap());
+        let _ = std::fs::remove_dir_all(d);
+    }
+
+    #[test]
+    fn other_formats_become_png_and_large_pictures_shrink() {
+        use base64::Engine;
+        let d = dir();
+        let bmp = load_picture(picture_file(&d, "pic.bmp", 40, 10, image::ImageFormat::Bmp)).unwrap();
+        let bytes = base64::engine::general_purpose::STANDARD.decode(&bmp.data).unwrap();
+        assert_eq!(image::guess_format(&bytes).unwrap(), image::ImageFormat::Png);
+        assert_eq!((bmp.width, bmp.height), (40, 10));
+
+        let big = load_picture(picture_file(&d, "big.jpg", 5000, 2500, image::ImageFormat::Jpeg)).unwrap();
+        let bytes = base64::engine::general_purpose::STANDARD.decode(&big.data).unwrap();
+        assert_eq!(image::guess_format(&bytes).unwrap(), image::ImageFormat::Jpeg, "a photo stays a JPEG");
+        assert_eq!((big.width, big.height), (4096, 2048));
+
+        let text = d.join("notes.txt");
+        std::fs::write(&text, b"hello").unwrap();
+        assert_eq!(load_picture(text.to_string_lossy().into_owned()).unwrap_err().code, ErrorCode::NotAnImage);
+        let _ = std::fs::remove_dir_all(d);
+    }
 }
 
 /// Largest picture accepted from disk.
 const MAX_IMAGE_BYTES: u64 = 64 * 1024 * 1024;
-
-/// Reads a picture (by its extension) and returns its bytes as base64.
-#[tauri::command]
-pub fn read_image_file(path: String) -> CmdResult<String> {
-    use base64::Engine;
-    let bytes = read_image_bytes(&path)?;
-    Ok(base64::engine::general_purpose::STANDARD.encode(bytes))
-}
 
 /// The bytes of a picture file, checked by extension and size.
 pub fn read_image_bytes(path: &str) -> CmdResult<Vec<u8>> {
@@ -117,6 +146,53 @@ pub fn read_image_bytes(path: &str) -> CmdResult<Vec<u8>> {
         return Err(PdfError::new(ErrorCode::TooLarge, "too large"));
     }
     std::fs::read(p).map_err(|e| e.to_string()).map_err(PdfError::from)
+}
+
+/// A picture ready to place on a page: base64 PNG or JPEG, and its size in pixels.
+#[derive(Debug, serde::Serialize, PartialEq)]
+pub struct Picture {
+    pub data: String,
+    pub width: u32,
+    pub height: u32,
+}
+
+/// Longest side kept for a picture; larger ones are scaled down.
+const MAX_PICTURE_SIDE: u32 = 4096;
+
+/// Reads the picture at `path` for placing on a page. PNG and JPEG files
+/// that are not too large are kept byte for byte; other formats (WebP, GIF,
+/// BMP) and very large pictures are re-encoded: as JPEG when they were
+/// JPEG, as PNG otherwise (the PDF writer takes both).
+#[tauri::command]
+pub fn load_picture(path: String) -> CmdResult<Picture> {
+    use base64::Engine;
+    let bytes = read_image_bytes(&path)?;
+    let not_an_image = |e: image::ImageError| PdfError::new(ErrorCode::NotAnImage, e.to_string());
+    let format = image::guess_format(&bytes).map_err(not_an_image)?;
+    let b64 = |b: &[u8]| base64::engine::general_purpose::STANDARD.encode(b);
+    let keep = matches!(format, image::ImageFormat::Png | image::ImageFormat::Jpeg);
+    if keep {
+        let (width, height) = image::ImageReader::with_format(std::io::Cursor::new(&bytes), format)
+            .into_dimensions()
+            .map_err(not_an_image)?;
+        if width.max(height) <= MAX_PICTURE_SIDE {
+            return Ok(Picture { data: b64(&bytes), width, height });
+        }
+    }
+    let mut img = image::load_from_memory_with_format(&bytes, format).map_err(not_an_image)?;
+    if img.width().max(img.height()) > MAX_PICTURE_SIDE {
+        img = img.resize(MAX_PICTURE_SIDE, MAX_PICTURE_SIDE, image::imageops::FilterType::Triangle);
+    }
+    let mut out = Vec::new();
+    let mut cursor = std::io::Cursor::new(&mut out);
+    if format == image::ImageFormat::Jpeg {
+        image::codecs::jpeg::JpegEncoder::new_with_quality(&mut cursor, 92)
+            .encode_image(&img.to_rgb8())
+            .map_err(not_an_image)?;
+    } else {
+        img.write_to(&mut cursor, image::ImageFormat::Png).map_err(not_an_image)?;
+    }
+    Ok(Picture { data: b64(&out), width: img.width(), height: img.height() })
 }
 
 /// Which of `paths` already exist (export asks before replacing them).

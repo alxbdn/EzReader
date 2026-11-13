@@ -85,7 +85,7 @@ pub fn run() {
             commands::dialog::open_image_dialog,
             commands::dialog::open_images_dialog,
             commands::files::rename_file,
-            commands::files::read_image_file,
+            commands::files::load_picture,
             commands::files::existing_files,
             commands::files::write_image_file,
             commands::pdf::get_page_count,

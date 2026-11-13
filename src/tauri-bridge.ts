@@ -302,10 +302,14 @@ export async function openImageDialog(): Promise<string | null> {
   return call<string | null>("open_image_dialog");
 }
 
-/** The bytes of the picture at `path`, as base64. */
-export async function readImageFile(path: string): Promise<string> {
-  return call<string>("read_image_file", { path });
+/**
+ * The picture at `path`, ready to place on a page: base64 PNG or JPEG and
+ * its size. Other formats and very large pictures are re-encoded in Rust.
+ */
+export async function loadPictureFile(path: string): Promise<{ data: string; width: number; height: number }> {
+  return call("load_picture", { path });
 }
+
 
 /** How one page is cropped and flipped (see `adjust_pages`). */
 export interface PageAdjust {
