@@ -1568,13 +1568,18 @@ export class CanvasOverlay implements SelectionOwner {
     this.selected = null;
     this.redrawCommitted();
 
+    // The note itself is the writing surface: the same paper as drawn on
+    // the page, typed on directly.
+    const darker = { r: ann.color.r * 0.8, g: ann.color.g * 0.8, b: ann.color.b * 0.8 };
     const area = document.createElement("textarea");
+    area.className = "note-editor";
     area.value = ann.content;
     area.spellcheck = false;
     area.style.cssText = `
       position: absolute; left: ${b.l}px; top: ${b.t}px; width: ${b.w}px; height: ${b.h}px;
       box-sizing: border-box; padding: ${NOTE_PAD * scale}px; margin: 0; resize: none;
-      border: 1px dashed rgba(0,0,0,0.35); outline: none; background: transparent; color: #262626;
+      border: ${0.75 * scale}px solid ${rgbToCss(darker)}; border-radius: 0; outline: none;
+      background: ${rgbToCss(ann.color)}; box-shadow: 0 2px 6px rgba(0,0,0,0.18); color: #262626;
       font: ${NOTE_FONT * scale}px/1.2 ${fontCss("helvetica")}; z-index: 20; overflow: hidden;
     `;
     const done = (keep: boolean): void => {
