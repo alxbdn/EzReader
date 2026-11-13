@@ -5,6 +5,7 @@ import type { Mat3 } from "./warp";
 import type { TextRun } from "./straighten";
 import type { TextDoc } from "./text-layout";
 import type { DocFormat } from "./export-modal";
+import type { OcrLanguage, OcrResult } from "./ocr-modal";
 
 /** Runs a Rust command; its errors come back as `CommandError` (see errors.ts). */
 async function call<T>(cmd: string, args?: Record<string, unknown>): Promise<T> {
@@ -366,6 +367,16 @@ export async function convertText(doc: TextDoc, format: DocFormat, output: strin
 /** Save As dialog for a converted file of `format`, pre-filled with `suggested`. */
 export async function saveAsDialog(suggested: string, format: DocFormat): Promise<string | null> {
   return call<string | null>("save_as_dialog", { suggested, format });
+}
+
+/** The languages Windows can recognize text in (its installed OCR packs). */
+export async function ocrLanguages(): Promise<OcrLanguage[]> {
+  return call<OcrLanguage[]>("ocr_languages");
+}
+
+/** Recognizes the text of a picture (base64 or data URL) in `language` ("" = the user's languages). */
+export async function ocrImage(data: string, language: string): Promise<OcrResult> {
+  return call<OcrResult>("ocr_image", { data, language: language || null });
 }
 
 /** Opens `pages` of `inputPath` as a new document `name` in a new window near the screen point. */

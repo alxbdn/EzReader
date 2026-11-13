@@ -506,6 +506,22 @@ export interface Translations {
   msgOverwrite?: string;
   msgOverwriteTitle?: string;
   msgOpenProtectedFailed?: string;
+  menuOcr?: string;
+  ocrTitle?: string;
+  ocrCopy?: string;
+  ocrLanguage?: string;
+  ocrAuto?: string;
+  ocrPicture?: string;
+  ocrAllPages?: string;
+  ocrPickHint?: string;
+  ocrReading?: string;
+  ocrReadingPage?: string;
+  ocrNothing?: string;
+  ocrFound?: string;
+  ocrAllDone?: string;
+  ocrCopied?: string;
+  ocrPageOf?: string;
+  msgErrNoOcrLanguage?: string;
 }
 
 // ── English ───────────────────────────────────────────────────────────────────
@@ -997,6 +1013,22 @@ const EN: Translations = {
   msgOverwrite: "{n} file(s) already exist in this folder. Replace them?",
   msgOverwriteTitle: "Replace files?",
   msgOpenProtectedFailed: "Couldn't open this protected PDF: {err}",
+  menuOcr: "Recognize text (OCR)…",
+  ocrTitle: "Recognize text (OCR)",
+  ocrCopy: "Copy text",
+  ocrLanguage: "Language of the text",
+  ocrAuto: "Automatic",
+  ocrPicture: "Open a picture…",
+  ocrAllPages: "All pages",
+  ocrPickHint: "Open a picture (a photo or a scan) to read its text.",
+  ocrReading: "Reading the text…",
+  ocrReadingPage: "Reading page {n} of {total}…",
+  ocrNothing: "No text found on this page.",
+  ocrFound: "{n} words found.",
+  ocrAllDone: "Text of the {n} pages, ready to copy.",
+  ocrCopied: "Text copied to the clipboard.",
+  ocrPageOf: "Page {n} / {total}",
+  msgErrNoOcrLanguage: "Windows has no text recognition for this language. Add the language in Windows Settings › Time & language › Language & region.",
 };
 
 // ── French ────────────────────────────────────────────────────────────────────
@@ -1488,6 +1520,22 @@ const FR: Translations = {
   msgOverwrite: "{n} fichier(s) existe(nt) déjà dans ce dossier. Les remplacer ?",
   msgOverwriteTitle: "Remplacer les fichiers ?",
   msgOpenProtectedFailed: "Impossible d'ouvrir ce PDF protégé : {err}",
+  menuOcr: "Reconnaître le texte (OCR)…",
+  ocrTitle: "Reconnaître le texte (OCR)",
+  ocrCopy: "Copier le texte",
+  ocrLanguage: "Langue du texte",
+  ocrAuto: "Automatique",
+  ocrPicture: "Ouvrir une image…",
+  ocrAllPages: "Toutes les pages",
+  ocrPickHint: "Ouvrez une image (photo ou scan) pour en lire le texte.",
+  ocrReading: "Lecture du texte…",
+  ocrReadingPage: "Lecture de la page {n} sur {total}…",
+  ocrNothing: "Aucun texte trouvé sur cette page.",
+  ocrFound: "{n} mots trouvés.",
+  ocrAllDone: "Texte des {n} pages, prêt à copier.",
+  ocrCopied: "Texte copié dans le presse-papiers.",
+  ocrPageOf: "Page {n} / {total}",
+  msgErrNoOcrLanguage: "Windows n'a pas de reconnaissance de texte pour cette langue. Ajoutez la langue dans Paramètres Windows › Heure et langue › Langue et région.",
 };
 
 // ── Chinese (Mandarin) ────────────────────────────────────────────────────────

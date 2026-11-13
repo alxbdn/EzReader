@@ -11,6 +11,7 @@ import { AdjustView, type PageSetting } from "./adjust-view";
 import { Toolbar, isValidFileStem, splitFileName } from "./toolbar";
 import { CompressModal } from "./compress-modal";
 import { ExportModal } from "./export-modal";
+import { OcrModal } from "./ocr-modal";
 import { PasswordModal } from "./password-modal";
 import { PrintModal } from "./print-modal";
 import { SignatureModal } from "./signature-modal";
@@ -47,6 +48,8 @@ import {
   exportFlattenedPages,
   convertText,
   saveAsDialog,
+  ocrImage,
+  ocrLanguages,
   cancelCompression,
   onCompressProgress,
   readAnnotations,
@@ -112,6 +115,27 @@ const toolbar   = new Toolbar();
 const history   = new AnnotationHistory();
 const compressModal      = new CompressModal();
 const exportModal        = new ExportModal();
+const ocrModal = new OcrModal({
+  pageCount: () => (viewer.isLoaded() ? viewer.pageCount : 0),
+  currentPage: () => viewer.currentPage,
+  materialize: () => session.materialize({ annotations: false }),
+  renderPage: async (path, n) => {
+    let data = "";
+    await viewer.renderFilePages(path, [n], 300, "image/png", async (d) => { data = d; });
+    return data;
+  },
+  languages: ocrLanguages,
+  recognize: ocrImage,
+  pickPicture: async () => {
+    const path = await openImageDialog();
+    if (!path) return null;
+    const pic = await loadPicture(path);
+    const mime = pic.data.startsWith("/9j/") ? "image/jpeg" : "image/png";
+    return { dataUrl: `data:${mime};base64,${pic.data}`, name: fileNameOf(path) };
+  },
+  copy: (text) => navigator.clipboard.writeText(text),
+  errText: (err) => messages.errText(err),
+});
 const passwordModal      = new PasswordModal();
 const printModal         = new PrintModal();
 const sigStore           = new SignatureStore();
@@ -341,6 +365,7 @@ mountWindowControls(document.getElementById("menubar-row")!, () => {
   toolbar.applyTranslations(t);
   compressModal.applyTranslations(t);
   exportModal.applyTranslations(t);
+  ocrModal.applyTranslations(t);
   passwordModal.applyTranslations(t);
   pageSidebar.applyTranslations(t);
   printModal.applyTranslations(t);
@@ -353,6 +378,7 @@ settingsModal.onChange(s => {
   toolbar.applyTranslations(t);
   compressModal.applyTranslations(t);
   exportModal.applyTranslations(t);
+  ocrModal.applyTranslations(t);
   passwordModal.applyTranslations(t);
   pageSidebar.applyTranslations(t);
   printModal.applyTranslations(t);
@@ -1257,6 +1283,10 @@ toolbar.on(async (e) => {
 
     case "images-to-pdf":
       openExport("images");
+      break;
+
+    case "ocr":
+      ocrModal.open();
       break;
 
     case "password":

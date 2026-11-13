@@ -2628,6 +2628,28 @@ body.custom-titlebar #menubar-row {
 .ez-check input { width: 16px; height: 16px; flex-shrink: 0; accent-color: var(--primary); margin: 0; }
 .ez-check-text { display: flex; flex-direction: column; gap: 2px; }
 .ez-summary { padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius); color: var(--muted-foreground); font-size: 12px; line-height: 1.5; }
+
+/* Recognize text (OCR) */
+.ez-modal.ocr-box { width: min(920px, calc(100vw - 48px)); }
+.ocr-bar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.ocr-nav { display: inline-flex; align-items: center; gap: 2px; }
+.ocr-page { min-width: 92px; text-align: center; font-variant-numeric: tabular-nums; }
+.ocr-lang { width: auto; min-width: 150px; height: 32px; }
+.ocr-spacer { flex: 1; }
+.ocr-panes { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px; height: min(56vh, 520px); }
+.ocr-preview {
+  overflow: auto; border: 1px solid var(--border); border-radius: var(--radius);
+  background: var(--muted); display: flex; justify-content: center; align-items: flex-start; padding: 10px;
+}
+.ocr-preview.busy .ocr-img { opacity: 0.6; }
+.ocr-frame { position: relative; width: 100%; line-height: 0; box-shadow: 0 1px 4px rgb(0 0 0 / 0.15); background: #fff; }
+.ocr-img { width: 100%; height: auto; transition: opacity 0.15s; }
+.ocr-boxes { position: absolute; inset: 0; pointer-events: none; }
+.ocr-word { position: absolute; background: color-mix(in srgb, #facc15 28%, transparent); border-bottom: 1px solid color-mix(in srgb, #ca8a04 60%, transparent); }
+.ocr-text { height: 100%; padding: 10px; resize: none; line-height: 1.5; font-size: 13px; }
+.ocr-panes:has(.ocr-preview[hidden]) { grid-template-columns: minmax(0, 1fr); }
+.ocr-status { min-height: 18px; color: var(--muted-foreground); font-size: 12px; }
+.ocr-status.error { color: var(--destructive); }
 .ez-summary.error, .ez-error { color: var(--destructive); }
 .ez-error { font-size: 12px; }
 .ez-filelist { display: flex; flex-direction: column; gap: 4px; max-height: 180px; overflow-y: auto; }
