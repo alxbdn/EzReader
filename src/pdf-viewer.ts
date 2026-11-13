@@ -8,8 +8,7 @@ import { AnnotationSession } from "./annotation-session";
 import { defaultToolState, type ActiveToolState, type RedactAnnotation, CSS_UNITS, MIN_SCALE, MAX_SCALE } from "./models";
 import type { TextItem } from "pdfjs-dist/types/src/display/api";
 import { openUrl, type RedactedPage, type StraightenedPage } from "./tauri-bridge";
-import { warpToRect, type Point } from "./warp";
-import { moveTextRuns, pageMap } from "./straighten";
+import { moveTextRuns, pageMap, reproject, warpToRect, type Point } from "./page-adjustment";
 
 pdfjs.GlobalWorkerOptions.workerSrc = workerUrl;
 
@@ -1311,26 +1310,6 @@ export async function renderRedactedPages(
   }
 }
 
-
-type Matrix = [number, number, number, number, number, number];
-
-function multiply(m: Matrix, n: Matrix): Matrix {
-  // m ∘ n: apply n, then m.
-  return [
-    m[0] * n[0] + m[2] * n[1], m[1] * n[0] + m[3] * n[1],
-    m[0] * n[2] + m[2] * n[3], m[1] * n[2] + m[3] * n[3],
-    m[0] * n[4] + m[2] * n[5] + m[4], m[1] * n[4] + m[3] * n[5] + m[5],
-  ];
-}
-
-function invert(m: Matrix): Matrix {
-  const det = m[0] * m[3] - m[1] * m[2];
-  return [
-    m[3] / det, -m[1] / det, -m[2] / det, m[0] / det,
-    (m[2] * m[5] - m[3] * m[4]) / det, (m[1] * m[4] - m[0] * m[5]) / det,
-  ];
-}
-
 /**
  * Straightens pages of `filePath`: the area inside each `quad` (fractions of
  * the page as shown, with its /Rotate) is stretched over the whole page.
@@ -1373,7 +1352,7 @@ export async function renderStraightenedPages(
       const dctx = dst.getContext("2d")!;
       dctx.fillStyle = "#fff";
       dctx.fillRect(0, 0, dst.width, dst.height);
-      dctx.setTransform(...multiply(flat.transform as Matrix, invert(shown.transform as Matrix)));
+      dctx.setTransform(...reproject(shown.transform, flat.transform));
       dctx.drawImage(src, 0, 0);
 
       const map = pageMap(shown.transform, quad, src.width, src.height);

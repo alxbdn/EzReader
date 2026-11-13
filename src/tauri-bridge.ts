@@ -1,8 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { toCommandError } from "./errors";
 import { listen } from "@tauri-apps/api/event";
-import type { Mat3 } from "./warp";
-import type { TextRun } from "./straighten";
+import type { Mat3, TextRun } from "./page-adjustment";
 import type { TextDoc } from "./text-layout";
 import type { DocFormat } from "./export-modal";
 import type { OcrLanguage, OcrResult } from "./ocr-modal";
