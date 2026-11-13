@@ -47,6 +47,8 @@ export interface SessionIO {
   redact(input: string, output: string, redactions: RedactAnnotation[]): Promise<void>;
   /** Returns a fresh, unique temp file path whose name ends with `suffix`. */
   tempPath(suffix: string): Promise<string>;
+  /** Writes `input` to `output` encrypted with `password` (the `encrypt_pdf` command). */
+  encrypt(input: string, output: string, password: string): Promise<void>;
 }
 
 export class DocumentSession {
@@ -56,6 +58,11 @@ export class DocumentSession {
   /** View rotation already written into `basePath` (by a previous save). */
   private _baseRotation = 0;
   private _dirty = false;
+  /**
+   * Password the document gets when it is written (null: none). `basePath`
+   * is always unencrypted; the password is only applied to what is saved.
+   */
+  private _password: string | null = null;
 
   constructor(private readonly edits: PendingEdits, private readonly io: SessionIO) {}
 
@@ -69,14 +76,25 @@ export class DocumentSession {
   /** Where a plain Save writes. */
   get saveTarget(): string | null { return this._saveTarget ?? this._sourcePath; }
 
-  /** A new document was opened from disk (the viewer shows `workingCopy ?? sourcePath`). */
-  opened(sourcePath: string, workingCopy: string | null): void {
+  /**
+   * A new document was opened from disk (the viewer shows `workingCopy ?? sourcePath`).
+   * A protected file is opened from an unencrypted working copy, and keeps
+   * its `password` when saved.
+   */
+  opened(sourcePath: string, workingCopy: string | null, password: string | null = null): void {
     this._sourcePath = sourcePath;
     this._saveTarget = null;
     this._basePath = workingCopy ?? sourcePath;
     this._baseRotation = 0;
     this._dirty = false;
+    this._password = password;
   }
+
+  /** The password the document is saved with, if any. */
+  get password(): string | null { return this._password; }
+
+  /** Protects the document with `password` (null removes it); applied on save. */
+  setPassword(password: string | null): void { this._password = password; }
 
   /** The viewer reloaded `workingCopy` (e.g. after page edits) for the same source. */
   replacedWorkingCopy(workingCopy: string): void {
@@ -84,11 +102,14 @@ export class DocumentSession {
     this._baseRotation = 0; // a fresh load resets the view rotation
   }
 
-  /** The document was written to `target`, which becomes the new source and base. */
-  saved(target: string): void {
+  /**
+   * The document was written to `target`, which becomes the new source and
+   * base (`base` instead when the target is encrypted).
+   */
+  saved(target: string, base: string = target): void {
     this._sourcePath = target;
     this._saveTarget = target;
-    this._basePath = target;
+    this._basePath = base;
     this._baseRotation = this.edits.rotation();
     this._dirty = false;
   }
@@ -112,12 +133,13 @@ export class DocumentSession {
    * are no pending edits this is the viewed file itself; otherwise the edits
    * are written to a new temp file.
    */
-  async materialize(): Promise<string> {
+  async materialize(opts: { annotations?: boolean } = {}): Promise<string> {
     const base = this._basePath;
     if (!base) throw new Error("No document is open");
-    if (!this.hasPendingEdits()) return base;
+    const keep = opts.annotations ?? true;
+    if (keep && !this.hasPendingEdits()) return base;
     const out = await this.io.tempPath("current.pdf");
-    await this.writeWithEdits(base, out);
+    await this.writeWithEdits(base, out, keep);
     return out;
   }
 
@@ -125,6 +147,14 @@ export class DocumentSession {
   async saveTo(target: string): Promise<void> {
     const base = this._basePath;
     if (!base) throw new Error("No document is open");
+    if (this._password) {
+      // The working copy stays unencrypted: later edits start from it.
+      const plain = await this.io.tempPath("saved.pdf");
+      await this.writeWithEdits(base, plain);
+      await this.io.encrypt(plain, target, this._password);
+      this.saved(target, plain);
+      return;
+    }
     await this.writeWithEdits(base, target);
     this.saved(target);
   }
@@ -134,10 +164,15 @@ export class DocumentSession {
     return this.edits.annotations().some(isRedaction);
   }
 
-  private async writeWithEdits(input: string, output: string): Promise<void> {
+  /**
+   * Writes `input` with the pending edits to `output`. Without `annotations`
+   * the annotations are left out, but redactions are still applied: what
+   * they hide must never come back.
+   */
+  private async writeWithEdits(input: string, output: string, annotations = true): Promise<void> {
     const all = this.edits.annotations();
     const redactions = all.filter(isRedaction);
-    const others = all.filter((a): a is StoredAnnotation => !isRedaction(a));
+    const others = annotations ? all.filter((a): a is StoredAnnotation => !isRedaction(a)) : [];
     if (redactions.length > 0) {
       const redacted = await this.io.tempPath("redacted.pdf");
       await this.io.redact(input, redacted, redactions);

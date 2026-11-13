@@ -189,18 +189,36 @@ export async function rearrangePages(
 export interface CompressResult {
   originalBytes: number;
   compressedBytes: number;
+  /** False when a target size could not be reached (the smallest result was written). */
+  reachedTarget: boolean;
 }
 
+export type CompressLevel = "lossless" | "balanced" | "maximum" | "target";
+
 /**
- * Compresses JPEG image streams in `inputPath` at the given quality level
- * and writes the result to `outputPath`. Returns both file sizes in bytes.
+ * Compresses `inputPath` into `outputPath`: "lossless" recompresses streams,
+ * "balanced" / "maximum" also re-encode pictures (150 dpi JPEG 75 / 96 dpi
+ * JPEG 55), "target" keeps the best quality that fits in `targetBytes`.
  */
 export async function compressPdf(
   inputPath: string,
   outputPath: string,
-  level: "screen" | "ebook" | "print",
+  level: CompressLevel,
+  targetBytes?: number,
 ): Promise<CompressResult> {
-  return invoke<CompressResult>("compress_pdf", { inputPath, outputPath, level });
+  return invoke<CompressResult>("compress_pdf", { inputPath, outputPath, level, targetBytes: targetBytes ?? null });
+}
+
+export interface CompressEstimate {
+  originalBytes: number;
+  losslessBytes: number;
+  balancedBytes: number;
+  maximumBytes: number;
+}
+
+/** Sizes the three levels would give, computed without writing anything. */
+export async function estimateCompression(inputPath: string): Promise<CompressEstimate> {
+  return invoke<CompressEstimate>("estimate_compression", { inputPath });
 }
 
 /** A page rendered with its redacted areas blacked out, ready to replace the original. */
@@ -251,4 +269,34 @@ export interface PageAdjust {
 /** Crops and flips pages, as an incremental update (the content stays vector). */
 export async function adjustPages(inputPath: string, outputPath: string, pages: PageAdjust[]): Promise<void> {
   return invoke<void>("adjust_pages", { inputPath, outputPath, pages });
+}
+
+/** Writes `inputPath` to `outputPath` protected by `password` (AES-256). */
+export async function encryptPdf(inputPath: string, outputPath: string, password: string): Promise<void> {
+  return invoke<void>("encrypt_pdf", { inputPath, outputPath, password });
+}
+
+/** Writes `inputPath` to `outputPath` without its password; rejects with "wrong password". */
+export async function decryptPdf(inputPath: string, outputPath: string, password: string): Promise<void> {
+  return invoke<void>("decrypt_pdf", { inputPath, outputPath, password });
+}
+
+/** Opens a file picker for several pictures; empty if cancelled. */
+export async function openImagesDialog(): Promise<string[]> {
+  return invoke<string[]>("open_images_dialog");
+}
+
+/** Makes a PDF with one page per picture. */
+export async function imagesToPdf(imagePaths: string[], outputPath: string): Promise<void> {
+  return invoke<void>("images_to_pdf", { imagePaths, outputPath });
+}
+
+/** Which of `paths` already exist. */
+export async function existingFiles(paths: string[]): Promise<string[]> {
+  return invoke<string[]>("existing_files", { paths });
+}
+
+/** Writes a PNG or JPEG picture (base64, or a data: URL) to `path`. */
+export async function writeImageFile(path: string, data: string): Promise<void> {
+  return invoke<void>("write_image_file", { path, data });
 }

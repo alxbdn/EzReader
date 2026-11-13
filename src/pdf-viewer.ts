@@ -1038,6 +1038,43 @@ export class PdfViewer {
     }
   }
 
+  /**
+   * Renders pages of `filePath` one by one at `dpi` (as shown, with their
+   * /Rotate) and hands each picture to `onPage` as a data: URL.
+   */
+  async renderFilePages(
+    filePath: string,
+    pageNumbers: number[],
+    dpi: number,
+    type: "image/png" | "image/jpeg",
+    onPage: (dataUrl: string, page: number) => Promise<void>,
+  ): Promise<void> {
+    const doc = await pdfjs.getDocument({ url: convertFileSrc(filePath) + `?t=${Date.now()}` }).promise;
+    try {
+      for (const n of pageNumbers) {
+        if (n < 1 || n > doc.numPages) continue;
+        const page = await doc.getPage(n);
+        const unit = page.getViewport({ scale: 1, rotation: page.rotate });
+        // Cap the bitmap (~40 MP) so very large pages do not exhaust memory.
+        const scale = Math.min(dpi / 72, Math.sqrt(40e6 / (unit.width * unit.height)));
+        const viewport = page.getViewport({ scale, rotation: page.rotate });
+        const canvas = document.createElement("canvas");
+        canvas.width = Math.ceil(viewport.width);
+        canvas.height = Math.ceil(viewport.height);
+        const ctx = canvas.getContext("2d")!;
+        ctx.fillStyle = "#fff";
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        await page.render({ canvasContext: ctx, viewport }).promise;
+        const data = canvas.toDataURL(type, 0.9);
+        canvas.width = canvas.height = 0;
+        page.cleanup();
+        await onPage(data, n);
+      }
+    } finally {
+      await doc.destroy();
+    }
+  }
+
   // ── Lifecycle ────────────────────────────────────────────────────────────────
 
   isLoaded(): boolean { return this.pdfDoc !== null; }

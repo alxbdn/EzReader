@@ -21,6 +21,8 @@ import {
   ICON_PLUS,
   ICON_EXPORT,
   ICON_COMPRESS_LAYERS,
+  ICON_LOCK,
+  ICON_UNLOCK,
 } from "./icons";
 import { SearchPill } from "./search-pill";
 
@@ -35,6 +37,8 @@ export type ToolbarEvent =
   | { type: "save-as" }
   | { type: "export" }
   | { type: "compress" }
+  | { type: "password" }
+  | { type: "images-to-pdf" }
   | { type: "rotate" }
   | { type: "zoom-in" }
   | { type: "zoom-out" }
@@ -88,7 +92,7 @@ interface MenuDef {
 
 /** Actions that must wait until pending changes are validated or discarded. */
 const GUARDED = new Set<ToolbarEvent["type"]>([
-  "open", "save", "save-as", "export", "compress", "print", "settings", "split", "rotate",
+  "open", "save", "save-as", "export", "compress", "password", "images-to-pdf", "print", "settings", "split", "rotate",
   "insert-blank", "insert-pdf", "extract-pages",
 ]);
 
@@ -139,6 +143,9 @@ export class Toolbar {
   private infoBtn!: HTMLButtonElement;
   private sidebarBtn!: HTMLButtonElement;
   private saveBtn!: HTMLButtonElement;
+  private lockBtn!: HTMLButtonElement;
+  private lockTitles = { on: "Protected: remove the password", off: "Protect with a password" };
+  private locked = false;
   private _lastScale = CSS_UNITS;
 
   private _i18nText  = new Map<HTMLElement, keyof Translations>();
@@ -162,6 +169,8 @@ export class Toolbar {
     this._i18nText.forEach((key, el)  => { const v = t[key]; if (v !== undefined) el.textContent = v; });
     this._i18nTitle.forEach((key, el) => { const v = t[key]; if (v !== undefined) el.title = v; });
     this.renameTitle = t.ttRename ?? "Click to rename";
+    this.lockTitles = { on: t.ttLockOn ?? "Protected: remove the password", off: t.ttLockOff ?? "Protect with a password" };
+    this.setProtected(this.locked);
     this.docTitleName.title = this.docName ? this.renameTitle : "";
     this.search.applyTranslations(t);
     this.tools.applyTranslations(t);
@@ -231,6 +240,17 @@ export class Toolbar {
     document.title = name ? `${dirty ? "• " : ""}${name} – EzReader` : "EzReader";
   }
 
+  /** Closed padlock (green) while the document is saved with a password. */
+  setProtected(on: boolean): void {
+    this.locked = on;
+    if (!this.lockBtn) return;
+    this.lockBtn.innerHTML = on ? ICON_LOCK : ICON_UNLOCK;
+    this.lockBtn.classList.toggle("on", on);
+    this.lockBtn.title = on ? this.lockTitles.on : this.lockTitles.off;
+    this.lockBtn.setAttribute("aria-label", this.lockBtn.title);
+    this.lockBtn.setAttribute("aria-pressed", String(on));
+  }
+
   /** Shows the sidebar toggle as pressed while the thumbnails are visible. */
   updateSidebar(visible: boolean): void {
     this.sidebarBtn.classList.toggle("active", visible);
@@ -296,6 +316,8 @@ export class Toolbar {
           { label: "btnSaveAs", shortcut: "Ctrl+Shift+S", action: () => this.emit({ type: "save-as" }), requiresDoc: true },
           { label: "btnExport", action: () => this.emit({ type: "export" }), requiresDoc: true },
           { label: "btnCompress", shortcut: "Ctrl+Shift+E", action: () => this.emit({ type: "compress" }), requiresDoc: true },
+          { label: "menuPassword", action: () => this.emit({ type: "password" }), requiresDoc: true },
+          { label: "menuImagesToPdf", action: () => this.emit({ type: "images-to-pdf" }) },
           null,
           { label: "menuPrint", shortcut: "Ctrl+P", action: () => this.emit({ type: "print" }), requiresDoc: true },
           null,
@@ -687,12 +709,14 @@ export class Toolbar {
     const compressBtn = this.btn(ICON_COMPRESS_LAYERS, "Compress", "icon-btn tb-square");
     this.reg(compressBtn, undefined, "ttCompress");
     compressBtn.addEventListener("click", () => this.emit({ type: "compress" }));
+    this.lockBtn = this.btn(ICON_UNLOCK, this.lockTitles.off, "icon-btn tb-square tb-lock");
+    this.lockBtn.addEventListener("click", () => this.emit({ type: "password" }));
     this.infoBtn = this.btn(ICON_INFO, "Document info", "icon-btn tb-square");
     this.reg(this.infoBtn, undefined, "ttInfo");
     this.infoBtn.addEventListener("click", () => this.emit({ type: "info" }));
     const right = document.createElement("div");
     right.className = "toolbar-group tb-right";
-    right.append(exportBtn, compressBtn, this.infoBtn, this.sep(), this.search.el);
+    right.append(exportBtn, compressBtn, this.lockBtn, this.infoBtn, this.sep(), this.search.el);
 
     main.append(
       this.sidebarBtn, this.saveBtn, this.segment(undo, redo), this.sep(),

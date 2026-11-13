@@ -96,7 +96,13 @@ const MAX_IMAGE_BYTES: u64 = 64 * 1024 * 1024;
 #[tauri::command]
 pub fn read_image_file(path: String) -> Result<String, String> {
     use base64::Engine;
-    let p = std::path::Path::new(&path);
+    let bytes = read_image_bytes(&path)?;
+    Ok(base64::engine::general_purpose::STANDARD.encode(bytes))
+}
+
+/// The bytes of a picture file, checked by extension and size.
+pub fn read_image_bytes(path: &str) -> Result<Vec<u8>, String> {
+    let p = std::path::Path::new(path);
     let ext = p
         .extension()
         .and_then(|e| e.to_str())
@@ -109,6 +115,31 @@ pub fn read_image_file(path: String) -> Result<String, String> {
     if len > MAX_IMAGE_BYTES {
         return Err("too large".into());
     }
-    let bytes = std::fs::read(p).map_err(|e| e.to_string())?;
-    Ok(base64::engine::general_purpose::STANDARD.encode(bytes))
+    std::fs::read(p).map_err(|e| e.to_string())
+}
+
+/// Which of `paths` already exist (export asks before replacing them).
+#[tauri::command]
+pub fn existing_files(paths: Vec<String>) -> Vec<String> {
+    paths.into_iter().filter(|p| std::path::Path::new(p).exists()).collect()
+}
+
+/// Writes base64 `data` (a page picture of an export) to `path`, atomically.
+/// Only PNG and JPEG files can be written this way.
+#[tauri::command]
+pub fn write_image_file(path: String, data: String) -> Result<(), String> {
+    use base64::Engine;
+    let ext = std::path::Path::new(&path)
+        .extension()
+        .and_then(|e| e.to_str())
+        .map(str::to_ascii_lowercase)
+        .unwrap_or_default();
+    if !matches!(ext.as_str(), "png" | "jpg" | "jpeg") {
+        return Err("only PNG and JPEG pictures can be written".into());
+    }
+    let b64 = data.split_once(',').map_or(data.as_str(), |(_, d)| d);
+    let bytes = base64::engine::general_purpose::STANDARD
+        .decode(b64)
+        .map_err(|e| format!("invalid image data: {e}"))?;
+    crate::fsutil::write_atomic(&path, |tmp| std::fs::write(tmp, &bytes).map_err(|e| e.to_string()))
 }

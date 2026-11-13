@@ -385,6 +385,96 @@ export interface Translations {
   msgPageAdjusted?: string;
   msgPagesAdjusted?: string;
   msgAdjustFailed?: string;
+  // Export / Compress / Password (optional, English fallback)
+  dlgClose?: string;
+  dlgCancel?: string;
+  expTitle?: string;
+  expOk?: string;
+  expTabPdf?: string;
+  expTabImages?: string;
+  expFormat?: string;
+  expPngSub?: string;
+  expJpegSub?: string;
+  expPdfSub?: string;
+  expPages?: string;
+  expResolution?: string;
+  expDpiLight?: string;
+  expDpiScreen?: string;
+  expDpiPrint?: string;
+  expKeepAnn?: string;
+  expKeepAnnSub?: string;
+  expPickImages?: string;
+  expImagesHint?: string;
+  expAllPages?: string;
+  expRemoveImage?: string;
+  expImagesNone?: string;
+  expImagesOne?: string;
+  expImagesMany?: string;
+  expBadPages?: string;
+  expWithAnn?: string;
+  expWithoutAnn?: string;
+  expPdfSummary?: string;
+  expImgSummaryOne?: string;
+  expImgSummaryMany?: string;
+  cmpOk?: string;
+  cmpCurrent?: string;
+  cmpLossless?: string;
+  cmpLosslessSub?: string;
+  cmpBalanced?: string;
+  cmpBalancedSub?: string;
+  cmpMaximum?: string;
+  cmpMaximumSub?: string;
+  cmpTarget?: string;
+  cmpTargetSub?: string;
+  cmpRecommended?: string;
+  cmpBefore?: string;
+  cmpAfter?: string;
+  unitMB?: string;
+  unitKB?: string;
+  pwStrength0?: string;
+  pwWeak?: string;
+  pwFair?: string;
+  pwGood?: string;
+  pwStrong?: string;
+  pwTimeInstant?: string;
+  pwTimeMinutes?: string;
+  pwTimeDays?: string;
+  pwTimeYears?: string;
+  pwTimeCenturies?: string;
+  pwProtectTitle?: string;
+  pwProtectOk?: string;
+  pwRemoveTitle?: string;
+  pwRemoveOk?: string;
+  pwUnlockTitle?: string;
+  pwUnlockOk?: string;
+  pwRemoveIntro?: string;
+  pwUnlockIntro?: string;
+  pwLabel?: string;
+  pwCurrent?: string;
+  pwShow?: string;
+  pwCritLength?: string;
+  pwCritDigit?: string;
+  pwCritSpecial?: string;
+  pwCritUpper?: string;
+  pwTip?: string;
+  pwPassphrase?: string;
+  pwExample?: string;
+  pwConfirm?: string;
+  pwWarning?: string;
+  pwWrong?: string;
+  ttLockOn?: string;
+  ttLockOff?: string;
+  menuPassword?: string;
+  menuImagesToPdf?: string;
+  msgProtected?: string;
+  msgUnprotected?: string;
+  msgExportedOne?: string;
+  msgExportedMany?: string;
+  msgImagesPdfSaved?: string;
+  msgCompressTarget?: string;
+  msgOverwrite?: string;
+  msgOverwriteTitle?: string;
+  msgOpenProtectedFailed?: string;
 }
 
 // ── English ───────────────────────────────────────────────────────────────────
@@ -439,7 +529,7 @@ const EN: Translations = {
   settingsThemeDark:   "Dark",
   btnCompress:       "Compress\u2026",
   ttCompress:        "Compress PDF",
-  compressTitle:     "Compress PDF",
+  compressTitle:     "Compress",
   compressClose:     "Cancel",
   compressScreen:    "Screen",
   compressScreenDesc:"Smallest file, lower quality",
@@ -756,6 +846,95 @@ const EN: Translations = {
   msgPageAdjusted: "1 page adjusted",
   msgPagesAdjusted: "{n} pages adjusted",
   msgAdjustFailed: "Couldn't adjust the pages: {err}",
+  dlgClose: "Close",
+  dlgCancel: "Cancel",
+  expTitle: "Export",
+  expOk: "Export",
+  expTabPdf: "This PDF to…",
+  expTabImages: "Images to PDF",
+  expFormat: "Format",
+  expPngSub: "Lossless",
+  expJpegSub: "Lighter",
+  expPdfSub: "Flattened copy",
+  expPages: "Pages",
+  expResolution: "Resolution",
+  expDpiLight: "96 dpi · light",
+  expDpiScreen: "150 dpi · screen",
+  expDpiPrint: "300 dpi · print",
+  expKeepAnn: "Keep annotations",
+  expKeepAnnSub: "Highlights, sticky notes, drawings, signatures and stamps",
+  expPickImages: "Choose pictures…",
+  expImagesHint: "Each picture becomes a page, in this order, fitted to A4.",
+  expAllPages: "All ({n})",
+  expRemoveImage: "Remove",
+  expImagesNone: "No pictures yet.",
+  expImagesOne: "1 picture → a PDF of 1 page.",
+  expImagesMany: "{n} pictures → a PDF of {n} pages.",
+  expBadPages: "Pages: type for example 1-3, 5 (the document has {n}).",
+  expWithAnn: "Annotations are included.",
+  expWithoutAnn: "Without annotations.",
+  expPdfSummary: "1 PDF file with {n} page(s).",
+  expImgSummaryOne: "1 {kind} file ({names}) at {dpi} dpi.",
+  expImgSummaryMany: "{n} {kind} files ({names}) at {dpi} dpi.",
+  cmpOk: "Compress",
+  cmpCurrent: "Current size:",
+  cmpLossless: "Lossless",
+  cmpLosslessSub: "Streams cleaned up and recompressed, same quality",
+  cmpBalanced: "Balanced",
+  cmpBalancedSub: "Images at 150 dpi, JPEG quality 75",
+  cmpMaximum: "Maximum",
+  cmpMaximumSub: "Images at 96 dpi, JPEG quality 55",
+  cmpTarget: "Target size",
+  cmpTargetSub: "EzReader looks for the best quality under this size",
+  cmpRecommended: "Recommended",
+  cmpBefore: "Before",
+  cmpAfter: "After (estimated)",
+  unitMB: "MB",
+  unitKB: "KB",
+  pwStrength0: "—",
+  pwWeak: "Weak",
+  pwFair: "Fair",
+  pwGood: "Good",
+  pwStrong: "Strong",
+  pwTimeInstant: "guessed in an instant",
+  pwTimeMinutes: "≈ minutes to guess",
+  pwTimeDays: "≈ days to guess",
+  pwTimeYears: "≈ years to guess",
+  pwTimeCenturies: "≈ centuries to guess",
+  pwProtectTitle: "Protect with a password",
+  pwProtectOk: "Protect",
+  pwRemoveTitle: "Remove the password",
+  pwRemoveOk: "Remove protection",
+  pwUnlockTitle: "Protected PDF",
+  pwUnlockOk: "Open",
+  pwRemoveIntro: "This PDF is protected. Enter its password to remove the protection for good when you save.",
+  pwUnlockIntro: "{name} is protected. Enter its password to open it.",
+  pwLabel: "Password",
+  pwCurrent: "Current password",
+  pwShow: "Show the password",
+  pwCritLength: "12 characters or more",
+  pwCritDigit: "A number",
+  pwCritSpecial: "A special character",
+  pwCritUpper: "An uppercase letter",
+  pwTip: "Tip: a {passphrase} is safer and easier to remember. For example {example}",
+  pwPassphrase: "passphrase",
+  pwExample: "turtle-orange-jumps-7-times",
+  pwConfirm: "Confirm",
+  pwWarning: "EzReader doesn't keep this password. If you forget it, nobody can open this PDF again, not even us. Write it down somewhere safe.",
+  pwWrong: "That's not the right password.",
+  ttLockOn: "Protected: remove the password",
+  ttLockOff: "Protect with a password",
+  menuPassword: "Password…",
+  menuImagesToPdf: "Images to PDF…",
+  msgProtected: "Password set: it's applied when you save.",
+  msgUnprotected: "Protection removed: applied when you save.",
+  msgExportedOne: "1 picture exported",
+  msgExportedMany: "{n} pictures exported",
+  msgImagesPdfSaved: "PDF made from {n} picture(s)",
+  msgCompressTarget: "Couldn't get under {target}: the smallest result is {to}.",
+  msgOverwrite: "{n} file(s) already exist in this folder. Replace them?",
+  msgOverwriteTitle: "Replace files?",
+  msgOpenProtectedFailed: "Couldn't open this protected PDF: {err}",
 };
 
 // ── French ────────────────────────────────────────────────────────────────────
@@ -810,7 +989,7 @@ const FR: Translations = {
   settingsThemeDark:   "Sombre",
   btnCompress:       "Compresser\u2026",
   ttCompress:        "Compresser le PDF",
-  compressTitle:     "Compresser le PDF",
+  compressTitle:     "Compresser",
   compressClose:     "Annuler",
   compressScreen:    "\u00c9cran",
   compressScreenDesc:"Fichier le plus petit, qualit\u00e9 r\u00e9duite",
@@ -1127,6 +1306,95 @@ const FR: Translations = {
   msgPageAdjusted: "1 page ajustée",
   msgPagesAdjusted: "{n} pages ajustées",
   msgAdjustFailed: "Impossible d'ajuster les pages : {err}",
+  dlgClose: "Fermer",
+  dlgCancel: "Annuler",
+  expTitle: "Exporter",
+  expOk: "Exporter",
+  expTabPdf: "Ce PDF vers…",
+  expTabImages: "Images vers PDF",
+  expFormat: "Format",
+  expPngSub: "Sans perte",
+  expJpegSub: "Plus léger",
+  expPdfSub: "Copie aplatie",
+  expPages: "Pages",
+  expResolution: "Résolution",
+  expDpiLight: "96 dpi · léger",
+  expDpiScreen: "150 dpi · écran",
+  expDpiPrint: "300 dpi · impression",
+  expKeepAnn: "Garder les annotations",
+  expKeepAnnSub: "Surlignages, notes, dessins, signatures et tampons",
+  expPickImages: "Choisir des images…",
+  expImagesHint: "Chaque image devient une page, dans cet ordre, ajustée au format A4.",
+  expAllPages: "Toutes ({n})",
+  expRemoveImage: "Retirer",
+  expImagesNone: "Aucune image pour l'instant.",
+  expImagesOne: "1 image → un PDF d'1 page.",
+  expImagesMany: "{n} images → un PDF de {n} pages.",
+  expBadPages: "Pages : tapez par exemple 1-3, 5 (le document en a {n}).",
+  expWithAnn: "Les annotations sont incluses.",
+  expWithoutAnn: "Sans les annotations.",
+  expPdfSummary: "1 fichier PDF de {n} page(s).",
+  expImgSummaryOne: "1 fichier {kind} ({names}) à {dpi} dpi.",
+  expImgSummaryMany: "{n} fichiers {kind} ({names}) à {dpi} dpi.",
+  cmpOk: "Compresser",
+  cmpCurrent: "Taille actuelle :",
+  cmpLossless: "Sans perte",
+  cmpLosslessSub: "Nettoyage et recompression des flux, qualité identique",
+  cmpBalanced: "Équilibré",
+  cmpBalancedSub: "Images à 150 dpi, JPEG qualité 75",
+  cmpMaximum: "Maximal",
+  cmpMaximumSub: "Images à 96 dpi, JPEG qualité 55",
+  cmpTarget: "Taille visée",
+  cmpTargetSub: "EzReader cherche la meilleure qualité sous cette taille",
+  cmpRecommended: "Conseillé",
+  cmpBefore: "Avant",
+  cmpAfter: "Après (estimé)",
+  unitMB: "Mo",
+  unitKB: "Ko",
+  pwStrength0: "—",
+  pwWeak: "Faible",
+  pwFair: "Moyen",
+  pwGood: "Bon",
+  pwStrong: "Fort",
+  pwTimeInstant: "deviné en un instant",
+  pwTimeMinutes: "≈ quelques minutes à deviner",
+  pwTimeDays: "≈ quelques jours à deviner",
+  pwTimeYears: "≈ des années à deviner",
+  pwTimeCenturies: "≈ des siècles à deviner",
+  pwProtectTitle: "Protéger par mot de passe",
+  pwProtectOk: "Protéger",
+  pwRemoveTitle: "Retirer le mot de passe",
+  pwRemoveOk: "Retirer la protection",
+  pwUnlockTitle: "PDF protégé",
+  pwUnlockOk: "Ouvrir",
+  pwRemoveIntro: "Ce PDF est protégé. Entrez son mot de passe pour retirer la protection de façon définitive à l'enregistrement.",
+  pwUnlockIntro: "{name} est protégé. Entrez son mot de passe pour l'ouvrir.",
+  pwLabel: "Mot de passe",
+  pwCurrent: "Mot de passe actuel",
+  pwShow: "Afficher le mot de passe",
+  pwCritLength: "12 caractères ou plus",
+  pwCritDigit: "Un chiffre",
+  pwCritSpecial: "Un caractère spécial",
+  pwCritUpper: "Une majuscule",
+  pwTip: "Astuce : une {passphrase} est plus sûre et plus facile à retenir. Par exemple {example}",
+  pwPassphrase: "phrase de passe",
+  pwExample: "tortue-orange-saute-7-fois",
+  pwConfirm: "Confirmer",
+  pwWarning: "EzReader ne garde pas ce mot de passe. Si vous l'oubliez, personne ne pourra rouvrir ce PDF, même pas nous. Notez-le dans un endroit sûr.",
+  pwWrong: "Ce n'est pas le bon mot de passe.",
+  ttLockOn: "Protégé : retirer le mot de passe",
+  ttLockOff: "Protéger par mot de passe",
+  menuPassword: "Mot de passe…",
+  menuImagesToPdf: "Images vers PDF…",
+  msgProtected: "Mot de passe défini : il est appliqué à l'enregistrement.",
+  msgUnprotected: "Protection retirée : appliqué à l'enregistrement.",
+  msgExportedOne: "1 image exportée",
+  msgExportedMany: "{n} images exportées",
+  msgImagesPdfSaved: "PDF créé à partir de {n} image(s)",
+  msgCompressTarget: "Impossible de descendre sous {target} : le plus petit résultat fait {to}.",
+  msgOverwrite: "{n} fichier(s) existe(nt) déjà dans ce dossier. Les remplacer ?",
+  msgOverwriteTitle: "Remplacer les fichiers ?",
+  msgOpenProtectedFailed: "Impossible d'ouvrir ce PDF protégé : {err}",
 };
 
 // ── Chinese (Mandarin) ────────────────────────────────────────────────────────

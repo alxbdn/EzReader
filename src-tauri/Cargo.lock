@@ -1040,6 +1040,7 @@ name = "ezreader"
 version = "0.2.31"
 dependencies = [
  "base64 0.22.1",
+ "getrandom 0.4.2",
  "image",
  "lopdf",
  "serde",
