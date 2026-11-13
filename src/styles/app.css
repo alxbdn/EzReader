@@ -1912,22 +1912,14 @@ kbd,
 .settings-btn:hover { background: var(--accent); }
 .settings-btn:disabled { opacity: 0.5; cursor: default; }
 
-/* ── Option cards (compress / split) ───────────────────────────────────── */
+/* ── Option cards (split) ──────────────────────────────────────────────── */
 
-.compress-box {
-  min-width: 320px;
-  max-width: 400px;
-  width: 100%;
-}
-
-.compress-options,
 .split-options {
   display: flex;
   flex-direction: column;
   gap: 8px;
 }
 
-.compress-option,
 .split-mode-option {
   display: flex;
   align-items: center;
@@ -1939,37 +1931,17 @@ kbd,
   transition: background 0.15s, border-color 0.15s, box-shadow 0.15s;
 }
 
-.compress-option:hover,
 .split-mode-option:hover { background: var(--accent); }
 
-.compress-option:has(input:checked),
 .split-mode-option:has(input[type="radio"]:checked) {
   border-color: var(--primary);
   box-shadow: 0 0 0 1px var(--primary);
 }
 
-.compress-option input[type="radio"],
 .split-mode-option input[type="radio"] {
   flex-shrink: 0;
   width: 15px;
   height: 15px;
-}
-
-.compress-option-body {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.compress-option-name {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--foreground);
-}
-
-.compress-option-desc {
-  font-size: 12px;
-  color: var(--muted-foreground);
 }
 
 .split-box {
@@ -2541,3 +2513,114 @@ body.custom-titlebar #menubar-row {
   z-index: 2;
 }
 .adj-loupe[hidden], .adj-loupe-label[hidden] { display: none; }
+
+/* ══ Export / Compress / Password dialogs (src/modal.ts) ══════════════════ */
+
+.ez-modal { width: 480px; padding: 20px; gap: 14px; }
+.ez-modal-title { display: inline-flex; align-items: center; gap: 10px; }
+.ez-modal-icon {
+  width: 30px; height: 30px; display: inline-flex; align-items: center; justify-content: center;
+  border: 1px solid var(--border); border-radius: var(--radius); background: var(--muted);
+}
+.ez-modal-body { display: flex; flex-direction: column; gap: 12px; font-size: 13px; }
+.ez-modal-body [hidden] { display: none !important; }
+.ez-pane { display: flex; flex-direction: column; gap: 12px; }
+.ez-tabs { align-self: flex-start; }
+.ez-tabs .mode-btn:disabled { opacity: 0.45; cursor: default; }
+.ez-label { color: var(--muted-foreground); font-size: 12px; }
+.ez-intro { margin: 0; color: var(--muted-foreground); line-height: 1.5; }
+.ez-grid3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.ez-row2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.ez-field { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.ez-input {
+  height: 34px; box-sizing: border-box; width: 100%; padding: 0 10px;
+  border: 1px solid var(--input); border-radius: var(--radius-md);
+  background: var(--background); color: var(--foreground); font: inherit;
+}
+.ez-input:focus { outline: none; border-color: var(--ring); box-shadow: 0 0 0 2px color-mix(in srgb, var(--ring) 35%, transparent); }
+.ez-input.invalid { border-color: var(--destructive); }
+.ez-input-wrap { position: relative; display: flex; }
+.ez-input-wrap .ez-input { padding-right: 38px; }
+.ez-reveal { position: absolute; right: 3px; top: 3px; width: 28px; height: 28px; }
+.ez-reveal.active { color: var(--selection); }
+
+.ez-card {
+  display: flex; align-items: center; gap: 12px; padding: 10px 12px;
+  border: 1px solid var(--border); border-radius: var(--radius);
+  background: transparent; color: var(--foreground); font: inherit; text-align: left; cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, box-shadow 0.15s;
+}
+.ez-card:hover { background: var(--accent); }
+.ez-card.active { border-color: var(--primary); box-shadow: 0 0 0 0.5px var(--primary); background: color-mix(in srgb, var(--muted) 60%, transparent); }
+.ez-card-center { height: 60px; flex-direction: column; justify-content: center; gap: 2px; text-align: center; }
+.ez-card-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.ez-card-label { font-weight: 600; }
+.ez-card-sub { color: var(--muted-foreground); font-size: 12px; line-height: 1.45; }
+.ez-card-right { text-align: right; display: flex; flex-direction: column; align-items: flex-end; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.ez-list { display: flex; flex-direction: column; gap: 8px; }
+.ez-radio {
+  width: 16px; height: 16px; flex-shrink: 0; box-sizing: border-box; border-radius: 50%;
+  border: 1.5px solid var(--ring);
+}
+.ez-radio-card.active .ez-radio { border: 5px solid var(--primary); }
+.ez-tag {
+  display: inline-block; margin-left: 4px; padding: 1px 6px; border-radius: 999px;
+  background: color-mix(in srgb, #22c55e 18%, transparent); color: #16a34a; font-size: 10px; font-weight: 600; vertical-align: 1px;
+}
+:root[data-theme="dark"] .ez-tag { color: #4ade80; }
+.ez-gain { color: var(--muted-foreground); font-size: 12px; }
+.ez-gain.good { color: #16a34a; }
+:root[data-theme="dark"] .ez-gain.good { color: #4ade80; }
+.ez-target-wrap { flex-direction: row; align-items: center; gap: 6px; }
+.ez-target { width: 70px; height: 30px; text-align: right; }
+
+.ez-compare { display: flex; flex-direction: column; gap: 6px; padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius); }
+.ez-compare-row { display: flex; justify-content: space-between; font-size: 12px; color: var(--muted-foreground); font-variant-numeric: tabular-nums; }
+.ez-bar { height: 8px; border-radius: 4px; background: var(--muted); overflow: hidden; }
+.ez-bar-fill { height: 100%; border-radius: 4px; background: #4ade80; transition: width 300ms ease; }
+.ez-bar-before { width: 100%; background: var(--ring); }
+
+.ez-check {
+  display: flex; align-items: center; gap: 10px; padding: 10px 12px; cursor: pointer;
+  border: 1px solid var(--border); border-radius: var(--radius);
+}
+.ez-check input { width: 16px; height: 16px; flex-shrink: 0; accent-color: var(--primary); margin: 0; }
+.ez-check-text { display: flex; flex-direction: column; gap: 2px; }
+.ez-summary { padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius); color: var(--muted-foreground); font-size: 12px; line-height: 1.5; }
+.ez-summary.error, .ez-error { color: var(--destructive); }
+.ez-error { font-size: 12px; }
+.ez-filelist { display: flex; flex-direction: column; gap: 4px; max-height: 180px; overflow-y: auto; }
+.ez-file { display: flex; align-items: center; gap: 8px; padding: 4px 4px 4px 10px; border: 1px solid var(--border); border-radius: var(--radius-md); }
+.ez-file-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ez-file .icon-btn { width: 24px; height: 24px; }
+
+.btn-destructive { background: #E53935; border-color: #E53935; color: #ffffff; }
+.btn-destructive:hover { background: #c62828; border-color: #c62828; }
+
+/* Password strength */
+.pw-meter { display: flex; flex-direction: column; gap: 6px; margin-top: -4px; }
+.pw-bars { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 4px; }
+.pw-bars span { height: 5px; border-radius: 3px; background: var(--muted); transition: background-color 200ms ease; }
+.pw-legend { display: flex; justify-content: space-between; gap: 8px; }
+.pw-strength { font-size: 12px; font-weight: 600; color: var(--muted-foreground); }
+.pw-criteria { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px 14px; font-size: 12px; }
+.pw-crit { display: flex; gap: 6px; color: var(--muted-foreground); }
+.pw-crit.met { color: var(--foreground); }
+.pw-crit.met .pw-mark { color: #16a34a; }
+:root[data-theme="dark"] .pw-crit.met .pw-mark { color: #4ade80; }
+.pw-tip { padding: 10px 12px; border-radius: var(--radius); background: var(--muted); color: var(--muted-foreground); font-size: 12px; line-height: 1.5; }
+.pw-tip b { color: var(--foreground); }
+.pw-tip code { font-family: ui-monospace, Consolas, monospace; color: var(--foreground); background: var(--background); padding: 1px 5px; border-radius: 4px; }
+.pw-warning {
+  display: flex; gap: 10px; align-items: flex-start; padding: 10px 12px; border-radius: var(--radius);
+  border: 1px solid #ca8a04; background: rgba(234, 179, 8, 0.1); color: #854d0e; font-size: 12px; line-height: 1.5;
+}
+:root[data-theme="dark"] .pw-warning { border-color: #854d0e; background: rgba(234, 179, 8, 0.08); color: #fde68a; }
+.pw-bang {
+  width: 18px; height: 18px; flex-shrink: 0; border-radius: 50%; background: #eab308; color: #09090b;
+  display: inline-flex; align-items: center; justify-content: center; font-weight: 700; font-size: 12px;
+}
+
+/* Padlock in the main bar: green while the document has a password */
+.tb-lock.on { color: #16a34a; }
+:root[data-theme="dark"] .tb-lock.on { color: #4ade80; }

@@ -121,3 +121,8 @@ export const ICON_CROP = lucide(`<path d="M6 2v14a2 2 0 0 0 2 2h14"/><path d="M2
 export const ICON_STRAIGHTEN = lucide(`<path d="M5 6 19 4l1 15-15 1z"/><circle cx="5" cy="6" r="2" fill="currentColor" stroke="none"/><circle cx="19" cy="4" r="2" fill="currentColor" stroke="none"/><circle cx="20" cy="19" r="2" fill="currentColor" stroke="none"/><circle cx="5" cy="20" r="2" fill="currentColor" stroke="none"/>`);
 export const ICON_FLIP_V = lucide(`<path d="M3 12h18"/><path d="M7 8l5-5 5 5H7z"/><path d="M7 16l5 5 5-5H7z"/>`);
 export const ICON_FLIP_H = lucide(`<path d="M12 3v18"/><path d="M8 7l-5 5 5 5V7z"/><path d="M16 7l5 5-5 5V7z"/>`);
+
+// ── Password ──────────────────────────────────────────────────────────────────
+export const ICON_LOCK = lucide(`<rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/>`);
+export const ICON_UNLOCK = lucide(`<rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 7.7-1.5"/>`);
+export const ICON_EYE = lucide(`<path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>`);

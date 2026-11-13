@@ -505,12 +505,17 @@ fn image_page(doc: &mut Document, data: &str) -> Result<ObjectId, String> {
     let bytes = base64::engine::general_purpose::STANDARD
         .decode(b64)
         .map_err(|e| format!("invalid image data: {e}"))?;
-    let (w, h) = image::ImageReader::new(std::io::Cursor::new(&bytes))
+    image_page_from_bytes(doc, &bytes)
+}
+
+/// Adds a page showing the picture `bytes` (PNG, JPEG…) to `doc` and returns its id.
+fn image_page_from_bytes(doc: &mut Document, bytes: &[u8]) -> Result<ObjectId, String> {
+    let (w, h) = image::ImageReader::new(std::io::Cursor::new(bytes))
         .with_guessed_format()
         .map_err(|e| e.to_string())?
         .into_dimensions()
         .map_err(|e| format!("invalid image: {e}"))?;
-    let (img_id, _) = writer::embed_image(doc, &bytes)?;
+    let (img_id, _) = writer::embed_image(doc, bytes)?;
     let (pw, ph) = image_page_size(w, h);
     let ops = format!("q\n{pw:.2} 0 0 {ph:.2} 0 0 cm\n/Im0 Do\nQ\n");
     let contents = doc.add_object(lopdf::Stream::new(lopdf::Dictionary::new(), ops.into_bytes()));
@@ -527,6 +532,38 @@ fn image_page(doc: &mut Document, data: &str) -> Result<ObjectId, String> {
     dict.set("Resources", Object::Dictionary(resources));
     dict.set("Contents", Object::Reference(contents));
     Ok(doc.add_object(dict))
+}
+
+/// Makes a new PDF with one page per picture of `image_paths`, in order
+/// (each page fits A4 in the picture's orientation).
+#[tauri::command]
+pub fn images_to_pdf(image_paths: Vec<String>, output_path: String) -> Result<(), String> {
+    if image_paths.is_empty() {
+        return Err("No pictures given".into());
+    }
+    let mut doc = Document::with_version("1.7");
+    let pages_id = doc.new_object_id();
+    let mut kids = Vec::with_capacity(image_paths.len());
+    for path in &image_paths {
+        let bytes = crate::commands::files::read_image_bytes(path)?;
+        let page = image_page_from_bytes(&mut doc, &bytes).map_err(|e| format!("{path}: {e}"))?;
+        if let Ok(Object::Dictionary(d)) = doc.get_object_mut(page) {
+            d.set("Parent", Object::Reference(pages_id));
+        }
+        kids.push(Object::Reference(page));
+    }
+    let mut pages = lopdf::Dictionary::new();
+    pages.set("Type", Object::Name(b"Pages".to_vec()));
+    pages.set("Count", kids.len() as i64);
+    pages.set("Kids", Object::Array(kids));
+    doc.objects.insert(pages_id, Object::Dictionary(pages));
+    let mut catalog = lopdf::Dictionary::new();
+    catalog.set("Type", Object::Name(b"Catalog".to_vec()));
+    catalog.set("Pages", Object::Reference(pages_id));
+    let catalog_id = doc.add_object(catalog);
+    doc.trailer.set("Root", Object::Reference(catalog_id));
+    doc.compress();
+    fsutil::save_document(&mut doc, &output_path)
 }
 
 /// Attributes a page may inherit from its ancestors in the page tree
@@ -844,6 +881,27 @@ impl Importer {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn images_become_a_pdf_one_page_each() {
+        let dir = std::env::temp_dir().join(format!("ezreader-img2pdf-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let wide = dir.join("wide.png");
+        let tall = dir.join("tall.jpg");
+        image::RgbImage::from_pixel(300, 200, image::Rgb([200, 30, 30])).save(&wide).unwrap();
+        image::RgbImage::from_pixel(200, 400, image::Rgb([30, 30, 200])).save(&tall).unwrap();
+        let out = dir.join("out.pdf").to_string_lossy().into_owned();
+        images_to_pdf(vec![wide.to_string_lossy().into(), tall.to_string_lossy().into()], out.clone()).unwrap();
+        let doc = Document::load(&out).unwrap();
+        let pages = doc.get_pages();
+        assert_eq!(pages.len(), 2);
+        let media = |n: u32| -> Vec<f32> {
+            doc.get_dictionary(pages[&n]).unwrap().get(b"MediaBox").unwrap().as_array().unwrap().iter().map(|o| o.as_float().unwrap()).collect()
+        };
+        assert!(media(1)[2] > media(1)[3], "landscape picture, landscape page");
+        assert!(media(2)[2] < media(2)[3]);
+        std::fs::remove_dir_all(&dir).ok();
+    }
 
     #[test]
     fn image_pages_fit_a4_in_their_orientation() {

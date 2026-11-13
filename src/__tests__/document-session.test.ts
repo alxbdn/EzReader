@@ -10,6 +10,7 @@ function makeSession() {
   };
   const saveAnnotated = vi.fn(async () => {});
   const redact = vi.fn(async () => {});
+  const encrypt = vi.fn(async () => {});
   let n = 0;
   const session = new DocumentSession(
     {
@@ -17,9 +18,9 @@ function makeSession() {
       formFields: () => state.formFields,
       rotation: () => state.rotation,
     },
-    { saveAnnotated, redact, tempPath: async (suffix) => `/tmp/${++n}-${suffix}` },
+    { saveAnnotated, redact, encrypt, tempPath: async (suffix) => `/tmp/${++n}-${suffix}` },
   );
-  return { session, state, saveAnnotated, redact };
+  return { session, state, saveAnnotated, redact, encrypt };
 }
 
 const rect = { kind: "rect", page: 1 } as unknown as Annotation;
@@ -163,5 +164,36 @@ describe("DocumentSession redaction", () => {
     expect(session.hasRedactions()).toBe(false);
     await session.saveTo("/docs/b.pdf");
     expect(redact).not.toHaveBeenCalled();
+  });
+});
+
+describe("DocumentSession password", () => {
+  it("saves encrypted but keeps working from an unencrypted copy", async () => {
+    const { session, encrypt, saveAnnotated } = makeSession();
+    session.opened("/docs/a.pdf", "/tmp/plain.pdf", "secret");
+    expect(session.password).toBe("secret");
+    await session.saveTo("/docs/a.pdf");
+    const plain = (saveAnnotated.mock.calls[0] as unknown[])[1];
+    expect(encrypt).toHaveBeenCalledWith(plain, "/docs/a.pdf", "secret");
+    expect(session.basePath).toBe(plain);
+    expect(session.sourcePath).toBe("/docs/a.pdf");
+  });
+
+  it("a removed password is not applied", async () => {
+    const { session, encrypt } = makeSession();
+    session.opened("/docs/a.pdf", "/tmp/plain.pdf", "secret");
+    session.setPassword(null);
+    await session.saveTo("/docs/b.pdf");
+    expect(encrypt).not.toHaveBeenCalled();
+    expect(session.basePath).toBe("/docs/b.pdf");
+  });
+
+  it("can leave annotations out but still applies redactions", async () => {
+    const { session, state, saveAnnotated, redact } = makeSession();
+    session.opened("/docs/a.pdf", null);
+    state.annotations = [rect, { kind: "redact", page: 1 } as unknown as Annotation];
+    await session.materialize({ annotations: false });
+    expect(redact).toHaveBeenCalled();
+    expect((saveAnnotated.mock.calls[0] as unknown[])[2]).toEqual([]);
   });
 });
