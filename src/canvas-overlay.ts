@@ -32,9 +32,9 @@ import type { SelectionOwner, ToolSelection } from "./tool-selection";
 export type ShapeAnnotation = RectAnnotation | CircleAnnotation | InkAnnotation;
 
 /** Default sticky-note size, in PDF points. */
-/** Every new sticky note has this standard size (points); its text scrolls inside. */
+/** Size of a sticky note placed by a click (points); a drag sets another size. */
 const NOTE_W = 150;
-const NOTE_H = 150;
+const NOTE_H = 100;
 const NOTE_FONT = 10;
 const NOTE_PAD = 6;
 /** How far each note's text is scrolled (points); kept while the app runs. */
@@ -435,7 +435,6 @@ export class CanvasOverlay implements SelectionOwner {
 
   private handlesFor(ann: Annotation): ResizeHandle[] {
     if (ann.kind === "text") return ["w", "e"];
-    if (ann.kind === "note") return []; // standard size; its text scrolls
     if (ann.kind === "redact" && ann.shape === "poly") return []; // its corners are the handles
     if (KEEPS_RATIO.has(ann.kind)) return ["nw", "ne", "se", "sw"];
     return ["nw", "n", "ne", "e", "se", "s", "sw", "w"];
@@ -967,10 +966,9 @@ export class CanvasOverlay implements SelectionOwner {
     if (this.activeTool === "rect") {
       ctx.strokeRect(x0, y0, w, h);
     } else if (this.activeTool === "note") {
-      // The note keeps its standard size: show where it will land.
       ctx.globalAlpha = 0.7;
       ctx.fillStyle = rgbToCss(this.style.noteColor);
-      ctx.fillRect(this.startX, this.startY, NOTE_W * this.scale, NOTE_H * this.scale);
+      ctx.fillRect(x0, y0, w, h);
       ctx.globalAlpha = 1;
     } else if (this.activeTool === "redact") {
       ctx.beginPath();
@@ -1189,12 +1187,14 @@ export class CanvasOverlay implements SelectionOwner {
 
     if (this.activeTool === "note") {
       this.redrawCommitted();
-      // A click sticks a note of the standard size, its top left corner
-      // where you clicked; its text scrolls when it gets longer.
+      // A click sticks a note of the default size; a drag sets its size.
+      // Text longer than the note scrolls inside it.
+      const dragged = Math.abs(e.offsetX - this.startX) >= 12 && Math.abs(e.offsetY - this.startY) >= 12;
       const [ax, ay] = this.toPdf(this.startX, this.startY);
+      const [bx, by] = dragged ? this.toPdf(e.offsetX, e.offsetY) : [ax + NOTE_W, ay - NOTE_H];
       const ann: NoteAnnotation = {
         kind: "note", page: this.currentPage,
-        x: ax, y: ay - NOTE_H, width: NOTE_W, height: NOTE_H,
+        x: Math.min(ax, bx), y: Math.min(ay, by), width: Math.abs(bx - ax), height: Math.abs(by - ay),
         content: "", color: { ...this.style.noteColor },
       };
       this.addInside(ann);
