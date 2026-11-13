@@ -511,7 +511,7 @@ export class PageSidebar {
     const rotate = q(".page-sidebar-rotate");
     if (rotate) rotate.title = this.t("sbRotateLeft", "Rotate left");
     const frame = q(".page-sidebar-frame");
-    if (frame) frame.title = this.t("sbToggleHint", "Click to show · check box or Ctrl+click to select (then click to add pages)");
+    if (frame) frame.title = this.t("sbToggleHint", "Click to show · check box or Ctrl+click to select");
   }
 
   private sizePlaceholder(thumb: Thumb, dim: { width: number; height: number } | undefined): void {
@@ -565,16 +565,20 @@ export class PageSidebar {
 
   /**
    * A click shows the page. The check box, Ctrl+click and Shift+click select
-   * (Shift extends from the last one checked); once a page is checked, a
-   * plain click checks or unchecks pages too, until none is left.
+   * (Shift extends from the last one checked).
    */
   private handleClick(page: number, e: MouseEvent): void {
     if (this.suppressClick) {
       this.suppressClick = false;
       return;
     }
-    const onCheck = (e.target as HTMLElement | null)?.closest(".page-sidebar-check") !== null;
-    if (!onCheck && !e.shiftKey && !e.ctrlKey && !e.metaKey && this.selected.size === 0) {
+    // By position: the frame captures the pointer (for dragging), so the
+    // click's target is the frame even on the check box.
+    const box = (e.currentTarget as HTMLElement | null)?.querySelector(".page-sidebar-check")?.getBoundingClientRect();
+    const pad = 6; // the check box's enlarged hit area
+    const onCheck = !!box && e.clientX >= box.left - pad && e.clientX <= box.right + pad
+      && e.clientY >= box.top - pad && e.clientY <= box.bottom + pad;
+    if (!onCheck && !e.shiftKey && !e.ctrlKey && !e.metaKey) {
       for (const cb of this.goToHandlers) cb(page, false);
       return;
     }
