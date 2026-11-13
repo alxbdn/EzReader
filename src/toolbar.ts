@@ -11,6 +11,9 @@ import { ToolRow, type SignatureChip } from "./tool-row";
 import type { Translations } from "./i18n";
 import {
   ICON_INFO,
+  ICON_EYE,
+  ICON_PEN,
+  ICON_EDIT_TEXT,
   ICON_PAGES_1,
   ICON_PAGES_2,
   ICON_SIDEBAR,
@@ -653,6 +656,7 @@ export class Toolbar {
     this.saveBtn = this.btn(ICON_SAVE, "Save (Ctrl+S)", "btn tb-save");
     const saveLabel = document.createElement("span");
     saveLabel.textContent = "Save";
+    saveLabel.className = "tb-save-label";
     this.saveBtn.append(saveLabel);
     this.reg(saveLabel, "btnSave");
     this.reg(this.saveBtn, undefined, "ttSave");
@@ -719,19 +723,31 @@ export class Toolbar {
     });
 
     // Read / Annotate / Edit
-    const modeDefs: [AppMode, keyof Translations, string][] = [
-      ["read", "modeRead", "Read"], ["annotate", "modeAnnotate", "Annotate"], ["edit", "modeEdit", "Edit"],
+    // On a narrow window the names give way to icons (see fitMainRow).
+    const modeDefs: [AppMode, keyof Translations, string, string][] = [
+      ["read", "modeRead", "Read", ICON_EYE], ["annotate", "modeAnnotate", "Annotate", ICON_PEN], ["edit", "modeEdit", "Edit", ICON_EDIT_TEXT],
     ];
-    this.modeBtns = modeDefs.map(([mode, key, fb]) => {
+    this.modeBtns = modeDefs.map(([mode, key, fb, icon]) => {
       const b = document.createElement("button");
       b.className = "mode-btn";
       b.dataset["mode"] = mode;
-      b.textContent = fb;
-      this.reg(b, key);
+      const ic = document.createElement("span");
+      ic.className = "mode-icon";
+      ic.innerHTML = icon;
+      ic.setAttribute("aria-hidden", "true");
+      const label = document.createElement("span");
+      label.className = "mode-label";
+      label.textContent = fb;
+      b.title = fb;
+      b.append(ic, label);
+      this.reg(label, key);
+      this.reg(b, undefined, key);
       b.addEventListener("click", () => this.setMode(mode));
       return b;
     });
     const modeSeg = this.segment(...this.modeBtns);
+    const columnsSeg = this.segment(...this.columnBtns);
+    columnsSeg.classList.add("tb-columns");
     modeSeg.classList.add("mode-segment");
 
     // Right side: export, compress, info, then the search pill
@@ -754,12 +770,52 @@ export class Toolbar {
       this.sidebarBtn, this.saveBtn, this.segment(undo, redo), this.sep(),
       this.segment(...this.pointerBtns),
       this.segment(zoomOut, this.zoomLabel, this.zoomInput, zoomIn, realSizeBtn),
-      this.segment(...this.columnBtns), this.sep(),
+      columnsSeg, this.sep(),
       modeSeg, right,
     );
     this.updateLayout(null, "vertical");
     this.syncModeBtns();
+
+    // Keep the main row on one line: compact it when it would wrap.
+    if (typeof ResizeObserver !== "undefined") {
+      const ro = new ResizeObserver(() => this.fitMainRow(main));
+      ro.observe(main);
+      ro.observe(this.search.el);
+    }
   }
+
+  /**
+   * Compacts the main row step by step (mode names become icons, the open
+   * search box narrows, then less used bits hide) only when it would
+   * otherwise take two lines. The search box's final width is used, not the
+   * one mid-animation, so the result doesn't flicker while it opens.
+   */
+  private fitMainRow(main: HTMLElement): void {
+    const levels = ["tb-compact", "tb-compact-2", "tb-compact-3"];
+    // Width of the open search box at each level.
+    const searchOpen = [250, 190, 160, 120];
+    const pill = this.search.el;
+    const open = pill.classList.contains("open");
+    // Laid out on one line, how much wider than the row the content is, with
+    // the search box at its final width (not the one mid-animation).
+    const right = main.lastElementChild as HTMLElement;
+    const gap = parseFloat(getComputedStyle(main).columnGap) || 0;
+    const overflow = (level: number): number => {
+      const prev = right.previousElementSibling as HTMLElement;
+      // Free room: the auto margin that pushes the right group to the end.
+      const slack = Math.max(0, right.offsetLeft - (prev.offsetLeft + prev.offsetWidth) - gap);
+      return main.scrollWidth - main.clientWidth - slack - pill.offsetWidth + (open ? searchOpen[level] : 34);
+    };
+    main.style.flexWrap = "nowrap";
+    main.classList.remove(...levels);
+    let level = 0;
+    while (level < levels.length && overflow(level) > 0) main.classList.add(levels[level++]);
+    main.style.flexWrap = "";
+    const w = `${searchOpen[level]}px`;
+    if (pill.style.getPropertyValue("--search-open-w") !== w) pill.style.setProperty("--search-open-w", w);
+  }
+
+
 
   /** Switches between reading, annotating and editing; any active tool is dropped. */
   setMode(mode: AppMode): void {
