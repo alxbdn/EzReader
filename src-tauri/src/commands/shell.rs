@@ -116,7 +116,7 @@ pub fn register_pdf_handler() -> CmdResult<()> {
     }
     #[cfg(not(target_os = "windows"))]
     {
-        Err("Registration is only supported on Windows".to_string())
+        Err("Registration is only supported on Windows".into())
     }
 }
 
@@ -264,7 +264,7 @@ pub fn print_pages(
     #[cfg(not(target_os = "windows"))]
     {
         let _ = (pages_b64, printer_name, copies, orientation, fit_mode);
-        Err("Printing is only supported on Windows".to_string())
+        Err("Printing is only supported on Windows".into())
     }
 }
 
@@ -556,7 +556,7 @@ pub fn unregister_pdf_handler() -> CmdResult<()> {
     }
     #[cfg(not(target_os = "windows"))]
     {
-        Err("Only supported on Windows".to_string())
+        Err("Only supported on Windows".into())
     }
 }
 
