@@ -4,6 +4,7 @@ mod pdf;
 #[cfg(test)]
 mod test_util;
 
+use std::collections::HashMap;
 use std::sync::Mutex;
 
 use tauri::{DragDropEvent, Manager, WindowEvent};
@@ -13,10 +14,15 @@ use tauri::{DragDropEvent, Manager, WindowEvent};
 pub struct StartupArgs {
     pub file_path: Option<String>,
     pub should_print: bool,
+    /// The file is a temp copy that was never saved (pages dragged out to a
+    /// new window): Save asks where to write it.
+    pub unsaved: bool,
 }
 
 pub struct AppState {
     pub startup_args: Mutex<StartupArgs>,
+    /// What each extra window opens, by window label.
+    pub window_args: Mutex<HashMap<String, StartupArgs>>,
 }
 
 /// Lets the webview read `path` through the asset protocol (pdf.js loads the
@@ -63,6 +69,7 @@ pub fn run() {
         })
         .manage(AppState {
             startup_args: Mutex::new(startup),
+            window_args: Mutex::new(HashMap::new()),
         })
         .invoke_handler(tauri::generate_handler![
             commands::compress::compress_pdf,
@@ -97,6 +104,7 @@ pub fn run() {
             commands::shell::register_print_verb,
             commands::shell::open_default_apps_settings,
             commands::shell::open_url,
+            commands::window::open_pages_in_new_window,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application")

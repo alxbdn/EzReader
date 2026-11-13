@@ -2,7 +2,7 @@
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
   "description": "EzReader default capabilities",
-  "windows": ["main"],
+  "windows": ["main", "doc-*"],
   "permissions": [
     "core:default",
     "core:window:allow-close",

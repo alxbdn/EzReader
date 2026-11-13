@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parsePageRange } from "../page-range";
+import { formatPageRange, parsePageRange } from "../page-range";
 import { checkPassword, crackTime } from "../password-strength";
 
 describe("page ranges", () => {
@@ -18,6 +18,11 @@ describe("page ranges", () => {
     expect(parsePageRange("7", 6)).toBeNull();
     expect(parsePageRange("3-1", 6)).toBeNull();
     expect(parsePageRange("abc", 6)).toBeNull();
+  });
+  it("writes lists the short way", () => {
+    expect(formatPageRange([3])).toBe("3");
+    expect(formatPageRange([2, 3, 4, 7, 9, 10])).toBe("2-4, 7, 9-10");
+    expect(parsePageRange(formatPageRange([1, 2, 5]), 6)).toEqual([1, 2, 5]);
   });
 });
 
