@@ -772,6 +772,7 @@ export class PdfViewer {
   // ── Layout (T011 + T018-T019) ────────────────────────────────────────────────
 
   buildLayout(): void {
+    this._previewScale = null;
     this.observer?.disconnect();
     this._visiblePages.clear();
     if (this._scrollHandler) { this.scrollEl.removeEventListener("scroll", this._scrollHandler); this._scrollHandler = null; }
@@ -957,8 +958,9 @@ export class PdfViewer {
    * of the current page.
    */
   async setScale(scale: number, anchor?: { x: number; y: number }): Promise<void> {
-    const next = Math.max(MIN_SCALE * CSS_UNITS, Math.min(MAX_SCALE * CSS_UNITS, scale));
+    const next = this.clampScale(scale);
     const spot = anchor ? this._spotAt(anchor) : null;
+    this._clearPreview();
     this._scale = next;
     this.reflow();
     if (spot && anchor) {
@@ -969,6 +971,43 @@ export class PdfViewer {
         this._renderVisible();
       }
     }
+  }
+
+  clampScale(scale: number): number {
+    return Math.max(MIN_SCALE * CSS_UNITS, Math.min(MAX_SCALE * CSS_UNITS, scale));
+  }
+
+  /** Scale shown while a zoom gesture runs (pages stretched, not redrawn). */
+  private _previewScale: number | null = null;
+
+  /** The scale on screen: the gesture's while one runs, else the real one. */
+  get shownScale(): number { return this._previewScale ?? this._scale; }
+
+  /**
+   * During a zoom gesture: stretches the pages already drawn to `scale`
+   * around `anchor` without redrawing them, which keeps the gesture fluid.
+   * `setScale` then redraws them sharp at the final scale.
+   */
+  previewScale(scale: number, anchor: { x: number; y: number }): void {
+    if (!this.pdfDoc) return;
+    const next = this.clampScale(scale);
+    const spot = this._spotAt(anchor);
+    this._previewScale = next;
+    const z = String(next / this._scale);
+    for (const row of Array.from(this.scrollEl.children) as HTMLElement[]) row.style.zoom = z;
+    if (spot) {
+      const r = this.pageViews[spot.page - 1]?.wrapper.getBoundingClientRect();
+      if (r) {
+        this.scrollEl.scrollLeft += r.left + spot.fx * r.width - anchor.x;
+        this.scrollEl.scrollTop  += r.top  + spot.fy * r.height - anchor.y;
+      }
+    }
+  }
+
+  private _clearPreview(): void {
+    if (this._previewScale === null) return;
+    this._previewScale = null;
+    for (const row of Array.from(this.scrollEl.children) as HTMLElement[]) row.style.zoom = "";
   }
 
   /** The page under a screen point and where on it (0–1), or the nearest page. */

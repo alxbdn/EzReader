@@ -1771,26 +1771,25 @@ document.getElementById("viewer-scroll")!.addEventListener("wheel", async (e: Wh
   }
   if (!e.ctrlKey || !viewer.isLoaded()) return;
   e.preventDefault();
-  // Smooth zoom around the mouse: each wheel step scales a little, and the
-  // steps of one frame are applied together so a touchpad stays fluid.
+  // Smooth zoom around the mouse: while the wheel turns, the pages already
+  // drawn are only stretched; they are redrawn sharp once it stops.
   const px = e.deltaMode === 1 ? e.deltaY * 40 : e.deltaMode === 2 ? e.deltaY * 400 : e.deltaY;
-  wheelZoom.factor *= Math.min(1.25, Math.max(0.8, Math.exp(-px * 0.0015)));
-  wheelZoom.anchor = { x: e.clientX, y: e.clientY };
-  if (wheelZoom.pending) return;
-  wheelZoom.pending = true;
-  requestAnimationFrame(async () => {
-    const { factor, anchor } = wheelZoom;
-    wheelZoom.factor = 1;
-    wheelZoom.pending = false;
-    fitMode = "none"; toolbar.updateFitMode(fitMode);
-    await viewer.setScale(viewer.scale * factor, anchor ?? undefined);
+  const factor = Math.min(1.25, Math.max(0.8, Math.exp(-px * 0.0015)));
+  const anchor = { x: e.clientX, y: e.clientY };
+  const target = viewer.clampScale(viewer.shownScale * factor);
+  if (fitMode !== "none") { fitMode = "none"; toolbar.updateFitMode(fitMode); }
+  viewer.previewScale(target, anchor);
+  toolbar.updateZoom(target);
+  if (wheelZoomTimer) clearTimeout(wheelZoomTimer);
+  wheelZoomTimer = setTimeout(async () => {
+    wheelZoomTimer = null;
+    await viewer.setScale(viewer.shownScale, anchor);
     toolbar.updateZoom(viewer.scale);
-  });
+  }, 200);
 }, { passive: false });
 
-/** Ctrl+wheel steps waiting for the next frame. */
-const wheelZoom: { factor: number; anchor: { x: number; y: number } | null; pending: boolean } =
-  { factor: 1, anchor: null, pending: false };
+/** Redraws the pages once the Ctrl+wheel zoom stops. */
+let wheelZoomTimer: ReturnType<typeof setTimeout> | null = null;
 
 /** The middle of the page area: buttons and keys zoom around it. */
 function viewerCenter(): { x: number; y: number } {
