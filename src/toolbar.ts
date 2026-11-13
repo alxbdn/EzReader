@@ -126,7 +126,7 @@ export class Toolbar {
   private menuBarEl: HTMLElement;
   private contextEl: HTMLElement;
   readonly search: SearchPill;
-  readonly tools: ToolRow;
+  private readonly tools: ToolRow;
   /** Changes wait for ✓ / ✕ before anything else can be done. */
   private pending = false;
 
@@ -916,4 +916,7 @@ export class Toolbar {
 
   /** Back to selecting and moving annotations. */
   clearActiveTool(): void { this.tools.clearTool(); }
+
+  /** How many pages are checked in the side panel (page tools apply to them). */
+  setPageSelection(count: number): void { this.tools.setPageSelection(count); }
 }
