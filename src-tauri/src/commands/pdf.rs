@@ -584,10 +584,12 @@ const INHERITABLE: [&[u8]; 4] = [b"Resources", b"MediaBox", b"CropBox", b"Rotate
 /// The update flattens the page tree: the root `/Pages` node gets the new
 /// page list as its `/Kids`, and every kept page is cloned into the update
 /// with `/Parent` pointing at the root and the attributes it used to inherit
-/// from intermediate nodes copied onto it. Pages left out, and intermediate
-/// nodes, stay in the original bytes but become unreferenced, so viewers
-/// ignore them. Imported pages are deep-copied, with every object they
-/// reference, as new objects of the update.
+/// from intermediate nodes copied onto it. Imported pages are deep-copied,
+/// with every object they reference, as new objects of the update.
+///
+/// The update is then merged and compacted ([`fsutil::save_compacted`]):
+/// pages left out, and the objects only they used, are removed from the
+/// output file entirely.
 #[tauri::command]
 pub fn rearrange_pages(
     input_path: String,
@@ -734,7 +736,8 @@ pub fn rearrange_pages(
         .map_err(|e| e.to_string())?;
     writer::save_meta(&mut inc.new_document, &meta)?;
 
-    fsutil::save_incremental(&mut inc, &output_path)?;
+    // Compacted, not incremental: pages left out must not survive in the bytes.
+    fsutil::save_compacted(&mut inc, &output_path)?;
     Ok(())
 }
 
@@ -1374,18 +1377,148 @@ mod tests {
         let _ = std::fs::remove_file(&input);
         let _ = std::fs::remove_file(&output);
     }
+
+    /// A 3-page PDF stored with object streams. Each page carries its own
+    /// marker in its content stream and in an annotation dictionary (which
+    /// lands inside a compressed object stream).
+    fn marked_pdf(path: &str) {
+        let mut doc = Document::with_version("1.7");
+        let pages_id = doc.new_object_id();
+        let mut kids = Vec::new();
+        for n in 1..=3 {
+            let content = doc.add_object(lopdf::Stream::new(
+                dictionary! {},
+                format!("BT /F1 12 Tf 72 720 Td (CONTENT-MARKER-{n}) Tj ET").into_bytes(),
+            ));
+            let annot = doc.add_object(dictionary! {
+                "Type" => "Annot",
+                "Subtype" => "Text",
+                "Rect" => vec![0.into(), 0.into(), 10.into(), 10.into()],
+                "Contents" => Object::string_literal(format!("ANNOT-MARKER-{n}")),
+            });
+            kids.push(Object::Reference(doc.add_object(dictionary! {
+                "Type" => "Page",
+                "Parent" => pages_id,
+                "MediaBox" => vec![0.into(), 0.into(), 612.into(), 792.into()],
+                "Contents" => content,
+                "Annots" => vec![Object::Reference(annot)],
+            })));
+        }
+        doc.objects.insert(pages_id, Object::Dictionary(dictionary! {
+            "Type" => "Pages", "Kids" => kids, "Count" => 3,
+        }));
+        let cat = doc.add_object(dictionary! { "Type" => "Catalog", "Pages" => pages_id });
+        doc.trailer.set("Root", cat);
+        let mut file = std::fs::File::create(path).unwrap();
+        doc.save_modern(&mut file).unwrap();
+    }
+
+    /// Everything a reader could dig out of `path`: the raw bytes plus the
+    /// decompressed content of every stream (object streams included).
+    fn recoverable_bytes(path: &str) -> Vec<u8> {
+        let mut all = std::fs::read(path).unwrap();
+        let doc = Document::load(path).unwrap();
+        for obj in doc.objects.values() {
+            if let Ok(stream) = obj.as_stream() {
+                all.extend(stream.decompressed_content().unwrap_or_else(|_| stream.content.clone()));
+            }
+        }
+        all
+    }
+
+    fn contains(hay: &[u8], needle: &str) -> bool {
+        hay.windows(needle.len()).any(|w| w == needle.as_bytes())
+    }
+
+    /// Asserts the pages in `kept` are present and the others left no trace.
+    fn assert_only_pages(path: &str, kept: &[u32]) {
+        let bytes = recoverable_bytes(path);
+        for n in 1..=3 {
+            let wanted = kept.contains(&n);
+            for marker in [format!("CONTENT-MARKER-{n}"), format!("ANNOT-MARKER-{n}")] {
+                assert_eq!(contains(&bytes, &marker), wanted, "{marker} in {path}");
+            }
+        }
+        assert_eq!(Document::load(path).unwrap().get_pages().len(), kept.len());
+    }
+
+    #[test]
+    fn extracting_pages_removes_every_trace_of_the_others() {
+        let input = tmp("marked-extract-in.pdf");
+        let out = tmp("marked-extract-out.pdf");
+        marked_pdf(&input);
+        extract_pdf_pages(input.clone(), out.clone(), vec![2]).unwrap();
+        assert_only_pages(&out, &[2]);
+        for p in [input, out] {
+            std::fs::remove_file(p).ok();
+        }
+    }
+
+    #[test]
+    fn deleting_pages_removes_every_trace_of_them() {
+        let input = tmp("marked-delete-in.pdf");
+        let out = tmp("marked-delete-out.pdf");
+        marked_pdf(&input);
+        modify_pages(input.clone(), out.clone(), vec![PageOperation { page: 1, rotation: 0, delete: true }]).unwrap();
+        assert_only_pages(&out, &[2, 3]);
+        for p in [input, out] {
+            std::fs::remove_file(p).ok();
+        }
+    }
+
+    #[test]
+    fn splitting_removes_every_trace_of_the_other_ranges() {
+        let dir = std::env::temp_dir().join(format!("ezreader-split-marked-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let input = dir.join("in.pdf").to_string_lossy().into_owned();
+        marked_pdf(&input);
+        let created = split_pdf(
+            input,
+            dir.to_string_lossy().into_owned(),
+            "doc".to_string(),
+            vec![SplitRange { start: 1, end: 1 }, SplitRange { start: 2, end: 3 }],
+        )
+        .unwrap();
+        assert_only_pages(&created[0], &[1]);
+        assert_only_pages(&created[1], &[2, 3]);
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    /// The real-world shape (object streams + indirect /Length): the kept
+    /// page still reads as text, and the dropped page's stream is gone.
+    #[test]
+    fn extracting_from_an_object_stream_pdf_keeps_text_and_drops_the_rest() {
+        let out = tmp("objstm-extract-out.pdf");
+        let input = fixture("objstm-indirect-length.pdf");
+        let src = Document::load(&input).unwrap();
+        let dropped: Vec<Vec<u8>> = src
+            .get_page_contents(src.get_pages()[&2])
+            .into_iter()
+            .map(|id| src.get_object(id).unwrap().as_stream().unwrap().content.clone())
+            .collect();
+
+        extract_pdf_pages(input, out.clone(), vec![1]).unwrap();
+        crate::test_util::assert_lengths_consistent(&out);
+
+        let doc = Document::load(&out).unwrap();
+        assert_eq!(doc.get_pages().len(), 1);
+        assert!(doc.extract_text(&[1]).unwrap().contains("Page 1"));
+        let raw = std::fs::read(&out).unwrap();
+        for content in dropped {
+            assert!(!raw.windows(content.len()).any(|w| w == content.as_slice()), "page 2 content survived");
+        }
+        std::fs::remove_file(out).ok();
+    }
 }
 
 /// Extracts selected pages from a PDF into a new file, preserving vector text.
 ///
-/// Implementation note: we MUST NOT round-trip through `Document::save`. lopdf
-/// 0.39's full-rewrite path corrupts content streams on PDFs that use object
-/// streams (`/ObjStm`) or indirect-reference `/Length` entries (typical of
-/// Acrobat / iLovePDF / Word output) — text comes out garbled. We use
-/// `IncrementalDocument` instead, which preserves the input bytes verbatim and
-/// drops unwanted pages by mutating only the page-tree metadata in an
-/// incremental update. The dropped page objects remain in the bytes but become
-/// unreferenced, so viewers ignore them.
+/// The page tree is edited in an incremental update, then merged and
+/// compacted ([`fsutil::save_compacted`]) so nothing of the pages left out
+/// remains in the output: no page objects, content, images or fonts that
+/// only they used. Object streams and indirect `/Length` entries (typical of
+/// Acrobat / iLovePDF / Word output) survive the rewrite; see
+/// `extracting_from_an_object_stream_pdf_keeps_text_and_drops_the_rest`.
 #[tauri::command]
 pub fn extract_pdf_pages(
     input_path: String,
@@ -1393,13 +1526,11 @@ pub fn extract_pdf_pages(
     pages: Vec<u32>,
 ) -> Result<(), String> {
     let keep: HashSet<u32> = pages.into_iter().collect();
-    extract_pages_via_incremental(&input_path, &output_path, &keep)
+    extract_pages(&input_path, &output_path, &keep)
 }
 
-/// Keeps only the pages in `keep` (1-based). Uses `IncrementalDocument` so
-/// content streams stay byte-perfect. The file size is dominated by the
-/// original bytes — unreferenced page objects stay in the file as orphans.
-fn extract_pages_via_incremental(
+/// Keeps only the pages in `keep` (1-based) and writes a compacted file.
+fn extract_pages(
     input_path: &str,
     output_path: &str,
     keep: &HashSet<u32>,
@@ -1418,7 +1549,7 @@ fn extract_pages_via_incremental(
 
     let delete_set: HashSet<u32> = (1..=total).filter(|p| !keep.contains(p)).collect();
     apply_page_deletions(&mut inc, &delete_set)?;
-    fsutil::save_incremental(&mut inc, output_path)?;
+    fsutil::save_compacted(&mut inc, output_path)?;
     Ok(())
 }
 
@@ -1582,7 +1713,7 @@ pub fn split_pdf(
         let target = unique_path(&out_dir, &stem, "pdf");
 
         let keep: HashSet<u32> = (range.start..=range.end).collect();
-        extract_pages_via_incremental(
+        extract_pages(
             &input_path,
             target.to_string_lossy().as_ref(),
             &keep,

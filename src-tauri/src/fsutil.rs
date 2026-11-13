@@ -54,6 +54,21 @@ pub fn save_document(doc: &mut Document, dst: impl AsRef<Path>) -> Result<(), St
     write_atomic(dst, |tmp| doc.save(tmp).map(|_| ()).map_err(|e| e.to_string()))
 }
 
+/// Saves `inc` to `dst` as one self-contained file: the update is merged
+/// into the original, every object nothing points at any more is dropped,
+/// and the result is written as a full rewrite.
+///
+/// Use this whenever the update leaves content out (deleted or unselected
+/// pages): an incremental save keeps the left-out objects in the original
+/// bytes, where anyone with a text editor can still read them.
+pub fn save_compacted(inc: &mut IncrementalDocument, dst: impl AsRef<Path>) -> Result<(), String> {
+    let mut merged = Vec::new();
+    inc.save_to(&mut merged).map_err(|e| e.to_string())?;
+    let mut doc = Document::load_mem(&merged).map_err(|e| e.to_string())?;
+    doc.prune_objects();
+    save_document(&mut doc, dst)
+}
+
 /// Saves an incremental update to `dst`, atomically.
 pub fn save_incremental(inc: &mut IncrementalDocument, dst: impl AsRef<Path>) -> Result<(), String> {
     write_atomic(dst, |tmp| inc.save(tmp).map(|_| ()).map_err(|e| e.to_string()))
