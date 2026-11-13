@@ -43,7 +43,7 @@ export function pageFileName(stem: string, n: number, count: number, format: "pn
 export class ExportModal extends Modal {
   private tab: "pdf" | "images" = "pdf";
   private format: ExportFormat = "png";
-  private dpi = 150;
+  private dpi = 300;
   private pageCount = 0;
   private stem = "document";
   private images: string[] = [];
