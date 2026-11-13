@@ -1,5 +1,6 @@
 import type { Translations } from "./i18n";
 import type { SplitRange } from "./tauri-bridge";
+import { parsePageSpans } from "./page-range";
 
 export type SplitMode = "each" | "every" | "custom";
 
@@ -126,7 +127,7 @@ export class SplitModal {
       return { ranges, error: null };
     }
     // custom
-    const parsed = parseRanges(this.customInput.value, this.pageCount);
+    const parsed = parsePageSpans(this.customInput.value, this.pageCount);
     if (parsed === null) return { ranges: [], error: "invalid-custom" };
     if (parsed.length === 0) return { ranges: [], error: "empty-custom" };
     return { ranges: parsed, error: null };
@@ -162,40 +163,4 @@ export class SplitModal {
     this.close();
     for (const cb of this.confirmHandlers) cb(req);
   }
-}
-
-/**
- * Parses an expression like "1-3, 5, 7-9" into a list of SplitRange.
- * Returns null if the syntax is invalid or any value falls outside [1, total].
- * Empty input returns []. Whitespace is tolerated.
- */
-export function parseRanges(input: string, total: number): SplitRange[] | null {
-  const trimmed = input.trim();
-  if (!trimmed) return [];
-  const tokens = trimmed.split(",");
-  const out: SplitRange[] = [];
-  for (const raw of tokens) {
-    const tok = raw.trim();
-    if (!tok) return null;
-    const dash = tok.indexOf("-");
-    let start: number;
-    let end: number;
-    if (dash === -1) {
-      start = end = Number(tok);
-    } else {
-      start = Number(tok.slice(0, dash).trim());
-      end = Number(tok.slice(dash + 1).trim());
-    }
-    if (
-      !Number.isInteger(start) ||
-      !Number.isInteger(end) ||
-      start < 1 ||
-      end < start ||
-      end > total
-    ) {
-      return null;
-    }
-    out.push({ start, end });
-  }
-  return out;
 }
