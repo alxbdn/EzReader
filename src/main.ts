@@ -28,8 +28,8 @@ import { SplitModal } from "./split-modal";
 import { getTranslations, applyTranslationsToDOM, fmt, type Translations } from "./i18n";
 import { DocumentSession, uniqueTempName, isMicrosoftPrintToPdf } from "./document-session";
 import { AnnotationSession } from "./annotation-session";
+import { ToolSelection } from "./tool-selection";
 import {
-  defaultToolState,
   type Annotation,
   type FormFieldValue,
   type TextAnnotation,
@@ -100,7 +100,9 @@ let editingShapeAnn: ShapeAnnotation | null = null;
 // ── Instances ─────────────────────────────────────────────────────────────────
 
 const viewer = new PdfViewer();
-const toolState = defaultToolState();
+/** The active tool, its style presets and the one selected annotation. */
+const tools = new ToolSelection();
+const toolState = tools.state;
 const toolbar   = new Toolbar();
 /** Annotations, undo / redo and the ✓ / ✕ gate for redactions. */
 const annotations: AnnotationSession = new AnnotationSession({
@@ -245,7 +247,7 @@ function onFormChange(name: string, val: string): void {
   setDirty(true);
 }
 
-viewer.setup(toolState, annotations, formValues, onFormChange);
+viewer.setup(tools, annotations, formValues, onFormChange);
 
 // ── Per-page overlay event wiring ─────────────────────────────────────────────
 
@@ -287,8 +289,8 @@ viewer.onLayoutChanged((pageViews) => {
       wirePageOverlay(pv);
       wiredOverlays.add(pv.overlay);
     }
-    pv.overlay.setTool(toolState.tool);
-    pv.overlay.setStyle(toolState);
+    pv.overlay.setTool(tools.tool);
+    pv.overlay.refreshStyle();
   }
 });
 
@@ -856,7 +858,7 @@ async function insertSlots(after: number, inserted: PageSlot[]): Promise<void> {
   if (await editPages(planInsert(viewer.pageCount, after, inserted))) showToast(msg("msgPagesUpdated"));
 }
 
-pageSidebar.onSelectionChange((pages) => toolbar.tools.setPageSelection(pages.length));
+pageSidebar.onSelectionChange((pages) => toolbar.setPageSelection(pages.length));
 
 // ── Crop / Straighten ────────────────────────────────────────────────────────
 
@@ -1206,7 +1208,7 @@ toolbar.on(async (e) => {
       break;
 
     case "tool-change":
-      toolState.tool = e.tool;
+      tools.setTool(e.tool);
       document.getElementById("viewer-scroll")!.classList.toggle("etext-mode", e.tool === "etext");
       updateHandMode();
       for (const pv of viewer.pageViews) pv.overlay.setTool(e.tool);
@@ -1216,8 +1218,8 @@ toolbar.on(async (e) => {
       break;
 
     case "style-change":
-      Object.assign(toolState, e.style);
-      for (const pv of viewer.pageViews) pv.overlay.setStyle(toolState);
+      tools.setStyle(e.style);
+      for (const pv of viewer.pageViews) pv.overlay.refreshStyle();
       if (editingTextAnn) {
         const pv = viewer.pageViews.find(p => p.pageNum === editingTextAnn!.page);
         pv?.overlay.applyTextAnnotationStyle(editingTextAnn, e.style);
@@ -1608,8 +1610,8 @@ document.getElementById("viewer-scroll")!.addEventListener("click", (e: MouseEve
     color: { r: 0, g: 0, b: 0 }, fontSize: Math.max(4, Math.round(fontSize)),
     bold: false, italic: false, underline: false, fontFamily: item.family, backgroundColor: null,
   };
-  Object.assign(toolState, { ...style, textBackground: null });
-  for (const p of viewer.pageViews) p.overlay.setStyle(toolState);
+  tools.setStyle({ ...style, textBackground: null });
+  for (const p of viewer.pageViews) p.overlay.refreshStyle();
   toolbar.showTextStyles(style);
   pv.overlay.replaceText(item);
 });

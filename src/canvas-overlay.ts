@@ -24,6 +24,7 @@ import {
   DRAW_TOOLS,
 } from "./models";
 import type { AnnotationSession } from "./annotation-session";
+import type { SelectionOwner, ToolSelection } from "./tool-selection";
 
 /** Shapes whose outline, fill, thickness and opacity can be changed. */
 export type ShapeAnnotation = RectAnnotation | CircleAnnotation | InkAnnotation;
@@ -92,12 +93,13 @@ function endsEditOnly(ev: MouseEvent): void {
   if ((ev.target as Element | null)?.classList?.contains("page-annotation-canvas")) ev.stopPropagation();
 }
 
-export class CanvasOverlay {
+export class CanvasOverlay implements SelectionOwner {
   private canvas: HTMLCanvasElement;
   private container: HTMLElement;
   private ctx: CanvasRenderingContext2D;
 
-  private style: ActiveToolState;
+  /** The active tool's style presets, shared by every page. */
+  private get style(): ActiveToolState { return this.tools.state; }
   private activeTool: ToolKind = "select";
   private editingAnn: Annotation | null = null;
 
@@ -109,7 +111,15 @@ export class CanvasOverlay {
   private inkPts: [number, number][] = [];
 
   // ── Select / move / resize state ────────────────────────────────────────────
-  private selected: Annotation | null = null;
+  /** The selected annotation when it is on this page (one selection across all pages). */
+  private get selected(): Annotation | null {
+    const s = this.tools.selected;
+    return s && this.shown && s.page === this.currentPage ? s : null;
+  }
+  private set selected(ann: Annotation | null) {
+    if (ann) this.tools.select(ann, this);
+    else if (this.selected) this.tools.select(null);
+  }
   private dragging = false;
   private resizing = false;
   private resizeHandle: ResizeHandle | null = null;
@@ -156,10 +166,9 @@ export class CanvasOverlay {
   constructor(
     canvas: HTMLCanvasElement,
     container: HTMLElement,
-    initialStyle: ActiveToolState,
+    private readonly tools: ToolSelection,
     private readonly session: AnnotationSession,
   ) {
-    this.style = { ...initialStyle };
     this.canvas = canvas;
     this.container = container;
     this.ctx = this.canvas.getContext("2d")!;
@@ -253,10 +262,15 @@ export class CanvasOverlay {
     this.session.edited();
   }
 
-  setStyle(style: ActiveToolState): void {
-    this.style = { ...style };
-    this.activeTool = style.tool;
-    this.applyPointerEvents(style.tool);
+  /** The shared tool state changed: follow its tool. */
+  refreshStyle(): void {
+    this.activeTool = this.style.tool;
+    this.applyPointerEvents(this.activeTool);
+  }
+
+  /** The selection moved to another page: stop drawing its box here. */
+  selectionLost(): void {
+    this.redrawCommitted();
   }
 
   setTool(tool: ToolKind): void {
@@ -284,9 +298,9 @@ export class CanvasOverlay {
 
   /** The page was cleared (scrolled out of range): draws nothing until the next sync. */
   hide(): void {
+    this.selected = null;
     this.syncToPage(this.currentPage, 1, 841);
     this.shown = false;
-    this.selected = null;
     this.redrawCommitted();
   }
 

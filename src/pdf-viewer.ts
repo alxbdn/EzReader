@@ -4,8 +4,9 @@ import type { PDFDocumentProxy, PDFPageProxy, PageViewport, RenderTask } from "p
 import { convertFileSrc } from "@tauri-apps/api/core";
 import workerUrl from "pdfjs-dist/build/pdf.worker.min.mjs?url";
 import { CanvasOverlay } from "./canvas-overlay";
+import { ToolSelection } from "./tool-selection";
 import { AnnotationSession } from "./annotation-session";
-import { defaultToolState, type ActiveToolState, type RedactAnnotation, CSS_UNITS, MIN_SCALE, MAX_SCALE } from "./models";
+import { type RedactAnnotation, CSS_UNITS, MIN_SCALE, MAX_SCALE } from "./models";
 import type { TextItem } from "pdfjs-dist/types/src/display/api";
 import { openUrl, type RedactedPage, type StraightenedPage } from "./tauri-bridge";
 import { moveTextRuns, pageMap, reproject, warpToRect, type Point } from "./page-adjustment";
@@ -77,7 +78,7 @@ export class PdfPageView {
   private _generation = 0;
   private _renderTask: RenderTask | null = null;
 
-  constructor(pageNum: number, toolState: ActiveToolState, annotations: AnnotationSession) {
+  constructor(pageNum: number, tools: ToolSelection, annotations: AnnotationSession) {
     this.pageNum = pageNum;
 
     this.wrapper = document.createElement("div");
@@ -106,7 +107,7 @@ export class PdfPageView {
       this.formLayer,
       this.annotationCanvas
     );
-    this.overlay = new CanvasOverlay(this.annotationCanvas, this.wrapper, toolState, annotations);
+    this.overlay = new CanvasOverlay(this.annotationCanvas, this.wrapper, tools, annotations);
   }
 
   get viewport(): PageViewport | null { return this._viewport; }
@@ -607,7 +608,7 @@ export class PdfViewer {
   private _pageCount  = 0;
   private _scale      = CSS_UNITS; // 100% actual size
   private _rotation   = 0;
-  private _toolState: ActiveToolState = defaultToolState();
+  private _tools: ToolSelection = new ToolSelection();
   private _annotations: AnnotationSession = new AnnotationSession();
   private _formValues: Map<string, string> = new Map();
   private _onFormChange: (name: string, val: string) => void = () => {};
@@ -702,12 +703,12 @@ export class PdfViewer {
 
   /** Call from main.ts before the first load() to provide shared context. */
   setup(
-    toolState: ActiveToolState,
+    tools: ToolSelection,
     annotations: AnnotationSession,
     formValues: Map<string, string>,
     onFormChange: (name: string, val: string) => void
   ): void {
-    this._toolState    = toolState;
+    this._tools        = tools;
     this._annotations  = annotations;
     this._formValues   = formValues;
     this._onFormChange = onFormChange;
@@ -792,7 +793,7 @@ export class PdfViewer {
       const rowEl = document.createElement("div");
       rowEl.className = "page-row";
       for (const pageNum of row) {
-        const view = new PdfPageView(pageNum, this._toolState, this._annotations);
+        const view = new PdfPageView(pageNum, this._tools, this._annotations);
         const dim  = this.pageDimensions[pageNum - 1];
         if (dim) view.setPlaceholderSize(
           (swapped ? dim.height : dim.width) * this._scale,
