@@ -325,6 +325,23 @@ pub fn redact_pages(
     fsutil::save_document(&mut doc, &output_path)
 }
 
+/// Straighten: replaces `pages` with their straightened pictures, keeping
+/// their text (invisible, searchable), links, form fields and annotations.
+#[tauri::command]
+pub fn straighten_pages(
+    input_path: String,
+    output_path: String,
+    pages: Vec<crate::pdf::straighten::StraightenedPage>,
+) -> Result<(), String> {
+    let mut doc = Document::load(&input_path).map_err(|e| e.to_string())?;
+    let page_count = doc.get_pages().len();
+    crate::pdf::straighten::straighten_pages(&mut doc, &pages)?;
+    if doc.get_pages().len() != page_count {
+        return Err("Straighten aborted: page count changed".into());
+    }
+    fsutil::save_document(&mut doc, &output_path)
+}
+
 /// Reads editable annotations from the PDF's `CCAnnot` catalog entry.
 /// Returns an empty array if the file has no stored annotations.
 #[tauri::command]

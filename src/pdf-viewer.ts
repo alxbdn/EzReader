@@ -6,8 +6,10 @@ import workerUrl from "pdfjs-dist/build/pdf.worker.min.mjs?url";
 import { CanvasOverlay } from "./canvas-overlay";
 import { AnnotationStore } from "./annotation-store";
 import { defaultToolState, type ActiveToolState, type RedactAnnotation, CSS_UNITS } from "./models";
-import { openUrl, type RedactedPage } from "./tauri-bridge";
+import type { TextItem } from "pdfjs-dist/types/src/display/api";
+import { openUrl, type RedactedPage, type StraightenedPage } from "./tauri-bridge";
 import { warpToRect, type Point } from "./warp";
+import { moveTextRuns, pageMap } from "./straighten";
 
 pdfjs.GlobalWorkerOptions.workerSrc = workerUrl;
 
@@ -1242,16 +1244,18 @@ function invert(m: Matrix): Matrix {
 /**
  * Straightens pages of `filePath`: the area inside each `quad` (fractions of
  * the page as shown, with its /Rotate) is stretched over the whole page.
- * Returns pictures ready for `redact_pages` (unrotated, over `page.view`).
+ * Returns, for `straighten_pages`, each picture (unrotated, over
+ * `page.view`), where the warp moves the page's points, and its text runs
+ * moved accordingly.
  */
 export async function renderStraightenedPages(
   filePath: string,
   items: { page: number; quad: [Point, Point, Point, Point] }[],
   dpi = 200,
-): Promise<RedactedPage[]> {
+): Promise<StraightenedPage[]> {
   const doc = await pdfjs.getDocument({ url: convertFileSrc(filePath) + `?t=${Date.now()}` }).promise;
   try {
-    const out: RedactedPage[] = [];
+    const out: StraightenedPage[] = [];
     for (const { page: pageNum, quad } of items) {
       if (pageNum < 1 || pageNum > doc.numPages) continue;
       const page = await doc.getPage(pageNum);
@@ -1282,6 +1286,10 @@ export async function renderStraightenedPages(
       dctx.setTransform(...multiply(flat.transform as Matrix, invert(shown.transform as Matrix)));
       dctx.drawImage(src, 0, 0);
 
+      const map = pageMap(shown.transform, quad, src.width, src.height);
+      const content = await page.getTextContent();
+      const text = moveTextRuns(content.items.filter((i): i is TextItem => "str" in i), map);
+
       const [v0, v1, v2, v3] = page.view;
       out.push({
         page: pageNum,
@@ -1289,6 +1297,8 @@ export async function renderStraightenedPages(
         widthPx: dst.width,
         heightPx: dst.height,
         view: [v0, v1, v2, v3],
+        map,
+        text,
       });
       src.width = src.height = dst.width = dst.height = 0;
       page.cleanup();

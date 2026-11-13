@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { contentBounds, squareToQuad, warpToRect, type Pixels } from "../warp";
+import { affine3, apply3, contentBounds, invert3, mul3, squareToQuad, straightenMap, warpToRect, type Pixels } from "../warp";
 
 function blank(w: number, h: number, v = 255): Pixels {
   return { data: new Uint8ClampedArray(w * h * 4).fill(v), width: w, height: h };
@@ -51,5 +51,36 @@ describe("contentBounds", () => {
 
   it("returns null for a blank page", () => {
     expect(contentBounds(blank(10, 10))).toBeNull();
+  });
+});
+
+describe("straightenMap", () => {
+  const quad: [number, number][] = [[0.1, 0.05], [0.85, 0.12], [0.9, 0.95], [0.05, 0.88]];
+  const W = 400, H = 600;
+
+  it("sends the quad's corners to the picture's corners", () => {
+    const m = straightenMap(quad as never, W, H);
+    const corners = [[0, 0], [W, 0], [W, H], [0, H]];
+    quad.forEach(([x, y], i) => {
+      const [px, py] = apply3(m, [x * W, y * H]);
+      expect(px).toBeCloseTo(corners[i][0], 6);
+      expect(py).toBeCloseTo(corners[i][1], 6);
+    });
+  });
+
+  it("is where warpToRect draws what it samples", () => {
+    const m = straightenMap(quad as never, W, H);
+    const sample = squareToQuad(quad.map(([x, y]) => [x * W, y * H]) as never);
+    for (const [u, v] of [[0.3, 0.4], [0.75, 0.2], [0.5, 0.9]]) {
+      const [x, y] = apply3(m, sample(u, v));
+      expect(x).toBeCloseTo(u * W, 6);
+      expect(y).toBeCloseTo(v * H, 6);
+    }
+  });
+
+  it("composes with affine transforms", () => {
+    const t = affine3([2, 0, 0, -2, 10, 800]);
+    const back = mul3(invert3(t), t);
+    back.forEach((v, i) => expect(v).toBeCloseTo([1, 0, 0, 0, 1, 0, 0, 0, 1][i], 9));
   });
 });
