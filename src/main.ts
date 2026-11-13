@@ -1,10 +1,15 @@
-import { errorCode, type ErrorCode } from "./errors";
+import { errorCode } from "./errors";
+import { createMessages } from "./messages";
+import { Protection } from "./protection";
+import { setUpCompress } from "./compress-flow";
+import { setUpExport } from "./export-flow";
+import { fileNameOf, withFileName } from "./file-paths";
 import { mountWelcomeDots } from "./welcome-dots";
 import { PdfViewer, PdfPageView, renderRedactedPages, renderStraightenedPages } from "./pdf-viewer";
 import { AdjustView, type PageSetting } from "./adjust-view";
 import { Toolbar, isValidFileStem, splitFileName } from "./toolbar";
 import { CompressModal } from "./compress-modal";
-import { ExportModal, pageFileName, type ExportRequest } from "./export-modal";
+import { ExportModal } from "./export-modal";
 import { PasswordModal } from "./password-modal";
 import { PrintModal } from "./print-modal";
 import { SignatureModal } from "./signature-modal";
@@ -61,7 +66,6 @@ import {
   imagesToPdf,
   existingFiles,
   writeImageFile,
-  type CompressLevel,
 } from "./tauri-bridge";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { mountWindowControls } from "./window-controls";
@@ -140,33 +144,49 @@ const session = new DocumentSession(
   },
 );
 
-type MessageKey = Extract<keyof Translations, `msg${string}`>;
+const messages = createMessages(() => settingsModal.getSettings().language);
+const { msg, errText } = messages;
 
-/** Translated message for the current UI language, with `{name}` placeholders filled. */
-function msg(key: MessageKey, vars: Record<string, string | number> = {}): string {
-  const t = getTranslations(settingsModal.getSettings().language);
-  return fmt(t[key] ?? key, vars);
-}
+/** Password rules as the user meets them (read-only while protected, the padlock). */
+const protection = new Protection({
+  session,
+  toolbar,
+  passwords: passwordModal,
+  msg,
+  notify: (text, isError) => showToast(text, isError),
+  setDirty: (dirty) => setDirty(dirty),
+});
 
-/** Translated text for each error code a command can return. */
-const ERROR_MESSAGES: Partial<Record<ErrorCode, MessageKey>> = {
-  "wrong-password": "msgErrWrongPassword",
-  "empty-password": "msgErrEmptyPassword",
-  "already-encrypted": "msgErrAlreadyEncrypted",
-  "exists": "msgRenameExists",
-  "invalid-name": "msgRenameInvalid",
-  "not-an-image": "msgErrNotAnImage",
-  "too-large": "msgErrTooLarge",
-  "page-count-changed": "msgErrPageCountChanged",
-  "invalid-pages": "msgErrInvalidPages",
-};
+const openCompress = setUpCompress({
+  session,
+  modal: compressModal,
+  refuse: () => protection.refuse(),
+  messages,
+  notify: (text, isError) => showToast(text, isError),
+  ask: (text) => ask(text, { kind: "warning" }),
+  savePdfDialog,
+  estimate: estimateCompression,
+  compress: compressPdf,
+  cancel: cancelCompression,
+  onProgress: onCompressProgress,
+});
 
-/** What went wrong, in the interface language when the error has a known code. */
-function errText(err: unknown): string {
-  const code = errorCode(err);
-  const key = code ? ERROR_MESSAGES[code] : undefined;
-  return key ? msg(key) : String(err);
-}
+const exportFlow = setUpExport({
+  session,
+  viewer,
+  modal: exportModal,
+  pendingRename: () => pendingRename,
+  messages,
+  notify: (text, isError) => showToast(text, isError),
+  ask: (text, title) => ask(text, { title, kind: "warning" }),
+  savePdfDialog,
+  pickDirectory: pickDirectoryDialog,
+  pickImages: openImagesDialog,
+  existingFiles,
+  writeImageFile,
+  imagesToPdf,
+  exportFlattenedPages,
+});
 
 async function applyFitMode(): Promise<void> {
   if (!viewer.isLoaded() || fitMode === "none") return;
@@ -372,16 +392,6 @@ function showToast(msg: string, isError = false): void {
 /** New file name typed in the title bar, applied by the next Save. */
 let pendingRename: string | null = null;
 
-function fileNameOf(path: string): string {
-  return path.split(/[\\/]/).pop() ?? path;
-}
-
-/** `path` with its file name replaced by `name` (same folder). */
-function withFileName(path: string, name: string): string {
-  const cut = Math.max(path.lastIndexOf("/"), path.lastIndexOf("\\"));
-  return path.slice(0, cut + 1) + name;
-}
-
 /** The name shown in the title bar: the pending rename, or the file's own. */
 function displayName(): string | null {
   const target = session.saveTarget;
@@ -496,8 +506,7 @@ async function confirmUnsaved(): Promise<boolean> {
  * will be saved with) a password, and a protected file is read-only.
  */
 function syncProtection(): void {
-  toolbar.setProtected(session.isProtected || session.hasPendingPassword);
-  toolbar.setReadOnly(session.isProtected);
+  protection.sync();
 }
 
 /**
@@ -505,12 +514,8 @@ function syncProtection(): void {
  * Returns true when the action must stop.
  */
 function refuseIfProtected(): boolean {
-  if (!session.isProtected) return false;
-  showToast(msg("msgProtectedReadOnly"), true);
-  return true;
+  return protection.refuse();
 }
-
-toolbar.onReadOnlyRefused(() => { refuseIfProtected(); });
 
 /**
  * Opens a password-protected file read-only: it is shown from an
@@ -741,88 +746,16 @@ async function saveFile(forceDialog: boolean): Promise<void> {
 
 /** Name of the open document without its extension (for exported files). */
 function docStem(): string {
-  const current = session.saveTarget;
-  const name = pendingRename ?? (current ? fileNameOf(current) : "document.pdf");
-  return name.replace(/\.pdf$/i, "");
+  return exportFlow.docStem();
 }
 
 function openExport(tab: "pdf" | "images"): void {
-  const pages = viewer.isLoaded() ? viewer.pageCount : 0;
-  exportModal.open(pages, docStem(), tab);
+  exportFlow.open(tab);
 }
 
-exportModal.onPickImages(() => openImagesDialog());
-exportModal.onExport((req) => void runExport(req));
-
-/** Export: pictures of the pages, a PDF copy, or pictures to a new PDF. */
-async function runExport(req: ExportRequest): Promise<void> {
-  try {
-    if (req.kind === "images") {
-      const out = await savePdfDialog(`${req.paths.length === 1 ? fileNameOf(req.paths[0]).replace(/\.[^.]+$/, "") : "Images"}.pdf`);
-      if (!out) return;
-      await imagesToPdf(req.paths, out);
-      showToast(msg("msgImagesPdfSaved", { n: req.paths.length }));
-      return;
-    }
-    if (!session.isOpen || !viewer.isLoaded()) return;
-    if (req.format === "pdf") {
-      const current = session.saveTarget!;
-      const out = await savePdfDialog(pendingRename ? withFileName(current, pendingRename) : current);
-      if (!out) return;
-      const input = await session.materialize({ annotations: req.annotations });
-      await exportFlattenedPages(input, out, req.pages);
-      showToast(msg("msgPdfSaved"));
-      return;
-    }
-    const dir = await pickDirectoryDialog();
-    if (!dir) return;
-    const sep = dir.includes("\\") && !dir.includes("/") ? "\\" : "/";
-    const base = dir.endsWith(sep) ? dir : dir + sep;
-    const paths = req.pages.map((n) => base + pageFileName(docStem(), n, viewer.pageCount, req.format as "png" | "jpeg"));
-    const existing = await existingFiles(paths);
-    if (existing.length > 0) {
-      const ok = await ask(msg("msgOverwrite", { n: existing.length }), { title: msg("msgOverwriteTitle"), kind: "warning" });
-      if (!ok) return;
-    }
-    const input = await session.materialize({ annotations: req.annotations });
-    let i = 0;
-    await viewer.renderFilePages(input, req.pages, req.dpi, req.format === "jpeg" ? "image/jpeg" : "image/png", async (data) => {
-      await writeImageFile(paths[i++], data);
-    });
-    showToast(paths.length === 1 ? msg("msgExportedOne") : msg("msgExportedMany", { n: paths.length }));
-  } catch (err) {
-    showToast(msg("msgExportFailed", { err: errText(err) }), true);
-  }
-}
-
-// ── Password ─────────────────────────────────────────────────────────────────
-
-/**
- * The padlock. On a protected file: remove its password (asks for it), which
- * makes the document editable; the next save writes it unprotected. Otherwise:
- * choose a password that the next save applies, or cancel one not saved yet.
- */
+/** The padlock (see protection.ts). */
 async function editPassword(): Promise<void> {
-  if (!session.isOpen) return;
-  if (session.isProtected) {
-    if (!await passwordModal.askCurrent((pw) => session.unlock(pw))) return;
-    syncProtection();
-    setDirty(true);
-    showToast(msg("msgUnprotected"));
-    return;
-  }
-  if (session.hasPendingPassword) {
-    session.protect(null);
-    syncProtection();
-    showToast(msg("msgProtectCancelled"));
-    return;
-  }
-  const pw = await passwordModal.askNew();
-  if (!pw) return;
-  session.protect(pw);
-  syncProtection();
-  setDirty(true);
-  showToast(msg("msgProtected"));
+  await protection.edit();
 }
 
 // ── Hand tool: drag the pages around ─────────────────────────────────────────
@@ -875,53 +808,6 @@ async function renderForPrint(pages: number[]): Promise<string[]> {
   return viewer.renderFileForPrint(await session.materialize(), pages, 200);
 }
 
-// ── Compress handler ──────────────────────────────────────────────────────────
-
-/** The file the Compress dialog works on (what is shown, edits included). */
-let compressInput: Promise<string> | null = null;
-
-async function openCompress(): Promise<void> {
-  if (!session.isOpen || compressModal.isOpen || refuseIfProtected()) return;
-  compressModal.open(0);
-  compressInput = session.materialize();
-  try {
-    compressModal.setEstimate(await estimateCompression(await compressInput));
-  } catch {
-    compressModal.setEstimate(null);
-  }
-}
-
-compressModal.onConfirm(async (level: CompressLevel, targetBytes?: number) => {
-  const source = session.sourcePath;
-  if (!source) return;
-  if (compressModal.wontShrink()
-    && !await ask(msg("msgCompressNoGain"), { kind: "warning" })) return;
-  const out = await savePdfDialog(source);
-  if (!out) return;
-  const stopListening = await onCompressProgress((share) => compressModal.setProgress(share));
-  compressModal.startRunning(() => { void cancelCompression(); });
-  try {
-    const input = await (compressInput ?? session.materialize());
-    const result = await compressPdf(input, out, level, targetBytes);
-    compressModal.finishRunning();
-    const fromMB = (result.originalBytes / 1_048_576).toFixed(1);
-    const toMB = (result.compressedBytes / 1_048_576).toFixed(1);
-    const pct = result.originalBytes > 0
-      ? Math.round((1 - result.compressedBytes / result.originalBytes) * 100)
-      : 0;
-    if (!result.reachedTarget && targetBytes) {
-      showToast(msg("msgCompressTarget", { target: compressModal.size(targetBytes), to: compressModal.size(result.compressedBytes) }), true);
-    } else {
-      showToast(msg("msgCompressed", { from: fromMB, to: toMB, pct }));
-    }
-  } catch (err) {
-    compressModal.finishRunning();
-    if (errorCode(err) === "cancelled") showToast(msg("msgCompressCancelled"));
-    else showToast(msg("msgCompressFailed", { err: errText(err) }), true);
-  } finally {
-    stopListening();
-  }
-});
 
 // ── Page panel (thumbnails sidebar) ──────────────────────────────────────────
 
