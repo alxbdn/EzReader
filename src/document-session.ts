@@ -59,10 +59,13 @@ export class DocumentSession {
   private _baseRotation = 0;
   private _dirty = false;
   /**
-   * Password the document gets when it is written (null: none). `basePath`
-   * is always unencrypted; the password is only applied to what is saved.
+   * Password of the file on disk while it is protected (null: not protected).
+   * A protected document is read-only until `unlock()` removes it. `basePath`
+   * is always an unencrypted copy, used only to show the pages.
    */
-  private _password: string | null = null;
+  private _lock: string | null = null;
+  /** Password chosen with Protect, applied by the next save (null: none). */
+  private _pending: string | null = null;
 
   constructor(private readonly edits: PendingEdits, private readonly io: SessionIO) {}
 
@@ -78,8 +81,8 @@ export class DocumentSession {
 
   /**
    * A new document was opened from disk (the viewer shows `workingCopy ?? sourcePath`).
-   * A protected file is opened from an unencrypted working copy, and keeps
-   * its `password` when saved.
+   * A protected file (`password` given) is shown from an unencrypted working
+   * copy and is read-only until its password is removed.
    */
   opened(sourcePath: string, workingCopy: string | null, password: string | null = null): void {
     this._sourcePath = sourcePath;
@@ -87,14 +90,38 @@ export class DocumentSession {
     this._basePath = workingCopy ?? sourcePath;
     this._baseRotation = 0;
     this._dirty = false;
-    this._password = password;
+    this._lock = password;
+    this._pending = null;
   }
 
-  /** The password the document is saved with, if any. */
-  get password(): string | null { return this._password; }
+  /** True while the file is password-protected, and so read-only. */
+  get isProtected(): boolean { return this._lock !== null; }
 
-  /** Protects the document with `password` (null removes it); applied on save. */
-  setPassword(password: string | null): void { this._password = password; }
+  /** The password of the file on disk (to reopen it), or null. */
+  get filePassword(): string | null { return this._lock; }
+
+  /** True when Protect chose a password that the next save applies. */
+  get hasPendingPassword(): boolean { return this._pending !== null; }
+
+  /**
+   * Removes the protection when `password` is the file's password. The
+   * document becomes editable; the next save writes it without a password.
+   */
+  unlock(password: string): boolean {
+    if (this._lock === null || password !== this._lock) return false;
+    this._lock = null;
+    this._dirty = true;
+    return true;
+  }
+
+  /**
+   * Chooses the password the next save applies (null cancels it). Once saved
+   * with it, the document is protected and read-only.
+   */
+  protect(password: string | null): void {
+    if (this._lock !== null) throw new Error("The document is already protected");
+    this._pending = password;
+  }
 
   /** The viewer reloaded `workingCopy` (e.g. after page edits) for the same source. */
   replacedWorkingCopy(workingCopy: string): void {
@@ -136,6 +163,8 @@ export class DocumentSession {
   async materialize(opts: { annotations?: boolean } = {}): Promise<string> {
     const base = this._basePath;
     if (!base) throw new Error("No document is open");
+    // Every copy starts here: a protected document must not leave unprotected.
+    if (this._lock !== null) throw new Error("The document is protected: remove its password first");
     const keep = opts.annotations ?? true;
     if (keep && !this.hasPendingEdits()) return base;
     const out = await this.io.tempPath("current.pdf");
@@ -147,12 +176,16 @@ export class DocumentSession {
   async saveTo(target: string): Promise<void> {
     const base = this._basePath;
     if (!base) throw new Error("No document is open");
-    if (this._password) {
-      // The working copy stays unencrypted: later edits start from it.
+    if (this._lock !== null) throw new Error("The document is protected: remove its password first");
+    const password = this._pending;
+    if (password) {
+      // The working copy stays unencrypted, to show the pages.
       const plain = await this.io.tempPath("saved.pdf");
       await this.writeWithEdits(base, plain);
-      await this.io.encrypt(plain, target, this._password);
+      await this.io.encrypt(plain, target, password);
       this.saved(target, plain);
+      this._pending = null;
+      this._lock = password;
       return;
     }
     await this.writeWithEdits(base, target);

@@ -472,6 +472,9 @@ export interface Translations {
   menuImagesToPdf?: string;
   msgProtected?: string;
   msgUnprotected?: string;
+  msgProtectedReadOnly?: string;
+  msgProtectCancelled?: string;
+  msgSavedProtected?: string;
   msgExportedOne?: string;
   msgExportedMany?: string;
   msgImagesPdfSaved?: string;
@@ -935,7 +938,10 @@ const EN: Translations = {
   menuPassword: "Password…",
   menuImagesToPdf: "Images to PDF…",
   msgProtected: "Password set: it's applied when you save.",
-  msgUnprotected: "Protection removed: applied when you save.",
+  msgUnprotected: "Password removed: you can edit now. Save to keep the file unprotected.",
+  msgProtectedReadOnly: "This file is password-protected, so it can only be read. Click the padlock to remove the password and edit or export it.",
+  msgProtectCancelled: "Password cancelled: the file will be saved without one.",
+  msgSavedProtected: "Saved with a password. The file is now read-only until the password is removed.",
   msgExportedOne: "1 picture exported",
   msgExportedMany: "{n} pictures exported",
   msgImagesPdfSaved: "PDF made from {n} picture(s)",
@@ -1399,7 +1405,10 @@ const FR: Translations = {
   menuPassword: "Mot de passe…",
   menuImagesToPdf: "Images vers PDF…",
   msgProtected: "Mot de passe défini : il est appliqué à l'enregistrement.",
-  msgUnprotected: "Protection retirée : appliqué à l'enregistrement.",
+  msgUnprotected: "Mot de passe retiré : vous pouvez modifier. Enregistrez pour garder le fichier sans protection.",
+  msgProtectedReadOnly: "Ce fichier est protégé par un mot de passe : il est en lecture seule. Cliquez sur le cadenas pour retirer le mot de passe et le modifier ou l'exporter.",
+  msgProtectCancelled: "Mot de passe annulé : le fichier sera enregistré sans.",
+  msgSavedProtected: "Enregistré avec un mot de passe. Le fichier est en lecture seule tant que le mot de passe n'est pas retiré.",
   msgExportedOne: "1 image exportée",
   msgExportedMany: "{n} images exportées",
   msgImagesPdfSaved: "PDF créé à partir de {n} image(s)",
