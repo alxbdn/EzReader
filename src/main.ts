@@ -69,9 +69,9 @@ import { InfoPanel } from "./info-panel";
 import { tempDir, basename } from "@tauri-apps/api/path";
 import { ask } from "@tauri-apps/plugin-dialog";
 
-// â”€â”€ Zoom levels â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Zoom levels ───────────────────────────────────────────────────────────────
 
-// Zoom levels in internal (pdf.js) scale.  Each entry = user-visible fraction Ã— CSS_UNITS.
+// Zoom levels in internal (pdf.js) scale.  Each entry = user-visible fraction × CSS_UNITS.
 const ZOOM_LEVELS = [0.25, 0.33, 0.5, 0.67, 0.75, 0.9, 1.0, 1.1, 1.25, 1.5, 1.75, 2.0, 2.5, 3.0, 4.0, 5.0]
   .map(z => Math.round(z * CSS_UNITS * 1000) / 1000);
 
@@ -83,7 +83,7 @@ function snapZoom(current: number, dir: 1 | -1): number {
   }
 }
 
-// â”€â”€ State â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── State ─────────────────────────────────────────────────────────────────────
 
 const appWindow = getCurrentWindow();
 let unlistenClose: (() => void) | null = null;
@@ -96,7 +96,7 @@ let pendingSignature: string | null = null;
 let editingTextAnn:  TextAnnotation | null = null;
 let editingShapeAnn: ShapeAnnotation | null = null;
 
-// â”€â”€ Instances â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Instances ─────────────────────────────────────────────────────────────────
 
 const viewer = new PdfViewer();
 const store  = new AnnotationStore();
@@ -210,7 +210,7 @@ function onFormChange(name: string, val: string): void {
 
 viewer.setup(toolState, store, formValues, onFormChange);
 
-// â”€â”€ Per-page overlay event wiring â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Per-page overlay event wiring ─────────────────────────────────────────────
 
 function wirePageOverlay(pv: PdfPageView): void {
   const ov = pv.overlay;
@@ -270,14 +270,14 @@ viewer.onLayoutChanged((pageViews) => {
   }
 });
 
-// â”€â”€ Focused-page tracking â†’ toolbar page indicator â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Focused-page tracking → toolbar page indicator ────────────────────────────
 
 document.getElementById("viewer-scroll")!.addEventListener("focused-page-changed", (e: Event) => {
   const { page } = (e as CustomEvent<{ page: number }>).detail;
   pageSidebar.setCurrentPage(page);
 });
 
-// â”€â”€ Document info â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Document info ─────────────────────────────────────────────────────────────
 
 const infoPanel = new InfoPanel(document.getElementById("app")!);
 infoPanel.onClose = () => toolbar.setInfoOpen(false);
@@ -291,7 +291,7 @@ async function showInfo(): Promise<void> {
   await infoPanel.show(doc, name, getTranslations(s.language), s.language);
 }
 
-// â”€â”€ Title bar (native decorations are off) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Title bar (native decorations are off) ──────────────────────────────────
 
 mountWindowControls(document.getElementById("menubar-row")!, () => {
   const t = getTranslations(settingsModal.getSettings().language);
@@ -303,7 +303,7 @@ mountWindowControls(document.getElementById("menubar-row")!, () => {
   };
 });
 
-// â”€â”€ Translations â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Translations ──────────────────────────────────────────────────────────────
 
 {
   const t = getTranslations(settingsModal.getSettings().language);
@@ -333,7 +333,7 @@ settingsModal.onChange(s => {
 /** The document is a temp copy that was never saved: Save asks where to put it. */
 let unsavedCopy = false;
 
-// â”€â”€ Startup handling â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Startup handling ──────────────────────────────────────────────────────────
 
 (async () => {
   try {
@@ -356,11 +356,11 @@ let unsavedCopy = false;
       }
     }
   } catch {
-    // Not running in Tauri (browser preview) â€” skip
+    // Not running in Tauri (browser preview) — skip
   }
 })();
 
-// â”€â”€ Helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Helpers ───────────────────────────────────────────────────────────────────
 
 function showToast(msg: string, isError = false): void {
   const toast = document.getElementById("toast")!;
@@ -395,7 +395,7 @@ function setDirty(val: boolean): void {
   else      { unregisterCloseGuard(); }
 }
 
-// â”€â”€ Changes waiting for âœ“ / âœ• â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Changes waiting for ✓ / ✕ ───────────────────────────────────────────────
 
 /** Annotations (and dirty flag) as they were before the pending changes. */
 let draft: { annotations: string; dirty: boolean } | null = null;
@@ -409,14 +409,14 @@ function beginChange(): void {
   }
 }
 
-/** âœ“: the pending changes are kept. */
+/** ✓: the pending changes are kept. */
 function applyDraft(): void {
   if (!draft) return;
   draft = null;
   toolbar.setPending(false);
 }
 
-/** âœ•: the pending changes are thrown away. */
+/** ✕: the pending changes are thrown away. */
 function discardDraft(): void {
   if (!draft) return;
   history.push(store.getAll()); // Ctrl+Z brings them back
@@ -489,7 +489,7 @@ async function confirmUnsaved(): Promise<boolean> {
   return ask(msg("msgDiscardChanges"), { title: msg("msgUnsavedTitle"), kind: "warning" });
 }
 
-// â”€â”€ Load / Save â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Load / Save ───────────────────────────────────────────────────────────────
 
 /**
  * Shows the protection state: the padlock is closed while the file has (or
@@ -563,7 +563,7 @@ function showThumbnails(): void {
   void runSearch(toolbar.search.query, false);
 }
 
-// â”€â”€ Search in the document â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Search in the document ───────────────────────────────────────────────────
 
 let searchMatches: SearchMatch[] = [];
 let searchIndex = -1;
@@ -583,7 +583,7 @@ async function runSearch(query: string, jump = true): Promise<void> {
     toolbar.search.setStatus("");
     return;
   }
-  toolbar.search.setStatus(searchText("sbSearching", "Searchingâ€¦"));
+  toolbar.search.setStatus(searchText("sbSearching", "Searching…"));
   const found = await docSearch.find(query, (done, total) =>
     toolbar.search.setStatus(`${Math.round((done / total) * 100)}%`));
   if (!found) return; // superseded by a newer search
@@ -795,7 +795,7 @@ async function runExport(req: ExportRequest): Promise<void> {
   }
 }
 
-// â”€â”€ Password â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Password ─────────────────────────────────────────────────────────────────
 
 /**
  * The padlock. On a protected file: remove its password (asks for it), which
@@ -825,7 +825,7 @@ async function editPassword(): Promise<void> {
   showToast(msg("msgProtected"));
 }
 
-// â”€â”€ Hand tool: drag the pages around â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Hand tool: drag the pages around ─────────────────────────────────────────
 
 const viewerScroll = document.getElementById("viewer-scroll")!;
 let panStart: { x: number; y: number; left: number; top: number; id: number } | null = null;
@@ -875,7 +875,7 @@ async function renderForPrint(pages: number[]): Promise<string[]> {
   return viewer.renderFileForPrint(await session.materialize(), pages, 200);
 }
 
-// â”€â”€ Compress handler â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Compress handler ──────────────────────────────────────────────────────────
 
 /** The file the Compress dialog works on (what is shown, edits included). */
 let compressInput: Promise<string> | null = null;
@@ -923,7 +923,7 @@ compressModal.onConfirm(async (level: CompressLevel, targetBytes?: number) => {
   }
 });
 
-// â”€â”€ Page panel (thumbnails sidebar) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Page panel (thumbnails sidebar) ──────────────────────────────────────────
 
 /**
  * Replaces the open document's pages with `slots` and shows the result.
@@ -979,7 +979,7 @@ async function insertSlots(after: number, inserted: PageSlot[]): Promise<void> {
 
 pageSidebar.onSelectionChange((pages) => toolbar.tools.setPageSelection(pages.length));
 
-// â”€â”€ Crop / Straighten â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Crop / Straighten ────────────────────────────────────────────────────────
 
 /** Opens Crop / Straighten on the pages selected in the side panel. */
 function openAdjust(kind: "crop" | "straighten"): void {
@@ -998,7 +998,7 @@ function openAdjust(kind: "crop" | "straighten"): void {
 }
 
 /**
- * âœ“ of Crop / Straighten. Crops and flips stay vector (CropBox and a
+ * ✓ of Crop / Straighten. Crops and flips stay vector (CropBox and a
  * mirroring matrix); straightened pages become pictures of the page, with
  * their text laid back invisibly (still searchable and selectable) and their
  * links and fields moved with the warp.
@@ -1203,7 +1203,7 @@ printModal.onConfirm(async (settings) => {
   }
 });
 
-// â”€â”€ Welcome screen â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Welcome screen ────────────────────────────────────────────────────────────
 
 mountWelcomeDots(document.getElementById("welcome-screen")!);
 
@@ -1211,7 +1211,7 @@ document.getElementById("welcome-open-btn")?.addEventListener("click", async () 
   await openFile();
 });
 
-// â”€â”€ Toolbar events â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Toolbar events ────────────────────────────────────────────────────────────
 
 toolbar.on(async (e) => {
   switch (e.type) {
@@ -1464,7 +1464,7 @@ toolbar.on(async (e) => {
   }
 });
 
-// â”€â”€ Keyboard shortcuts â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Keyboard shortcuts ────────────────────────────────────────────────────────
 
 document.addEventListener("keydown", async (e) => {
   const tag = (document.activeElement as HTMLElement)?.tagName ?? "";
@@ -1546,7 +1546,7 @@ document.addEventListener("keydown", async (e) => {
   }
 });
 
-// â”€â”€ Signature events â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Signature events ──────────────────────────────────────────────────────────
 
 // Floating signature preview that follows the cursor during placement
 const sigPreview = document.createElement("img");
@@ -1617,7 +1617,7 @@ document.getElementById("viewer-scroll")!.addEventListener("click", (e: MouseEve
   cancelSignaturePlacement();
 });
 
-// â”€â”€ Context menu â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Context menu ──────────────────────────────────────────────────────────────
 
 const ctxMenu    = document.getElementById("ctx-menu")!;
 const ctxCopyBtn = document.getElementById("ctx-copy") as HTMLButtonElement;
@@ -1641,7 +1641,7 @@ document.addEventListener("mousedown", (e: MouseEvent) => {
   if (!ctxMenu.contains(e.target as Node)) ctxMenu.classList.add("hidden");
 });
 
-// â”€â”€ Escape / zoom keyboard shortcuts (window-level) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Escape / zoom keyboard shortcuts (window-level) ──────────────────────────
 
 window.addEventListener("keydown", async (e: KeyboardEvent) => {
   if (e.ctrlKey && (e.key === "+" || e.key === "=" || e.key === "-")) {
@@ -1656,7 +1656,7 @@ window.addEventListener("keydown", async (e: KeyboardEvent) => {
   const typing = !!active && (active.tagName === "INPUT" || active.tagName === "TEXTAREA" || active.tagName === "SELECT" || active.isContentEditable);
   if (typing) return;
   if (e.key === "Enter" && toolbar.isPending) {
-    // Enter validates the pending changes (âœ“).
+    // Enter validates the pending changes (✓).
     e.preventDefault();
     applyDraft();
     return;
@@ -1666,14 +1666,14 @@ window.addEventListener("keydown", async (e: KeyboardEvent) => {
     cancelSignaturePlacement();
     showToast(msg("msgSignatureCancelled"));
   } else if (toolbar.isPending) {
-    // Escape discards them (âœ•).
+    // Escape discards them (✕).
     discardDraft();
   } else if (toolState.tool !== "select") {
     toolbar.clearActiveTool();
   }
 });
 
-// â”€â”€ Edit text: click existing words to replace them â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Edit text: click existing words to replace them ──────────────────────────
 
 /** PDF font family that looks like the one pdf.js reports for the text. */
 function familyOf(css: string | undefined): FontFamilyValue {
@@ -1737,7 +1737,7 @@ document.getElementById("viewer-scroll")!.addEventListener("click", (e: MouseEve
   pv.overlay.replaceText(item);
 });
 
-// â”€â”€ Pictures: placed on a page, or added as a page â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Pictures: placed on a page, or added as a page ───────────────────────────
 
 /** Reads the picture at `path`; shows an error and returns null if it can't. */
 async function readPicture(path: string): Promise<Picture | null> {
@@ -1774,7 +1774,7 @@ async function insertPictures(after: number, paths: string[]): Promise<void> {
   if (slots.length > 0) await insertSlots(after, slots);
 }
 
-// â”€â”€ Highlighter: applies to the text selected while it is on â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Highlighter: applies to the text selected while it is on ─────────────────
 
 document.getElementById("viewer-scroll")!.addEventListener("mouseup", () => {
   if (toolState.tool !== "highlight" && toolState.tool !== "redact-text") return;
@@ -1820,7 +1820,7 @@ document.getElementById("viewer-scroll")!.addEventListener("mouseup", () => {
   }, 0);
 });
 
-// â”€â”€ Ctrl+wheel zoom â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Ctrl+wheel zoom ───────────────────────────────────────────────────────────
 
 document.getElementById("viewer-scroll")!.addEventListener("wheel", async (e: WheelEvent) => {
   if (!e.ctrlKey && viewer.scrollMode === "horizontal" && !e.shiftKey && Math.abs(e.deltaY) > Math.abs(e.deltaX)) {
@@ -1838,7 +1838,7 @@ document.getElementById("viewer-scroll")!.addEventListener("wheel", async (e: Wh
   toolbar.updateZoom(viewer.scale);
 }, { passive: false });
 
-// â”€â”€ Drag-drop â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Drag-drop ─────────────────────────────────────────────────────────────────
 
 /**
  * Files dropped on the window. In the side panel, PDFs and pictures are
@@ -1878,7 +1878,7 @@ async function handleDrop(paths: string[], at: { x: number; y: number } | null, 
   try {
     await appWindow.onDragDropEvent(async (event) => {
       const p = event.payload;
-      // Physical pixels â†’ CSS pixels of the page.
+      // Physical pixels → CSS pixels of the page.
       const at = "position" in p ? { x: p.position.x / devicePixelRatio, y: p.position.y / devicePixelRatio } : null;
       if (p.type === "over" || p.type === "enter") {
         document.body.classList.add("drag-over");
