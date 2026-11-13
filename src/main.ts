@@ -37,6 +37,7 @@ import {
   saveAnnotatedPdf,
   stripAnnotationStreams,
   compressPdf,
+  exportFlattenedPages,
   cancelCompression,
   onCompressProgress,
   readAnnotations,
@@ -746,7 +747,7 @@ async function runExport(req: ExportRequest): Promise<void> {
       const out = await savePdfDialog(pendingRename ? withFileName(current, pendingRename) : current);
       if (!out) return;
       const input = await session.materialize({ annotations: req.annotations });
-      await extractPdfPages(input, out, req.pages);
+      await exportFlattenedPages(input, out, req.pages);
       showToast(msg("msgPdfSaved"));
       return;
     }

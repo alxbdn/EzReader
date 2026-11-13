@@ -93,6 +93,7 @@ pub fn run() {
             commands::pdf::read_annotations,
             commands::pdf::rearrange_pages,
             commands::pdf::extract_pdf_pages,
+            commands::pdf::export_flattened_pages,
             commands::pdf::split_pdf,
             commands::pdf::redact_pages,
             commands::pdf::adjust_pages,
