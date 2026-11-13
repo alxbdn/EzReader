@@ -5,11 +5,11 @@ import { setUpCompress } from "./compress-flow";
 import { setUpExport } from "./export-flow";
 import type { Feedback } from "./backend";
 import { tauriBackend } from "./tauri-backend";
-import { fileNameOf, withFileName } from "./file-paths";
+import { fileNameOf } from "./file-paths";
 import { mountWelcomeDots } from "./welcome-dots";
 import { PdfViewer, PdfPageView, renderRedactedPages, renderStraightenedPages } from "./pdf-viewer";
 import { AdjustView, type PageSetting } from "./adjust-view";
-import { Toolbar, isValidFileStem, splitFileName } from "./toolbar";
+import { Toolbar } from "./toolbar";
 import { CompressModal } from "./compress-modal";
 import { ExportModal } from "./export-modal";
 import { OcrModal } from "./ocr-modal";
@@ -201,7 +201,7 @@ const exportFlow = setUpExport({
   session,
   viewer,
   modal: exportModal,
-  pendingRename: () => pendingRename,
+  pendingRename: () => session.pendingName,
   messages,
   ui: feedback,
   backend: tauriBackend,
@@ -310,7 +310,7 @@ async function showInfo(): Promise<void> {
   const doc = viewer.document;
   if (!doc) return;
   const s = settingsModal.getSettings();
-  const name = displayName() ?? "";
+  const name = session.displayName ?? "";
   toolbar.setInfoOpen(true);
   await infoPanel.show(doc, name, getTranslations(s.language), s.language);
 }
@@ -356,9 +356,6 @@ settingsModal.onChange(s => {
   applyTranslationsToDOM(t);
 });
 
-/** The document is a temp copy that was never saved: Save asks where to put it. */
-let unsavedCopy = false;
-
 // ── Startup handling ──────────────────────────────────────────────────────────
 
 (async () => {
@@ -376,7 +373,7 @@ let unsavedCopy = false;
         await loadPdf(startup.filePath);
         if (startup.unsaved && session.isOpen) {
           // Pages dragged out of another window: a new document, never saved.
-          unsavedCopy = true;
+          session.markUnsavedCopy();
           setDirty(true);
         }
       }
@@ -395,18 +392,9 @@ function showToast(msg: string, isError = false): void {
   setTimeout(() => toast.classList.add("hidden"), 3000);
 }
 
-/** New file name typed in the title bar, applied by the next Save. */
-let pendingRename: string | null = null;
-
-/** The name shown in the title bar: the pending rename, or the file's own. */
-function displayName(): string | null {
-  const target = session.saveTarget;
-  return pendingRename ?? (target ? fileNameOf(target) : null);
-}
-
 function setDirty(val: boolean): void {
   session.markDirty(val);
-  toolbar.setDocTitle(displayName(), val);
+  toolbar.setDocTitle(session.displayName, val);
   if (val) { void registerCloseGuard(); }
   else      { unregisterCloseGuard(); }
 }
@@ -435,7 +423,7 @@ function discardDraft(): void {
   if (dirty === null) return;
   dropStaleSelection();
   syncAllPageOverlays();
-  setDirty(dirty || pendingRename !== null);
+  setDirty(dirty || session.pendingName !== null);
 }
 
 let closeGuardBusy = false;
@@ -653,8 +641,7 @@ async function showInViewer(path: string, reload = false): Promise<string | null
 }
 
 async function loadPdf(path: string, password?: string | null): Promise<void> {
-  pendingRename = null;
-  unsavedCopy = false;
+  session.forgetName();
   // Changes still waiting for ✓ / ✕ are kept as they are.
   annotations.apply();
   if (password) { await openProtected(path, password); return; }
@@ -686,15 +673,13 @@ async function saveFile(forceDialog: boolean): Promise<void> {
   const current = session.saveTarget;
   if (!current || refuseIfProtected()) return;
   let target = current;
-  if (unsavedCopy) forceDialog = true;
-  if (forceDialog) {
-    const picked = await savePdfDialog(pendingRename ? withFileName(current, pendingRename) : current);
+  // A plain Save also applies the name typed in the title bar.
+  const { dialog, renameTo } = session.planSave(forceDialog);
+  if (dialog !== null) {
+    const picked = await savePdfDialog(dialog);
     if (!picked) return;
     target = picked;
   }
-  // A plain Save also applies the name typed in the title bar.
-  const renameTo = !forceDialog && pendingRename && pendingRename !== fileNameOf(current)
-    ? withFileName(current, pendingRename) : null;
   const redacting = session.hasRedactions();
   if (redacting) {
     const ok = await ask(msg("msgRedactConfirm"), { title: msg("msgRedactTitle"), kind: "warning" });
@@ -703,13 +688,13 @@ async function saveFile(forceDialog: boolean): Promise<void> {
   toolbar.setSaving(true);
   try {
     await session.saveTo(target);
-    if (forceDialog) { pendingRename = null; unsavedCopy = false; }
+    if (dialog !== null) session.savedAs();
     if (renameTo) {
       const page = viewer.currentPage;
       try {
         await renameFile(target, renameTo);
       } catch (err) {
-        pendingRename = null;
+        session.renameFailed();
         setDirty(false);
         const code = errorCode(err);
         showToast(code === "exists" ? msg("msgRenameExists")
@@ -1174,13 +1159,8 @@ toolbar.on(async (e) => {
 
     case "rename":
       if (!session.isOpen) break;
-      if (!isValidFileStem(e.stem)) { showToast(msg("msgRenameInvalid"), true); break; }
-      {
-        const own = fileNameOf(session.saveTarget ?? "");
-        const name = e.stem + splitFileName(own)[1];
-        pendingRename = name === own ? null : name;
-        setDirty(session.isDirty || pendingRename !== null);
-      }
+      if (!session.rename(e.stem)) { showToast(msg("msgRenameInvalid"), true); break; }
+      setDirty(session.needsSave);
       break;
 
     case "mode-change":

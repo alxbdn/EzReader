@@ -1,3 +1,4 @@
+import { fileNameOf, isValidFileStem, splitFileName, withFileName } from "./file-paths";
 import { isRedaction, type Annotation, type FormFieldValue, type RedactAnnotation, type StoredAnnotation } from "./models";
 
 /**
@@ -66,6 +67,10 @@ export class DocumentSession {
   private _lock: string | null = null;
   /** Password chosen with Protect, applied by the next save (null: none). */
   private _pending: string | null = null;
+  /** New file name typed in the title bar, applied by the next Save (null: none). */
+  private _pendingName: string | null = null;
+  /** The document is a temp copy that was never saved: Save asks where to put it. */
+  private _unsavedCopy = false;
 
   constructor(private readonly edits: PendingEdits, private readonly io: SessionIO) {}
 
@@ -92,7 +97,65 @@ export class DocumentSession {
     this._dirty = false;
     this._lock = password;
     this._pending = null;
+    this.forgetName();
   }
+
+  // ── Name ───────────────────────────────────────────────────────────────────
+
+  /** The file name typed in the title bar and not saved yet, or null. */
+  get pendingName(): string | null { return this._pendingName; }
+
+  /** The name shown in the title bar: the pending rename, or the file's own. */
+  get displayName(): string | null {
+    const target = this.saveTarget;
+    return this._pendingName ?? (target ? fileNameOf(target) : null);
+  }
+
+  /** True when there is something to save: changed content or a new name. */
+  get needsSave(): boolean { return this._dirty || this._pendingName !== null; }
+
+  /**
+   * The user typed `stem` in the title bar; the extension stays. False (and
+   * nothing changes) when it cannot be a file name. Typing the current name
+   * back cancels the rename.
+   */
+  rename(stem: string): boolean {
+    if (!this.isOpen || !isValidFileStem(stem)) return false;
+    const own = fileNameOf(this.saveTarget ?? "");
+    const name = stem + splitFileName(own)[1];
+    this._pendingName = name === own ? null : name;
+    return true;
+  }
+
+  /** The rename could not be applied: the file keeps its name. */
+  renameFailed(): void { this._pendingName = null; }
+
+  /** The open document is a new copy that was never saved (pages dragged out of a window). */
+  markUnsavedCopy(): void { this._unsavedCopy = true; }
+
+  /** Drops the pending rename and the unsaved-copy flag (a document is being opened). */
+  forgetName(): void {
+    this._pendingName = null;
+    this._unsavedCopy = false;
+  }
+
+  /**
+   * Where a save goes. `dialog` is the path to suggest when a Save As dialog
+   * must ask (asked for, or a copy never saved), else null; `renameTo` is the
+   * path a plain Save renames the file to afterwards (the pending name), else null.
+   */
+  planSave(saveAs: boolean): { dialog: string | null; renameTo: string | null } {
+    const current = this.saveTarget;
+    if (!current) throw new Error("No document is open");
+    const pending = this._pendingName;
+    if (saveAs || this._unsavedCopy) {
+      return { dialog: pending ? withFileName(current, pending) : current, renameTo: null };
+    }
+    return { dialog: null, renameTo: pending && pending !== fileNameOf(current) ? withFileName(current, pending) : null };
+  }
+
+  /** A Save As went through: the chosen file is the document now, name included. */
+  savedAs(): void { this.forgetName(); }
 
   /** True while the file is password-protected, and so read-only. */
   get isProtected(): boolean { return this._lock !== null; }
