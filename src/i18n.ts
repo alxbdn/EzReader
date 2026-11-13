@@ -203,6 +203,8 @@ export interface Translations {
   ttScrollVertical?: string;
   ttScrollHorizontal?: string;
   ttInfo?: string;
+  ttFullscreen?: string;
+  ttFullscreenExit?: string;
   ttFont?: string;
   ttLayerUp?: string;
   ttLayerDown?: string;
@@ -685,6 +687,8 @@ const EN: Translations = {
   ttScrollVertical:     "Scroll vertically",
   ttScrollHorizontal:   "Scroll horizontally",
   ttInfo:               "Document info",
+  ttFullscreen:         "Full screen (F11)",
+  ttFullscreenExit:     "Exit full screen (F11 or Esc)",
   ttFont:               "Font",
   ttLayerUp:            "Bring forward",
   ttLayerDown:          "Send backward",
@@ -1161,6 +1165,8 @@ const FR: Translations = {
   ttScrollVertical:     "Défilement vertical",
   ttScrollHorizontal:   "Défilement horizontal",
   ttInfo:               "Infos du document",
+  ttFullscreen:         "Plein écran (F11)",
+  ttFullscreenExit:     "Quitter le plein écran (F11 ou Échap)",
   ttFont:               "Police",
   ttLayerUp:            "Monter d'une couche",
   ttLayerDown:          "Descendre d'une couche",
