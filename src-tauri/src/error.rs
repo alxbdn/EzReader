@@ -29,6 +29,8 @@ pub enum ErrorCode {
     PageCountChanged,
     /// A page number or range does not exist in the document.
     InvalidPages,
+    /// Windows has no OCR language for this (or OCR is not available).
+    NoOcrLanguage,
     /// Anything else: `detail` says what.
     Other,
 }

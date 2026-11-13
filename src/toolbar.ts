@@ -47,6 +47,7 @@ export type ToolbarEvent =
   | { type: "compress" }
   | { type: "password" }
   | { type: "images-to-pdf" }
+  | { type: "ocr" }
   | { type: "rotate" }
   | { type: "zoom-in" }
   | { type: "zoom-out" }
@@ -101,7 +102,7 @@ interface MenuDef {
 
 /** Actions that must wait until pending changes are validated or discarded. */
 const GUARDED = new Set<ToolbarEvent["type"]>([
-  "open", "save", "save-as", "export", "compress", "password", "images-to-pdf", "print", "settings", "split", "rotate",
+  "open", "save", "save-as", "export", "compress", "password", "images-to-pdf", "ocr", "print", "settings", "split", "rotate",
   "insert-blank", "insert-pdf", "extract-pages",
 ]);
 
@@ -385,6 +386,7 @@ export class Toolbar {
           { label: "btnCompress", shortcut: "Ctrl+Shift+E", action: () => this.emit({ type: "compress" }), requiresDoc: true },
           { label: "menuPassword", action: () => this.emit({ type: "password" }), requiresDoc: true },
           { label: "menuImagesToPdf", action: () => this.emit({ type: "images-to-pdf" }) },
+          { label: "menuOcr", action: () => this.emit({ type: "ocr" }) },
           null,
           { label: "menuPrint", shortcut: "Ctrl+P", action: () => this.emit({ type: "print" }), requiresDoc: true },
           null,

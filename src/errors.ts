@@ -13,6 +13,7 @@ export type ErrorCode =
   | "too-large"
   | "page-count-changed"
   | "invalid-pages"
+  | "no-ocr-language"
   | "other";
 
 export class CommandError extends Error {
