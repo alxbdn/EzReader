@@ -32,6 +32,7 @@ import {
   ICON_UNLOCK,
 } from "./icons";
 import { SearchPill } from "./search-pill";
+import { BrightnessButton } from "./brightness-button";
 import { blockedWhileProtected } from "./read-only";
 import { splitFileName } from "./file-paths";
 
@@ -135,6 +136,8 @@ export class Toolbar {
   private modeBtns: HTMLButtonElement[] = [];
   private pointerBtns: HTMLButtonElement[] = [];
   private zoomLabel!: HTMLButtonElement;
+  /** Page brightness: a button that opens a slider. */
+  readonly brightness = new BrightnessButton();
   private zoomInput!: HTMLInputElement;
   private columnBtns: HTMLButtonElement[] = [];
   private infoBtn!: HTMLButtonElement;
@@ -734,6 +737,10 @@ export class Toolbar {
     this.reg(realSizeBtn, undefined, "ttRealSize");
     realSizeBtn.addEventListener("click", () => this.emit({ type: "zoom-real" }));
 
+    this.reg(this.brightness.button, undefined, "settingsBrightness");
+    const brightnessSeg = this.segment(this.brightness.el);
+    brightnessSeg.classList.add("tb-brightness");
+
     // One page / two pages per row; clicking the active one goes back to "as many as fit".
     const colDefs: [number, string, keyof Translations][] = [[1, ICON_PAGES_1, "ttPages1"], [2, ICON_PAGES_2, "ttPages2"]];
     this.columnBtns = colDefs.map(([n, icon, tt]) => {
@@ -795,7 +802,7 @@ export class Toolbar {
       this.sidebarBtn, this.saveBtn, this.segment(undo, redo), this.sep(),
       this.segment(...this.pointerBtns),
       this.segment(zoomOut, this.zoomLabel, this.zoomInput, zoomIn, realSizeBtn),
-      columnsSeg, this.sep(),
+      brightnessSeg, columnsSeg, this.sep(),
       modeSeg, right,
     );
     this.updateLayout(null, "vertical");

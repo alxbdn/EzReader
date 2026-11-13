@@ -17,7 +17,7 @@ import { PasswordModal } from "./password-modal";
 import { PrintModal } from "./print-modal";
 import { SignatureModal } from "./signature-modal";
 import { SignatureStore } from "./signature-store";
-import { SettingsModal } from "./settings";
+import { SettingsModal, applyPageBrightness } from "./settings";
 import { PageSidebar } from "./page-sidebar";
 import { DocSearch, type SearchMatch } from "./doc-search";
 import { planDelete, planInsert, planMove, planRotate, type PagePlan } from "./page-layout";
@@ -345,7 +345,13 @@ mountWindowControls(document.getElementById("menubar-row")!, () => {
   adjustView.applyTranslations(t);
   applyTranslationsToDOM(t);
 }
+// Page brightness button in the toolbar, kept in step with Settings.
+toolbar.brightness.value = settingsModal.getSettings().pageBrightness;
+toolbar.brightness.onInput((v) => applyPageBrightness(v));
+toolbar.brightness.onCommit((v) => settingsModal.setPageBrightness(v));
+
 settingsModal.onChange(s => {
+  toolbar.brightness.value = s.pageBrightness;
   const t = getTranslations(s.language);
   toolbar.applyTranslations(t);
   compressModal.applyTranslations(t);

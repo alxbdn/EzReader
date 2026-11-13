@@ -120,6 +120,21 @@ export class SettingsModal {
   }
   close(): void { this.backdrop.classList.add("hidden"); }
 
+  /** Page brightness chosen elsewhere (the toolbar button): applied, shown here and saved. */
+  setPageBrightness(pct: number): void {
+    this.showBrightness(pct);
+    if (pct !== this.settings.pageBrightness) this.set("pageBrightness", pct);
+  }
+
+  /** Applies `pct` to the pages and shows it on this modal's slider. */
+  private showBrightness(pct: number): void {
+    const input = document.getElementById("settings-brightness") as HTMLInputElement | null;
+    const label = document.getElementById("settings-brightness-val");
+    if (input) input.value = String(pct);
+    if (label) label.textContent = `${pct} %`;
+    applyPageBrightness(pct);
+  }
+
   private set<K extends keyof AppSettings>(key: K, value: AppSettings[K]): void {
     this.settings[key] = value;
     saveSettings(this.settings);
@@ -204,12 +219,9 @@ export class SettingsModal {
 
     // Page brightness: applied live while dragging.
     const brightInput = document.getElementById("settings-brightness") as HTMLInputElement | null;
-    const brightVal = document.getElementById("settings-brightness-val");
     if (brightInput) {
-      const show = (v: number) => { if (brightVal) brightVal.textContent = `${v} %`; applyPageBrightness(v); };
-      brightInput.value = String(this.settings.pageBrightness);
-      show(this.settings.pageBrightness);
-      brightInput.addEventListener("input", () => show(Number(brightInput.value)));
+      this.showBrightness(this.settings.pageBrightness);
+      brightInput.addEventListener("input", () => this.showBrightness(Number(brightInput.value)));
       brightInput.addEventListener("change", () => this.set("pageBrightness", Number(brightInput.value)));
     }
 

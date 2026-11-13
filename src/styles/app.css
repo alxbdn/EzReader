@@ -2707,3 +2707,25 @@ body.read-only .page-form-layer { pointer-events: none; }
 
 /* Full screen: no window buttons (F11, Esc or the toolbar button exit it). */
 body.fullscreen .window-controls { display: none; }
+
+/* Page brightness button and its slider. */
+.brightness-wrap { position: relative; display: inline-flex; }
+.brightness-pop {
+  display: none;
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 50%;
+  transform: translateX(-50%);
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: var(--popover);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-lg);
+  z-index: 100;
+  white-space: nowrap;
+}
+.brightness-pop.open { display: flex; animation: pop-in 0.12s ease-out; }
+.brightness-pop .settings-range { width: 140px; }
+.brightness-val { font-size: 12px; color: var(--muted-foreground); min-width: 38px; text-align: right; cursor: default; }
