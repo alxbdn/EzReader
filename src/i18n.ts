@@ -431,6 +431,19 @@ export interface Translations {
   expPdfSummary?: string;
   expImgSummaryOne?: string;
   expImgSummaryMany?: string;
+  expPictures?: string;
+  expDocuments?: string;
+  expDocxSub?: string;
+  expXlsxSub?: string;
+  expRtfSub?: string;
+  expHtmlSub?: string;
+  expTxtSub?: string;
+  expXmlSub?: string;
+  expTextLabel?: string;
+  expDocSummary?: string;
+  expDocNote?: string;
+  msgConverted?: string;
+  msgNoTextFound?: string;
   cmpOk?: string;
   cmpCurrent?: string;
   cmpLossless?: string;
@@ -641,7 +654,7 @@ const EN: Translations = {
   welcomeFeatSign:          "Sign Documents",
   welcomeFeatRedact:        "Redact Content",
   welcomeFeatPages:         "Manage Pages",
-  welcomeFeatToImage:       "Convert to img",
+  welcomeFeatToImage:       "Convert Files",
   welcomeFeatCompress:      "Compress Files",
   welcomeFeatProtect:       "Protect Files",
   welcomeFeatResize:        "Resize Scans",
@@ -772,7 +785,7 @@ const EN: Translations = {
   modeAnnotate: "Annotate",
   modeEdit: "Edit",
   btnExport: "Export",
-  ttExport: "Export a copy",
+  ttExport: "Export or convert (pictures, Word, Excel…)",
   ttSearch: "Search (Ctrl+F)",
   ttSearchClear: "Clear the search",
   ttRename: "Click to rename",
@@ -881,7 +894,7 @@ const EN: Translations = {
   msgAdjustFailed: "Couldn't adjust the pages: {err}",
   dlgClose: "Close",
   dlgCancel: "Cancel",
-  expTitle: "Export",
+  expTitle: "Export & convert",
   expOk: "Export",
   expTabPdf: "This PDF to…",
   expTabImages: "Images to PDF",
@@ -909,6 +922,19 @@ const EN: Translations = {
   expPdfSummary: "1 PDF file with {n} page(s).",
   expImgSummaryOne: "1 {kind} file ({names}) at {dpi} dpi.",
   expImgSummaryMany: "{n} {kind} files ({names}) at {dpi} dpi.",
+  expPictures: "Pictures & PDF",
+  expDocuments: "Editable text",
+  expDocxSub: "Document .docx",
+  expXlsxSub: "Tables .xlsx",
+  expRtfSub: "Rich text",
+  expHtmlSub: "Web page",
+  expTxtSub: "Plain text",
+  expXmlSub: "Structured data",
+  expTextLabel: "Text",
+  expDocSummary: "1 {kind} file ({name}) with the text of {n} page(s).",
+  expDocNote: "Text, titles and tables only: pictures and the exact layout are not kept.",
+  msgConverted: "Saved as {name}",
+  msgNoTextFound: "No text found in these pages: they look like scanned pictures.",
   cmpOk: "Compress",
   cmpCurrent: "Current size:",
   cmpLossless: "Lossless",
@@ -1119,7 +1145,7 @@ const FR: Translations = {
   welcomeFeatSign:          "Signer des documents",
   welcomeFeatRedact:        "Caviarder du contenu",
   welcomeFeatPages:         "G\u00e9rer les pages",
-  welcomeFeatToImage:       "Convertir en image",
+  welcomeFeatToImage:       "Convertir des fichiers",
   welcomeFeatCompress:      "Compresser des fichiers",
   welcomeFeatProtect:       "Prot\u00e9ger des fichiers",
   welcomeFeatResize:        "Redresser des scans",
@@ -1250,7 +1276,7 @@ const FR: Translations = {
   modeAnnotate: "Annoter",
   modeEdit: "Éditer",
   btnExport: "Exporter",
-  ttExport: "Exporter une copie",
+  ttExport: "Exporter ou convertir (images, Word, Excel…)",
   ttSearch: "Rechercher (Ctrl+F)",
   ttSearchClear: "Effacer la recherche",
   ttRename: "Cliquer pour renommer",
@@ -1359,7 +1385,7 @@ const FR: Translations = {
   msgAdjustFailed: "Impossible d'ajuster les pages : {err}",
   dlgClose: "Fermer",
   dlgCancel: "Annuler",
-  expTitle: "Exporter",
+  expTitle: "Exporter et convertir",
   expOk: "Exporter",
   expTabPdf: "Ce PDF vers…",
   expTabImages: "Images vers PDF",
@@ -1387,6 +1413,19 @@ const FR: Translations = {
   expPdfSummary: "1 fichier PDF de {n} page(s).",
   expImgSummaryOne: "1 fichier {kind} ({names}) à {dpi} dpi.",
   expImgSummaryMany: "{n} fichiers {kind} ({names}) à {dpi} dpi.",
+  expPictures: "Images et PDF",
+  expDocuments: "Texte modifiable",
+  expDocxSub: "Document .docx",
+  expXlsxSub: "Tableaux .xlsx",
+  expRtfSub: "Texte enrichi",
+  expHtmlSub: "Page web",
+  expTxtSub: "Texte brut",
+  expXmlSub: "Données structurées",
+  expTextLabel: "Texte",
+  expDocSummary: "1 fichier {kind} ({name}) avec le texte de {n} page(s).",
+  expDocNote: "Texte, titres et tableaux seulement : les images et la mise en page exacte ne sont pas conservées.",
+  msgConverted: "Enregistré sous {name}",
+  msgNoTextFound: "Aucun texte trouvé dans ces pages : ce sont sans doute des images numérisées.",
   cmpOk: "Compresser",
   cmpCurrent: "Taille actuelle :",
   cmpLossless: "Sans perte",

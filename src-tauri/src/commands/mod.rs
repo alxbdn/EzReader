@@ -1,4 +1,5 @@
 pub mod compress;
+pub mod convert;
 pub mod dialog;
 pub mod files;
 pub mod pdf;

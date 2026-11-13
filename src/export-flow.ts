@@ -1,5 +1,6 @@
 import type { DocumentSession } from "./document-session";
-import { pageFileName, type ExportModal, type ExportRequest } from "./export-modal";
+import { docFileName, isDocFormat, pageFileName, type DocFormat, type ExportModal, type ExportRequest } from "./export-modal";
+import { textLength, type TextDoc } from "./text-layout";
 import type { Messages } from "./messages";
 import { fileNameOf, withFileName } from "./file-paths";
 
@@ -23,6 +24,9 @@ export interface ExportDeps {
   writeImageFile(path: string, data: string): Promise<void>;
   imagesToPdf(paths: string[], output: string): Promise<void>;
   exportFlattenedPages(input: string, output: string, pages: number[]): Promise<void>;
+  extractText(path: string, pages: number[], title: string): Promise<TextDoc>;
+  saveAsDialog(suggested: string, format: DocFormat): Promise<string | null>;
+  convertText(doc: TextDoc, format: DocFormat, output: string): Promise<void>;
 }
 
 export interface ExportFlow {
@@ -32,7 +36,10 @@ export interface ExportFlow {
   docStem(): string;
 }
 
-/** Export: pictures of the pages, a flattened PDF copy, or pictures to a new PDF. */
+/**
+ * Export: pictures of the pages, a flattened PDF copy, the text as Word /
+ * Excel / RTF / HTML / text / XML, or pictures to a new PDF.
+ */
 export function setUpExport(d: ExportDeps): ExportFlow {
   const { msg, errText } = d.messages;
 
@@ -52,6 +59,21 @@ export function setUpExport(d: ExportDeps): ExportFlow {
         return;
       }
       if (!d.session.isOpen || !d.viewer.isLoaded()) return;
+      if (isDocFormat(req.format)) {
+        // The text only: annotations are drawings, and redactions are already
+        // burnt into the materialized file, so nothing hidden can leak.
+        const input = await d.session.materialize({ annotations: false });
+        const doc = await d.extractText(input, req.pages, docStem());
+        if (textLength(doc) === 0) {
+          d.notify(msg("msgNoTextFound"), true);
+          return;
+        }
+        const out = await d.saveAsDialog(docFileName(docStem(), req.format), req.format);
+        if (!out) return;
+        await d.convertText(doc, req.format, out);
+        d.notify(msg("msgConverted", { name: fileNameOf(out) }));
+        return;
+      }
       if (req.format === "pdf") {
         const current = d.session.saveTarget!;
         const rename = d.pendingRename();
