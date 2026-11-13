@@ -3,7 +3,8 @@ import { createMessages } from "./messages";
 import { Protection } from "./protection";
 import { setUpCompress } from "./compress-flow";
 import { setUpExport } from "./export-flow";
-import { extractText } from "./text-extract";
+import type { Feedback } from "./backend";
+import { tauriBackend } from "./tauri-backend";
 import { fileNameOf, withFileName } from "./file-paths";
 import { mountWelcomeDots } from "./welcome-dots";
 import { PdfViewer, PdfPageView, renderRedactedPages, renderStraightenedPages } from "./pdf-viewer";
@@ -37,21 +38,16 @@ import {
   CSS_UNITS,
 } from "./models";
 import type { PageTextItem, ShapeAnnotation } from "./canvas-overlay";
-import { fitWithin, isImagePath, loadPicture, type Picture } from "./pictures";
+import { fitWithin, isImagePath, type Picture } from "./pictures";
 import {
   openPdfDialog,
   getPageCount,
   savePdfDialog,
+  loadPictureFile,
   saveAnnotatedPdf,
   stripAnnotationStreams,
-  compressPdf,
-  exportFlattenedPages,
-  convertText,
-  saveAsDialog,
   ocrImage,
   ocrLanguages,
-  cancelCompression,
-  onCompressProgress,
   readAnnotations,
   getStartupArgs,
   printPages,
@@ -65,13 +61,8 @@ import {
   renameFile,
   openImageDialog,
   adjustPages,
-  estimateCompression,
   encryptPdf,
   decryptPdf,
-  openImagesDialog,
-  imagesToPdf,
-  existingFiles,
-  writeImageFile,
 } from "./tauri-bridge";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { mountWindowControls } from "./window-controls";
@@ -134,7 +125,7 @@ const ocrModal = new OcrModal({
   pickPicture: async () => {
     const path = await openImageDialog();
     if (!path) return null;
-    const pic = await loadPicture(path);
+    const pic = await loadPictureFile(path);
     const mime = pic.data.startsWith("/9j/") ? "image/jpeg" : "image/png";
     return { dataUrl: `data:${mime};base64,${pic.data}`, name: fileNameOf(path) };
   },
@@ -189,18 +180,19 @@ const protection = new Protection({
   setDirty: (dirty) => setDirty(dirty),
 });
 
+/** Toasts and warning questions, for the dialog flows. */
+const feedback: Feedback = {
+  notify: (text, isError) => showToast(text, isError),
+  ask: (text, title) => ask(text, title === undefined ? { kind: "warning" } : { title, kind: "warning" }),
+};
+
 const openCompress = setUpCompress({
   session,
   modal: compressModal,
   refuse: () => protection.refuse(),
   messages,
-  notify: (text, isError) => showToast(text, isError),
-  ask: (text) => ask(text, { kind: "warning" }),
-  savePdfDialog,
-  estimate: estimateCompression,
-  compress: compressPdf,
-  cancel: cancelCompression,
-  onProgress: onCompressProgress,
+  ui: feedback,
+  backend: tauriBackend,
 });
 
 const exportFlow = setUpExport({
@@ -209,18 +201,8 @@ const exportFlow = setUpExport({
   modal: exportModal,
   pendingRename: () => pendingRename,
   messages,
-  notify: (text, isError) => showToast(text, isError),
-  ask: (text, title) => ask(text, { title, kind: "warning" }),
-  savePdfDialog,
-  pickDirectory: pickDirectoryDialog,
-  pickImages: openImagesDialog,
-  existingFiles,
-  writeImageFile,
-  imagesToPdf,
-  exportFlattenedPages,
-  extractText,
-  saveAsDialog,
-  convertText,
+  ui: feedback,
+  backend: tauriBackend,
 });
 
 async function applyFitMode(): Promise<void> {
@@ -1637,7 +1619,7 @@ document.getElementById("viewer-scroll")!.addEventListener("click", (e: MouseEve
 /** Reads the picture at `path`; shows an error and returns null if it can't. */
 async function readPicture(path: string): Promise<Picture | null> {
   try {
-    return await loadPicture(path);
+    return await loadPictureFile(path);
   } catch (err) {
     showToast(msg("msgImageFailed", { err: errText(err) }), true);
     return null;
