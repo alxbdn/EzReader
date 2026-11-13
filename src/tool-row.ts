@@ -36,6 +36,8 @@ import {
   ICON_STAMP_CROSS,
   ICON_SHAPE_LASSO,
   ICON_SHAPE_POLY,
+  ICON_CROP,
+  ICON_STRAIGHTEN,
 } from "./icons";
 
 /** A button of the tool row; pencil and shapes each cover several tools. */
@@ -92,6 +94,9 @@ export class ToolRow {
   private hint: HTMLElement;
   private validate: HTMLElement;
   private pending = false;
+  /** Pages selected in the side panel: Crop and Straighten need some. */
+  private selectedPages = 0;
+  private pageBtns: [HTMLButtonElement, Key, string, Key, string][] = [];
 
   private t: Translations = {} as Translations;
   private texts: [HTMLElement, Key, string][] = [];
@@ -152,6 +157,8 @@ export class ToolRow {
     contentSeg.append(
       this.groupButton("etext", ICON_EDIT_TEXT, "toolEditText", "Edit text"),
       this.groupButton("image", ICON_IMAGE, "toolImage", "Image"),
+      this.pageButton("crop", ICON_CROP, "toolCrop", "Crop", "ttCropOff", "Crop: select pages in the side panel first"),
+      this.pageButton("straighten", ICON_STRAIGHTEN, "toolStraighten", "Straighten", "ttStraightenOff", "Straighten: select pages in the side panel first"),
     );
     const redactSeg = this.segment("");
     redactSeg.append(
@@ -190,6 +197,7 @@ export class ToolRow {
     this.buildStampPanel();
     for (const p of new Set(this.panels.values())) this.options.append(p);
 
+    this.syncPageBtns();
     this.syncAll();
   }
 
@@ -264,6 +272,13 @@ export class ToolRow {
     this.hideSelectionPanel("shapes");
   }
 
+  /** Number of pages selected in the side panel (Crop and Straighten need some). */
+  setPageSelection(count: number): void {
+    this.selectedPages = count;
+    this.syncPageBtns();
+    this.syncHint();
+  }
+
   setSignatures(list: SignatureChip[]): void {
     this.signatures = list;
     this.renderSignatures();
@@ -279,6 +294,7 @@ export class ToolRow {
     }
     for (const [s, key, fb] of this.sliders) s.setLabel(this.tr(key, fb));
     this.renderSignatures();
+    this.syncPageBtns();
     this.syncHint();
   }
 
@@ -623,6 +639,12 @@ export class ToolRow {
       check: ["hintStamp", "Click on the page to stamp."],
       cross: ["hintStamp", "Click on the page to stamp."],
     };
+    if (!this.pending && !this.group && this.mode === "edit") {
+      this.hint.textContent = this.selectedPages > 0
+        ? this.tr("hintEditPagesReady", "{n} page(s) selected: Crop and Straighten are ready.").replace("{n}", String(this.selectedPages))
+        : this.tr("hintEditPages", "Select pages to crop or straighten them.");
+      return;
+    }
     const [key, fb] = this.pending ? ["hintPending", "Validate or discard your changes to continue."] as [Key, string]
       : this.group ? hints[this.group] : ["hintPick", "Pick a tool."] as [Key, string];
     this.hint.textContent = this.tr(key, fb);
@@ -678,6 +700,35 @@ export class ToolRow {
     b.addEventListener("click", () => this.pickGroup(g));
     this.groupBtns.set(g, b);
     return b;
+  }
+
+  /** Crop / Straighten: they open the adjust view on the selected pages. */
+  private pageButton(kind: "crop" | "straighten", icon: string, key: Key, fb: string, offKey: Key, offFb: string): HTMLButtonElement {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "tool-btn";
+    b.dataset["adjust"] = kind;
+    b.innerHTML = icon;
+    const label = document.createElement("span");
+    this.text(label, key, fb);
+    b.append(label);
+    b.addEventListener("click", () => {
+      if (!this.canSwitch()) return;
+      if (this.group) this.clearTool();
+      this.emit({ type: "adjust", kind });
+    });
+    this.pageBtns.push([b, key, fb, offKey, offFb]);
+    return b;
+  }
+
+  private syncPageBtns(): void {
+    const off = this.selectedPages === 0;
+    for (const [b, key, fb, offKey, offFb] of this.pageBtns) {
+      b.classList.toggle("off", off);
+      b.setAttribute("aria-disabled", String(off));
+      b.title = off ? this.tr(offKey, offFb) : this.tr(key, fb);
+      b.setAttribute("aria-label", b.title);
+    }
   }
 
   private roundBtn(cls: string, icon: string, key: Key, fb: string): HTMLButtonElement {

@@ -7,6 +7,7 @@ import { CanvasOverlay } from "./canvas-overlay";
 import { AnnotationStore } from "./annotation-store";
 import { defaultToolState, type ActiveToolState, type RedactAnnotation, CSS_UNITS } from "./models";
 import { openUrl, type RedactedPage } from "./tauri-bridge";
+import { warpToRect, type Point } from "./warp";
 
 pdfjs.GlobalWorkerOptions.workerSrc = workerUrl;
 
@@ -1181,3 +1182,82 @@ export async function renderRedactedPages(
   }
 }
 
+
+type Matrix = [number, number, number, number, number, number];
+
+function multiply(m: Matrix, n: Matrix): Matrix {
+  // m ∘ n: apply n, then m.
+  return [
+    m[0] * n[0] + m[2] * n[1], m[1] * n[0] + m[3] * n[1],
+    m[0] * n[2] + m[2] * n[3], m[1] * n[2] + m[3] * n[3],
+    m[0] * n[4] + m[2] * n[5] + m[4], m[1] * n[4] + m[3] * n[5] + m[5],
+  ];
+}
+
+function invert(m: Matrix): Matrix {
+  const det = m[0] * m[3] - m[1] * m[2];
+  return [
+    m[3] / det, -m[1] / det, -m[2] / det, m[0] / det,
+    (m[2] * m[5] - m[3] * m[4]) / det, (m[1] * m[4] - m[0] * m[5]) / det,
+  ];
+}
+
+/**
+ * Straightens pages of `filePath`: the area inside each `quad` (fractions of
+ * the page as shown, with its /Rotate) is stretched over the whole page.
+ * Returns pictures ready for `redact_pages` (unrotated, over `page.view`).
+ */
+export async function renderStraightenedPages(
+  filePath: string,
+  items: { page: number; quad: [Point, Point, Point, Point] }[],
+  dpi = 200,
+): Promise<RedactedPage[]> {
+  const doc = await pdfjs.getDocument({ url: convertFileSrc(filePath) + `?t=${Date.now()}` }).promise;
+  try {
+    const out: RedactedPage[] = [];
+    for (const { page: pageNum, quad } of items) {
+      if (pageNum < 1 || pageNum > doc.numPages) continue;
+      const page = await doc.getPage(pageNum);
+      const unit = page.getViewport({ scale: 1, rotation: 0 });
+      const scale = Math.min(dpi / 72, Math.sqrt(40e6 / (unit.width * unit.height)));
+      const shown = page.getViewport({ scale, rotation: page.rotate });
+      const flat = page.getViewport({ scale, rotation: 0 });
+
+      const src = document.createElement("canvas");
+      src.width = Math.ceil(shown.width);
+      src.height = Math.ceil(shown.height);
+      const sctx = src.getContext("2d", { willReadFrequently: true })!;
+      sctx.fillStyle = "#fff";
+      sctx.fillRect(0, 0, src.width, src.height);
+      await page.render({ canvasContext: sctx, viewport: shown }).promise;
+      const pixels = sctx.getImageData(0, 0, src.width, src.height);
+      const px = quad.map(([x, y]) => [x * src.width, y * src.height] as Point) as [Point, Point, Point, Point];
+      const warped = warpToRect(pixels, px, src.width, src.height);
+      sctx.putImageData(new ImageData(warped.data as Uint8ClampedArray<ArrayBuffer>, warped.width, warped.height), 0, 0);
+
+      // Back to the page's own orientation: /Rotate stays on the page.
+      const dst = document.createElement("canvas");
+      dst.width = Math.ceil(flat.width);
+      dst.height = Math.ceil(flat.height);
+      const dctx = dst.getContext("2d")!;
+      dctx.fillStyle = "#fff";
+      dctx.fillRect(0, 0, dst.width, dst.height);
+      dctx.setTransform(...multiply(flat.transform as Matrix, invert(shown.transform as Matrix)));
+      dctx.drawImage(src, 0, 0);
+
+      const [v0, v1, v2, v3] = page.view;
+      out.push({
+        page: pageNum,
+        jpegBase64: dst.toDataURL("image/jpeg", 0.9).split(",")[1],
+        widthPx: dst.width,
+        heightPx: dst.height,
+        view: [v0, v1, v2, v3],
+      });
+      src.width = src.height = dst.width = dst.height = 0;
+      page.cleanup();
+    }
+    return out;
+  } finally {
+    await doc.destroy();
+  }
+}

@@ -57,6 +57,7 @@ export type ToolbarEvent =
   | { type: "signature-delete"; id: string }
   | { type: "draft-apply" }
   | { type: "image-browse" }
+  | { type: "adjust"; kind: "crop" | "straighten" }
   | { type: "draft-discard" }
   | { type: "pages" }
   | { type: "toggle-sidebar" }
@@ -176,8 +177,15 @@ export class Toolbar {
     this.handlers.forEach((h) => h(e));
   }
 
+  /** Set while another view (Crop / Straighten) holds its own ✓ / ✕. */
+  private blocker: (() => void) | null = null;
+
+  /** While `shake` is set, every guarded action calls it and is refused. */
+  setBlocker(shake: (() => void) | null): void { this.blocker = shake; }
+
   /** While changes wait for validation, shakes ✓ / ✕ and says no. */
   allowed(): boolean {
+    if (this.blocker) { this.blocker(); return false; }
     if (!this.pending) return true;
     this.tools.shake();
     return false;

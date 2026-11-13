@@ -333,6 +333,144 @@ pub fn read_annotations(file_path: String) -> Result<Vec<Annotation>, String> {
     Ok(writer::load_meta(&doc).annotations)
 }
 
+/// How one page is cropped and flipped by [`adjust_pages`].
+#[derive(Debug, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct PageAdjust {
+    /// 1-based page number.
+    pub page: u32,
+    /// Visible area kept, in PDF user space (after the flip): [x0, y0, x1, y1].
+    #[serde(default)]
+    pub crop: Option<[f64; 4]>,
+    /// Mirror the page left to right.
+    #[serde(default)]
+    pub flip_h: bool,
+    /// Mirror the page top to bottom.
+    #[serde(default)]
+    pub flip_v: bool,
+}
+
+/// Crops and flips pages, as an incremental update (the content stays
+/// vector and selectable; a crop only sets the page's CropBox).
+#[tauri::command]
+pub fn adjust_pages(input_path: String, output_path: String, pages: Vec<PageAdjust>) -> Result<(), String> {
+    let mut inc = IncrementalDocument::load(&input_path).map_err(|e| e.to_string())?;
+    let prev_pages = inc.get_prev_documents().get_pages();
+    let meta = writer::load_meta(inc.get_prev_documents());
+
+    for adj in &pages {
+        let &page_id = prev_pages
+            .get(&adj.page)
+            .ok_or_else(|| format!("Page {} does not exist", adj.page))?;
+        let inherited = inherited_attributes(inc.get_prev_documents(), page_id);
+        let prev = inc.get_prev_documents();
+        let media = page_box(prev, page_id, &inherited, b"MediaBox").unwrap_or([0.0, 0.0, 612.0, 792.0]);
+        // What is shown of the page: a flip mirrors it onto itself.
+        let shown = page_box(prev, page_id, &inherited, b"CropBox")
+            .map(|[x0, y0, x1, y1]| [x0.max(media[0]), y0.max(media[1]), x1.min(media[2]), y1.min(media[3])])
+            .filter(|b| b[2] > b[0] && b[3] > b[1])
+            .unwrap_or(media);
+        let contents = content_refs(prev, page_id);
+        let ann_stream = meta
+            .stream_ids
+            .get(&adj.page)
+            .map(|ids| (ids[0], ids[1] as u16));
+
+        inc.opt_clone_object_to_new_document(page_id).map_err(|e| e.to_string())?;
+        let mut new_contents = contents.clone();
+        if adj.flip_h || adj.flip_v {
+            let [x0, y0, x1, y1] = shown;
+            let (a, e) = if adj.flip_h { (-1.0, x0 + x1) } else { (1.0, 0.0) };
+            let (d, f) = if adj.flip_v { (-1.0, y0 + y1) } else { (1.0, 0.0) };
+            let pre = inc.new_document.add_object(lopdf::Stream::new(
+                lopdf::Dictionary::new(),
+                format!("q {a} 0 0 {d} {e:.4} {f:.4} cm\n").into_bytes(),
+            ));
+            let post = inc.new_document.add_object(lopdf::Stream::new(lopdf::Dictionary::new(), b"\nQ\n".to_vec()));
+            // Our annotation layer stays outside the mirror: it is redrawn
+            // from its metadata, in page coordinates, on every save.
+            let (layer, page_content): (Vec<Object>, Vec<Object>) = contents
+                .into_iter()
+                .partition(|o| matches!((o.as_reference().ok(), ann_stream), (Some(id), Some(a)) if id == a));
+            new_contents = vec![Object::Reference(pre)];
+            new_contents.extend(page_content);
+            new_contents.push(Object::Reference(post));
+            new_contents.extend(layer);
+        }
+        let dict = inc
+            .new_document
+            .get_object_mut(page_id)
+            .and_then(Object::as_dict_mut)
+            .map_err(|e| format!("page {}: {e}", adj.page))?;
+        for (key, value) in inherited {
+            if key != b"Parent" && !dict.has(key) {
+                dict.set(key, value);
+            }
+        }
+        dict.set("Contents", Object::Array(new_contents));
+        if let Some(c) = adj.crop {
+            let [mx0, my0, mx1, my1] = media;
+            let x0 = c[0].min(c[2]).max(mx0);
+            let y0 = c[1].min(c[3]).max(my0);
+            let x1 = c[0].max(c[2]).min(mx1);
+            let y1 = c[1].max(c[3]).min(my1);
+            if x1 - x0 < 1.0 || y1 - y0 < 1.0 {
+                return Err(format!("page {}: crop area is empty", adj.page));
+            }
+            let real = |v: f64| Object::Real(v as f32);
+            dict.set("CropBox", Object::Array(vec![real(x0), real(y0), real(x1), real(y1)]));
+            for key in [b"TrimBox".as_slice(), b"BleedBox", b"ArtBox"] {
+                dict.remove(key);
+            }
+        }
+    }
+    fsutil::save_incremental(&mut inc, &output_path)
+}
+
+/// A page box (own or inherited), as [x0, y0, x1, y1] with x0 < x1, y0 < y1.
+fn page_box(doc: &Document, page_id: ObjectId, inherited: &[(&[u8], Object)], key: &[u8]) -> Option<[f64; 4]> {
+    let page = doc.get_object(page_id).and_then(Object::as_dict).ok()?;
+    let obj = page
+        .get(key)
+        .ok()
+        .cloned()
+        .or_else(|| inherited.iter().find(|(k, _)| *k == key).map(|(_, v)| v.clone()))?;
+    let arr = match obj {
+        Object::Reference(id) => doc.get_object(id).ok()?.as_array().ok()?.clone(),
+        Object::Array(a) => a,
+        _ => return None,
+    };
+    let num = |o: &Object| -> Option<f64> {
+        let o = match o {
+            Object::Reference(id) => doc.get_object(*id).ok()?,
+            other => other,
+        };
+        match o {
+            Object::Integer(i) => Some(*i as f64),
+            Object::Real(r) => Some(f64::from(*r)),
+            _ => None,
+        }
+    };
+    if arr.len() != 4 {
+        return None;
+    }
+    let v: Vec<f64> = arr.iter().map(num).collect::<Option<_>>()?;
+    Some([v[0].min(v[2]), v[1].min(v[3]), v[0].max(v[2]), v[1].max(v[3])])
+}
+
+/// The page's content streams, as references.
+fn content_refs(doc: &Document, page_id: ObjectId) -> Vec<Object> {
+    let Ok(page) = doc.get_object(page_id).and_then(Object::as_dict) else { return Vec::new() };
+    match page.get(b"Contents") {
+        Ok(Object::Reference(id)) => match doc.get_object(*id) {
+            Ok(Object::Array(a)) => a.clone(),
+            _ => vec![Object::Reference(*id)],
+        },
+        Ok(Object::Array(a)) => a.clone(),
+        _ => Vec::new(),
+    }
+}
+
 /// One page of the document produced by [`rearrange_pages`], in output order.
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(tag = "kind", rename_all = "camelCase")]
@@ -744,6 +882,40 @@ mod tests {
             "height": 40.0, "color": {"r": 255, "g": 0, "b": 0}, "strokeWidth": 2.0
         }))
         .unwrap()
+    }
+
+    /// Crop and mirror an annotated page: the text stays vector, the
+    /// annotation layer is left out of the mirror.
+    #[test]
+    fn adjust_crops_and_mirrors_without_touching_the_annotation_layer() {
+        let annotated = tmp("adjust-in.pdf");
+        let out = tmp("adjust-out.pdf");
+        save_annotated_pdf(fixture("objstm-indirect-length.pdf"), annotated.clone(), vec![rect(1, 200.0)], 0, vec![]).unwrap();
+        let layer = writer::load_meta(&Document::load(&annotated).unwrap()).stream_ids[&1];
+
+        adjust_pages(annotated.clone(), out.clone(), vec![PageAdjust {
+            page: 1, crop: Some([50.0, 60.0, 300.0, 400.0]), flip_h: true, flip_v: false,
+        }]).unwrap();
+        crate::test_util::assert_lengths_consistent(&out);
+
+        let doc = Document::load(&out).unwrap();
+        let page = doc.get_pages()[&1];
+        let dict = doc.get_dictionary(page).unwrap();
+        let crop: Vec<f32> = dict.get(b"CropBox").unwrap().as_array().unwrap().iter().map(|o| o.as_float().unwrap()).collect();
+        assert_eq!(crop, vec![50.0, 60.0, 300.0, 400.0]);
+
+        let contents = dict.get(b"Contents").unwrap().as_array().unwrap();
+        let first = contents[0].as_reference().unwrap();
+        let pre = doc.get_object(first).unwrap().as_stream().unwrap().decompressed_content().unwrap_or_else(|_| doc.get_object(first).unwrap().as_stream().unwrap().content.clone());
+        assert!(String::from_utf8_lossy(&pre).starts_with("q -1 0 0 1 "), "mirror comes first");
+        let last = contents.last().unwrap().as_reference().unwrap();
+        assert_eq!(last, (layer[0], layer[1] as u16), "the annotation layer stays outside the mirror");
+        assert!(doc.extract_text(&[1]).unwrap().contains("Page 1"), "text stays text");
+        assert_eq!(read_annotations(out.clone()).unwrap().len(), 1);
+
+        for p in [annotated, out] {
+            std::fs::remove_file(p).ok();
+        }
     }
 
     /// Save, re-save with a changed annotation, strip, then delete a page, on a

@@ -81,6 +81,7 @@ export class PageSidebar {
   private insertBlankHandlers: ((after: number) => void)[] = [];
   private insertPdfHandlers: ((after: number) => void)[] = [];
   private visibilityHandlers: ((visible: boolean) => void)[] = [];
+  private selectionHandlers: ((pages: number[]) => void)[] = [];
   private addCard!: HTMLElement;
   private pageInput!: HTMLInputElement;
   private pageTotal!: HTMLElement;
@@ -186,6 +187,7 @@ export class PageSidebar {
   /** Another PDF's pages are wanted after page `after` (0 = at the start). */
   onInsertPdf(cb: (after: number) => void): void { this.insertPdfHandlers.push(cb); }
   onVisibilityChange(cb: (visible: boolean) => void): void { this.visibilityHandlers.push(cb); }
+  onSelectionChange(cb: (pages: number[]) => void): void { this.selectionHandlers.push(cb); }
 
   /** Menu commands acting on the selection, or after the page shown. */
   requestInsertBlank(): void { if (this.canAct()) for (const cb of this.insertBlankHandlers) cb(this.insertionPoint()); }
@@ -276,6 +278,7 @@ export class PageSidebar {
     this.doc = null;
     this.root.classList.remove("selecting");
     this.updateHeader();
+    for (const cb of this.selectionHandlers) cb([]);
   }
 
   /** Selects exactly `pages` (after an edit, to keep the moved/rotated pages selected). */
@@ -628,6 +631,8 @@ export class PageSidebar {
     }
     this.root.classList.toggle("selecting", this.selected.size > 0);
     this.updateHeader();
+    const pages = this.sortedSelection();
+    for (const cb of this.selectionHandlers) cb(pages);
   }
 
   private canAct(): boolean {
