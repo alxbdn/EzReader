@@ -2,195 +2,122 @@
 
 # EzReader
 
-**A fast, lightweight, open-source PDF reader for Windows.**
-Read, annotate, sign, fill forms, and compress — all in a single 5.5 MB portable executable. No installer. No subscription. No telemetry.
+**A fast, lightweight PDF reader and editor for Windows.**
+Read, annotate, sign, edit, reorganize, compress and protect your PDFs. Everything runs on your computer: no account, no subscription, no telemetry.
 
 [![Latest Release](https://img.shields.io/github/v/release/alxbdn/EzReader?style=flat-square&label=Download)](https://github.com/alxbdn/EzReader/releases/latest)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue?style=flat-square)](LICENSE)
-[![Built with Rust](https://img.shields.io/badge/built%20with-Rust-orange?style=flat-square)](https://www.rust-lang.org/)
 
 </div>
-
-> EzReader is a fork of [PDF Rider](https://github.com/pleymor/pdf-rider) by pleymor.
-
----
-
-## Why EzReader?
-
-Most PDF tools are either bloated desktop applications that take minutes to install and gigabytes of disk space, or cloud-based services that upload your documents to a third-party server. PDF Rider is neither.
-
-| | EzReader | Adobe Acrobat | Online tools |
-|---|---|---|---|
-| **Binary size** | 5.5 MB | ~4 GB | — |
-| **Installer required** | No | Yes | No |
-| **Works offline** | Yes | Yes | No |
-| **Your files stay local** | Always | Yes | No |
-| **Price** | Free & open source | ~€180/year | Freemium |
-| **Startup** | Instant | Slow | Browser-dependent |
-
----
-
-## Features
-
-### Read
-- **Crisp rendering** powered by PDF.js — text, vectors, and images at any zoom level
-- **Page navigation** with keyboard shortcuts, page number input, and prev/next buttons
-- **Zoom controls** — fit to width, fit to height, snap levels, or type any percentage
-- **Rotation** — rotate pages 90° clockwise
-- **Drag & drop** to open files
-
-### Annotate
-- **Text annotations** with full typography controls: bold, italic, underline, size, color, alignment
-- **Shape annotations** — rectangles and circles with stroke color
-- **Freehand signature** — draw directly or insert a signature image
-- **Layer management** — bring to front / send to back
-- Annotations are saved as PDF metadata and **fully re-editable** on reopen
-
-![Annotation mode with rich toolbar](docs/screenshots/annotations.png)
-
-### Fill forms
-- **Interactive form support** — text fields, checkboxes, radio buttons
-- **Keyboard navigation** between fields (Tab / arrow keys)
-- Filled values are saved back into the PDF
-
-### Compress
-- **Three quality presets**: Screen (smallest), Ebook (balanced), Print (high quality)
-- JPEG re-encoding, FlateDecode stream compression, metadata stripping, dead object pruning
-- Typical result: **35% size reduction** with no visible quality loss
-
-![Compression result toast: 1.7 MB → 1.1 MB](docs/screenshots/compression.png)
-
-### Internationalized
-- **20 languages** — switch instantly in Settings, no restart required
-- UI fully translated: English, Français, 中文, हिन्दी, Español, العربية, বাংলা, Русский, Português, اردو, Bahasa Indonesia, Deutsch, 日本語, Kiswahili, मराठी, తెలుగు, Türkçe, தமிழ், Tiếng Việt, 한국어
-
-![Language picker with 20 languages](docs/screenshots/i18n.png)
-
-### Windows integration
-- **Set as default PDF handler** directly from the app — no admin rights required
-- **Print** silently from the command line (`ezreader-portable.exe --print file.pdf`)
-- Registers both open and print verbs in HKCU
 
 ---
 
 ## Download
 
-**[→ Download the latest release](https://github.com/alxbdn/EzReader/releases/latest)**
+**[Download the latest release](https://github.com/alxbdn/EzReader/releases/latest)** and pick the file that suits you:
 
-Single portable `.exe`, 5.5 MB. Drop it anywhere and run it — no installer, no dependencies.
+| File | What it is |
+|------|------------|
+| `ezreader-<version>-win-x64-setup.exe` | Installer |
+| `ezreader-portable-<version>-win-x64.exe` | Portable app: a single file you can run from anywhere, nothing to install |
+
+EzReader runs on 64-bit Windows.
 
 ---
 
-## Contributing
+## Features
 
-EzReader is built with **Rust + TypeScript + Tauri v2**. The codebase is intentionally small and straightforward. Contributions are welcome.
+EzReader has three modes, picked from the toolbar: **Read**, **Annotate** and **Edit**. The pages side panel and the File, Edit, View and Pages menus are available in all of them.
 
-### Prerequisites
+### Read
 
-| Tool | Minimum version | Install |
-|------|----------------|---------|
-| Rust (stable) | 1.77 | [rustup.rs](https://rustup.rs) |
-| Node.js | 18 | [nodejs.org](https://nodejs.org) |
-| Tauri CLI | 2.x | `cargo install tauri-cli` |
-| Visual Studio Build Tools | 2019+ | [visualstudio.microsoft.com](https://visualstudio.microsoft.com/visual-cpp-build-tools/) |
+- Sharp rendering at any zoom, powered by PDF.js
+- Zoom in and out, fit to width or height, actual size (1:1, calibrated to your screen), or type any percentage
+- One, two or three pages per row, with vertical or horizontal scrolling
+- Hand tool to drag the page around, or text selection to copy text
+- Search the whole document (Ctrl+F) and jump between matches
+- Fill in interactive forms: text fields, checkboxes and radio buttons
+- Document info: page size, PDF version, author, producer, dates and keywords
+- Rename the open file by clicking its name in the toolbar
+- Open files by dropping them onto the window
 
-> **Platform**: Windows only (the portable `.exe` uses Windows-specific APIs for printing and file association).
+### Annotate
 
-### Build
+- **Text** with font, size, color and background
+- **Pencil**, freeform or straight lines, with color, thickness and opacity
+- **Shapes**: rectangle, ellipse and arrow, with outline and fill colors
+- **Highlighter** on selected text (select it again to remove the highlight)
+- **Sticky notes**
+- **Signatures**: draw one or import a picture, keep up to three saved, and place them anywhere
+- Each change is validated (Enter) or discarded (Esc), and everything can be undone and redone (Ctrl+Z, Ctrl+Y)
+- Annotations stay editable when you reopen the file
+
+### Edit
+
+- **Edit text**: click existing text in the PDF to replace it
+- **Images**: browse for a picture or drop one on a page to place it
+- **Redact** selected text or an area. Redactions are permanent once saved: the content under the black boxes is removed, not just hidden
+- **Stamps**: check marks and crosses
+- **Crop** pages, with handles and automatic content margins
+- **Straighten** scanned pages by placing each corner with a magnifying loupe, and flip pages vertically or horizontally
+
+### Manage pages
+
+The side panel shows a thumbnail of every page.
+
+- Select pages, then rotate, delete or export them
+- Drag thumbnails to reorder pages (Ctrl+← and Ctrl+→ with the keyboard)
+- Insert a blank page, insert another PDF, or add a PDF at the end to merge files
+- Drop a picture in the panel to add it as a new page
+- Drag pages out of the window to open them in a new window
+- Extract the selected pages to a new PDF, or split the document into several files (every page, every N pages, or custom ranges)
+
+Extracted, split and rearranged files contain nothing from the pages you left out: their text, images and annotations are removed from the output, not just hidden.
+
+### Export, compress and protect
+
+- **Export** pages as PNG or JPEG images (96, 150 or 300 dpi), or as a flattened PDF copy, with or without annotations
+- **Images to PDF**: turn a set of pictures into a PDF, one picture per page
+- **Compress** with a Lossless, Balanced or Maximum preset, or give a target size and let EzReader find the best quality under it. The estimated result is shown before you save
+- **Password**: protect a PDF with a password (with a strength meter and tips), open protected PDFs, or remove the protection
+- **Print** with a choice of printer, pages, copies, orientation and scale
+
+### Settings and Windows integration
+
+- Light, dark or system theme
+- Default zoom when a file opens
+- 20 interface languages, switched instantly: English, Français, 中文, हिन्दी, Español, العربية, বাংলা, Русский, Português, اردو, Bahasa Indonesia, Deutsch, 日本語, Kiswahili, मराठी, తెలుగు, Türkçe, தமிழ், Tiếng Việt, 한국어
+- Set EzReader as the default PDF viewer from Settings, no administrator rights needed
+- Print from the command line: `ezreader-portable.exe --print file.pdf`
+
+---
+
+## Build from source
+
+EzReader is built with Rust, TypeScript and [Tauri 2](https://tauri.app). You need Rust (stable), Node.js 18 or later, and the Visual Studio C++ Build Tools.
 
 ```bash
-# Clone
-git clone https://github.com/alxbdn/EzReader.git
-cd EzReader
-
-# Install JS dependencies
 npm install
-
-# Run in development (hot-reload frontend, auto-rebuild Rust on change)
-npm run tauri dev
-
-# Build a release portable executable
-npm run tauri build
-# Output: src-tauri/target/release/ezreader-portable.exe
+npm run tauri dev      # run in development
+npm run tauri build    # build the release app
 ```
 
-### Architecture
-
-```
-EzReader/
-├── src/                        # TypeScript frontend (Vite + PDF.js)
-│   ├── main.ts                 # App entrypoint, event wiring
-│   ├── tauri-bridge.ts         # All invoke() wrappers with types
-│   ├── toolbar.ts              # Toolbar component & events
-│   ├── compress-modal.ts       # Compression modal
-│   ├── i18n.ts                 # 20-language translation table
-│   └── styles/app.css          # All styles
-├── src-tauri/
-│   ├── src/
-│   │   ├── lib.rs              # App state, Tauri setup, command registration
-│   │   ├── commands/           # Tauri command handlers (one file per feature)
-│   │   │   ├── compress.rs     # compress_pdf command
-│   │   │   ├── pdf.rs          # get_page_count, save_annotated_pdf, read_annotations
-│   │   │   ├── dialog.rs       # open/save dialog commands
-│   │   │   └── shell.rs        # print, URL open, file association
-│   │   └── pdf/
-│   │       └── compress.rs     # PDF compression logic (lopdf)
-│   └── Cargo.toml
-├── specs/                      # Feature specifications (one folder per feature)
-└── index.html                  # Single-page app shell
-```
-
-**How a feature works end-to-end:**
-1. User clicks a toolbar button → `toolbar.ts` emits a typed event
-2. `main.ts` handles the event, calls a wrapper in `tauri-bridge.ts`
-3. `tauri-bridge.ts` calls `invoke("command_name", { ...args })`
-4. Tauri routes to the matching `#[tauri::command]` fn in `commands/`
-5. The Rust handler processes the PDF (via `lopdf` or the filesystem) and returns a result
-6. The result is displayed as a toast or used to update the UI
-
-### Code quality checks
-
-Run these before opening a PR — both must pass:
+The frontend lives in `src/` and the Rust backend in `src-tauri/`. Before opening a pull request, run the checks that CI runs:
 
 ```bash
-# Rust: lints and type checks
-cd src-tauri && cargo clippy -- -D warnings
-
-# TypeScript: type checks (no emit)
 npx tsc --noEmit
-
-# Tests (also run by CI on every push and pull request)
 npm test
-cd src-tauri && cargo test
+cd src-tauri && cargo clippy -- -D warnings && cargo test
 ```
 
-### Branching & commit conventions
-
-| What | Convention |
-|------|-----------|
-| Branch name | `NNN-short-description` (e.g. `004-dark-mode`) |
-| Commit message | Imperative, present tense: `Add dark mode toggle` |
-| One commit per PR | Squash before merging |
-| PR title | Same as the squashed commit message |
-
-Feature branches are numbered sequentially. Pick the next available number from the existing `specs/` directories.
-
-### Opening a PR
-
-1. Fork the repo and create a branch from `main`
-2. Make your changes — keep PRs focused on a single feature or fix
-3. Run `cargo clippy` and `tsc --noEmit`, fix any warnings
-4. Open a PR with a clear description of **what** and **why**
-5. Link the relevant spec from `specs/` if one exists
-
-### Good first issues
-
-Check the [open issues](https://github.com/alxbdn/EzReader/issues).
+Bug reports and ideas are welcome in the [issues](https://github.com/alxbdn/EzReader/issues).
 
 ---
 
-## License
+## Credits and license
 
-MIT — see [LICENSE](LICENSE) for details.
+EzReader started as a fork of [PDF Rider](https://github.com/pleymor/pdf-rider) by pleymor, used under the MIT license. Thanks to its author for the foundation this app is built on.
 
-EzReader is a fork of [PDF Rider](https://github.com/pleymor/pdf-rider) by pleymor, used under the MIT license. Thanks to the original author for the foundation.
+PDF rendering uses [PDF.js](https://mozilla.github.io/pdf.js/) by Mozilla.
+
+EzReader is released under the MIT license. See [LICENSE](LICENSE) for details.
