@@ -3,9 +3,14 @@ use tauri::State;
 
 use crate::AppState;
 
+/// What this window opens: the command line for the main window, the
+/// pages dragged out for a window made by `open_pages_in_new_window`.
 #[tauri::command]
-pub fn get_startup_args(state: State<AppState>) -> crate::StartupArgs {
-    state.startup_args.lock().unwrap().clone()
+pub fn get_startup_args(window: tauri::WebviewWindow, state: State<AppState>) -> crate::StartupArgs {
+    if window.label() == "main" {
+        return state.startup_args.lock().unwrap().clone();
+    }
+    state.window_args.lock().unwrap().get(window.label()).cloned().unwrap_or_default()
 }
 
 #[tauri::command]

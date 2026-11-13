@@ -28,3 +28,15 @@ export function parsePageRange(text: string, count: number): number[] | null {
   }
   return pages.size > 0 ? [...pages].sort((x, y) => x - y) : null;
 }
+
+/** Writes sorted pages the short way: [2, 3, 4, 7] → "2-4, 7". */
+export function formatPageRange(pages: number[]): string {
+  const parts: string[] = [];
+  for (let i = 0; i < pages.length; i++) {
+    let j = i;
+    while (j + 1 < pages.length && pages[j + 1] === pages[j] + 1) j++;
+    parts.push(j === i ? String(pages[i]) : `${pages[i]}-${pages[j]}`);
+    i = j;
+  }
+  return parts.join(", ");
+}

@@ -40,11 +40,18 @@ interface DragState {
   moving: number[] | null;
   insertAt: number;
   lastY: number;
+  /** The pointer left the window: releasing opens the pages in a new window. */
+  outside: boolean;
   ghost: HTMLElement | null;
   scrollRaf: number;
 }
 
 type PagesHandler = (pages: number[]) => void;
+
+/** True when the pointer is past the edge of the window. */
+function isOutsideWindow(e: PointerEvent): boolean {
+  return e.clientX < 0 || e.clientY < 0 || e.clientX >= window.innerWidth || e.clientY >= window.innerHeight;
+}
 
 /**
  * Page panel beside the viewer: a page counter to jump anywhere, a scrollable
@@ -78,6 +85,7 @@ export class PageSidebar {
   private exportHandlers: PagesHandler[] = [];
   private rotateHandlers: ((pages: number[], quarterTurns: number) => void)[] = [];
   private moveHandlers: ((pages: number[], insertAt: number) => void)[] = [];
+  private dragOutHandlers: ((pages: number[], screenX: number, screenY: number) => void)[] = [];
   private insertBlankHandlers: ((after: number) => void)[] = [];
   private insertPdfHandlers: ((after: number) => void)[] = [];
   private visibilityHandlers: ((visible: boolean) => void)[] = [];
@@ -182,6 +190,8 @@ export class PageSidebar {
   onRotate(cb: (pages: number[], quarterTurns: number) => void): void { this.rotateHandlers.push(cb); }
   /** Pages (1-based, ascending) to move to the gap `insertAt` (0 = before page 1). */
   onMove(cb: (pages: number[], insertAt: number) => void): void { this.moveHandlers.push(cb); }
+  /** Pages dragged out of the window and released at the screen point. */
+  onDragOut(cb: (pages: number[], screenX: number, screenY: number) => void): void { this.dragOutHandlers.push(cb); }
   /** A blank page is wanted after page `after` (0 = at the start). */
   onInsertBlank(cb: (after: number) => void): void { this.insertBlankHandlers.push(cb); }
   /** Another PDF's pages are wanted after page `after` (0 = at the start). */
@@ -658,9 +668,12 @@ export class PageSidebar {
       moving: null,
       insertAt: -1,
       lastY: e.clientY,
+      outside: false,
       ghost: null,
       scrollRaf: 0,
     };
+    // Keeps the events coming when the pointer leaves the window.
+    try { (e.currentTarget as Element | null)?.setPointerCapture(e.pointerId); } catch { /* not supported */ }
     window.addEventListener("pointermove", this.onPointerMove);
     window.addEventListener("pointerup", this.onPointerUp);
     window.addEventListener("pointercancel", this.onPointerUp);
@@ -676,17 +689,29 @@ export class PageSidebar {
       for (const p of d.moving) this.thumbs[p - 1]?.card.classList.add("dragging");
       d.ghost = document.createElement("div");
       d.ghost.className = "page-sidebar-ghost";
-      d.ghost.textContent = d.moving.length === 1
-        ? fmt(this.t("sbMovingOne", "Page {p}"), { p: d.moving[0] })
-        : fmt(this.t("sbMovingMany", "{n} pages"), { n: d.moving.length });
       document.body.appendChild(d.ghost);
       this.root.classList.add("dragging");
       this.startAutoscroll();
     }
     e.preventDefault();
+    const outside = isOutsideWindow(e) && this.dragOutHandlers.length > 0;
+    if (d.ghost && (outside !== d.outside || !d.ghost.textContent)) {
+      d.ghost.classList.toggle("out", outside);
+      d.ghost.textContent = outside
+        ? this.t("sbDragOut", "Release to open in a new window")
+        : d.moving.length === 1
+          ? fmt(this.t("sbMovingOne", "Page {p}"), { p: d.moving[0] })
+          : fmt(this.t("sbMovingMany", "{n} pages"), { n: d.moving.length });
+    }
+    d.outside = outside;
     if (d.ghost) {
-      d.ghost.style.left = `${e.clientX + 12}px`;
-      d.ghost.style.top = `${e.clientY + 12}px`;
+      // Outside the window the ghost waits at the edge the pointer crossed.
+      const w = d.ghost.offsetWidth;
+      const h = d.ghost.offsetHeight;
+      const x = Math.min(Math.max(e.clientX + 12, 4), window.innerWidth - w - 4);
+      const y = Math.min(Math.max(e.clientY + 12, 4), window.innerHeight - h - 4);
+      d.ghost.style.left = `${x}px`;
+      d.ghost.style.top = `${y}px`;
     }
     this.updateDropTarget();
   }
@@ -701,6 +726,10 @@ export class PageSidebar {
     // The click that ends a drag must not also navigate.
     this.suppressClick = true;
     setTimeout(() => { this.suppressClick = false; }, 0);
+    if (isOutsideWindow(e) && this.dragOutHandlers.length > 0) {
+      for (const cb of this.dragOutHandlers) cb(moving, e.screenX, e.screenY);
+      return;
+    }
     if (insertAt < 0 || this.isNoOpMove(moving, insertAt)) return;
     for (const cb of this.moveHandlers) cb(moving, insertAt);
   }
@@ -718,6 +747,11 @@ export class PageSidebar {
   private updateDropTarget(): void {
     const d = this.drag;
     if (!d) return;
+    if (d.outside) {
+      d.insertAt = -1;
+      this.dropIndicator.classList.add("hidden");
+      return;
+    }
     d.insertAt = this.showGapAt(d.lastY);
   }
 

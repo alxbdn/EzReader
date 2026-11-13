@@ -250,6 +250,10 @@ export interface Translations {
   sbRotateHint?: string;
   sbMovingOne?: string;
   sbMovingMany?: string;
+  sbDragOut?: string;
+  nwPageOne?: string;
+  nwPageMany?: string;
+  msgNewWindowFailed?: string;
   sbSave?: string;
   sbAppendPdf?: string;
   sbAppendPdfHint?: string;
@@ -715,6 +719,10 @@ const EN: Translations = {
   sbRotateHint: "Rotate the selected pages",
   sbMovingOne: "Page {p}",
   sbMovingMany: "{n} pages",
+  sbDragOut: "Release to open in a new window",
+  nwPageOne: "{name} (page {pages})",
+  nwPageMany: "{name} (pages {pages})",
+  msgNewWindowFailed: "Couldn't open a new window: {err}",
   sbSave: "Save changes (Ctrl+S)",
   sbAppendPdf: "Add a PDF",
   sbAppendPdfHint: "Add the pages of another PDF at the end (to merge them)",
@@ -1175,6 +1183,10 @@ const FR: Translations = {
   sbRotateHint: "Tourner les pages sélectionnées",
   sbMovingOne: "Page {p}",
   sbMovingMany: "{n} pages",
+  sbDragOut: "Relâchez pour ouvrir dans une nouvelle fenêtre",
+  nwPageOne: "{name} (page {pages})",
+  nwPageMany: "{name} (pages {pages})",
+  msgNewWindowFailed: "Impossible d'ouvrir une nouvelle fenêtre : {err}",
   sbSave: "Enregistrer les modifications (Ctrl+S)",
   sbAppendPdf: "Ajouter un PDF",
   sbAppendPdfHint: "Ajouter les pages d'un autre PDF à la fin (pour les fusionner)",

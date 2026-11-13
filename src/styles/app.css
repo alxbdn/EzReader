@@ -1392,11 +1392,16 @@ input[type="color"].color-picker.is-off::-webkit-color-swatch {
   pointer-events: none;
   padding: 4px 10px;
   border-radius: 999px;
-  background: var(--sidebar-select);
+  background: var(--sidebar-select, #E53935); /* the ghost is on body, outside the panel */
   color: #fff;
   font-size: 12px;
   font-weight: 600;
   box-shadow: var(--shadow-md);
+}
+.page-sidebar-ghost.out {
+  outline: 2px dashed rgba(255, 255, 255, 0.7);
+  outline-offset: -4px;
+  padding: 6px 14px;
 }
 
 @media print {

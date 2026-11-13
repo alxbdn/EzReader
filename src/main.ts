@@ -12,6 +12,7 @@ import { SettingsModal } from "./settings";
 import { PageSidebar } from "./page-sidebar";
 import { DocSearch, type SearchMatch } from "./doc-search";
 import { moveItems } from "./page-order";
+import { formatPageRange } from "./page-range";
 import type { PageAdjust, PageSlot } from "./tauri-bridge";
 import { SplitModal } from "./split-modal";
 import { getTranslations, applyTranslationsToDOM, fmt, type Translations } from "./i18n";
@@ -40,6 +41,7 @@ import {
   getStartupArgs,
   printPages,
   extractPdfPages,
+  openPagesInNewWindow,
   rearrangePages,
   splitPdf,
   pickDirectoryDialog,
@@ -301,6 +303,9 @@ settingsModal.onChange(s => {
   applyTranslationsToDOM(t);
 });
 
+/** The document is a temp copy that was never saved: Save asks where to put it. */
+let unsavedCopy = false;
+
 // ── Startup handling ──────────────────────────────────────────────────────────
 
 (async () => {
@@ -316,6 +321,11 @@ settingsModal.onChange(s => {
         await appWindow.close();
       } else {
         await loadPdf(startup.filePath);
+        if (startup.unsaved && session.isOpen) {
+          // Pages dragged out of another window: a new document, never saved.
+          unsavedCopy = true;
+          setDirty(true);
+        }
       }
     }
   } catch {
@@ -594,6 +604,7 @@ async function showInViewer(path: string): Promise<string | null> {
 
 async function loadPdf(path: string, password?: string | null): Promise<void> {
   pendingRename = null;
+  unsavedCopy = false;
   draft = null;
   toolbar.setPending(false);
   if (password) { await openProtected(path, password); return; }
@@ -624,6 +635,7 @@ async function saveFile(forceDialog: boolean): Promise<void> {
   const current = session.saveTarget;
   if (!current) return;
   let target = current;
+  if (unsavedCopy) forceDialog = true;
   if (forceDialog) {
     const picked = await savePdfDialog(pendingRename ? withFileName(current, pendingRename) : current);
     if (!picked) return;
@@ -639,7 +651,7 @@ async function saveFile(forceDialog: boolean): Promise<void> {
   }
   try {
     await session.saveTo(target);
-    if (forceDialog) pendingRename = null;
+    if (forceDialog) { pendingRename = null; unsavedCopy = false; }
     if (renameTo) {
       const page = viewer.currentPage;
       try {
@@ -1063,6 +1075,22 @@ pageSidebar.onExport(async (pages) => {
     showToast(msg("msgPagesExported", { n: pages.length }));
   } catch (err) {
     showToast(msg("msgExportFailed", { err: String(err) }), true);
+  } finally {
+    pageSidebar.setBusy(false);
+  }
+});
+
+// Pages dragged out of the window open as a new document in a new window.
+pageSidebar.onDragOut(async (pages, x, y) => {
+  if (!session.isOpen || !viewer.isLoaded()) return;
+  const t = getTranslations(settingsModal.getSettings().language);
+  const pattern = pages.length === 1 ? t.nwPageOne ?? "{name} (page {pages})" : t.nwPageMany ?? "{name} (pages {pages})";
+  const name = `${fmt(pattern, { name: docStem(), pages: formatPageRange(pages) })}.pdf`;
+  pageSidebar.setBusy(true);
+  try {
+    await openPagesInNewWindow(await session.materialize(), pages, name, x, y);
+  } catch (err) {
+    showToast(msg("msgNewWindowFailed", { err: String(err) }), true);
   } finally {
     pageSidebar.setBusy(false);
   }

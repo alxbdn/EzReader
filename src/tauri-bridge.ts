@@ -71,6 +71,8 @@ export async function readAnnotations(
 export interface StartupArgs {
   filePath: string | null;
   shouldPrint: boolean;
+  /** A temp copy never saved (pages dragged out to this window). */
+  unsaved?: boolean;
 }
 
 /** Returns the CLI arguments parsed at startup (file path and print flag). */
@@ -299,4 +301,11 @@ export async function existingFiles(paths: string[]): Promise<string[]> {
 /** Writes a PNG or JPEG picture (base64, or a data: URL) to `path`. */
 export async function writeImageFile(path: string, data: string): Promise<void> {
   return invoke<void>("write_image_file", { path, data });
+}
+
+/** Opens `pages` of `inputPath` as a new document `name` in a new window near the screen point. */
+export async function openPagesInNewWindow(
+  inputPath: string, pages: number[], name: string, x: number, y: number,
+): Promise<void> {
+  return invoke<void>("open_pages_in_new_window", { inputPath, pages, name, x, y });
 }
