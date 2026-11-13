@@ -1308,11 +1308,27 @@ toolbar.on(async (e) => {
 let fullscreen = false;
 
 /** Full screen on / off: the title bar hides, the toolbar stays. */
+/** The window was maximized when full screen began: it is maximized again after. */
+let maximizedBeforeFullscreen = false;
+
 async function toggleFullscreen(on = !fullscreen): Promise<void> {
   try {
+    // Windows keeps a maximized frameless window at its maximized size
+    // (taskbar still showing) when asked to go full screen: restore it
+    // first, and maximize it again on the way out.
+    if (on) {
+      maximizedBeforeFullscreen = await appWindow.isMaximized();
+      if (maximizedBeforeFullscreen) await appWindow.unmaximize();
+    }
     await appWindow.setFullscreen(on);
-  } catch {
+    if (!on && maximizedBeforeFullscreen) {
+      maximizedBeforeFullscreen = false;
+      await appWindow.maximize();
+    }
+    on = await appWindow.isFullscreen();
+  } catch (err) {
     // Browser preview: no window to resize.
+    console.warn("full screen:", err);
   }
   fullscreen = on;
   document.body.classList.toggle("fullscreen", on);
