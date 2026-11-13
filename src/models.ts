@@ -2,6 +2,10 @@
 // Multiplying the pdf.js scale by this factor makes "100%" match actual size.
 export const CSS_UNITS = 96 / 72;
 
+/** Zoom limits, as a share of actual size. */
+export const MIN_SCALE = 0.1;
+export const MAX_SCALE = 8.0;
+
 // ── Colour ────────────────────────────────────────────────────────────────────
 
 export interface RgbColor {
