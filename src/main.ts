@@ -18,6 +18,7 @@ import { PrintModal } from "./print-modal";
 import { SignatureModal } from "./signature-modal";
 import { SignatureStore } from "./signature-store";
 import { SettingsModal, applyPageBrightness } from "./settings";
+import { confirmDialog } from "./confirm-dialog";
 import { PageSidebar } from "./page-sidebar";
 import { DocSearch, type SearchMatch } from "./doc-search";
 import { planDelete, planInsert, planMove, planRotate, type PagePlan } from "./page-layout";
@@ -454,7 +455,7 @@ async function registerCloseGuard(): Promise<void> {
       event.preventDefault();
       closeGuardBusy = true;
       try {
-        const ok = await ask(msg("msgCloseWithoutSaving"), { title: msg("msgUnsavedTitle"), kind: "warning" });
+        const ok = await askLoseChanges("msgCloseWithoutSaving");
         if (ok) {
           setDirty(false);
           await appWindow.destroy();
@@ -488,7 +489,12 @@ function syncAllPageOverlays(): void {
 
 async function confirmUnsaved(): Promise<boolean> {
   if (!session.isDirty) return true;
-  return ask(msg("msgDiscardChanges"), { title: msg("msgUnsavedTitle"), kind: "warning" });
+  return askLoseChanges("msgDiscardChanges");
+}
+
+/** "Lose your changes?": No is the default answer (Enter and Escape keep them). */
+function askLoseChanges(key: "msgCloseWithoutSaving" | "msgDiscardChanges"): Promise<boolean> {
+  return confirmDialog({ title: msg("msgUnsavedTitle"), text: msg(key), yes: msg("msgYes"), no: msg("msgNo") });
 }
 
 // ── Load / Save ───────────────────────────────────────────────────────────────

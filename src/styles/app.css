@@ -2729,3 +2729,8 @@ body.fullscreen .window-controls { display: none; }
 .brightness-pop.open { display: flex; animation: pop-in 0.12s ease-out; }
 .brightness-pop .settings-range { width: 140px; }
 .brightness-val { font-size: 12px; color: var(--muted-foreground); min-width: 38px; text-align: right; cursor: default; }
+
+/* Yes / no question (confirm-dialog.ts). */
+.confirm-dialog { z-index: 1000; }
+.confirm-box { max-width: 420px; }
+.confirm-text { margin: 4px 0 8px; font-size: 13px; color: var(--foreground); }
