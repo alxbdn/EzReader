@@ -25,6 +25,7 @@ import {
   ICON_UNLOCK,
 } from "./icons";
 import { SearchPill } from "./search-pill";
+import { blockedWhileProtected } from "./read-only";
 
 /** What the main toolbar is set up for: reading, annotating or editing. */
 export type AppMode = "read" | "annotate" | "edit";
@@ -182,8 +183,36 @@ export class Toolbar {
   }
 
   private emit(e: ToolbarEvent): void {
+    if (this.refusedReadOnly(e)) return;
     if (GUARDED.has(e.type) && !this.allowed()) return;
     this.handlers.forEach((h) => h(e));
+  }
+
+  /** True while the open document is protected: only reading is allowed. */
+  private readOnly = false;
+  private readOnlyRefused: (() => void) | null = null;
+
+  /** Called when an action is refused because the document is protected. */
+  onReadOnlyRefused(cb: () => void): void { this.readOnlyRefused = cb; }
+
+  get isReadOnly(): boolean { return this.readOnly; }
+
+  /** Makes the toolbar read-only (back to Read mode) or editable again. */
+  setReadOnly(on: boolean): void {
+    this.readOnly = on;
+    document.body.classList.toggle("read-only", on);
+    if (on && this.mode !== "read") {
+      this.mode = "read";
+      this.tools.setMode("read");
+      this.syncModeBtns();
+      this.handlers.forEach((h) => h({ type: "mode-change", mode: "read" }));
+    }
+  }
+
+  private refusedReadOnly(e: ToolbarEvent): boolean {
+    if (!this.readOnly || !blockedWhileProtected(e)) return false;
+    this.readOnlyRefused?.();
+    return true;
   }
 
   /** Set while another view (Crop / Straighten) holds its own ✓ / ✕. */
@@ -240,7 +269,7 @@ export class Toolbar {
     document.title = name ? `${dirty ? "• " : ""}${name} – EzReader` : "EzReader";
   }
 
-  /** Closed padlock (green) while the document is saved with a password. */
+  /** Closed padlock (green) while the document is, or will be saved, with a password. */
   setProtected(on: boolean): void {
     this.locked = on;
     if (!this.lockBtn) return;
@@ -731,7 +760,7 @@ export class Toolbar {
 
   /** Switches between reading, annotating and editing; any active tool is dropped. */
   setMode(mode: AppMode): void {
-    if (mode === this.mode || !this.allowed()) return;
+    if (mode === this.mode || this.refusedReadOnly({ type: "mode-change", mode }) || !this.allowed()) return;
     this.mode = mode;
     this.tools.setMode(mode);
     this.syncModeBtns();

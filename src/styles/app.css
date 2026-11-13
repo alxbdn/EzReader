@@ -2629,3 +2629,8 @@ body.custom-titlebar #menubar-row {
 /* Padlock in the main bar: green while the document has a password */
 .tb-lock.on { color: #16a34a; }
 :root[data-theme="dark"] .tb-lock.on { color: #4ade80; }
+
+/* A password-protected document is read-only: Annotate / Edit and its form
+   fields look unavailable until the password is removed (the padlock). */
+body.read-only .mode-btn:not([data-mode="read"]) { opacity: 0.45; }
+body.read-only .page-form-layer { pointer-events: none; }

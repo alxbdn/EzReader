@@ -177,6 +177,8 @@ viewer.onResizeCb = async () => {
 };
 
 function onFormChange(name: string, val: string): void {
+  // Form fields of a protected file are disabled (body.read-only); this is the backstop.
+  if (refuseIfProtected()) return;
   formValues.set(name, val);
   setDirty(true);
 }
@@ -465,9 +467,31 @@ async function confirmUnsaved(): Promise<boolean> {
 // ── Load / Save ───────────────────────────────────────────────────────────────
 
 /**
- * Opens a password-protected file: it is shown and edited from an
- * unencrypted temp copy, and saved with the same password (until removed).
- * `password` is tried first when known (after saving a protected file).
+ * Shows the protection state: the padlock is closed while the file has (or
+ * will be saved with) a password, and a protected file is read-only.
+ */
+function syncProtection(): void {
+  toolbar.setProtected(session.isProtected || session.hasPendingPassword);
+  toolbar.setReadOnly(session.isProtected);
+}
+
+/**
+ * Refuses an action on a protected document, saying how to unlock it.
+ * Returns true when the action must stop.
+ */
+function refuseIfProtected(): boolean {
+  if (!session.isProtected) return false;
+  showToast(msg("msgProtectedReadOnly"), true);
+  return true;
+}
+
+toolbar.onReadOnlyRefused(() => { refuseIfProtected(); });
+
+/**
+ * Opens a password-protected file read-only: it is shown from an
+ * unencrypted temp copy, and nothing can change or copy it until its
+ * password is removed. `password` is tried first when known (after saving
+ * a protected file).
  */
 async function openProtected(fp: string, password?: string | null): Promise<void> {
   const name = fileNameOf(fp);
@@ -495,7 +519,7 @@ async function openProtected(fp: string, password?: string | null): Promise<void
   try {
     const workingCopy = await showInViewer(plain);
     session.opened(fp, workingCopy ?? plain, used);
-    toolbar.setProtected(true);
+    syncProtection();
     setDirty(false);
     await applyDefaultZoom();
     if (infoPanel.isOpen) await showInfo();
@@ -611,7 +635,7 @@ async function loadPdf(path: string, password?: string | null): Promise<void> {
   try {
     const workingCopy = await showInViewer(path);
     session.opened(path, workingCopy);
-    toolbar.setProtected(false);
+    syncProtection();
     setDirty(false);
     await applyDefaultZoom();
     if (infoPanel.isOpen) await showInfo();
@@ -633,7 +657,7 @@ async function openFile(): Promise<void> {
 
 async function saveFile(forceDialog: boolean): Promise<void> {
   const current = session.saveTarget;
-  if (!current) return;
+  if (!current || refuseIfProtected()) return;
   let target = current;
   if (unsavedCopy) forceDialog = true;
   if (forceDialog) {
@@ -666,7 +690,7 @@ async function saveFile(forceDialog: boolean): Promise<void> {
         return;
       }
       // Show the file under its new name (pdf.js reads it from its path).
-      const password = session.password;
+      const password = session.filePassword;
       session.saved(renameTo);
       await loadPdf(renameTo, password);
       viewer.goToPage(page, "instant");
@@ -678,10 +702,12 @@ async function saveFile(forceDialog: boolean): Promise<void> {
       // Show the saved file: the redacted pages are now images and the
       // redaction boxes are gone from the editable annotations.
       const page = viewer.currentPage;
-      await loadPdf(target, session.password);
+      await loadPdf(target, session.filePassword);
       viewer.goToPage(page);
     }
-    showToast(msg("msgSaved"));
+    // Saved with a new password: the file is now protected, so read-only.
+    syncProtection();
+    showToast(msg(session.isProtected ? "msgSavedProtected" : "msgSaved"));
   } catch (err: unknown) {
     showToast(msg("msgSaveFailed", { err: String(err) }), true);
   }
@@ -718,11 +744,7 @@ async function runExport(req: ExportRequest): Promise<void> {
       const out = await savePdfDialog(pendingRename ? withFileName(current, pendingRename) : current);
       if (!out) return;
       const input = await session.materialize({ annotations: req.annotations });
-      // A protected document stays protected in its copies.
-      const password = session.password;
-      const copy = password ? await newTempPath("export.pdf") : out;
-      await extractPdfPages(input, copy, req.pages);
-      if (password) await encryptPdf(copy, out, password);
+      await extractPdfPages(input, out, req.pages);
       showToast(msg("msgPdfSaved"));
       return;
     }
@@ -749,22 +771,30 @@ async function runExport(req: ExportRequest): Promise<void> {
 
 // ── Password ─────────────────────────────────────────────────────────────────
 
-/** The padlock: protect the document, or remove its password (applied on save). */
+/**
+ * The padlock. On a protected file: remove its password (asks for it), which
+ * makes the document editable; the next save writes it unprotected. Otherwise:
+ * choose a password that the next save applies, or cancel one not saved yet.
+ */
 async function editPassword(): Promise<void> {
   if (!session.isOpen) return;
-  const current = session.password;
-  if (current) {
-    if (!await passwordModal.askCurrent((pw) => pw === current)) return;
-    session.setPassword(null);
-    toolbar.setProtected(false);
+  if (session.isProtected) {
+    if (!await passwordModal.askCurrent((pw) => session.unlock(pw))) return;
+    syncProtection();
     setDirty(true);
     showToast(msg("msgUnprotected"));
     return;
   }
+  if (session.hasPendingPassword) {
+    session.protect(null);
+    syncProtection();
+    showToast(msg("msgProtectCancelled"));
+    return;
+  }
   const pw = await passwordModal.askNew();
   if (!pw) return;
-  session.setPassword(pw);
-  toolbar.setProtected(true);
+  session.protect(pw);
+  syncProtection();
   setDirty(true);
   showToast(msg("msgProtected"));
 }
@@ -825,7 +855,7 @@ async function renderForPrint(pages: number[]): Promise<string[]> {
 let compressInput: Promise<string> | null = null;
 
 async function openCompress(): Promise<void> {
-  if (!session.isOpen || compressModal.isOpen) return;
+  if (!session.isOpen || compressModal.isOpen || refuseIfProtected()) return;
   compressModal.open(0);
   compressInput = session.materialize();
   try {
@@ -842,10 +872,7 @@ compressModal.onConfirm(async (level: CompressLevel, targetBytes?: number) => {
   if (!out) return;
   try {
     const input = await (compressInput ?? session.materialize());
-    const password = session.password;
-    const tmp = password ? await newTempPath("compressed.pdf") : out;
-    const result = await compressPdf(input, tmp, level, targetBytes);
-    if (password) await encryptPdf(tmp, out, password);
+    const result = await compressPdf(input, out, level, targetBytes);
     const fromMB = (result.originalBytes / 1_048_576).toFixed(1);
     const toMB = (result.compressedBytes / 1_048_576).toFixed(1);
     const pct = result.originalBytes > 0
@@ -892,7 +919,7 @@ async function applyPageLayout(slots: PageSlot[], keepPage = 1, select: number[]
 /** Runs a page edit from the panel, with the panel locked meanwhile. */
 async function editPages(slots: PageSlot[], keepPage: number, select: number[] = []): Promise<boolean> {
   if (!session.isOpen || !viewer.isLoaded()) return false;
-  if (!toolbar.allowed()) return false;
+  if (refuseIfProtected() || !toolbar.allowed()) return false;
   pageSidebar.setBusy(true);
   try {
     return await applyPageLayout(slots, keepPage, select);
@@ -1065,7 +1092,7 @@ async function insertPdfAt(after: number, path: string): Promise<void> {
 
 pageSidebar.onExport(async (pages) => {
   const source = session.sourcePath;
-  if (!source || !viewer.isLoaded()) return;
+  if (!source || !viewer.isLoaded() || refuseIfProtected()) return;
   const name = (await basename(source)).replace(/\.pdf$/i, "");
   const out  = await savePdfDialog(`${name} (pages).pdf`);
   if (!out) return;
@@ -1082,7 +1109,7 @@ pageSidebar.onExport(async (pages) => {
 
 // Pages dragged out of the window open as a new document in a new window.
 pageSidebar.onDragOut(async (pages, x, y) => {
-  if (!session.isOpen || !viewer.isLoaded()) return;
+  if (!session.isOpen || !viewer.isLoaded() || refuseIfProtected()) return;
   const t = getTranslations(settingsModal.getSettings().language);
   const pattern = pages.length === 1 ? t.nwPageOne ?? "{name} (page {pages})" : t.nwPageMany ?? "{name} (pages {pages})";
   const name = `${fmt(pattern, { name: docStem(), pages: formatPageRange(pages) })}.pdf`;
@@ -1120,7 +1147,8 @@ printModal.onConfirm(async (settings) => {
   try {
     if (isMicrosoftPrintToPdf(settings.printerName)) {
       // Write the selected pages as a real (vector) PDF rather than a
-      // rasterised one.
+      // rasterised one. That is a copy, refused on a protected file.
+      if (refuseIfProtected()) return;
       const out = await savePdfDialog(source);
       if (!out) return;
       await extractPdfPages(await session.materialize(), out, settings.pageRange);

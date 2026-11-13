@@ -168,24 +168,52 @@ describe("DocumentSession redaction", () => {
 });
 
 describe("DocumentSession password", () => {
-  it("saves encrypted but keeps working from an unencrypted copy", async () => {
-    const { session, encrypt, saveAnnotated } = makeSession();
+  it("a protected document can be neither saved nor copied", async () => {
+    const { session, saveAnnotated, encrypt } = makeSession();
     session.opened("/docs/a.pdf", "/tmp/plain.pdf", "secret");
-    expect(session.password).toBe("secret");
-    await session.saveTo("/docs/a.pdf");
-    const plain = (saveAnnotated.mock.calls[0] as unknown[])[1];
-    expect(encrypt).toHaveBeenCalledWith(plain, "/docs/a.pdf", "secret");
-    expect(session.basePath).toBe(plain);
-    expect(session.sourcePath).toBe("/docs/a.pdf");
+    expect(session.isProtected).toBe(true);
+    await expect(session.saveTo("/docs/a.pdf")).rejects.toThrow(/protected/);
+    await expect(session.materialize()).rejects.toThrow(/protected/);
+    expect(saveAnnotated).not.toHaveBeenCalled();
+    expect(encrypt).not.toHaveBeenCalled();
   });
 
-  it("a removed password is not applied", async () => {
+  it("unlocks only with the file's password, then saves without one", async () => {
     const { session, encrypt } = makeSession();
     session.opened("/docs/a.pdf", "/tmp/plain.pdf", "secret");
-    session.setPassword(null);
+    expect(session.unlock("wrong")).toBe(false);
+    expect(session.isProtected).toBe(true);
+    expect(session.unlock("secret")).toBe(true);
+    expect(session.isProtected).toBe(false);
+    expect(session.isDirty).toBe(true);
+    await session.saveTo("/docs/a.pdf");
+    expect(encrypt).not.toHaveBeenCalled();
+    expect(session.basePath).toBe("/docs/a.pdf");
+  });
+
+  it("a chosen password is applied by the next save, which locks the document", async () => {
+    const { session, encrypt, saveAnnotated } = makeSession();
+    session.opened("/docs/a.pdf", null);
+    session.protect("secret");
+    expect(session.hasPendingPassword).toBe(true);
+    expect(session.isProtected).toBe(false);
+    await session.saveTo("/docs/b.pdf");
+    const plain = (saveAnnotated.mock.calls[0] as unknown[])[1];
+    expect(encrypt).toHaveBeenCalledWith(plain, "/docs/b.pdf", "secret");
+    expect(session.basePath).toBe(plain);
+    expect(session.isProtected).toBe(true);
+    expect(session.filePassword).toBe("secret");
+    expect(session.hasPendingPassword).toBe(false);
+  });
+
+  it("a cancelled password is not applied", async () => {
+    const { session, encrypt } = makeSession();
+    session.opened("/docs/a.pdf", null);
+    session.protect("secret");
+    session.protect(null);
     await session.saveTo("/docs/b.pdf");
     expect(encrypt).not.toHaveBeenCalled();
-    expect(session.basePath).toBe("/docs/b.pdf");
+    expect(session.isProtected).toBe(false);
   });
 
   it("can leave annotations out but still applies redactions", async () => {
