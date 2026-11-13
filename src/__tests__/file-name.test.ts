@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isValidFileStem, splitFileName } from "../toolbar";
+import { isValidFileStem, splitFileName } from "../file-paths";
 
 describe("splitFileName", () => {
   it("keeps the last extension apart", () => {

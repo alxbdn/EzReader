@@ -225,3 +225,70 @@ describe("DocumentSession password", () => {
     expect((saveAnnotated.mock.calls[0] as unknown[])[2]).toEqual([]);
   });
 });
+
+describe("DocumentSession naming (rename in the title bar, Save / Save As)", () => {
+  it("shows the file's own name until one is typed", () => {
+    const { session } = makeSession();
+    expect(session.displayName).toBeNull();
+    session.opened("/docs/report.pdf", null);
+    expect(session.displayName).toBe("report.pdf");
+    expect(session.needsSave).toBe(false);
+  });
+
+  it("keeps the extension, refuses unusable names, and typing the name back cancels", () => {
+    const { session } = makeSession();
+    session.opened("C:\\docs\\report.pdf", null);
+    expect(session.rename("Q3 report")).toBe(true);
+    expect(session.pendingName).toBe("Q3 report.pdf");
+    expect(session.displayName).toBe("Q3 report.pdf");
+    expect(session.needsSave).toBe(true);
+    expect(session.rename("bad:name")).toBe(false);
+    expect(session.pendingName).toBe("Q3 report.pdf");
+    session.rename("report");
+    expect(session.pendingName).toBeNull();
+  });
+
+  it("a plain Save writes in place, then renames to the pending name", () => {
+    const { session } = makeSession();
+    session.opened("C:\\docs\\report.pdf", null);
+    expect(session.planSave(false)).toEqual({ dialog: null, renameTo: null });
+    session.rename("final");
+    expect(session.planSave(false)).toEqual({ dialog: null, renameTo: "C:\\docs\\final.pdf" });
+  });
+
+  it("Save As suggests the pending name and then forgets it", () => {
+    const { session } = makeSession();
+    session.opened("/docs/report.pdf", null);
+    session.rename("final");
+    expect(session.planSave(true)).toEqual({ dialog: "/docs/final.pdf", renameTo: null });
+    session.savedAs();
+    expect(session.pendingName).toBeNull();
+  });
+
+  it("a copy never saved always asks where to save", () => {
+    const { session } = makeSession();
+    session.opened("/tmp/dragged.pdf", null);
+    session.markUnsavedCopy();
+    expect(session.planSave(false)).toEqual({ dialog: "/tmp/dragged.pdf", renameTo: null });
+    session.savedAs();
+    expect(session.planSave(false).dialog).toBeNull();
+  });
+
+  it("opening a document drops the pending name and the unsaved-copy flag", () => {
+    const { session } = makeSession();
+    session.opened("/docs/a.pdf", null);
+    session.rename("b");
+    session.markUnsavedCopy();
+    session.opened("/docs/c.pdf", null);
+    expect(session.pendingName).toBeNull();
+    expect(session.planSave(false).dialog).toBeNull();
+  });
+
+  it("a failed rename keeps the file's name", () => {
+    const { session } = makeSession();
+    session.opened("/docs/a.pdf", null);
+    session.rename("b");
+    session.renameFailed();
+    expect(session.displayName).toBe("a.pdf");
+  });
+});
