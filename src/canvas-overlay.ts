@@ -32,10 +32,20 @@ import type { SelectionOwner, ToolSelection } from "./tool-selection";
 export type ShapeAnnotation = RectAnnotation | CircleAnnotation | InkAnnotation;
 
 /** Default sticky-note size, in PDF points. */
+/** Every new sticky note has this standard size (points); its text scrolls inside. */
 const NOTE_W = 150;
-const NOTE_H = 100;
+const NOTE_H = 150;
 const NOTE_FONT = 10;
 const NOTE_PAD = 6;
+/** How far each note's text is scrolled (points); kept while the app runs. */
+const noteScroll = new WeakMap<NoteAnnotation, number>();
+/** Height of each note's text as last drawn (points). */
+const noteTextHeight = new WeakMap<NoteAnnotation, number>();
+
+/** How far the text of `ann` can scroll (points). */
+function noteMaxScroll(ann: NoteAnnotation): number {
+  return Math.max(0, (noteTextHeight.get(ann) ?? 0) - (ann.height - 2 * NOTE_PAD));
+}
 
 /** Size of a new check mark or cross, in PDF points. */
 const STAMP_SIZE = 22;
@@ -199,6 +209,7 @@ export class CanvasOverlay implements SelectionOwner {
     CanvasOverlay.byContainer.set(container, this);
     container.addEventListener("mousemove", this.onContainerMouseMove);
     container.addEventListener("mousedown", this.onContainerMouseDown);
+    container.addEventListener("wheel", this.onWheel, { passive: false });
 
     this.applyPointerEvents(this.activeTool);
   }
@@ -424,6 +435,7 @@ export class CanvasOverlay implements SelectionOwner {
 
   private handlesFor(ann: Annotation): ResizeHandle[] {
     if (ann.kind === "text") return ["w", "e"];
+    if (ann.kind === "note") return []; // standard size; its text scrolls
     if (ann.kind === "redact" && ann.shape === "poly") return []; // its corners are the handles
     if (KEEPS_RATIO.has(ann.kind)) return ["nw", "ne", "se", "sw"];
     return ["nw", "n", "ne", "e", "se", "s", "sw", "w"];
@@ -900,10 +912,26 @@ export class CanvasOverlay implements SelectionOwner {
       ctx.translate(x, y);
       const rot = (this.viewportRotation * Math.PI) / 180;
       if (rot) ctx.rotate(rot);
-      ctx.fillStyle = "#262626";
       ctx.font = `${NOTE_FONT * scale}px ${fontCss("helvetica")}`;
       const lines = this.wrapLines(ctx, ann.content, (ann.width - 2 * NOTE_PAD) * scale);
-      lines.forEach((line, i) => ctx.fillText(line, 0, i * NOTE_FONT * 1.2 * scale));
+      // Text taller than the note scrolls (vertically) inside it; a thin
+      // bar on the right shows where you are.
+      const lineH = NOTE_FONT * 1.2;
+      const textH = lines.length * lineH;
+      noteTextHeight.set(ann, textH);
+      const innerH = ann.height - 2 * NOTE_PAD;
+      const scroll = Math.min(noteScroll.get(ann) ?? 0, noteMaxScroll(ann));
+      if (textH > innerH) {
+        const thumbH = Math.max(8, innerH * (innerH / textH));
+        const thumbY = -NOTE_FONT + (innerH - thumbH) * (scroll / (textH - innerH));
+        ctx.fillStyle = "rgba(0, 0, 0, 0.28)";
+        ctx.fillRect((ann.width - 1.5 * NOTE_PAD - 1) * scale, thumbY * scale, 2 * scale, thumbH * scale);
+      }
+      ctx.beginPath();
+      ctx.rect(-1, -NOTE_FONT * scale, (ann.width - 2 * NOTE_PAD) * scale + 2, innerH * scale);
+      ctx.clip();
+      ctx.fillStyle = "#262626";
+      lines.forEach((line, i) => ctx.fillText(line, 0, (i * lineH - scroll) * scale));
     }
     ctx.restore();
   }
@@ -939,9 +967,10 @@ export class CanvasOverlay implements SelectionOwner {
     if (this.activeTool === "rect") {
       ctx.strokeRect(x0, y0, w, h);
     } else if (this.activeTool === "note") {
+      // The note keeps its standard size: show where it will land.
       ctx.globalAlpha = 0.7;
       ctx.fillStyle = rgbToCss(this.style.noteColor);
-      ctx.fillRect(x0, y0, w, h);
+      ctx.fillRect(this.startX, this.startY, NOTE_W * this.scale, NOTE_H * this.scale);
       ctx.globalAlpha = 1;
     } else if (this.activeTool === "redact") {
       ctx.beginPath();
@@ -1160,13 +1189,12 @@ export class CanvasOverlay implements SelectionOwner {
 
     if (this.activeTool === "note") {
       this.redrawCommitted();
-      // A click sticks a note of the default size; a drag sets its size.
-      const dragged = Math.abs(e.offsetX - this.startX) >= 12 && Math.abs(e.offsetY - this.startY) >= 12;
+      // A click sticks a note of the standard size, its top left corner
+      // where you clicked; its text scrolls when it gets longer.
       const [ax, ay] = this.toPdf(this.startX, this.startY);
-      const [bx, by] = dragged ? this.toPdf(e.offsetX, e.offsetY) : [ax + NOTE_W, ay - NOTE_H];
       const ann: NoteAnnotation = {
         kind: "note", page: this.currentPage,
-        x: Math.min(ax, bx), y: Math.min(ay, by), width: Math.abs(bx - ax), height: Math.abs(by - ay),
+        x: ax, y: ay - NOTE_H, width: NOTE_W, height: NOTE_H,
         content: "", color: { ...this.style.noteColor },
       };
       this.addInside(ann);
@@ -1727,11 +1755,13 @@ export class CanvasOverlay implements SelectionOwner {
       box-sizing: border-box; padding: ${NOTE_PAD * scale}px; margin: 0; resize: none;
       border: ${0.75 * scale}px solid ${rgbToCss(darker)}; border-radius: 0; outline: none;
       background: ${rgbToCss(ann.color)}; box-shadow: 0 2px 6px rgba(0,0,0,0.18); color: #262626;
-      font: ${NOTE_FONT * scale}px/1.2 ${fontCss("helvetica")}; z-index: 20; overflow: hidden;
+      font: ${NOTE_FONT * scale}px/1.2 ${fontCss("helvetica")}; z-index: 20;
+      overflow-x: hidden; overflow-y: auto; overflow-wrap: break-word; scrollbar-width: thin;
     `;
     const done = (keep: boolean): void => {
       if (!area.isConnected) return;
       document.removeEventListener("mousedown", outside, true);
+      noteScroll.set(ann, area.scrollTop / scale);
       area.remove();
       this.editingAnn = null;
       if (keep && area.value !== ann.content) {
@@ -1755,9 +1785,27 @@ export class CanvasOverlay implements SelectionOwner {
       else if (ev.key === "Enter" && (ev.ctrlKey || ev.metaKey)) done(true);
     });
     this.container.appendChild(area);
-    area.focus();
+    area.scrollTop = (noteScroll.get(ann) ?? 0) * scale;
+    area.focus({ preventScroll: true });
     setTimeout(() => document.addEventListener("mousedown", outside, true), 0);
   }
+
+  /** The wheel over a note whose text overflows scrolls the text, not the page (until it ends). */
+  private onWheel = (e: WheelEvent): void => {
+    if (e.ctrlKey || e.metaKey || e.deltaY === 0 || !this.shown) return;
+    const [cx, cy] = this.canvasPoint(e);
+    const hit = this.hitTest(cx, cy);
+    if (hit?.kind !== "note" || hit === this.editingAnn) return;
+    const max = noteMaxScroll(hit);
+    if (max <= 0) return;
+    const px = e.deltaMode === 1 ? e.deltaY * NOTE_FONT * 1.2 * this.scale : e.deltaMode === 2 ? e.deltaY * hit.height * this.scale : e.deltaY;
+    const cur = Math.min(noteScroll.get(hit) ?? 0, max);
+    const next = Math.min(max, Math.max(0, cur + px / this.scale));
+    if (next === cur) return; // at the end: the page scrolls on
+    e.preventDefault();
+    noteScroll.set(hit, next);
+    this.redrawCommitted();
+  };
 
   private handleTextStyleEdit(ann: TextAnnotation): void {
     this.selected = ann;
