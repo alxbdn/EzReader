@@ -614,10 +614,21 @@ pub fn rearrange_pages(
     output_path: String,
     slots: Vec<PageSlot>,
 ) -> CmdResult<()> {
+    let mut inc = IncrementalDocument::load(&input_path).map_err(|e| e.to_string())?;
+    rewrite_pages(&mut inc, &slots)?;
+    // Compacted, not incremental: pages left out must not survive in the bytes.
+    fsutil::save_compacted(&mut inc, &output_path)?;
+    Ok(())
+}
+
+/// The page-tree engine behind [`rearrange_pages`], extract, split and
+/// flattened export: replaces the page list of `inc` with `slots` in its
+/// incremental update (flattened tree, inherited attributes copied onto each
+/// kept page, `CCAnnot` renumbered). The caller saves, compacted.
+fn rewrite_pages(inc: &mut IncrementalDocument, slots: &[PageSlot]) -> CmdResult<()> {
     if slots.is_empty() {
         return Err(PdfError::new(ErrorCode::InvalidPages, "A document needs at least one page"));
     }
-    let mut inc = IncrementalDocument::load(&input_path).map_err(|e| e.to_string())?;
     let prev_pages = inc.get_prev_documents().get_pages();
 
     let cat_id = inc
@@ -641,7 +652,7 @@ pub fn rearrange_pages(
     // Pages imported from the same file share one importer, so resources they
     // have in common are copied once.
     let mut importers: HashMap<String, Importer> = HashMap::new();
-    for slot in &slots {
+    for slot in slots {
         if let PageSlot::Imported { path, .. } = slot {
             if !importers.contains_key(path) {
                 importers.insert(path.clone(), Importer::load(path)?);
@@ -651,7 +662,7 @@ pub fn rearrange_pages(
     // Allocate an id for every imported page before copying anything, so
     // links between imported pages (annotation /P, ...) stay connected.
     let mut imported_ids: Vec<Option<ObjectId>> = Vec::with_capacity(slots.len());
-    for slot in &slots {
+    for slot in slots {
         imported_ids.push(match slot {
             PageSlot::Imported { path, page, .. } => {
                 let importer = importers.get_mut(path).expect("loaded above");
@@ -753,10 +764,16 @@ pub fn rearrange_pages(
     inc.opt_clone_object_to_new_document(cat_id)
         .map_err(|e| e.to_string())?;
     writer::save_meta(&mut inc.new_document, &meta)?;
-
-    // Compacted, not incremental: pages left out must not survive in the bytes.
-    fsutil::save_compacted(&mut inc, &output_path)?;
     Ok(())
+}
+
+/// The pages of `keep` (1-based) that exist in a `total`-page document, in
+/// document order, as slots for [`rewrite_pages`].
+fn kept_slots(keep: &HashSet<u32>, total: u32) -> Vec<PageSlot> {
+    (1..=total)
+        .filter(|p| keep.contains(p))
+        .map(|page| PageSlot::Original { page, rotation: 0 })
+        .collect()
 }
 
 /// The inheritable attributes `page_id` lacks itself, taken from its nearest
@@ -1472,6 +1489,52 @@ mod tests {
         }
     }
 
+    /// Extract goes through the same page-tree engine as rearrange: editable
+    /// annotations follow their page, those of pages left out go.
+    #[test]
+    fn extracting_pages_renumbers_their_annotations() {
+        let plain = tmp("extract-plain.pdf");
+        let annotated = tmp("extract-annotated.pdf");
+        let out = tmp("extract-annotated-out.pdf");
+        marked_pdf(&plain);
+        save_annotated_pdf(
+            plain.clone(),
+            annotated.clone(),
+            vec![rect(1, 10.0), rect(2, 20.0), rect(3, 30.0)],
+            0,
+            vec![],
+        )
+        .unwrap();
+        let before = page_order(&annotated);
+
+        // Order given does not matter: pages keep their document order.
+        extract_pdf_pages(annotated.clone(), out.clone(), vec![3, 1, 99]).unwrap();
+        crate::test_util::assert_lengths_consistent(&out);
+        assert_eq!(page_order(&out), vec![before[0].clone(), before[2].clone()]);
+        let mut pages: Vec<u32> = read_annotations(out.clone()).unwrap().iter().map(|a| a.page()).collect();
+        pages.sort();
+        assert_eq!(pages, vec![1, 2], "page 3's annotation is now on page 2, page 2's is gone");
+
+        for p in [plain, annotated, out] {
+            std::fs::remove_file(p).ok();
+        }
+    }
+
+    /// Extracting from a nested page tree (pages under intermediate nodes).
+    #[test]
+    fn extracting_across_intermediates_keeps_the_chosen_pages() {
+        let (mut doc, _) = build_nested_pdf(3, 2);
+        let input = tmp("extract-nested-in.pdf");
+        let out = tmp("extract-nested-out.pdf");
+        doc.save(&input).unwrap();
+        extract_pdf_pages(input.clone(), out.clone(), vec![2, 5]).unwrap();
+        crate::test_util::assert_lengths_consistent(&out);
+        assert_eq!(Document::load(&out).unwrap().get_pages().len(), 2);
+        for p in [input, out] {
+            std::fs::remove_file(p).ok();
+        }
+    }
+
     #[test]
     fn deleting_pages_removes_every_trace_of_them() {
         let input = tmp("marked-delete-in.pdf");
@@ -1566,7 +1629,7 @@ pub fn extract_pdf_pages(
     pages: Vec<u32>,
 ) -> CmdResult<()> {
     let keep: HashSet<u32> = pages.into_iter().collect();
-    extract_pages(&input_path, &output_path, &keep).map_err(PdfError::from)
+    extract_pages(&input_path, &output_path, &keep)
 }
 
 /// Export › PDF: the selected pages as a flattened copy. What annotations
@@ -1581,11 +1644,11 @@ pub fn export_flattened_pages(
     let keep: HashSet<u32> = pages.into_iter().collect();
     let mut inc = IncrementalDocument::load(&input_path).map_err(|e| e.to_string())?;
     let total = inc.get_prev_documents().get_pages().len() as u32;
-    let delete_set: HashSet<u32> = (1..=total).filter(|p| !keep.contains(p)).collect();
-    if delete_set.len() as u32 >= total {
+    let slots = kept_slots(&keep, total);
+    if slots.is_empty() {
         return Err(PdfError::new(ErrorCode::InvalidPages, "No page to export"));
     }
-    apply_page_deletions(&mut inc, &delete_set)?;
+    rewrite_pages(&mut inc, &slots)?;
     let mut doc = fsutil::compacted(&mut inc)?;
     crate::pdf::flatten::flatten(&mut doc)?;
     fsutil::save_document(&mut doc, &output_path).map_err(PdfError::from)
@@ -1596,7 +1659,7 @@ fn extract_pages(
     input_path: &str,
     output_path: &str,
     keep: &HashSet<u32>,
-) -> Result<(), String> {
+) -> CmdResult<()> {
     let mut inc = IncrementalDocument::load(input_path).map_err(|e| e.to_string())?;
     let total = inc.get_prev_documents().get_pages().len() as u32;
 
@@ -1609,112 +1672,8 @@ fn extract_pages(
         return Ok(());
     }
 
-    let delete_set: HashSet<u32> = (1..=total).filter(|p| !keep.contains(p)).collect();
-    apply_page_deletions(&mut inc, &delete_set)?;
+    rewrite_pages(&mut inc, &kept_slots(keep, total))?;
     fsutil::save_compacted(&mut inc, output_path)?;
-    Ok(())
-}
-
-/// Drops `delete_set` pages from `inc` by walking each page up to its parent,
-/// removing it from /Kids, and decrementing /Count along the chain. Also
-/// updates the `CCAnnot` catalog entry so editable annotations follow the page
-/// renumber.
-///
-/// This is the same algorithm `modify_pages` uses for deletions, factored out
-/// so split / extract can reuse it.
-fn apply_page_deletions(
-    inc: &mut IncrementalDocument,
-    delete_set: &HashSet<u32>,
-) -> Result<(), String> {
-    if delete_set.is_empty() {
-        return Ok(());
-    }
-
-    let pages = inc.get_prev_documents().get_pages();
-
-    for &page_num in delete_set {
-        let Some(&page_id) = pages.get(&page_num) else { continue };
-
-        let direct_parent = inc
-            .get_prev_documents()
-            .get_object(page_id)
-            .and_then(Object::as_dict)
-            .and_then(|d| d.get(b"Parent"))
-            .and_then(Object::as_reference)
-            .map_err(|e| format!("page {page_num} has no /Parent: {e}"))?;
-
-        inc.opt_clone_object_to_new_document(direct_parent)
-            .map_err(|e| e.to_string())?;
-        if let Ok(Object::Dictionary(dict)) = inc.new_document.get_object_mut(direct_parent) {
-            if let Ok(Object::Array(kids)) = dict.get_mut(b"Kids") {
-                kids.retain(|k| k.as_reference().ok() != Some(page_id));
-            }
-            let count = dict.get(b"Count").and_then(Object::as_i64).unwrap_or(0);
-            dict.set(b"Count", Object::Integer(count - 1));
-        }
-
-        // Walk up the parent chain decrementing /Count.
-        let mut cursor = direct_parent;
-        let mut depth = 0;
-        loop {
-            depth += 1;
-            if depth > 64 {
-                break;
-            }
-            let next = inc
-                .get_prev_documents()
-                .get_object(cursor)
-                .and_then(Object::as_dict)
-                .and_then(|d| d.get(b"Parent"))
-                .and_then(Object::as_reference);
-            let Ok(next_id) = next else { break };
-            if next_id == cursor {
-                break;
-            }
-            inc.opt_clone_object_to_new_document(next_id)
-                .map_err(|e| e.to_string())?;
-            if let Ok(Object::Dictionary(dict)) = inc.new_document.get_object_mut(next_id) {
-                let count = dict.get(b"Count").and_then(Object::as_i64).unwrap_or(0);
-                dict.set(b"Count", Object::Integer(count - 1));
-            }
-            cursor = next_id;
-        }
-    }
-
-    // Update CCAnnot metadata so editable annotations follow the page renumber.
-    let mut meta = writer::load_meta(inc.get_prev_documents());
-    let sorted_deleted: Vec<u32> = {
-        let mut v: Vec<u32> = delete_set.iter().copied().collect();
-        v.sort();
-        v
-    };
-
-    meta.annotations.retain(|ann| !delete_set.contains(&ann.page()));
-    for ann in &mut meta.annotations {
-        let old_page = ann.page();
-        let shift = sorted_deleted.iter().filter(|&&d| d < old_page).count() as u32;
-        ann.set_page(old_page - shift);
-    }
-
-    let old_ids = std::mem::take(&mut meta.stream_ids);
-    for (page_num, ids) in old_ids {
-        if delete_set.contains(&page_num) {
-            continue;
-        }
-        let shift = sorted_deleted.iter().filter(|&&d| d < page_num).count() as u32;
-        meta.stream_ids.insert(page_num - shift, ids);
-    }
-
-    let cat_id = inc
-        .get_prev_documents()
-        .trailer
-        .get(b"Root")
-        .and_then(Object::as_reference)
-        .map_err(|e| format!("No catalog: {e}"))?;
-    inc.opt_clone_object_to_new_document(cat_id)
-        .map_err(|e| e.to_string())?;
-    writer::save_meta(&mut inc.new_document, &meta)?;
-
     Ok(())
 }
 
