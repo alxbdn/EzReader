@@ -86,6 +86,19 @@ describe("DocumentSession save targets", () => {
 });
 
 describe("DocumentSession after a save", () => {
+  it("a page edit writes the view rotation once: the reloaded view starts at 0", async () => {
+    const { session, state, saveAnnotated } = makeSession();
+    session.opened("/docs/a.pdf", null);
+    state.rotation = 90;
+    const input = await session.materialize();
+    expect(saveAnnotated).toHaveBeenLastCalledWith("/docs/a.pdf", input, [], 90, []);
+    // The edited file holds the turn; the viewer reloads it upright (PdfViewer.reload).
+    session.replacedWorkingCopy("/tmp/pages.pdf");
+    state.rotation = 0;
+    expect(session.hasPendingEdits()).toBe(false);
+    expect(await session.materialize()).toBe("/tmp/pages.pdf");
+  });
+
   it("builds on the saved file and does not apply the rotation twice", async () => {
     const { session, state, saveAnnotated } = makeSession();
     session.opened("/docs/a.pdf", null);

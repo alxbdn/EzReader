@@ -726,12 +726,14 @@ export class PdfViewer {
 
   /**
    * Shows a new version of the same document (after a page edit) without
-   * moving: the view rotation and the scroll position are kept.
+   * moving: the scroll position is kept. The view rotation starts over at 0:
+   * the new version was written with it (`DocumentSession.materialize`), so
+   * keeping it would turn the pages twice.
    */
   async reload(filePath: string): Promise<void> {
     const top = this.scrollEl.scrollTop;
     const left = this.scrollEl.scrollLeft;
-    await this._openDoc(convertFileSrc(filePath) + `?t=${Date.now()}`, undefined, this._rotation);
+    await this._openDoc(convertFileSrc(filePath) + `?t=${Date.now()}`, undefined, 0);
     this.scrollEl.scrollTop = top;
     this.scrollEl.scrollLeft = left;
     this._updateFocusedPage();
