@@ -139,11 +139,12 @@ describe("isMicrosoftPrintToPdf", () => {
 
 describe("uniqueTempName", () => {
   it("never returns the same name twice", () => {
-    const a = uniqueTempName("C:\\Temp\\", "pages-x.pdf");
-    const b = uniqueTempName("C:\\Temp\\", "pages-x.pdf");
+    const a = uniqueTempName("C:\\Temp\\", "p42", "pages-x.pdf");
+    const b = uniqueTempName("C:\\Temp\\", "p42", "pages-x.pdf");
     expect(a).not.toBe(b);
-    expect(a.startsWith("C:\\Temp\\ezreader-")).toBe(true);
-    expect(uniqueTempName("/tmp", "x.pdf").startsWith("/tmp/ezreader-")).toBe(true);
+    expect(a.startsWith("C:\\Temp\\ezreader-p42-")).toBe(true);
+    expect(a.endsWith("-pages-x.pdf")).toBe(true);
+    expect(uniqueTempName("/tmp", "p42", "x.pdf").startsWith("/tmp/ezreader-p42-")).toBe(true);
   });
 });
 

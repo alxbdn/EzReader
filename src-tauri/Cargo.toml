@@ -31,7 +31,7 @@ crc32fast = "1"
 
 [target.'cfg(windows)'.dependencies]
 winreg = "0.52"
-winapi = { version = "0.3", features = ["winspool", "wingdi", "winnt", "shellapi"] }
+winapi = { version = "0.3", features = ["winspool", "wingdi", "winnt", "shellapi", "processthreadsapi", "handleapi", "minwinbase", "minwindef", "errhandlingapi", "winerror"] }
 # Text recognition with the OCR engine built into Windows (Windows.Media.Ocr):
 # same version Tauri already builds, nothing to bundle.
 windows = { version = "0.61", features = [

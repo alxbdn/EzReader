@@ -348,6 +348,11 @@ export async function imagesToPdf(imagePaths: string[], outputPath: string): Pro
   return call<void>("images_to_pdf", { imagePaths, outputPath });
 }
 
+/** What this app's temp file names carry after `ezreader-` (its process). */
+export async function tempTag(): Promise<string> {
+  return call<string>("temp_tag");
+}
+
 /** Which of `paths` already exist. */
 export async function existingFiles(paths: string[]): Promise<string[]> {
   return call<string[]>("existing_files", { paths });
