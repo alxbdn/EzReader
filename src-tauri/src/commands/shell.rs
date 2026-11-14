@@ -611,17 +611,80 @@ pub fn register_print_verb() -> CmdResult<()> {
     }
 }
 
+/// `raw` as a plain web address to hand to the browser, or `None`.
+///
+/// Links come from the documents, so from anyone: only http(s) with a host
+/// gets through, without a user name (`https://bank.com@evil.example`), and
+/// in its parsed, percent-encoded form (no quotes, spaces or control
+/// characters left for Windows to interpret).
+fn web_url(raw: &str) -> Option<String> {
+    let url = url::Url::parse(raw.trim()).ok()?;
+    if !matches!(url.scheme(), "http" | "https") || url.host_str().is_none_or(str::is_empty) {
+        return None;
+    }
+    if !url.username().is_empty() || url.password().is_some() {
+        return None;
+    }
+    let s = url.as_str();
+    if s.chars().any(|c| c.is_control() || c.is_whitespace() || c == '"') {
+        return None;
+    }
+    Some(s.to_string())
+}
+
+/// Opens a web link in the default browser.
 #[tauri::command]
 pub fn open_url(url: String) -> CmdResult<()> {
-    if !url.starts_with("http://") && !url.starts_with("https://") {
-        return Err("Only http/https URLs are supported".into());
+    let Some(url) = web_url(&url) else {
+        return Err("Only http/https web addresses can be opened".into());
+    };
+    #[cfg(target_os = "windows")]
+    {
+        use winapi::um::shellapi::ShellExecuteW;
+        use winapi::um::winuser::SW_SHOWNORMAL;
+        let wide = |s: &str| s.encode_utf16().chain(std::iter::once(0)).collect::<Vec<u16>>();
+        let (verb, target) = (wide("open"), wide(&url));
+        // ShellExecute hands the URL to the http(s) protocol handler (the
+        // browser): no command line to parse, unlike explorer.exe or cmd.
+        // SAFETY: both strings are NUL-terminated and outlive the call.
+        let code = unsafe {
+            ShellExecuteW(std::ptr::null_mut(), verb.as_ptr(), target.as_ptr(), std::ptr::null(), std::ptr::null(), SW_SHOWNORMAL)
+        } as isize;
+        if code <= 32 {
+            return Err(format!("could not open the link (error {code})").into());
+        }
+        Ok(())
     }
-    // Use explorer.exe directly — avoids cmd.exe shell interpretation
-    Command::new("explorer.exe")
-        .arg(&url)
-        .spawn()
-        .map_err(|e| e.to_string())?;
-    Ok(())
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = url;
+        Err("Opening links is only supported on Windows".into())
+    }
+}
+
+#[cfg(test)]
+mod url_tests {
+    use super::web_url;
+
+    #[test]
+    fn plain_web_links_open() {
+        assert_eq!(web_url("https://example.com/a b?q=\"x\"").as_deref(), Some("https://example.com/a%20b?q=%22x%22"));
+        assert_eq!(web_url(" http://example.com ").as_deref(), Some("http://example.com/"));
+    }
+
+    #[test]
+    fn anything_else_is_refused() {
+        for bad in [
+            "file:///C:/Windows/System32/calc.exe",
+            "javascript:alert(1)",
+            "ms-settings:privacy",
+            "https://bank.example@evil.example/",
+            "https://",
+            "C:\\Windows\\System32\\calc.exe",
+        ] {
+            assert_eq!(web_url(bad), None, "{bad}");
+        }
+    }
 }
 
 #[tauri::command]

@@ -185,6 +185,7 @@ pub async fn compress_pdf(
     level: String,
     target_bytes: Option<u64>,
 ) -> CmdResult<CompressResult> {
+    crate::grants::check_all([&input_path, &output_path])?;
     let flag = cancel.0.clone();
     flag.store(false, Ordering::Relaxed);
     tauri::async_runtime::spawn_blocking(move || {
@@ -214,6 +215,7 @@ pub fn cancel_compression(cancel: tauri::State<'_, CompressCancel>) {
 /// See [`estimate_file`].
 #[tauri::command]
 pub async fn estimate_compression(input_path: String) -> CmdResult<CompressEstimate> {
+    crate::grants::check(&input_path)?;
     tauri::async_runtime::spawn_blocking(move || estimate_file(&input_path))
         .await
         .map_err(|e| e.to_string())?

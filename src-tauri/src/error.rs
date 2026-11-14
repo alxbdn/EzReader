@@ -31,6 +31,8 @@ pub enum ErrorCode {
     InvalidPages,
     /// Windows has no OCR language for this (or OCR is not available).
     NoOcrLanguage,
+    /// The path is not a file the user opened or chose (see `grants`).
+    NotAllowed,
     /// Anything else: `detail` says what.
     Other,
 }

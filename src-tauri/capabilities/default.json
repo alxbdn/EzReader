@@ -19,8 +19,6 @@
     "core:window:allow-set-position",
     "core:window:allow-set-size",
     "core:window:allow-set-focus",
-    "dialog:allow-open",
-    "dialog:allow-save",
     "dialog:allow-ask"
   ]
 }

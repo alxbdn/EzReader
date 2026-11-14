@@ -14,6 +14,7 @@ export type ErrorCode =
   | "page-count-changed"
   | "invalid-pages"
   | "no-ocr-language"
+  | "not-allowed"
   | "other";
 
 export class CommandError extends Error {

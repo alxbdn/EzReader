@@ -9,6 +9,16 @@ use tauri_plugin_dialog::{DialogExt, FilePath};
 pub async fn convert_text(doc: TextDoc, format: String, output: String) -> CmdResult<()> {
     let format = Format::parse(&format)
         .ok_or_else(|| PdfError::new(ErrorCode::Other, format!("unknown format: {format}")))?;
+    crate::grants::check(&output)?;
+    // The file's type must match what is written in it: a .bat or .exe never
+    // comes out of this, even with a name chosen elsewhere.
+    let ext = std::path::Path::new(&output)
+        .extension()
+        .and_then(|e| e.to_str())
+        .map(str::to_ascii_lowercase);
+    if ext.as_deref() != Some(format.extension()) {
+        return Err(PdfError::new(ErrorCode::InvalidName, format!("a {} file must end in .{}", format.extension(), format.extension())));
+    }
     tauri::async_runtime::spawn_blocking(move || {
         let bytes = convert(&doc, format);
         crate::fsutil::write_atomic(&output, |tmp| std::fs::write(tmp, &bytes).map_err(|e| e.to_string()))
@@ -38,8 +48,12 @@ pub fn save_as_dialog(app: AppHandle, suggested: String, format: String) -> CmdR
         .add_filter(label, &[format.extension()])
         .set_file_name(&suggested)
         .blocking_save_file();
-    Ok(result.map(|p| match p {
+    let picked = result.map(|p| match p {
         FilePath::Path(pb) => pb.to_string_lossy().into_owned(),
         FilePath::Url(u) => u.to_string(),
-    }))
+    });
+    if let Some(path) = &picked {
+        crate::grants::allow_file(path);
+    }
+    Ok(picked)
 }
