@@ -390,7 +390,6 @@ export interface Translations {
   adjWarpHint?: string;
   adjValidateHint?: string;
   adjEach?: string;
-  adjPreview?: string;
   adjPageCrop?: string;
   adjPageStraighten?: string;
   adjCropCaption?: string;
@@ -902,7 +901,6 @@ const EN: Translations = {
   adjWarpHint: "Click a corner: an offset loupe opens so you can place it to the pixel. Arrow keys nudge it.",
   adjValidateHint: "Validate or discard",
   adjEach: "Each page is set on its own",
-  adjPreview: "Preview",
   adjPageCrop: "p. {n} · Crop",
   adjPageStraighten: "p. {n} · Straighten",
   adjCropCaption: "Drag the handles to crop · {size}",
@@ -1413,7 +1411,6 @@ const FR: Translations = {
   adjWarpHint: "Cliquez un coin : une loupe décalée s'ouvre pour le placer au pixel près. Les flèches l'ajustent.",
   adjValidateHint: "Valider ou annuler",
   adjEach: "Chaque page se règle à part",
-  adjPreview: "Aperçu",
   adjPageCrop: "p. {n} · Recadrer",
   adjPageStraighten: "p. {n} · Redresser",
   adjCropCaption: "Faites glisser les poignées pour recadrer · {size}",

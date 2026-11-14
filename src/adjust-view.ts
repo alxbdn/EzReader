@@ -31,10 +31,8 @@ const MIN_SIZE = 0.04;
 const LOUPE = 132;
 /** The app's selection red (as in the page panel). */
 const SELECT = "#E53935";
-/** Space between the preview and the page being straightened. */
-const PAIR_GAP = 40;
-/** The preview's size, as a share of the page being straightened. */
-const PREVIEW_SCALE = 0.55;
+/** While a corner moves, the result is drawn at this share of the screen's resolution. */
+const LIVE_SCALE = 0.75;
 const ZOOM = 4;
 /** Biggest bitmap rendered for a page (the loupe reads it ×4). */
 const MAX_PIXELS = 12e6;
@@ -104,8 +102,11 @@ export class AdjustView {
   private page: Rendered | null = null;
   private cropEls: { dim: HTMLElement; box: HTMLElement; caption: HTMLElement } | null = null;
   private warpEls: { svg: SVGSVGElement; dim: SVGPathElement; poly: SVGPathElement; link: SVGPathElement; corners: HTMLButtonElement[]; loupe: HTMLCanvasElement; label: HTMLElement } | null = null;
-  /** Straighten: the result as it will be, redrawn while a corner moves. */
-  private preview: { canvas: HTMLCanvasElement; src: Pixels; frame: number; sharp: number } | null = null;
+  /**
+   * Straighten: the result as it will be, drawn over the page while a corner
+   * moves (`on`), from `src`, a copy of the page at about twice its shown size.
+   */
+  private live: { canvas: HTMLCanvasElement; src: Pixels; on: boolean; frame: number; sharp: number; off: number } | null = null;
 
   constructor(
     host: HTMLElement,
@@ -215,7 +216,7 @@ export class AdjustView {
     for (const r of this.renders.values()) void r.then((x) => { x.canvas.width = x.canvas.height = 0; }, () => {});
     this.renders.clear();
     this.frame = this.page = this.cropEls = this.warpEls = null;
-    this.dropPreview();
+    this.dropLive();
     window.removeEventListener("keydown", this.onKey, true);
     window.removeEventListener("resize", this.onResize);
     this.onClose();
@@ -321,6 +322,9 @@ export class AdjustView {
       if (e.key === "ArrowUp") q[1] -= step / fr.height;
       if (e.key === "ArrowDown") q[1] += step / fr.height;
       q[0] = clamp01(q[0]); q[1] = clamp01(q[1]);
+      // A nudge shows the result for a moment too.
+      this.setLive(true);
+      if (this.live) { clearTimeout(this.live.off); this.live.off = window.setTimeout(() => this.setLive(false), 700); }
       this.syncWarp();
       this.syncLabels();
       return;
@@ -361,8 +365,7 @@ export class AdjustView {
   /** Display size of a page in the stage. */
   private fitSize(wPt: number, hPt: number): { w: number; h: number } {
     const crop = this.current?.mode !== "straighten";
-    // Straighten shows a smaller preview of the result to the left of the page.
-    const availW = Math.max(120, crop ? this.stage.clientWidth - 96 : (this.stage.clientWidth - 120 - PAIR_GAP - 40) / (1 + PREVIEW_SCALE));
+    const availW = Math.max(120, this.stage.clientWidth - (crop ? 96 : 120));
     const availH = Math.max(120, this.stage.clientHeight - (crop ? 110 : 120));
     const k = Math.min(availW / wPt, availH / hPt);
     return { w: Math.round(wPt * k), h: Math.round(hPt * k) };
@@ -455,14 +458,10 @@ export class AdjustView {
     frame.style.height = `${h}px`;
     this.frame = frame;
     this.cropEls = this.warpEls = null;
-    this.dropPreview();
-    if (s.mode === "crop") {
-      this.buildCrop(frame, r);
-      this.stage.replaceChildren(frame);
-    } else {
-      this.buildWarp(frame, r);
-      this.stage.replaceChildren(this.buildPreview(frame, r, Math.round(w * PREVIEW_SCALE), Math.round(h * PREVIEW_SCALE)));
-    }
+    this.dropLive();
+    if (s.mode === "crop") this.buildCrop(frame, r);
+    else this.buildWarp(frame, r, w, h);
+    this.stage.replaceChildren(frame);
     this.syncCrop();
     this.syncWarp();
   }
@@ -567,7 +566,7 @@ export class AdjustView {
 
   // ── Straighten ──────────────────────────────────────────────────────────────
 
-  private buildWarp(frame: HTMLElement, r: Rendered): void {
+  private buildWarp(frame: HTMLElement, r: Rendered, w: number, h: number): void {
     const canvas = this.pageCanvas(r);
     const NS = "http://www.w3.org/2000/svg";
     const svg = document.createElementNS(NS, "svg");
@@ -597,8 +596,12 @@ export class AdjustView {
     loupe.width = loupe.height = LOUPE * dpr;
     const label = document.createElement("span");
     label.className = "adj-loupe-label";
-    frame.append(canvas, svg, ...corners, loupe, label);
+    const result = document.createElement("canvas");
+    result.className = "adj-page adj-live";
+    result.hidden = true;
+    frame.append(canvas, result, svg, ...corners, loupe, label);
     this.warpEls = { svg, dim, poly, link, corners, loupe, label };
+    this.live = { canvas: result, src: this.liveSource(r, w, h), on: false, frame: 0, sharp: 0, off: 0 };
   }
 
   private dragCorner(e: PointerEvent, i: number): void {
@@ -613,6 +616,7 @@ export class AdjustView {
     const q = this.current.quad[i];
     const start: Point = [q[0], q[1]];
     const x0 = e.clientX, y0 = e.clientY;
+    this.setLive(true);
     this.syncWarp();
     const move = (ev: PointerEvent) => {
       q[0] = clamp01(start[0] + (ev.clientX - x0) / fr.width);
@@ -623,6 +627,7 @@ export class AdjustView {
       target.removeEventListener("pointermove", move);
       target.removeEventListener("pointerup", up);
       target.removeEventListener("pointercancel", up);
+      this.setLive(false);
       this.syncLabels();
     };
     target.addEventListener("pointermove", move);
@@ -641,7 +646,7 @@ export class AdjustView {
     els.poly.setAttribute("d", d);
     // Dim what falls outside the page's corners.
     els.dim.setAttribute("d", `M0 0H${w}V${h}H0Z ${d}`);
-    this.schedulePreview();
+    this.scheduleLive();
     pts.forEach(([x, y], i) => {
       const b = els.corners[i];
       b.style.left = `${x}px`;
@@ -667,30 +672,8 @@ export class AdjustView {
     this.drawLoupe(els.loupe, pts, c, w);
   }
 
-  /**
-   * Puts a preview of the straightened result, `w` × `h`, in a card to the
-   * left of the page. It is computed the way ✓ does it (the area inside the
-   * corners stretched over the whole page), from a copy of the page at
-   * about twice the preview's size.
-   */
-  private buildPreview(frame: HTMLElement, r: Rendered, w: number, h: number): HTMLElement {
-    const pair = document.createElement("div");
-    pair.className = "adj-pair";
-    const side = document.createElement("div");
-    side.className = "adj-preview-side";
-    const box = document.createElement("div");
-    box.className = "adj-preview";
-    box.style.width = `${w}px`;
-    box.style.height = `${h}px`;
-    const canvas = document.createElement("canvas");
-    canvas.className = "adj-page";
-    box.append(canvas);
-    const caption = document.createElement("span");
-    caption.className = "adj-preview-caption";
-    caption.textContent = this.tr("adjPreview", "Preview");
-    side.append(box, caption);
-    pair.append(side, frame);
-
+  /** A copy of the page at about twice its shown size (`w` × `h`), the result's source. */
+  private liveSource(r: Rendered, w: number, h: number): Pixels {
     const k = Math.min(1, (2 * Math.max(w, h)) / Math.max(r.canvas.width, r.canvas.height));
     const sw = Math.max(1, Math.round(r.canvas.width * k)), sh = Math.max(1, Math.round(r.canvas.height * k));
     const tmp = document.createElement("canvas");
@@ -701,46 +684,61 @@ export class AdjustView {
     tctx.drawImage(r.canvas, 0, 0, sw, sh);
     const src = tctx.getImageData(0, 0, sw, sh);
     tmp.width = tmp.height = 0;
-    this.preview = { canvas, src, frame: 0, sharp: 0 };
-    return pair;
-  }
-
-  private dropPreview(): void {
-    const p = this.preview;
-    if (!p) return;
-    cancelAnimationFrame(p.frame);
-    clearTimeout(p.sharp);
-    p.canvas.width = p.canvas.height = 0;
-    this.preview = null;
+    return src;
   }
 
   /**
-   * Redraws the result on the next frame, at screen resolution; once the
-   * corners stop moving, again at the display's full sharpness.
+   * Shows the straightened result over the page (while a corner moves), or
+   * the page with its outline again. The loupe keeps showing the page itself,
+   * to place the corner to the pixel.
    */
-  private schedulePreview(): void {
-    const p = this.preview;
-    if (!p) return;
-    cancelAnimationFrame(p.frame);
-    clearTimeout(p.sharp);
-    p.frame = requestAnimationFrame(() => {
-      this.drawPreview(1);
+  private setLive(on: boolean): void {
+    const l = this.live;
+    if (!l || l.on === on) return;
+    l.on = on;
+    clearTimeout(l.off);
+    if (on) this.drawLive(LIVE_SCALE);
+    else { cancelAnimationFrame(l.frame); clearTimeout(l.sharp); }
+    l.canvas.hidden = !on;
+    this.frame?.classList.toggle("adj-live-on", on);
+  }
+
+  private dropLive(): void {
+    const l = this.live;
+    if (!l) return;
+    cancelAnimationFrame(l.frame);
+    clearTimeout(l.sharp);
+    clearTimeout(l.off);
+    l.canvas.width = l.canvas.height = 0;
+    this.live = null;
+  }
+
+  /**
+   * Redraws the result on the next frame, a little below screen resolution
+   * so it keeps up with the pointer; once the corner rests, sharp.
+   */
+  private scheduleLive(): void {
+    const l = this.live;
+    if (!l || !l.on) return;
+    cancelAnimationFrame(l.frame);
+    clearTimeout(l.sharp);
+    l.frame = requestAnimationFrame(() => {
+      this.drawLive(LIVE_SCALE);
       const dpr = Math.min(window.devicePixelRatio || 1, 2);
-      if (dpr > 1) p.sharp = window.setTimeout(() => this.drawPreview(dpr), 180);
+      l.sharp = window.setTimeout(() => this.drawLive(dpr), 160);
     });
   }
 
-  private drawPreview(scale: number): void {
-    const p = this.preview;
+  private drawLive(scale: number): void {
+    const l = this.live;
     const s = this.current;
-    if (!p || !s || s.mode !== "straighten" || !p.canvas.isConnected) return;
-    const box = p.canvas.parentElement!;
-    const w = Math.max(1, Math.round(box.clientWidth * scale)), h = Math.max(1, Math.round(box.clientHeight * scale));
-    const { width: sw, height: sh } = p.src;
+    if (!l || !l.on || !s || s.mode !== "straighten" || !this.frame) return;
+    const w = Math.max(1, Math.round(this.frame.clientWidth * scale)), h = Math.max(1, Math.round(this.frame.clientHeight * scale));
+    const { width: sw, height: sh } = l.src;
     const quad = s.quad.map(([x, y]) => [x * sw, y * sh] as Point) as Quad;
-    const out = warpToRect(p.src, quad, w, h);
-    if (p.canvas.width !== w || p.canvas.height !== h) { p.canvas.width = w; p.canvas.height = h; }
-    p.canvas.getContext("2d")!.putImageData(new ImageData(out.data as Uint8ClampedArray<ArrayBuffer>, w, h), 0, 0);
+    const out = warpToRect(l.src, quad, w, h);
+    if (l.canvas.width !== w || l.canvas.height !== h) { l.canvas.width = w; l.canvas.height = h; }
+    l.canvas.getContext("2d")!.putImageData(new ImageData(out.data as Uint8ClampedArray<ArrayBuffer>, w, h), 0, 0);
   }
 
   private drawLoupe(loupe: HTMLCanvasElement, pts: Point[], c: Point, w: number): void {
