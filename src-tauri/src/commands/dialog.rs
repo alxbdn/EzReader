@@ -39,7 +39,11 @@ pub fn open_image_dialog(app: AppHandle) -> CmdResult<Option<String>> {
         .file()
         .add_filter("Images", &IMAGE_EXTENSIONS)
         .blocking_pick_file();
-    Ok(result.map(filepath_to_string))
+    let picked = result.map(filepath_to_string);
+    if let Some(path) = &picked {
+        crate::grants::allow_file(path);
+    }
+    Ok(picked)
 }
 
 /// Opens a native file-picker dialog for several pictures at once.
@@ -51,7 +55,11 @@ pub fn open_images_dialog(app: AppHandle) -> CmdResult<Vec<String>> {
         .file()
         .add_filter("Images", &IMAGE_EXTENSIONS)
         .blocking_pick_files();
-    Ok(result.unwrap_or_default().into_iter().map(filepath_to_string).collect())
+    let picked: Vec<String> = result.unwrap_or_default().into_iter().map(filepath_to_string).collect();
+    for path in &picked {
+        crate::grants::allow_file(path);
+    }
+    Ok(picked)
 }
 
 /// Opens a native Save As dialog.
@@ -75,12 +83,20 @@ pub fn save_pdf_dialog(
         .set_file_name(&default_name)
         .blocking_save_file();
 
-    Ok(result.map(filepath_to_string))
+    let picked = result.map(filepath_to_string);
+    if let Some(path) = &picked {
+        crate::grants::allow_file(path);
+    }
+    Ok(picked)
 }
 
 /// Opens a native folder-picker dialog. Returns the chosen path or null.
 #[tauri::command]
 pub fn pick_directory_dialog(app: AppHandle) -> CmdResult<Option<String>> {
     let result = app.dialog().file().blocking_pick_folder();
-    Ok(result.map(filepath_to_string))
+    let picked = result.map(filepath_to_string);
+    if let Some(path) = &picked {
+        crate::grants::allow_dir(path);
+    }
+    Ok(picked)
 }

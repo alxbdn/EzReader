@@ -30,6 +30,11 @@ pub(crate) fn rename_no_clobber(from: &Path, to: &Path) -> CmdResult<()> {
 /// Fails with [`ErrorCode::Exists`] when another file already has that name.
 #[tauri::command]
 pub fn rename_file(app: AppHandle, from: String, to: String) -> CmdResult<()> {
+    // Only a document the user opened or saved can be renamed (and only
+    // within its folder: see `rename_no_clobber`).
+    if !crate::grants::is_granted_file(&from) {
+        return Err(PdfError::new(ErrorCode::NotAllowed, "not a file you opened"));
+    }
     rename_no_clobber(Path::new(&from), Path::new(&to))?;
     crate::allow_viewing(&app, &to);
     Ok(())
@@ -166,6 +171,7 @@ const MAX_PICTURE_SIDE: u32 = 4096;
 #[tauri::command]
 pub fn load_picture(path: String) -> CmdResult<Picture> {
     use base64::Engine;
+    crate::grants::check(&path)?;
     let bytes = read_image_bytes(&path)?;
     let not_an_image = |e: image::ImageError| PdfError::new(ErrorCode::NotAnImage, e.to_string());
     let format = image::guess_format(&bytes).map_err(not_an_image)?;
@@ -203,9 +209,13 @@ pub fn temp_tag() -> String {
 }
 
 /// Which of `paths` already exist (export asks before replacing them).
+/// Only paths the export may write are looked at.
 #[tauri::command]
 pub fn existing_files(paths: Vec<String>) -> Vec<String> {
-    paths.into_iter().filter(|p| std::path::Path::new(p).exists()).collect()
+    paths
+        .into_iter()
+        .filter(|p| crate::grants::check(p).is_ok() && std::path::Path::new(p).exists())
+        .collect()
 }
 
 /// Writes base64 `data` (a page picture of an export) to `path`, atomically.
@@ -221,6 +231,7 @@ pub fn write_image_file(path: String, data: String) -> CmdResult<()> {
     if !matches!(ext.as_str(), "png" | "jpg" | "jpeg") {
         return Err(PdfError::new(ErrorCode::NotAnImage, "only PNG and JPEG pictures can be written"));
     }
+    crate::grants::check(&path)?;
     let b64 = data.split_once(',').map_or(data.as_str(), |(_, d)| d);
     let bytes = base64::engine::general_purpose::STANDARD
         .decode(b64)

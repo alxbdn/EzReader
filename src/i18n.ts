@@ -183,6 +183,7 @@ export interface Translations {
   msgErrTooLarge?: string;
   msgErrPageCountChanged?: string;
   msgErrInvalidPages?: string;
+  msgErrNotAllowed?: string;
   msgCompressNoGain?: string;
   cmpNoGain?: string;
   cmpRunning?: string;
@@ -700,6 +701,7 @@ const EN: Translations = {
   msgErrTooLarge:         "the file is too large",
   msgErrPageCountChanged: "the number of pages would have changed, so nothing was written",
   msgErrInvalidPages:     "those pages don't exist in the document",
+  msgErrNotAllowed:       "EzReader can only use files you opened or chose",
   msgCompressNoGain:      "This level won't make the file smaller. Save the copy anyway?",
   cmpNoGain:              "This level won't make the file smaller.",
   cmpRunning:             "Compressing… {pct} %",
@@ -1210,6 +1212,7 @@ const FR: Translations = {
   msgErrTooLarge:         "le fichier est trop volumineux",
   msgErrPageCountChanged: "le nombre de pages aurait changé, rien n'a donc été écrit",
   msgErrInvalidPages:     "ces pages n'existent pas dans le document",
+  msgErrNotAllowed:       "EzReader ne peut utiliser que les fichiers que vous avez ouverts ou choisis",
   msgCompressNoGain:      "Ce niveau ne rendra pas le fichier plus léger. Enregistrer la copie quand même ?",
   cmpNoGain:              "Ce niveau ne rendra pas le fichier plus léger.",
   cmpRunning:             "Compression… {pct} %",
