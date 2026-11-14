@@ -30,8 +30,10 @@ fn pdf_text_to_string(bytes: &[u8]) -> Option<String> {
     if bytes.starts_with(&[0xFE, 0xFF]) {
         // UTF-16BE with BOM
         let u16s: Vec<u16> = bytes[2..]
-            .chunks_exact(2)
-            .map(|c| u16::from_be_bytes([c[0], c[1]]))
+            .as_chunks::<2>()
+            .0
+            .iter()
+            .map(|&c| u16::from_be_bytes(c))
             .collect();
         String::from_utf16(&u16s).ok()
     } else {
@@ -541,7 +543,7 @@ pub fn write_signature_vector(buf: &mut Vec<u8>, ann: &SignatureAnnotation) {
         ann.x,
         ann.y + ann.height,
     );
-    for s in v.segs.chunks_exact(9) {
+    for s in v.segs.as_chunks::<9>().0 {
         ops.push_str(&format!(
             "{:.3} w\n{:.2} {:.2} m\n{:.2} {:.2} {:.2} {:.2} {:.2} {:.2} c\nS\n",
             s[8], s[0], s[1], s[2], s[3], s[4], s[5], s[6], s[7],
