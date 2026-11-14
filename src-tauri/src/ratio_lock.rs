@@ -3,6 +3,10 @@
 //! src/window-fit.ts). Windows sends WM_SIZING with the rectangle the drag
 //! asks for, before applying it: the lock corrects that rectangle, so the
 //! window never shows the wrong shape, not even for a frame.
+//!
+//! The same hook keeps the size of a window that Windows snapped (stretched
+//! to full height, or to a side): moving it afterwards no longer brings
+//! back the size it had before the snap.
 
 /// Which edge or corner is dragged (the WMSZ_* values).
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -88,16 +92,77 @@ pub fn constrain(r: Rect, edge: Edge, ratio: f64, min_w: i32, min_h: i32, before
 mod win {
     use super::{constrain, Edge, Rect};
     use winapi::shared::basetsd::{DWORD_PTR, UINT_PTR};
-    use winapi::shared::minwindef::{LPARAM, LRESULT, TRUE, UINT, WPARAM};
+    use winapi::shared::minwindef::{BOOL, LPARAM, LRESULT, TRUE, UINT, WPARAM};
     use winapi::shared::windef::{HWND, RECT};
-    use winapi::um::commctrl::{DefSubclassProc, RemoveWindowSubclass, SetWindowSubclass};
-    use winapi::um::winuser::{GetDpiForWindow, GetWindowRect, WM_SIZING};
+    use winapi::um::commctrl::{DefSubclassProc, SetWindowSubclass};
+    use winapi::um::libloaderapi::{GetModuleHandleA, GetProcAddress};
+    use winapi::um::winuser::{
+        GetDpiForWindow, GetMonitorInfoW, GetWindowPlacement, GetWindowRect, IsIconic, IsZoomed,
+        MonitorFromWindow, PostMessageW, SetWindowPlacement, MONITORINFO, MONITOR_DEFAULTTONEAREST,
+        SW_SHOWNORMAL, WINDOWPLACEMENT, WM_APP, WM_SIZING, WM_WINDOWPOSCHANGED,
+    };
 
     const SUBCLASS_ID: UINT_PTR = 0x457a_5274; // "EzRt"
+
+    /// Posted to itself once Windows snapped the window (see `unsnap`).
+    const WM_EZ_UNSNAP: UINT = WM_APP + 0x45;
+
+    thread_local! {
+        /// Unsnaps asked for since the window was last seen not snapped.
+        static TRIES: std::cell::Cell<u32> = const { std::cell::Cell::new(0) };
+    }
 
     /// Smallest window, as in tauri.conf.json (logical pixels).
     const MIN_W: f64 = 720.0;
     const MIN_H: f64 = 480.0;
+
+    /// `IsWindowArranged` (user32, Windows 10 and later): true while the
+    /// window is snapped (to a side, a corner, or stretched to full height).
+    unsafe fn is_arranged(hwnd: HWND) -> bool {
+        type IsWindowArranged = unsafe extern "system" fn(HWND) -> BOOL;
+        let user32 = GetModuleHandleA(c"user32.dll".as_ptr());
+        if user32.is_null() {
+            return false;
+        }
+        let f = GetProcAddress(user32, c"IsWindowArranged".as_ptr());
+        if f.is_null() {
+            return false;
+        }
+        let f: IsWindowArranged = std::mem::transmute(f);
+        f(hwnd) != 0
+    }
+
+    /**
+     * A snapped window becomes a normal window of the same size and place.
+     * Windows otherwise keeps the size from before the snap and puts it back
+     * as soon as the window is dragged: stretched to full height, it shrank
+     * again when moved.
+     */
+    unsafe fn unsnap(hwnd: HWND) {
+        if !is_arranged(hwnd) || IsZoomed(hwnd) != 0 || IsIconic(hwnd) != 0 {
+            return;
+        }
+        let mut r: RECT = std::mem::zeroed();
+        if GetWindowRect(hwnd, &mut r) == 0 {
+            return;
+        }
+        let mut wp: WINDOWPLACEMENT = std::mem::zeroed();
+        wp.length = std::mem::size_of::<WINDOWPLACEMENT>() as UINT;
+        if GetWindowPlacement(hwnd, &mut wp) == 0 {
+            return;
+        }
+        // The placement counts from the work area, not from the screen.
+        let mut mi: MONITORINFO = std::mem::zeroed();
+        mi.cbSize = std::mem::size_of::<MONITORINFO>() as u32;
+        let (dx, dy) = if GetMonitorInfoW(MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST), &mut mi) != 0 {
+            (mi.rcWork.left - mi.rcMonitor.left, mi.rcWork.top - mi.rcMonitor.top)
+        } else {
+            (0, 0)
+        };
+        wp.showCmd = SW_SHOWNORMAL as UINT;
+        wp.rcNormalPosition = RECT { left: r.left - dx, top: r.top - dy, right: r.right - dx, bottom: r.bottom - dy };
+        SetWindowPlacement(hwnd, &wp);
+    }
 
     unsafe extern "system" fn proc(
         hwnd: HWND,
@@ -107,7 +172,8 @@ mod win {
         _id: UINT_PTR,
         data: DWORD_PTR,
     ) -> LRESULT {
-        if msg == WM_SIZING && lparam != 0 {
+        // `data`: the locked width / height (as f64 bits), 0 when free.
+        if msg == WM_SIZING && lparam != 0 && data != 0 {
             if let Some(edge) = Edge::from_wmsz(wparam) {
                 let ratio = f64::from_bits(data as u64);
                 let rect = &mut *(lparam as *mut RECT);
@@ -132,23 +198,38 @@ mod win {
                 return TRUE as LRESULT;
             }
         }
+        if msg == WM_WINDOWPOSCHANGED {
+            if !is_arranged(hwnd) {
+                TRIES.with(|t| t.set(0));
+            } else if IsZoomed(hwnd) == 0 && TRIES.with(|t| t.get()) < 2 {
+                // Not from inside the snap itself: once it is over. Tried
+                // twice at most, should a Windows version refuse it.
+                TRIES.with(|t| t.set(t.get() + 1));
+                PostMessageW(hwnd, WM_EZ_UNSNAP, 0, 0);
+            }
+        }
+        if msg == WM_EZ_UNSNAP {
+            unsnap(hwnd);
+            return 0;
+        }
         DefSubclassProc(hwnd, msg, wparam, lparam)
     }
 
-    /// Locks `hwnd` to its present proportions, or frees it.
+    /// Locks `hwnd` to its present proportions, or frees it. Either way, a
+    /// snap keeps its size when the window is moved afterwards.
     pub fn set(hwnd: isize, locked: bool) {
         let hwnd = hwnd as HWND;
         unsafe {
+            let mut ratio = 0.0f64;
             if locked {
                 let mut r: RECT = std::mem::zeroed();
-                if GetWindowRect(hwnd, &mut r) == 0 || r.bottom <= r.top {
-                    return;
+                if GetWindowRect(hwnd, &mut r) != 0 && r.bottom > r.top {
+                    ratio = (r.right - r.left) as f64 / (r.bottom - r.top) as f64;
                 }
-                let ratio = (r.right - r.left) as f64 / (r.bottom - r.top) as f64;
-                SetWindowSubclass(hwnd, Some(proc), SUBCLASS_ID, ratio.to_bits() as DWORD_PTR);
-            } else {
-                RemoveWindowSubclass(hwnd, Some(proc), SUBCLASS_ID);
             }
+            let data = if ratio > 0.0 { ratio.to_bits() as DWORD_PTR } else { 0 };
+            // Installs the hook, or only updates its data when already there.
+            SetWindowSubclass(hwnd, Some(proc), SUBCLASS_ID, data);
         }
     }
 }

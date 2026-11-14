@@ -103,9 +103,7 @@ pub fn run() {
                 let _ = fit_to_screen(&main);
                 // The launcher keeps its shape when resized; a document
                 // window is free (its page decides, see window-fit.ts).
-                if startup_file.is_none() {
-                    ratio_lock::set_ratio_lock(&main, true);
-                }
+                ratio_lock::set_ratio_lock(&main, startup_file.is_none());
             }
             Ok(())
         })
