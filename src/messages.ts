@@ -15,6 +15,7 @@ const ERROR_MESSAGES: Partial<Record<ErrorCode, MessageKey>> = {
   "page-count-changed": "msgErrPageCountChanged",
   "invalid-pages": "msgErrInvalidPages",
   "no-ocr-language": "msgErrNoOcrLanguage",
+  "not-allowed": "msgErrNotAllowed",
 };
 
 export interface Messages {

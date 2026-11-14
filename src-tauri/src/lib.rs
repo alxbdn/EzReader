@@ -2,6 +2,7 @@ mod commands;
 mod convert;
 mod error;
 mod fsutil;
+mod grants;
 mod ocr;
 mod pdf;
 mod tempfiles;
@@ -59,11 +60,13 @@ pub struct AppState {
 }
 
 /// Lets the webview read `path` through the asset protocol (pdf.js loads the
-/// document that way). The static scope in tauri.conf.json only covers the
-/// app's own temp files; documents are allowed one by one when the user picks
-/// them (open dialog, drag and drop, command line), so a compromised page
-/// cannot read arbitrary files from disk.
+/// document that way), and the commands read and write it (see [`grants`]).
+/// The static scope in tauri.conf.json only covers the app's own temp files;
+/// documents are allowed one by one when the user picks them (open dialog,
+/// drag and drop, command line), so a compromised page cannot read or write
+/// arbitrary files on disk.
 pub(crate) fn allow_viewing<R: tauri::Runtime, M: Manager<R>>(app: &M, path: &str) {
+    grants::allow_file(path);
     let _ = app.asset_protocol_scope().allow_file(path);
 }
 
@@ -76,10 +79,10 @@ pub fn run() {
         if arg == "--print" {
             startup.should_print = true;
             if let Some(path) = args.next() {
-                startup.file_path = Some(path);
+                startup.file_path = Some(grants::absolute(&path).to_string_lossy().into_owned());
             }
         } else if !arg.starts_with("--") {
-            startup.file_path = Some(arg);
+            startup.file_path = Some(grants::absolute(&arg).to_string_lossy().into_owned());
         }
     }
 

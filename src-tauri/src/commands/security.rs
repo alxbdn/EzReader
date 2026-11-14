@@ -13,6 +13,7 @@ use crate::fsutil;
 /// Everything stays allowed once it is open: printing, copying, editing.
 #[tauri::command(async)]
 pub fn encrypt_pdf(input_path: String, output_path: String, password: String) -> CmdResult<()> {
+    crate::grants::check_all([&input_path, &output_path])?;
     if password.is_empty() {
         return Err(PdfError::new(ErrorCode::EmptyPassword, "The password is empty"));
     }
@@ -42,6 +43,7 @@ pub fn encrypt_pdf(input_path: String, output_path: String, password: String) ->
 /// [`ErrorCode::WrongPassword`] when `password` does not open it.
 #[tauri::command(async)]
 pub fn decrypt_pdf(input_path: String, output_path: String, password: String) -> CmdResult<()> {
+    crate::grants::check_all([&input_path, &output_path])?;
     let mut doc = Document::load_with_password(&input_path, &password).map_err(|e| {
         let text = e.to_string();
         if text.to_lowercase().contains("password") || text.to_lowercase().contains("decrypt") {

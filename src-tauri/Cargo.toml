@@ -24,6 +24,7 @@ serde_json = "1"
 lopdf = "0.47"
 image = { version = "0.25", features = ["png", "jpeg", "webp", "gif", "bmp"] }
 base64 = "0.22"
+url = "2"
 getrandom = "0.4"
 # Already built for lopdf / png; used directly to pack .docx / .xlsx (ZIP) files.
 flate2 = "1"
@@ -31,7 +32,7 @@ crc32fast = "1"
 
 [target.'cfg(windows)'.dependencies]
 winreg = "0.52"
-winapi = { version = "0.3", features = ["winspool", "wingdi", "winnt", "shellapi", "processthreadsapi", "handleapi", "minwinbase", "minwindef", "errhandlingapi", "winerror"] }
+winapi = { version = "0.3", features = ["winspool", "wingdi", "winnt", "shellapi", "processthreadsapi", "handleapi", "minwinbase", "minwindef", "errhandlingapi", "winerror", "winuser"] }
 # Text recognition with the OCR engine built into Windows (Windows.Media.Ocr):
 # same version Tauri already builds, nothing to bundle.
 windows = { version = "0.61", features = [

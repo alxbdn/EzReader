@@ -10,6 +10,7 @@ use crate::pdf::{models::Annotation, redact, writer, writer::FormFieldValue};
 /// Returns the total number of pages in the given PDF file.
 #[tauri::command(async)]
 pub fn get_page_count(file_path: String) -> CmdResult<u32> {
+    crate::grants::check(&file_path)?;
     let doc = Document::load(&file_path).map_err(|e| e.to_string())?;
     Ok(doc.get_pages().len() as u32)
 }
@@ -27,6 +28,7 @@ pub fn save_annotated_pdf(
     rotation_delta: i64,
     form_fields: Vec<FormFieldValue>,
 ) -> CmdResult<()> {
+    crate::grants::check_all([&input_path, &output_path])?;
     // Fast-path: nothing to apply → byte-perfect copy. Avoids any PDF rewrite.
     if annotations.is_empty() && rotation_delta == 0 && form_fields.is_empty() {
         let prev_meta_empty = Document::load(&input_path)
@@ -284,6 +286,7 @@ pub fn strip_annotation_streams(
     input_path: String,
     output_path: String,
 ) -> CmdResult<bool> {
+    crate::grants::check_all([&input_path, &output_path])?;
     let meta_empty = Document::load(&input_path)
         .map(|d| writer::load_meta(&d).stream_ids.is_empty())
         .unwrap_or(true);
@@ -317,6 +320,7 @@ pub fn redact_pages(
     output_path: String,
     pages: Vec<redact::RedactedPage>,
 ) -> CmdResult<()> {
+    crate::grants::check_all([&input_path, &output_path])?;
     let mut doc = Document::load(&input_path).map_err(|e| e.to_string())?;
     let page_count = doc.get_pages().len();
     redact::redact_pages(&mut doc, &pages)?;
@@ -334,6 +338,7 @@ pub fn straighten_pages(
     output_path: String,
     pages: Vec<crate::pdf::straighten::StraightenedPage>,
 ) -> CmdResult<()> {
+    crate::grants::check_all([&input_path, &output_path])?;
     let mut doc = Document::load(&input_path).map_err(|e| e.to_string())?;
     let page_count = doc.get_pages().len();
     crate::pdf::straighten::straighten_pages(&mut doc, &pages)?;
@@ -347,6 +352,7 @@ pub fn straighten_pages(
 /// Returns an empty array if the file has no stored annotations.
 #[tauri::command(async)]
 pub fn read_annotations(file_path: String) -> CmdResult<Vec<Annotation>> {
+    crate::grants::check(&file_path)?;
     let doc = Document::load(&file_path).map_err(|e| e.to_string())?;
     Ok(writer::load_meta(&doc).annotations)
 }
@@ -372,6 +378,7 @@ pub struct PageAdjust {
 /// vector and selectable; a crop only sets the page's CropBox).
 #[tauri::command(async)]
 pub fn adjust_pages(input_path: String, output_path: String, pages: Vec<PageAdjust>) -> CmdResult<()> {
+    crate::grants::check_all([&input_path, &output_path])?;
     let mut inc = IncrementalDocument::load(&input_path).map_err(|e| e.to_string())?;
     let prev_pages = inc.get_prev_documents().get_pages();
     let meta = writer::load_meta(inc.get_prev_documents());
@@ -556,6 +563,7 @@ fn image_page_from_bytes(doc: &mut Document, bytes: &[u8]) -> Result<ObjectId, S
 /// (each page fits A4 in the picture's orientation).
 #[tauri::command(async)]
 pub fn images_to_pdf(image_paths: Vec<String>, output_path: String) -> CmdResult<()> {
+    crate::grants::check_all(image_paths.iter().chain([&output_path]))?;
     if image_paths.is_empty() {
         return Err("No pictures given".into());
     }
@@ -614,6 +622,12 @@ pub fn rearrange_pages(
     output_path: String,
     slots: Vec<PageSlot>,
 ) -> CmdResult<()> {
+    crate::grants::check_all([&input_path, &output_path])?;
+    for slot in &slots {
+        if let PageSlot::Imported { path, .. } = slot {
+            crate::grants::check(path)?;
+        }
+    }
     let mut inc = IncrementalDocument::load(&input_path).map_err(|e| e.to_string())?;
     rewrite_pages(&mut inc, &slots)?;
     // Compacted, not incremental: pages left out must not survive in the bytes.
@@ -1628,6 +1642,7 @@ pub fn extract_pdf_pages(
     output_path: String,
     pages: Vec<u32>,
 ) -> CmdResult<()> {
+    crate::grants::check_all([&input_path, &output_path])?;
     let keep: HashSet<u32> = pages.into_iter().collect();
     extract_pages(&input_path, &output_path, &keep)
 }
@@ -1641,6 +1656,7 @@ pub fn export_flattened_pages(
     output_path: String,
     pages: Vec<u32>,
 ) -> CmdResult<()> {
+    crate::grants::check_all([&input_path, &output_path])?;
     let keep: HashSet<u32> = pages.into_iter().collect();
     let mut inc = IncrementalDocument::load(&input_path).map_err(|e| e.to_string())?;
     let total = inc.get_prev_documents().get_pages().len() as u32;
@@ -1699,6 +1715,8 @@ pub fn split_pdf(
     base_name: String,
     ranges: Vec<SplitRange>,
 ) -> CmdResult<Vec<String>> {
+    crate::grants::check(&input_path)?;
+    crate::grants::check_dir(&output_dir)?;
     if ranges.is_empty() {
         return Err(PdfError::new(ErrorCode::InvalidPages, "No ranges to split"));
     }
