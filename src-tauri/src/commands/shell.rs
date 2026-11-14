@@ -14,10 +14,25 @@ pub fn get_startup_args(window: tauri::WebviewWindow, state: State<AppState>) ->
     state.window_args.lock().unwrap().get(window.label()).cloned().unwrap_or_default()
 }
 
+/// True when the app runs from its MSIX package (Store install). Windows then
+/// takes the .pdf association and the Print verb from the package manifest,
+/// and registry writes would only land in the package's private copy of
+/// HKCU, so the "default app" commands below leave the registry alone.
+#[cfg(target_os = "windows")]
+fn is_packaged() -> bool {
+    std::env::current_exe()
+        .map(|p| p.to_string_lossy().to_ascii_lowercase().contains(r"\windowsapps\"))
+        .unwrap_or(false)
+}
+
 #[tauri::command]
 pub fn check_pdf_association() -> bool {
     #[cfg(target_os = "windows")]
     {
+        // Packaged: the button only opens Windows' Default apps page.
+        if is_packaged() {
+            return false;
+        }
         use winreg::enums::HKEY_CURRENT_USER;
         use winreg::RegKey;
         let hkcu = RegKey::predef(HKEY_CURRENT_USER);
@@ -34,6 +49,9 @@ pub fn check_pdf_association() -> bool {
 pub fn register_pdf_handler() -> CmdResult<()> {
     #[cfg(target_os = "windows")]
     {
+        if is_packaged() {
+            return Ok(());
+        }
         use winreg::enums::{HKEY_CURRENT_USER, KEY_SET_VALUE};
         use winreg::RegKey;
 
@@ -523,6 +541,9 @@ mod tests {
 pub fn unregister_pdf_handler() -> CmdResult<()> {
     #[cfg(target_os = "windows")]
     {
+        if is_packaged() {
+            return Ok(());
+        }
         use winreg::enums::HKEY_CURRENT_USER;
         use winreg::RegKey;
 
@@ -568,6 +589,9 @@ pub fn unregister_pdf_handler() -> CmdResult<()> {
 pub fn register_print_verb() -> CmdResult<()> {
     #[cfg(target_os = "windows")]
     {
+        if is_packaged() {
+            return Ok(());
+        }
         use winreg::enums::HKEY_CURRENT_USER;
         use winreg::RegKey;
 
