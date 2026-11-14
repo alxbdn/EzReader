@@ -582,9 +582,7 @@ pub fn register_print_verb() -> CmdResult<()> {
 
         // Under our ProgID
         let (progid_print, _) = hkcu
-            .create_subkey(format!(
-                r"Software\Classes\com.ezreader.app\shell\print\command"
-            ))
+            .create_subkey(r"Software\Classes\com.ezreader.app\shell\print\command")
             .map_err(|e| e.to_string())?;
         progid_print
             .set_value("", &format!("\"{exe}\" --print \"%1\""))
