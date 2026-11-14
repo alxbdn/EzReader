@@ -3,7 +3,7 @@
 # EzReader
 
 **A fast, lightweight PDF reader and editor for Windows.**
-Read, annotate, sign, edit, reorganize, compress and protect your PDFs. Everything runs on your computer: no account, no subscription, no telemetry.
+Read, annotate, sign, edit, reorganize, compress and protect your PDFs. Everything runs on your computer: no account, no subscription, no AI, no telemetry. Free and open source.
 
 [![Latest Release](https://img.shields.io/github/v/release/alxbdn/EzReader?style=flat-square&label=Download)](https://github.com/alxbdn/EzReader/releases/latest)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue?style=flat-square)](LICENSE)
@@ -20,19 +20,22 @@ Read, annotate, sign, edit, reorganize, compress and protect your PDFs. Everythi
 |------|------------|
 | `ezreader-<version>-win-x64-setup.exe` | Installer |
 | `ezreader-portable-<version>-win-x64.exe` | Portable app: a single file you can run from anywhere, nothing to install |
+| `ezreader-<version>-win-x64.msix` | Package for the Microsoft Store |
 
-EzReader runs on 64-bit Windows.
+EzReader runs on 64-bit Windows 10 (version 2004 or later) and Windows 11. The download is about 3 MB.
 
 ---
 
 ## Features
 
-EzReader has three modes, picked from the toolbar: **Read**, **Annotate** and **Edit**. The pages side panel and the File, Edit, View and Pages menus are available in all of them.
+EzReader opens on a home screen with a shortcut to each task: annotate, sign, redact, manage pages, convert, compress, protect, straighten scans and merge. Once a file is open, it has three modes, picked from the toolbar: **Read**, **Annotate** and **Edit**. The pages side panel and the File, Edit, View and Pages menus are available in all of them.
 
 ### Read
 
 - Sharp rendering at any zoom, powered by PDF.js
-- Zoom in and out, fit to width or height, actual size (1:1, calibrated to your screen), or type any percentage
+- Zoom in and out (Ctrl+wheel zooms around the mouse), fit to width or height, actual size (1:1, calibrated to your screen), or type any percentage
+- **Page brightness**: dim glaring white pages from the toolbar, 1 % at a time down to 40 %. Only the screen changes, never the file
+- Full screen (F11)
 - One, two or three pages per row, with vertical or horizontal scrolling
 - Hand tool to drag the page around, or text selection to copy text
 - Search the whole document (Ctrl+F) and jump between matches
@@ -48,7 +51,8 @@ EzReader has three modes, picked from the toolbar: **Read**, **Annotate** and **
 - **Shapes**: rectangle, ellipse and arrow, with outline and fill colors
 - **Highlighter** on selected text (select it again to remove the highlight)
 - **Sticky notes**
-- **Signatures**: draw one or import a picture, keep up to three saved, and place them anywhere
+- **Signatures**: draw one or import a picture, keep up to three saved, and place them anywhere. Drawn signatures stay vector curves, sharp at any size
+- Annotations can be dragged to another page
 - Each change is validated (Enter) or discarded (Esc), and everything can be undone and redone (Ctrl+Z, Ctrl+Y)
 - Annotations stay editable when you reopen the file
 
@@ -59,13 +63,14 @@ EzReader has three modes, picked from the toolbar: **Read**, **Annotate** and **
 - **Redact** selected text or an area. Redactions are permanent once saved: the content under the black boxes is removed, not just hidden
 - **Stamps**: check marks and crosses
 - **Crop** pages, with handles and automatic content margins
-- **Straighten** scanned pages by placing each corner with a magnifying loupe, and flip pages vertically or horizontally
+- **Straighten** scanned pages by placing each corner with a magnifying loupe. A preview shows the straightened page as you go
+- Flip pages vertically or horizontally
 
 ### Manage pages
 
 The side panel shows a thumbnail of every page.
 
-- Select pages, then rotate, delete or export them
+- Select pages, then rotate, delete or export them. Page edits can be undone and redone too
 - Drag thumbnails to reorder pages (Ctrl+← and Ctrl+→ with the keyboard)
 - Insert a blank page, insert another PDF, or add a PDF at the end to merge files
 - Drop a picture in the panel to add it as a new page
@@ -84,10 +89,18 @@ Extracted, split and rearranged files contain nothing from the pages you left ou
 - **Password**: protect a PDF with a password (with a strength meter and tips), open protected PDFs, or remove the protection
 - **Print** with a choice of printer, pages, copies, orientation and scale
 
+### Privacy and security
+
+- No account, no AI, no telemetry: EzReader never sends your documents or usage anywhere
+- PDFs open in a locked-down viewer: document scripts never run, and the page cannot reach the network
+- The app only reads and writes the files you open or pick in a dialog
+- Its temporary copies, including decrypted ones, are removed when you close it, or on the next start after a crash
+
 ### Settings and Windows integration
 
 - Light, dark or system theme
 - Default zoom when a file opens
+- Page brightness, remembered between sessions
 - 20 interface languages, switched instantly: English, Français, 中文, हिन्दी, Español, العربية, বাংলা, Русский, Português, اردو, Bahasa Indonesia, Deutsch, 日本語, Kiswahili, मराठी, తెలుగు, Türkçe, தமிழ், Tiếng Việt, 한국어
 - Set EzReader as the default PDF viewer from Settings, no administrator rights needed
 - Print from the command line: `ezreader-portable.exe --print file.pdf`
