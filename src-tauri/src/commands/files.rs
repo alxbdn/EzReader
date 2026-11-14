@@ -168,7 +168,7 @@ const MAX_PICTURE_SIDE: u32 = 4096;
 /// that are not too large are kept byte for byte; other formats (WebP, GIF,
 /// BMP) and very large pictures are re-encoded: as JPEG when they were
 /// JPEG, as PNG otherwise (the PDF writer takes both).
-#[tauri::command]
+#[tauri::command(async)]
 pub fn load_picture(path: String) -> CmdResult<Picture> {
     use base64::Engine;
     crate::grants::check(&path)?;
@@ -220,7 +220,7 @@ pub fn existing_files(paths: Vec<String>) -> Vec<String> {
 
 /// Writes base64 `data` (a page picture of an export) to `path`, atomically.
 /// Only PNG and JPEG files can be written this way.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn write_image_file(path: String, data: String) -> CmdResult<()> {
     use base64::Engine;
     let ext = std::path::Path::new(&path)

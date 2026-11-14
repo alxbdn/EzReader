@@ -184,13 +184,15 @@ fn list_printers_impl() -> Result<PrinterList, String> {
     }
 
     // Second call: fill buffer
-    let mut buf = vec![0u8; needed as usize];
+    // u64 words: the PRINTER_INFO_2W records read below hold pointers and
+    // must be 8-byte aligned, which a byte buffer does not guarantee.
+    let mut buf = vec![0u64; (needed as usize).div_ceil(8)];
     let ok = unsafe {
         EnumPrintersW(
             flags,
             ptr::null_mut(),
             2,
-            buf.as_mut_ptr(),
+            buf.as_mut_ptr().cast::<u8>(),
             needed,
             &mut needed,
             &mut returned,
@@ -249,7 +251,7 @@ fn list_printers_impl() -> Result<PrinterList, String> {
 
 // ── Print pages ──────────────────────────────────────────────────────────────
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn print_pages(
     pages_b64: Vec<String>,
     printer_name: Option<String>,
@@ -343,7 +345,8 @@ fn print_pages_impl(
         return Err("StartDocW failed".to_string());
     }
 
-    let num_copies = copies.unwrap_or(1).max(1);
+    // A real print job never needs more; a bad value must not run for hours.
+    let num_copies = copies.unwrap_or(1).clamp(1, 999);
 
     for _ in 0..num_copies {
         for page_b64 in &pages_b64 {
