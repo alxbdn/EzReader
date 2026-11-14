@@ -12,6 +12,8 @@ $ErrorActionPreference = "Stop"
 # Configuration
 $AppName = "ezreader"
 $ExeName = "ezreader-portable"
+# Name of the executable inside the package (the Store install is not the portable app)
+$PackagedExeName = "EzReader"
 $OutputDir = ".\msix-output"
 $PackageDir = "$OutputDir\package"
 
@@ -75,7 +77,7 @@ if (-not (Test-Path $buildDir)) {
 }
 
 Write-Host "Copying application files..." -ForegroundColor Yellow
-Copy-Item "$buildDir\$ExeName.exe" "$PackageDir\" -Force
+Copy-Item "$buildDir\$ExeName.exe" "$PackageDir\$PackagedExeName.exe" -Force
 
 # Copy any DLLs
 Get-ChildItem "$buildDir\*.dll" | ForEach-Object {

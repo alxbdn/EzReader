@@ -2,9 +2,10 @@
 <Package
   xmlns="http://schemas.microsoft.com/appx/manifest/foundation/windows10"
   xmlns:uap="http://schemas.microsoft.com/appx/manifest/uap/windows10"
+  xmlns:uap2="http://schemas.microsoft.com/appx/manifest/uap/windows10/2"
   xmlns:uap3="http://schemas.microsoft.com/appx/manifest/uap/windows10/3"
   xmlns:rescap="http://schemas.microsoft.com/appx/manifest/foundation/windows10/restrictedcapabilities"
-  IgnorableNamespaces="uap uap3 rescap">
+  IgnorableNamespaces="uap uap2 uap3 rescap">
 
   <!-- Name and Publisher must match the identity reserved for EzReader in
        Microsoft Partner Center (Product identity page). The values below are
@@ -33,7 +34,7 @@
   </Resources>
 
   <Applications>
-    <Application Id="App" Executable="ezreader-portable.exe" EntryPoint="Windows.FullTrustApplication">
+    <Application Id="App" Executable="EzReader.exe" EntryPoint="Windows.FullTrustApplication">
       <uap:VisualElements
         DisplayName="EzReader"
         Description="A simple, lightweight PDF reader with annotations and signing"
@@ -50,6 +51,9 @@
               <uap:FileType>.pdf</uap:FileType>
             </uap:SupportedFileTypes>
             <uap:DisplayName>PDF Document</uap:DisplayName>
+            <uap2:SupportedVerbs>
+              <uap3:Verb Id="print" Parameters="--print &quot;%1&quot;">Print</uap3:Verb>
+            </uap2:SupportedVerbs>
           </uap:FileTypeAssociation>
         </uap:Extension>
       </Extensions>
