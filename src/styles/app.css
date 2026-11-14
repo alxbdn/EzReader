@@ -655,10 +655,11 @@ input::placeholder { color: var(--muted-foreground); }
   border-radius: 16px;
   cursor: pointer;
 }
-.validate-btn { border: none; background: var(--primary); color: var(--primary-foreground); }
-.discard-btn { border: 1px solid var(--ring); background: transparent; color: var(--foreground); }
-.validate-btn:hover { filter: brightness(1.15); }
-.discard-btn:hover { background: var(--accent); }
+/* ✓ is green; ✕ turns red under the pointer. */
+.validate-btn { border: none; background: #16a34a; color: #ffffff; }
+.discard-btn { border: 1px solid var(--ring); background: transparent; color: var(--foreground); transition: background-color 120ms ease, border-color 120ms ease, color 120ms ease; }
+.validate-btn:hover { filter: brightness(1.12); }
+.discard-btn:hover { background: #E53935; border-color: #E53935; color: #ffffff; }
 .tb-validate.shake .validate-btn { box-shadow: 0 0 0 3px rgba(229, 57, 53, 0.55); }
 
 @keyframes tb-shake {
