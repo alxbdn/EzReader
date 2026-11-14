@@ -8,7 +8,7 @@ use crate::fsutil;
 use crate::pdf::{models::Annotation, redact, writer, writer::FormFieldValue};
 
 /// Returns the total number of pages in the given PDF file.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn get_page_count(file_path: String) -> CmdResult<u32> {
     let doc = Document::load(&file_path).map_err(|e| e.to_string())?;
     Ok(doc.get_pages().len() as u32)
@@ -19,7 +19,7 @@ pub fn get_page_count(file_path: String) -> CmdResult<u32> {
 ///
 /// On re-save, existing annotation streams are updated in-place rather than
 /// appended, so repeated saves never accumulate stale burn layers.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn save_annotated_pdf(
     input_path: String,
     output_path: String,
@@ -279,7 +279,7 @@ fn clone_acroform_tree(inc: &mut IncrementalDocument, cat_id: ObjectId) -> lopdf
 /// (the CCAnnot metadata is preserved). Returns true if any streams were cleared.
 /// Used to produce a "display" PDF that pdf.js can render without showing
 /// burned annotation content — the overlay draws all annotations from memory.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn strip_annotation_streams(
     input_path: String,
     output_path: String,
@@ -311,7 +311,7 @@ pub fn strip_annotation_streams(
 /// Writes `input_path` to `output_path` with `pages` replaced by their
 /// redacted images. Always a full rewrite: an incremental update would keep
 /// the original page content in the file's earlier revision.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn redact_pages(
     input_path: String,
     output_path: String,
@@ -328,7 +328,7 @@ pub fn redact_pages(
 
 /// Straighten: replaces `pages` with their straightened pictures, keeping
 /// their text (invisible, searchable), links, form fields and annotations.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn straighten_pages(
     input_path: String,
     output_path: String,
@@ -345,7 +345,7 @@ pub fn straighten_pages(
 
 /// Reads editable annotations from the PDF's `CCAnnot` catalog entry.
 /// Returns an empty array if the file has no stored annotations.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn read_annotations(file_path: String) -> CmdResult<Vec<Annotation>> {
     let doc = Document::load(&file_path).map_err(|e| e.to_string())?;
     Ok(writer::load_meta(&doc).annotations)
@@ -370,7 +370,7 @@ pub struct PageAdjust {
 
 /// Crops and flips pages, as an incremental update (the content stays
 /// vector and selectable; a crop only sets the page's CropBox).
-#[tauri::command]
+#[tauri::command(async)]
 pub fn adjust_pages(input_path: String, output_path: String, pages: Vec<PageAdjust>) -> CmdResult<()> {
     let mut inc = IncrementalDocument::load(&input_path).map_err(|e| e.to_string())?;
     let prev_pages = inc.get_prev_documents().get_pages();
@@ -554,7 +554,7 @@ fn image_page_from_bytes(doc: &mut Document, bytes: &[u8]) -> Result<ObjectId, S
 
 /// Makes a new PDF with one page per picture of `image_paths`, in order
 /// (each page fits A4 in the picture's orientation).
-#[tauri::command]
+#[tauri::command(async)]
 pub fn images_to_pdf(image_paths: Vec<String>, output_path: String) -> CmdResult<()> {
     if image_paths.is_empty() {
         return Err("No pictures given".into());
@@ -608,7 +608,7 @@ const INHERITABLE: [&[u8]; 4] = [b"Resources", b"MediaBox", b"CropBox", b"Rotate
 /// The update is then merged and compacted ([`fsutil::save_compacted`]):
 /// pages left out, and the objects only they used, are removed from the
 /// output file entirely.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn rearrange_pages(
     input_path: String,
     output_path: String,
@@ -1622,7 +1622,7 @@ mod tests {
 /// only they used. Object streams and indirect `/Length` entries (typical of
 /// Acrobat / iLovePDF / Word output) survive the rewrite; see
 /// `extracting_from_an_object_stream_pdf_keeps_text_and_drops_the_rest`.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn extract_pdf_pages(
     input_path: String,
     output_path: String,
@@ -1635,7 +1635,7 @@ pub fn extract_pdf_pages(
 /// Export › PDF: the selected pages as a flattened copy. What annotations
 /// and form fields show is drawn into the pages; nothing in the copy is
 /// interactive or editable any more (links excepted).
-#[tauri::command]
+#[tauri::command(async)]
 pub fn export_flattened_pages(
     input_path: String,
     output_path: String,
@@ -1692,7 +1692,7 @@ pub struct SplitRange {
 /// Output filenames: `{base_name}-pages-{start}-{end}.pdf` (or
 /// `{base_name}-page-{n}.pdf` when start == end). If a file already exists,
 /// `-N` is appended before the extension. Returns the list of created paths.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn split_pdf(
     input_path: String,
     output_dir: String,

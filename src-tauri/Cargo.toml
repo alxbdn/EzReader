@@ -45,7 +45,9 @@ windows = { version = "0.61", features = [
 ] }
 
 [profile.release]
-panic = "abort"
+# A bug on a malformed PDF must fail that one command, not close every
+# window with unsaved work: panics unwind and stay in their thread.
+panic = "unwind"
 codegen-units = 1
 lto = true
 opt-level = "s"
