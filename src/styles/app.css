@@ -2712,7 +2712,11 @@ body.read-only .page-form-layer { pointer-events: none; }
 .compress-box.running .ez-list, .compress-box.running .ez-compare, .compress-box.running .ez-warn { opacity: 0.5; pointer-events: none; }.ez-warn.hidden, .ez-progress.hidden { display: none; }
 
 /* Page brightness (Settings): dims too-bright pages on screen only. */
-.dim-pages .page-wrapper, .dim-pages .page-sidebar-frame canvas { filter: brightness(var(--page-brightness, 1)); }
+.dim-pages .page-wrapper,
+.dim-pages .page-sidebar-frame canvas,
+.dim-pages .adj-page,
+.dim-pages .adj-thumb-pic canvas,
+.dim-pages .adj-loupe { filter: brightness(var(--page-brightness, 1)); }
 .settings-brightness { display: flex; align-items: center; gap: 8px; }
 .settings-brightness .settings-range { width: 140px; }
 @media print { .dim-pages .page-wrapper { filter: none; } }

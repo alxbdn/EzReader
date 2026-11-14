@@ -35,7 +35,7 @@ export class BrightnessButton {
     this.range.className = "settings-range";
     this.range.min = String(MIN_BRIGHTNESS);
     this.range.max = "100";
-    this.range.step = "5";
+    this.range.step = "1";
     this.label = document.createElement("span");
     this.label.className = "brightness-val";
     this.pop.append(this.range, this.label);
