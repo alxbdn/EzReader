@@ -29,8 +29,12 @@ const FULL: CropRect = { l: 0, t: 0, r: 1, b: 1 };
 const CORNERS: Quad = [[0, 0], [1, 0], [1, 1], [0, 1]];
 const MIN_SIZE = 0.04;
 const LOUPE = 132;
-/** Space between the page and its straightened result. */
-const PAIR_GAP = 48;
+/** The app's selection red (as in the page panel). */
+const SELECT = "#E53935";
+/** Space between the preview and the page being straightened. */
+const PAIR_GAP = 40;
+/** The preview's size, as a share of the page being straightened. */
+const PREVIEW_SCALE = 0.55;
 const ZOOM = 4;
 /** Biggest bitmap rendered for a page (the loupe reads it ×4). */
 const MAX_PIXELS = 12e6;
@@ -357,8 +361,8 @@ export class AdjustView {
   /** Display size of a page in the stage. */
   private fitSize(wPt: number, hPt: number): { w: number; h: number } {
     const crop = this.current?.mode !== "straighten";
-    // Straighten shows the page and the result side by side.
-    const availW = Math.max(120, crop ? this.stage.clientWidth - 96 : (this.stage.clientWidth - 120 - PAIR_GAP) / 2);
+    // Straighten shows a smaller preview of the result to the left of the page.
+    const availW = Math.max(120, crop ? this.stage.clientWidth - 96 : (this.stage.clientWidth - 120 - PAIR_GAP - 40) / (1 + PREVIEW_SCALE));
     const availH = Math.max(120, this.stage.clientHeight - (crop ? 110 : 120));
     const k = Math.min(availW / wPt, availH / hPt);
     return { w: Math.round(wPt * k), h: Math.round(hPt * k) };
@@ -457,7 +461,7 @@ export class AdjustView {
       this.stage.replaceChildren(frame);
     } else {
       this.buildWarp(frame, r);
-      this.stage.replaceChildren(this.buildPreview(frame, r, w, h));
+      this.stage.replaceChildren(this.buildPreview(frame, r, Math.round(w * PREVIEW_SCALE), Math.round(h * PREVIEW_SCALE)));
     }
     this.syncCrop();
     this.syncWarp();
@@ -664,9 +668,10 @@ export class AdjustView {
   }
 
   /**
-   * Puts the page and, beside it, the straightened result. The result is
-   * computed the way ✓ does it (the area inside the corners stretched over
-   * the whole page), from a copy of the page at about twice its shown size.
+   * Puts a preview of the straightened result, `w` × `h`, in a card to the
+   * left of the page. It is computed the way ✓ does it (the area inside the
+   * corners stretched over the whole page), from a copy of the page at
+   * about twice the preview's size.
    */
   private buildPreview(frame: HTMLElement, r: Rendered, w: number, h: number): HTMLElement {
     const pair = document.createElement("div");
@@ -682,9 +687,9 @@ export class AdjustView {
     box.append(canvas);
     const caption = document.createElement("span");
     caption.className = "adj-preview-caption";
-    caption.textContent = this.tr("adjPreview", "Result");
+    caption.textContent = this.tr("adjPreview", "Preview");
     side.append(box, caption);
-    pair.append(frame, side);
+    pair.append(side, frame);
 
     const k = Math.min(1, (2 * Math.max(w, h)) / Math.max(r.canvas.width, r.canvas.height));
     const sw = Math.max(1, Math.round(r.canvas.width * k)), sh = Math.max(1, Math.round(r.canvas.height * k));
@@ -752,7 +757,7 @@ export class AdjustView {
     ctx.imageSmoothingQuality = "high";
     ctx.drawImage(src, (c[0] - span / 2) * k, (c[1] - span / 2) * k, span * k, span * k, 0, 0, LOUPE, LOUPE);
     const P = (p: Point): Point => [LOUPE / 2 + (p[0] - c[0]) * ZOOM, LOUPE / 2 + (p[1] - c[1]) * ZOOM];
-    ctx.strokeStyle = "#3b82f6";
+    ctx.strokeStyle = SELECT;
     ctx.lineWidth = 1.5;
     ctx.setLineDash([6, 4]);
     ctx.beginPath();
