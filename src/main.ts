@@ -41,9 +41,11 @@ import {
   type InkVector,
 } from "./models";
 import type { PageTextItem, ShapeAnnotation } from "./canvas-overlay";
-import { fitWithin, isImagePath, type Picture } from "./pictures";
+import { fitWithin, isImagePath, openKind, picturesDocument, type Picture } from "./pictures";
 import {
   openPdfDialog,
+  openDocumentDialog,
+  picturesToNewPdf,
   getPageCount,
   savePdfDialog,
   loadPictureFile,
@@ -390,6 +392,8 @@ settingsModal.onChange(s => {
         const all = Array.from({ length: viewer.pageCount }, (_, i) => i + 1);
         await printPages(await renderForPrint(all));
         await appWindow.close();
+      } else if (openKind(startup.filePath) === "pictures") {
+        await openPictures([startup.filePath]);
       } else {
         await loadPdf(startup.filePath);
         if (startup.unsaved && session.isOpen) {
@@ -735,9 +739,35 @@ async function loadPdf(path: string, password?: string | null): Promise<void> {
 }
 
 async function openFile(): Promise<void> {
-  const path = await openPdfDialog();
+  const path = await openDocumentDialog();
   if (!path) return;
-  await loadPdf(path);
+  await openPath(path);
+}
+
+/** Opens `path`: a PDF as it is, a picture as a new one-page PDF. */
+async function openPath(path: string): Promise<void> {
+  if (openKind(path) === "pictures") await openPictures([path]);
+  else await loadPdf(path);
+}
+
+/**
+ * Opens the pictures as a new PDF, one page each. It was never saved: the
+ * first Save asks where to put it, suggesting the pictures' folder.
+ */
+async function openPictures(paths: string[]): Promise<void> {
+  const { name, suggested } = picturesDocument(paths);
+  let pdf: string;
+  try {
+    pdf = await picturesToNewPdf(paths, name);
+  } catch (err) {
+    showToast(msg("msgImageFailed", { err: errText(err) }), true);
+    return;
+  }
+  await loadPdf(pdf);
+  if (session.sourcePath === pdf) {
+    session.markUnsavedCopy(suggested);
+    setDirty(true);
+  }
 }
 
 async function saveFile(forceDialog: boolean): Promise<void> {
@@ -1881,6 +1911,9 @@ async function handleDrop(paths: string[], at: { x: number; y: number } | null, 
   }
   if (pdfs.length > 0) {
     if (await confirmUnsaved()) void loadPdf(pdfs[0]);
+  } else if (!viewer.isLoaded()) {
+    // On the launcher: the pictures become a new document.
+    await openPictures(images);
   } else {
     showToast(msg("msgDropImageOnPage"));
   }

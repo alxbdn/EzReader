@@ -71,6 +71,8 @@ export class DocumentSession {
   private _pendingName: string | null = null;
   /** The document is a temp copy that was never saved: Save asks where to put it. */
   private _unsavedCopy = false;
+  /** Where Save first suggests putting the unsaved copy (null: where it is now). */
+  private _suggestedPath: string | null = null;
 
   constructor(private readonly edits: PendingEdits, private readonly io: SessionIO) {}
 
@@ -130,13 +132,21 @@ export class DocumentSession {
   /** The rename could not be applied: the file keeps its name. */
   renameFailed(): void { this._pendingName = null; }
 
-  /** The open document is a new copy that was never saved (pages dragged out of a window). */
-  markUnsavedCopy(): void { this._unsavedCopy = true; }
+  /**
+   * The open document is a new copy that was never saved (pages dragged out
+   * of a window, pictures opened as a PDF). `suggested` is the path the first
+   * Save proposes, e.g. next to the pictures, instead of the temp file.
+   */
+  markUnsavedCopy(suggested: string | null = null): void {
+    this._unsavedCopy = true;
+    this._suggestedPath = suggested;
+  }
 
   /** Drops the pending rename and the unsaved-copy flag (a document is being opened). */
   forgetName(): void {
     this._pendingName = null;
     this._unsavedCopy = false;
+    this._suggestedPath = null;
   }
 
   /**
@@ -149,7 +159,8 @@ export class DocumentSession {
     if (!current) throw new Error("No document is open");
     const pending = this._pendingName;
     if (saveAs || this._unsavedCopy) {
-      return { dialog: pending ? withFileName(current, pending) : current, renameTo: null };
+      const base = (this._unsavedCopy && this._suggestedPath) || current;
+      return { dialog: withFileName(base, pending ?? fileNameOf(base)), renameTo: null };
     }
     return { dialog: null, renameTo: pending && pending !== fileNameOf(current) ? withFileName(current, pending) : null };
   }

@@ -22,6 +22,19 @@ export async function openPdfDialog(): Promise<string | null> {
   return call<string | null>("open_pdf_dialog");
 }
 
+/** Opens a file-picker dialog for a PDF or a picture to open. Returns the path or null. */
+export async function openDocumentDialog(): Promise<string | null> {
+  return call<string | null>("open_document_dialog");
+}
+
+/**
+ * Makes a new temp PDF named `name` with one page per picture and returns
+ * its path (a document never saved, to open in this window).
+ */
+export async function picturesToNewPdf(imagePaths: string[], name: string): Promise<string> {
+  return call<string>("pictures_to_new_pdf", { imagePaths, name });
+}
+
 /** Opens a Save As dialog. Returns the chosen path or null. */
 export async function savePdfDialog(
   currentPath: string
