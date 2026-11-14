@@ -151,6 +151,7 @@ export interface Translations {
   welcomeTagline?: string;
   welcomeOpen?: string;
   welcomeDropHint?: string;
+  welcomeFeatHeading?: string;
   welcomeFeatAnnotate?: string;
   welcomeFeatSign?: string;
   welcomeFeatRedact?: string;
@@ -670,6 +671,7 @@ const EN: Translations = {
   welcomeTagline:           "Read, annotate, sign and edit your Files",
   welcomeOpen:              "Open a PDF",
   welcomeDropHint:          "Drop a file to begin",
+  welcomeFeatHeading:       "What you can do with EzReader",
   welcomeFeatAnnotate:      "Annotate Files",
   welcomeFeatSign:          "Sign Documents",
   welcomeFeatRedact:        "Redact Content",
@@ -1181,6 +1183,7 @@ const FR: Translations = {
   welcomeTagline:           "Lisez, annotez, signez et modifiez vos fichiers",
   welcomeOpen:              "Ouvrir un PDF",
   welcomeDropHint:          "D\u00e9posez un fichier pour commencer",
+  welcomeFeatHeading:       "Ce que vous pouvez faire avec EzReader",
   welcomeFeatAnnotate:      "Annoter des fichiers",
   welcomeFeatSign:          "Signer des documents",
   welcomeFeatRedact:        "Caviarder du contenu",
