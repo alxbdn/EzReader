@@ -91,6 +91,8 @@ type ShapeAnnotationSelectedHandler = (ann: ShapeAnnotation | null) => void;
 type ResizeHandle = "nw" | "n" | "ne" | "e" | "se" | "s" | "sw" | "w";
 
 const HANDLE_R = 4; // half-size of handle squares in px
+/** Selection boxes and handles: the app's selection red (as in the page panel). */
+const SELECT = "#E53935";
 const HANDLE_HIT = 7; // hit radius in px
 const HANDLE_CURSORS: Record<ResizeHandle, string> = {
   nw: "nw-resize", n: "n-resize",  ne: "ne-resize",
@@ -580,7 +582,7 @@ export class CanvasOverlay implements SelectionOwner {
     const b = this.getAnnBounds(ann);
     const box = { left: b.left - SEL_PAD, top: b.top - SEL_PAD, right: b.right + SEL_PAD, bottom: b.bottom + SEL_PAD };
 
-    this.ctx.strokeStyle = "#4d9eff";
+    this.ctx.strokeStyle = SELECT;
     this.ctx.lineWidth   = 1.5;
     this.ctx.setLineDash([5, 3]);
     this.ctx.strokeRect(box.left, box.top, box.right - box.left, box.bottom - box.top);
@@ -588,7 +590,7 @@ export class CanvasOverlay implements SelectionOwner {
 
     if (ann.kind === "redact" && ann.shape === "poly") {
       this.ctx.fillStyle = "#fff";
-      this.ctx.strokeStyle = "#4d9eff";
+      this.ctx.strokeStyle = SELECT;
       this.ctx.lineWidth = 1.5;
       for (const [px, py] of this.outlineOf(ann)) {
         const [x, y] = this.toCanvas(px, py);
@@ -602,7 +604,7 @@ export class CanvasOverlay implements SelectionOwner {
     // Draw resize handles
     const positions = this.handlePositions(box);
     this.ctx.fillStyle   = "#fff";
-    this.ctx.strokeStyle = "#4d9eff";
+    this.ctx.strokeStyle = SELECT;
     this.ctx.lineWidth   = 1;
     for (const h of this.handlesFor(ann)) {
       const { x, y } = positions[h];
@@ -1907,7 +1909,7 @@ export class CanvasOverlay implements SelectionOwner {
       font-weight: ${st.bold ? "bold" : "300"}; font-style: ${st.italic ? "italic" : "normal"};
       text-decoration: ${st.underline ? "underline" : "none"};
       color: ${rgbToCss(st.color)}; background: ${rgbToCss(item.background)};
-      outline: 1.5px dashed #4d9eff; padding: 2px 4px; white-space: pre; z-index: 20;
+      outline: 1.5px dashed #E53935; padding: 2px 4px; white-space: pre; z-index: 20;
     `;
     const patch = document.createElement("div");
     patch.style.cssText = `position: absolute; left: ${c.l}px; top: ${c.t}px; width: ${c.w}px; height: ${c.h}px;
