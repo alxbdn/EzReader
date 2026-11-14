@@ -69,9 +69,11 @@ import {
   encryptPdf,
   decryptPdf,
   tempTag,
+  setLauncherRatioLock,
 } from "./tauri-bridge";
 import { currentMonitor, getCurrentWindow } from "@tauri-apps/api/window";
-import { PhysicalPosition, PhysicalSize } from "@tauri-apps/api/dpi";
+import { LogicalSize, PhysicalPosition, PhysicalSize } from "@tauri-apps/api/dpi";
+import { keepCentred, pageFitScale, planWindowFit } from "./window-fit";
 import { mountWindowControls } from "./window-controls";
 import { InfoPanel } from "./info-panel";
 import { tempDir, basename } from "@tauri-apps/api/path";
@@ -99,7 +101,7 @@ let unlistenClose: (() => void) | null = null;
 const formValues = new Map<string, string>();
 
 let guardRegistering = false;
-let fitMode: "none" | "fit-width" | "fit-height" = "none";
+let fitMode: "none" | "fit-width" | "fit-height" | "fit-page" = "none";
 let pendingSignature: string | null = null;
 /** The pen strokes of the pending signature, when it was drawn. */
 let pendingSignatureVector: InkVector | undefined;
@@ -229,6 +231,9 @@ async function applyFitMode(): Promise<void> {
   const scroll = document.getElementById("viewer-scroll")!;
   if (fitMode === "fit-width") {
     await viewer.setScale((scroll.clientWidth - 40) / viewer.pageWidthPt);
+  } else if (fitMode === "fit-page") {
+    // The whole page, portrait or landscape: whichever side is tighter.
+    await viewer.setScale(pageFitScale(firstPageShown(), { width: scroll.clientWidth, height: scroll.clientHeight }));
   } else {
     await viewer.setScale(scroll.clientHeight / viewer.pageHeightPt);
   }
@@ -240,7 +245,7 @@ async function applyDefaultZoom(): Promise<void> {
   if (!viewer.isLoaded()) return;
   const pref = settingsModal.getSettings().defaultZoom;
   if (pref === "fit-width" || pref === "fit-page") {
-    fitMode = pref === "fit-width" ? "fit-width" : "fit-height";
+    fitMode = pref === "fit-width" ? "fit-width" : "fit-page";
     toolbar.updateFitMode(fitMode);
     await applyFitMode();
   } else {
@@ -250,6 +255,96 @@ async function applyDefaultZoom(): Promise<void> {
     await viewer.setScale((Number.isFinite(pct) ? pct : 100) / 100 * CSS_UNITS);
   }
   toolbar.updateZoom(viewer.scale);
+}
+
+/** The first page's size in points, as shown (view rotation applied). */
+function firstPageShown(): { width: number; height: number } {
+  const w = viewer.pageWidthPt, h = viewer.pageHeightPt;
+  return viewer.rotation % 180 === 0 ? { width: w, height: h } : { width: h, height: w };
+}
+
+/** False while a window opened only to print: it closes again at once. */
+let autoFitWindow = true;
+
+/** Width of the viewer's scroll bars (they are styled, see app.css). */
+function scrollbarSize(): number {
+  const probe = document.createElement("div");
+  probe.style.cssText = "position:absolute;visibility:hidden;width:100px;height:100px;overflow:scroll;";
+  document.body.append(probe);
+  const size = probe.offsetWidth - probe.clientWidth;
+  probe.remove();
+  return size;
+}
+
+/**
+ * Gives the window the shape of one page of the document just opened,
+ * portrait or landscape (see window-fit.ts), and frees its proportions,
+ * which stay locked only on the launcher. A maximized or full-screen
+ * window keeps its size. Returns false when the zoom from Settings is too
+ * big to show a whole page on this screen.
+ */
+async function fitWindowToDocument(): Promise<boolean> {
+  if (!("__TAURI_INTERNALS__" in window)) return true;
+  try {
+    await setLauncherRatioLock(false);
+    if (!autoFitWindow || fullscreen || await appWindow.isMaximized()) return true;
+    const monitor = await currentMonitor();
+    if (!monitor) return true;
+    const sf = monitor.scaleFactor || 1;
+    const scroll = document.getElementById("viewer-scroll")!;
+    const pref = parseFloat(settingsModal.getSettings().defaultZoom);
+    const bar = viewer.pageCount > 1 ? scrollbarSize() : 0;
+    const horizontal = viewer.scrollMode === "horizontal";
+    const plan = planWindowFit({
+      page: firstPageShown(),
+      preferredScale: Number.isFinite(pref) ? pref / 100 * CSS_UNITS : null,
+      window: { width: window.innerWidth, height: window.innerHeight },
+      viewer: { width: scroll.offsetWidth, height: scroll.offsetHeight },
+      scrollbars: horizontal ? { width: 0, height: bar } : { width: bar, height: 0 },
+      area: { width: monitor.workArea.size.width / sf, height: monitor.workArea.size.height / sf },
+    });
+    const target = plan.window;
+    if (Math.abs(target.width - window.innerWidth) > 1 || Math.abs(target.height - window.innerHeight) > 1) {
+      const pos = await appWindow.outerPosition();
+      const outer = await appWindow.outerSize();
+      const inner = await appWindow.innerSize();
+      const next = {
+        width: Math.round(target.width * sf) + outer.width - inner.width,
+        height: Math.round(target.height * sf) + outer.height - inner.height,
+      };
+      const at = keepCentred(pos, outer, next, {
+        x: monitor.workArea.position.x, y: monitor.workArea.position.y,
+        width: monitor.workArea.size.width, height: monitor.workArea.size.height,
+      });
+      await appWindow.setSize(new LogicalSize(target.width, target.height));
+      await appWindow.setPosition(new PhysicalPosition(at.x, at.y));
+      await windowSizeSettles(target);
+    }
+    return plan.preferredFits || !Number.isFinite(pref);
+  } catch (err) {
+    console.warn("fit window:", err);
+    return true;
+  }
+}
+
+/** Waits (half a second at most) until the page sees the window's new size. */
+async function windowSizeSettles(target: { width: number; height: number }): Promise<void> {
+  for (let i = 0; i < 30; i++) {
+    if (Math.abs(window.innerWidth - target.width) <= 2 && Math.abs(window.innerHeight - target.height) <= 2) break;
+    await new Promise((r) => setTimeout(r, 16));
+  }
+  await new Promise((r) => requestAnimationFrame(() => r(null)));
+}
+
+/** A document was just opened: the window fits one page, then the zoom from Settings. */
+async function showOpenedDocument(): Promise<void> {
+  if (await fitWindowToDocument()) {
+    await applyDefaultZoom();
+  } else {
+    fitMode = "fit-page";
+    toolbar.updateFitMode(fitMode);
+    await applyFitMode();
+  }
 }
 
 viewer.onResizeCb = async () => {
@@ -386,6 +481,7 @@ settingsModal.onChange(s => {
     const startup = await getStartupArgs();
     if (startup.filePath) {
       if (startup.shouldPrint) {
+        autoFitWindow = false;
         document.getElementById("toolbar-container")!.style.display = "none";
         document.getElementById("welcome-screen")!.classList.add("hidden");
         await loadPdf(startup.filePath);
@@ -608,7 +704,7 @@ async function openProtected(fp: string, password?: string | null): Promise<void
     session.opened(fp, workingCopy ?? plain, used);
     syncProtection();
     setDirty(false);
-    await applyDefaultZoom();
+    await showOpenedDocument();
     if (infoPanel.isOpen) await showInfo();
   } catch (err) {
     showToast(msg("msgOpenProtectedFailed", { err: errText(err) }), true);
@@ -725,7 +821,7 @@ async function loadPdf(path: string, password?: string | null): Promise<void> {
     session.opened(path, workingCopy);
     syncProtection();
     setDirty(false);
-    await applyDefaultZoom();
+    await showOpenedDocument();
     if (infoPanel.isOpen) await showInfo();
   } catch (err: unknown) {
     // pdf.js's own error (not a command's): it has no code.
@@ -1544,11 +1640,11 @@ document.addEventListener("keydown", async (e) => {
     return;
   }
   if (!ctrl && (e.key === "ArrowRight" || e.key === "PageDown")) {
-    if (viewer.isLoaded()) { e.preventDefault(); viewer.goToPage(viewer.currentPage + viewer.columnCount); }
+    if (viewer.isLoaded()) { e.preventDefault(); viewer.nextPage(); }
     return;
   }
   if (!ctrl && (e.key === "ArrowLeft" || e.key === "PageUp")) {
-    if (viewer.isLoaded()) { e.preventDefault(); viewer.goToPage(viewer.currentPage - viewer.columnCount); }
+    if (viewer.isLoaded()) { e.preventDefault(); viewer.prevPage(); }
     return;
   }
 });

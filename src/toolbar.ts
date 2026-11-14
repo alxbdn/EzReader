@@ -247,7 +247,7 @@ export class Toolbar {
   }
 
   /** Fit modes are menu-only now; kept so callers need not care. */
-  updateFitMode(_mode: "none" | "fit-width" | "fit-height"): void {}
+  updateFitMode(_mode: "none" | "fit-width" | "fit-height" | "fit-page"): void {}
 
   /** Highlights the one-page / two-page buttons. */
   updateLayout(columns: number | null, mode: "vertical" | "horizontal"): void {

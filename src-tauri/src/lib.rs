@@ -5,6 +5,7 @@ mod fsutil;
 mod grants;
 mod ocr;
 mod pdf;
+mod ratio_lock;
 mod tempfiles;
 #[cfg(test)]
 mod test_util;
@@ -100,6 +101,11 @@ pub fn run() {
             if let Some(main) = app.get_webview_window("main") {
                 // Best effort: a window that cannot be measured stays as it is.
                 let _ = fit_to_screen(&main);
+                // The launcher keeps its shape when resized; a document
+                // window is free (its page decides, see window-fit.ts).
+                if startup_file.is_none() {
+                    ratio_lock::set_ratio_lock(&main, true);
+                }
             }
             Ok(())
         })
@@ -159,6 +165,7 @@ pub fn run() {
             commands::shell::open_url,
             commands::window::open_pages_in_new_window,
             commands::window::pictures_to_new_pdf,
+            ratio_lock::set_launcher_ratio_lock,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")

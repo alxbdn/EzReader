@@ -1065,6 +1065,11 @@ input[type="color"].color-picker.is-off::-webkit-color-swatch {
 #viewer-scroll {
   flex: 1;
   overflow: auto;
+  /* Page offsets (offsetTop / offsetLeft) count from the scrolled content. */
+  position: relative;
+  /* The viewer keeps its own place when pages are resized or redrawn; the
+     browser's scroll anchoring on top of that made the end of a document jump. */
+  overflow-anchor: none;
   /* The launcher's dot matrix, standing still. */
   background-color: var(--viewer);
   background-image: radial-gradient(circle, var(--viewer-dot) 1px, transparent 1.6px);
