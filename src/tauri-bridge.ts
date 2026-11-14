@@ -402,3 +402,11 @@ export async function openPagesInNewWindow(
 ): Promise<void> {
   return call<void>("open_pages_in_new_window", { inputPath, pages, name, x, y });
 }
+
+/**
+ * Keeps the window's proportions while it is resized (the launcher), or
+ * frees them (a document is open). Windows only; elsewhere it does nothing.
+ */
+export async function setLauncherRatioLock(locked: boolean): Promise<void> {
+  return call<void>("set_launcher_ratio_lock", { locked });
+}

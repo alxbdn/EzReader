@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { calculateColumnCount, buildRows } from "../pdf-viewer";
+import { calculateColumnCount, buildRows, focusedPageAt } from "../pdf-viewer";
 
 describe("calculateColumnCount", () => {
   it("returns 1 when only one page fits (800px container, 600px page)", () => {
@@ -56,5 +56,21 @@ describe("buildRows", () => {
 
   it("handles exactly matching page count for column count (4 pages, 2 columns)", () => {
     expect(buildRows(4, 2)).toEqual([[1, 2], [3, 4]]);
+  });
+});
+
+describe("focusedPageAt", () => {
+  // Three landscape pages, 400 px tall with 20 px gaps, in a 1000 px view.
+  const pages = [{ start: 20, size: 400 }, { start: 440, size: 400 }, { start: 860, size: 400 }];
+  it("picks the page nearest a third of the way down", () => {
+    expect(focusedPageAt(0, 1000, 280, pages)).toBe(1);
+    expect(focusedPageAt(200, 1000, 280, pages)).toBe(2);
+  });
+  it("is the last page once scrolled to the very end", () => {
+    // At the end the third line (280 + 333) is nearer page 2's middle.
+    expect(focusedPageAt(280, 1000, 280, pages)).toBe(3);
+  });
+  it("stays on page 1 when nothing scrolls", () => {
+    expect(focusedPageAt(0, 1000, 0, pages)).toBe(1);
   });
 });
