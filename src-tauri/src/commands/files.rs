@@ -195,6 +195,13 @@ pub fn load_picture(path: String) -> CmdResult<Picture> {
     Ok(Picture { data: b64(&out), width: img.width(), height: img.height() })
 }
 
+/// What this app's temp file names start with, after `ezreader-`: the
+/// app removes them on exit (see [`crate::tempfiles`]).
+#[tauri::command]
+pub fn temp_tag() -> String {
+    crate::tempfiles::tag()
+}
+
 /// Which of `paths` already exist (export asks before replacing them).
 #[tauri::command]
 pub fn existing_files(paths: Vec<String>) -> Vec<String> {

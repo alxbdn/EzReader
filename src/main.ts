@@ -66,6 +66,7 @@ import {
   adjustPages,
   encryptPdf,
   decryptPdf,
+  tempTag,
 } from "./tauri-bridge";
 import { currentMonitor, getCurrentWindow } from "@tauri-apps/api/window";
 import { PhysicalPosition, PhysicalSize } from "@tauri-apps/api/dpi";
@@ -159,8 +160,12 @@ const adjustView         = new AdjustView(appEl, applyAdjust, () => {
 });
 document.getElementById("viewer-area")!.after(adjustView.el);
 
+let tempPrefix: Promise<[string, string]> | null = null;
+
 async function newTempPath(suffix: string): Promise<string> {
-  return uniqueTempName(await tempDir(), suffix);
+  tempPrefix ??= Promise.all([tempDir(), tempTag()]);
+  const [dir, tag] = await tempPrefix;
+  return uniqueTempName(dir, tag, suffix);
 }
 
 /** The open document: paths, dirty flag and the edits not yet written to disk. */

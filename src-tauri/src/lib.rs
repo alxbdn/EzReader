@@ -4,6 +4,7 @@ mod error;
 mod fsutil;
 mod ocr;
 mod pdf;
+mod tempfiles;
 #[cfg(test)]
 mod test_util;
 
@@ -87,6 +88,9 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .setup(move |app| {
+            // Temp files left by an EzReader that crashed: removed in the
+            // background, so a big leftover never delays the window.
+            std::thread::spawn(tempfiles::sweep_leftovers);
             if let Some(path) = &startup_file {
                 allow_viewing(app, path);
             }
@@ -123,6 +127,7 @@ pub fn run() {
             commands::files::load_picture,
             commands::files::existing_files,
             commands::files::write_image_file,
+            commands::files::temp_tag,
             commands::convert::convert_text,
             commands::convert::save_as_dialog,
             commands::ocr::ocr_languages,
@@ -150,8 +155,13 @@ pub fn run() {
             commands::shell::open_url,
             commands::window::open_pages_in_new_window,
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application")
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application")
+        .run(|_app, event| {
+            if let tauri::RunEvent::Exit = event {
+                tempfiles::remove_own();
+            }
+        })
 }
 
 #[cfg(test)]

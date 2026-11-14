@@ -286,11 +286,15 @@ export class DocumentSession {
 
 let tempCounter = 0;
 
-/** Builds a temp file name that cannot collide with another open document or operation. */
-export function uniqueTempName(dir: string, suffix: string): string {
+/**
+ * Builds a temp file name that cannot collide with another open document or
+ * operation. `tag` names this app's process (`p1234`): the app removes the
+ * files it made on exit, and those of a crashed one at the next start.
+ */
+export function uniqueTempName(dir: string, tag: string, suffix: string): string {
   tempCounter += 1;
   const sep = dir.endsWith("/") || dir.endsWith("\\") ? "" : "/";
-  return `${dir}${sep}ezreader-${Date.now().toString(36)}-${tempCounter}-${suffix}`;
+  return `${dir}${sep}ezreader-${tag}-${Date.now().toString(36)}-${tempCounter}-${suffix}`;
 }
 
 /**
