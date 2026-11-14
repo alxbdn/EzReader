@@ -67,9 +67,45 @@ pub async fn open_pages_in_new_window(
     Ok(())
 }
 
+/// A fresh temp folder for a new, never-saved document, which the commands
+/// may use (see `grants`): `%TEMP%\ezreader-window-new-…`.
+fn new_document_dir() -> CmdResult<std::path::PathBuf> {
+    let n = NEXT_WINDOW.fetch_add(1, Ordering::Relaxed);
+    let dir = std::env::temp_dir().join(format!("ezreader-window-new-{}-{n}", std::process::id()));
+    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    Ok(dir)
+}
+
+/// Writes `image_paths` (one page each) to a new temp PDF named `name` and
+/// returns its path, ready to open in this window. The document has never
+/// been saved: its first Save asks where to put it.
+#[tauri::command]
+pub async fn pictures_to_new_pdf(app: AppHandle, image_paths: Vec<String>, name: String) -> CmdResult<String> {
+    crate::grants::check_all(image_paths.iter())?;
+    let out = new_document_dir()?.join(safe_file_name(&name));
+    let out_str = out.to_string_lossy().to_string();
+    let target = out_str.clone();
+    tauri::async_runtime::spawn_blocking(move || super::pdf::images_to_pdf(image_paths, target))
+        .await
+        .map_err(|e| e.to_string())??;
+    crate::allow_viewing(&app, &out_str);
+    Ok(out_str)
+}
+
 #[cfg(test)]
 mod tests {
-    use super::safe_file_name;
+    use super::{new_document_dir, safe_file_name};
+
+    #[test]
+    fn new_documents_get_their_own_temp_folder() {
+        let a = new_document_dir().unwrap();
+        let b = new_document_dir().unwrap();
+        assert_ne!(a, b);
+        assert!(a.file_name().unwrap().to_string_lossy().starts_with("ezreader-window-"));
+        assert_eq!(a.parent().unwrap(), std::env::temp_dir().as_path());
+        std::fs::remove_dir_all(&a).ok();
+        std::fs::remove_dir_all(&b).ok();
+    }
 
     #[test]
     fn file_names_are_made_safe() {

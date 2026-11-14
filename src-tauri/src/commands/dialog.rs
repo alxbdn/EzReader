@@ -27,6 +27,27 @@ pub fn open_pdf_dialog(app: AppHandle) -> CmdResult<Option<String>> {
     Ok(picked)
 }
 
+/// Opens a native file-picker for a document to open: a PDF, or a picture
+/// that becomes a new one-page PDF. Returns the selected path, or null.
+#[tauri::command]
+pub fn open_document_dialog(app: AppHandle) -> CmdResult<Option<String>> {
+    let mut all = vec!["pdf"];
+    all.extend(IMAGE_EXTENSIONS);
+    let result = app
+        .dialog()
+        .file()
+        .add_filter("PDF and pictures", &all)
+        .add_filter("PDF Files", &["pdf"])
+        .add_filter("Images", &IMAGE_EXTENSIONS)
+        .blocking_pick_file();
+
+    let picked = result.map(filepath_to_string);
+    if let Some(path) = &picked {
+        crate::allow_viewing(&app, path);
+    }
+    Ok(picked)
+}
+
 /// Picture types that can be placed on a page or added as a page.
 pub const IMAGE_EXTENSIONS: [&str; 6] = ["png", "jpg", "jpeg", "webp", "gif", "bmp"];
 

@@ -288,6 +288,18 @@ describe("DocumentSession naming (rename in the title bar, Save / Save As)", () 
     expect(session.planSave(false).dialog).toBeNull();
   });
 
+  it("a copy never saved can suggest another folder, keeping a typed name", () => {
+    const { session } = makeSession();
+    session.opened("/tmp/ezreader-window-new-1/Scan.pdf", null);
+    session.markUnsavedCopy("/pics/Scan.pdf");
+    expect(session.planSave(false)).toEqual({ dialog: "/pics/Scan.pdf", renameTo: null });
+    session.rename("Invoice");
+    expect(session.planSave(false)).toEqual({ dialog: "/pics/Invoice.pdf", renameTo: null });
+    session.savedAs();
+    expect(session.planSave(false).dialog).toBeNull();
+    expect(session.planSave(true).dialog).toBe("/tmp/ezreader-window-new-1/Scan.pdf");
+  });
+
   it("opening a document drops the pending name and the unsaved-copy flag", () => {
     const { session } = makeSession();
     session.opened("/docs/a.pdf", null);

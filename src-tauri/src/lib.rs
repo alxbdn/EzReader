@@ -122,6 +122,7 @@ pub fn run() {
             commands::security::encrypt_pdf,
             commands::security::decrypt_pdf,
             commands::dialog::open_pdf_dialog,
+            commands::dialog::open_document_dialog,
             commands::dialog::save_pdf_dialog,
             commands::dialog::pick_directory_dialog,
             commands::dialog::open_image_dialog,
@@ -157,6 +158,7 @@ pub fn run() {
             commands::shell::open_default_apps_settings,
             commands::shell::open_url,
             commands::window::open_pages_in_new_window,
+            commands::window::pictures_to_new_pdf,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
