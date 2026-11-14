@@ -31,8 +31,6 @@ const MIN_SIZE = 0.04;
 const LOUPE = 132;
 /** The app's selection red (as in the page panel). */
 const SELECT = "#E53935";
-/** While a corner moves, the result is drawn at this share of the screen's resolution. */
-const LIVE_SCALE = 0.75;
 const ZOOM = 4;
 /** Biggest bitmap rendered for a page (the loupe reads it ×4). */
 const MAX_PIXELS = 12e6;
@@ -106,7 +104,7 @@ export class AdjustView {
    * Straighten: the result as it will be, drawn over the page while a corner
    * moves (`on`), from `src`, a copy of the page at about twice its shown size.
    */
-  private live: { canvas: HTMLCanvasElement; src: Pixels; on: boolean; frame: number; sharp: number; off: number } | null = null;
+  private live: { canvas: HTMLCanvasElement; src: Pixels; on: boolean; off: number } | null = null;
 
   constructor(
     host: HTMLElement,
@@ -322,9 +320,9 @@ export class AdjustView {
       if (e.key === "ArrowUp") q[1] -= step / fr.height;
       if (e.key === "ArrowDown") q[1] += step / fr.height;
       q[0] = clamp01(q[0]); q[1] = clamp01(q[1]);
-      // A nudge shows the result for a moment too.
-      this.setLive(true);
-      if (this.live) { clearTimeout(this.live.off); this.live.off = window.setTimeout(() => this.setLive(false), 700); }
+      // A nudge shows the page itself for a moment, then the result again.
+      this.setLive(false);
+      if (this.live) { clearTimeout(this.live.off); this.live.off = window.setTimeout(() => this.showResult(), 700); }
       this.syncWarp();
       this.syncLabels();
       return;
@@ -464,6 +462,7 @@ export class AdjustView {
     this.stage.replaceChildren(frame);
     this.syncCrop();
     this.syncWarp();
+    if (s.mode === "straighten") this.showResult();
   }
 
   private pageCanvas(r: Rendered): HTMLCanvasElement {
@@ -601,7 +600,7 @@ export class AdjustView {
     result.hidden = true;
     frame.append(canvas, result, svg, ...corners, loupe, label);
     this.warpEls = { svg, dim, poly, link, corners, loupe, label };
-    this.live = { canvas: result, src: this.liveSource(r, w, h), on: false, frame: 0, sharp: 0, off: 0 };
+    this.live = { canvas: result, src: this.liveSource(r, w, h), on: false, off: 0 };
   }
 
   private dragCorner(e: PointerEvent, i: number): void {
@@ -616,7 +615,8 @@ export class AdjustView {
     const q = this.current.quad[i];
     const start: Point = [q[0], q[1]];
     const x0 = e.clientX, y0 = e.clientY;
-    this.setLive(true);
+    // While the corner moves, the page itself shows, to aim with the loupe.
+    this.setLive(false);
     this.syncWarp();
     const move = (ev: PointerEvent) => {
       q[0] = clamp01(start[0] + (ev.clientX - x0) / fr.width);
@@ -627,7 +627,7 @@ export class AdjustView {
       target.removeEventListener("pointermove", move);
       target.removeEventListener("pointerup", up);
       target.removeEventListener("pointercancel", up);
-      this.setLive(false);
+      this.showResult();
       this.syncLabels();
     };
     target.addEventListener("pointermove", move);
@@ -646,7 +646,6 @@ export class AdjustView {
     els.poly.setAttribute("d", d);
     // Dim what falls outside the page's corners.
     els.dim.setAttribute("d", `M0 0H${w}V${h}H0Z ${d}`);
-    this.scheduleLive();
     pts.forEach(([x, y], i) => {
       const b = els.corners[i];
       b.style.left = `${x}px`;
@@ -687,18 +686,24 @@ export class AdjustView {
     return src;
   }
 
+  /** Shows the straightened result, once the corners change the page. */
+  private showResult(): void {
+    const s = this.current;
+    this.setLive(!!s && s.mode === "straighten" && changesPage(s));
+  }
+
   /**
-   * Shows the straightened result over the page (while a corner moves), or
-   * the page with its outline again. The loupe keeps showing the page itself,
-   * to place the corner to the pixel.
+   * Shows the straightened result in place of the page, with the outline and
+   * the corners over it (faint, ready to be grabbed again), or the page
+   * itself, as while a corner moves.
    */
   private setLive(on: boolean): void {
     const l = this.live;
-    if (!l || l.on === on) return;
-    l.on = on;
+    if (!l) return;
     clearTimeout(l.off);
-    if (on) this.drawLive(LIVE_SCALE);
-    else { cancelAnimationFrame(l.frame); clearTimeout(l.sharp); }
+    if (on) this.drawLive(Math.min(window.devicePixelRatio || 1, 2));
+    if (l.on === on) return;
+    l.on = on;
     l.canvas.hidden = !on;
     this.frame?.classList.toggle("adj-live-on", on);
   }
@@ -706,33 +711,15 @@ export class AdjustView {
   private dropLive(): void {
     const l = this.live;
     if (!l) return;
-    cancelAnimationFrame(l.frame);
-    clearTimeout(l.sharp);
     clearTimeout(l.off);
     l.canvas.width = l.canvas.height = 0;
     this.live = null;
   }
 
-  /**
-   * Redraws the result on the next frame, a little below screen resolution
-   * so it keeps up with the pointer; once the corner rests, sharp.
-   */
-  private scheduleLive(): void {
-    const l = this.live;
-    if (!l || !l.on) return;
-    cancelAnimationFrame(l.frame);
-    clearTimeout(l.sharp);
-    l.frame = requestAnimationFrame(() => {
-      this.drawLive(LIVE_SCALE);
-      const dpr = Math.min(window.devicePixelRatio || 1, 2);
-      l.sharp = window.setTimeout(() => this.drawLive(dpr), 160);
-    });
-  }
-
   private drawLive(scale: number): void {
     const l = this.live;
     const s = this.current;
-    if (!l || !l.on || !s || s.mode !== "straighten" || !this.frame) return;
+    if (!l || !s || s.mode !== "straighten" || !this.frame) return;
     const w = Math.max(1, Math.round(this.frame.clientWidth * scale)), h = Math.max(1, Math.round(this.frame.clientHeight * scale));
     const { width: sw, height: sh } = l.src;
     const quad = s.quad.map(([x, y]) => [x * sw, y * sh] as Point) as Quad;
