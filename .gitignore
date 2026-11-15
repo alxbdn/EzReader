@@ -39,3 +39,7 @@ marketing/
 e2e/results/
 visual/results/
 visual/report/
+
+# Load test (perf/)
+perf-big.pdf
+perf-results.json

@@ -1,0 +1,59 @@
+name: Performance
+
+# Load test of the viewer: a 1500-page PDF (300 of them scanned, read by the
+# background OCR) is opened, scrolled, jumped through and zoomed in a loop
+# while memory, CPU and response times are measured. The job fails when a
+# figure goes past perf/thresholds.json (see perf/README.md).
+#
+# Pull requests and pushes run the quick test (3 rounds, a few minutes).
+# Mondays, and on demand, a soak test runs 15 rounds on a 3000-page PDF.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    - cron: '47 4 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  load:
+    name: Load test (${{ (github.event_name == 'pull_request' || github.event_name == 'push') && 'quick' || 'soak' }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Install dependencies and Chromium
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+
+      - name: Build the front end
+        run: npm run build
+
+      - name: Load test
+        run: |
+          PAGES=1500; ROUNDS=3
+          case "${{ github.event_name }}" in schedule|workflow_dispatch) PAGES=3000; ROUNDS=15 ;; esac
+          node perf/make-big-pdf.mjs "$RUNNER_TEMP/big.pdf" $PAGES
+          node perf/stress.mjs "$RUNNER_TEMP/big.pdf" --rounds $ROUNDS --out perf-results.json
+
+      - name: Keep the measurements
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: perf-results
+          path: perf-results.json
+          if-no-files-found: ignore

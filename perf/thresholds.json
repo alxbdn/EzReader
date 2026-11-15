@@ -1,0 +1,14 @@
+{
+  "open_ms": 6000,
+  "jump_p95_ms": 1500,
+  "zoom_p95_ms": 1500,
+  "memory_opened_mb": 1000,
+  "memory_peak_mb": 4500,
+  "memory_leak_per_round_mb": 600,
+  "heap_leak_per_round_mb": 20,
+  "dom_nodes_growth": 15000,
+  "pdf_worker_heap_end_mb": 200,
+  "canvas_peak_mb": 250,
+  "cpu_idle_percent": 5,
+  "page_errors": 0
+}
