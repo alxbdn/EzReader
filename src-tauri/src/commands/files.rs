@@ -16,15 +16,28 @@ pub(crate) fn rename_no_clobber(from: &Path, to: &Path) -> CmdResult<()> {
     if from == to {
         return Ok(());
     }
-    // A case-only change ("a.pdf" -> "A.pdf") is the same file on Windows.
-    let same_file = cfg!(windows)
-        && from
-            .to_string_lossy()
-            .eq_ignore_ascii_case(&to.to_string_lossy());
+    // A case-only change ("a.pdf" -> "A.pdf") is the same file on Windows,
+    // and on macOS (its disks ignore case by default).
+    let same_file = is_same_file(from, to);
     if to.exists() && !same_file {
         return Err(PdfError::new(ErrorCode::Exists, "exists"));
     }
     std::fs::rename(from, to).map_err(|e| e.to_string()).map_err(PdfError::from)
+}
+
+#[cfg(windows)]
+fn is_same_file(from: &Path, to: &Path) -> bool {
+    from.to_string_lossy().eq_ignore_ascii_case(&to.to_string_lossy())
+}
+
+/// Both names lead to the same file on disk (a case-insensitive disk).
+#[cfg(unix)]
+fn is_same_file(from: &Path, to: &Path) -> bool {
+    use std::os::unix::fs::MetadataExt;
+    match (std::fs::metadata(from), std::fs::metadata(to)) {
+        (Ok(a), Ok(b)) => a.dev() == b.dev() && a.ino() == b.ino(),
+        _ => false,
+    }
 }
 
 /// Renames the open document on disk (the title bar rename, applied on save).
@@ -85,12 +98,21 @@ mod tests {
 
     #[cfg(not(windows))]
     #[test]
-    fn refuses_case_collision_on_case_sensitive_fs() {
+    fn case_only_renames_follow_the_disk() {
         let d = dir();
         let lower = d.join("a.pdf");
         let upper = d.join("A.pdf");
         std::fs::write(&lower, b"lower").unwrap();
         std::fs::write(&upper, b"upper").unwrap();
+        if std::fs::read(&lower).unwrap() == b"upper" {
+            // A disk that ignores case (macOS by default): both names are
+            // one file, and the rename only changes its case.
+            assert_eq!(rename_no_clobber(&lower, &upper), Ok(()));
+            let names: Vec<_> = std::fs::read_dir(&d).unwrap().map(|e| e.unwrap().file_name()).collect();
+            assert_eq!(names, ["A.pdf"]);
+            let _ = std::fs::remove_dir_all(d);
+            return;
+        }
         assert_eq!(
             rename_no_clobber(&lower, &upper),
             Err(PdfError::new(ErrorCode::Exists, "exists"))

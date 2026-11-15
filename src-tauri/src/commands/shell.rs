@@ -9,7 +9,11 @@ use crate::AppState;
 #[tauri::command]
 pub fn get_startup_args(window: tauri::WebviewWindow, state: State<AppState>) -> crate::StartupArgs {
     if window.label() == "main" {
-        return state.startup_args.lock().unwrap().clone();
+        // Taken under the lock: a file opened from the Finder after this
+        // goes to the page (`open-files` event) instead.
+        let args = state.startup_args.lock().unwrap();
+        state.startup_taken.store(true, std::sync::atomic::Ordering::SeqCst);
+        return args.clone();
     }
     state.window_args.lock().unwrap().get(window.label()).cloned().unwrap_or_default()
 }
@@ -26,6 +30,7 @@ fn is_packaged() -> bool {
 }
 
 #[cfg(not(target_os = "windows"))]
+#[cfg_attr(target_os = "macos", allow(dead_code))]
 fn desktop_file_path() -> Option<std::path::PathBuf> {
     std::env::var_os("XDG_DATA_HOME")
         .filter(|v| !v.is_empty())
@@ -35,6 +40,7 @@ fn desktop_file_path() -> Option<std::path::PathBuf> {
 }
 
 #[cfg(not(target_os = "windows"))]
+#[cfg_attr(target_os = "macos", allow(dead_code))]
 fn mimeapps_list_path() -> Option<std::path::PathBuf> {
     std::env::var_os("XDG_CONFIG_HOME")
         .filter(|v| !v.is_empty())
@@ -44,6 +50,7 @@ fn mimeapps_list_path() -> Option<std::path::PathBuf> {
 }
 
 #[cfg(not(target_os = "windows"))]
+#[cfg_attr(target_os = "macos", allow(dead_code))]
 fn desktop_entry_exists() -> bool {
     desktop_file_path().is_some_and(|p| p.exists())
         || std::path::Path::new("/usr/share/applications/ezreader.desktop").exists()
@@ -64,7 +71,11 @@ pub fn check_pdf_association() -> bool {
         hkcu.open_subkey(r"Software\Classes\com.ezreader.app\shell\open\command")
             .is_ok()
     }
-    #[cfg(not(target_os = "windows"))]
+    #[cfg(target_os = "macos")]
+    {
+        crate::macos::is_default_pdf_reader()
+    }
+    #[cfg(not(any(target_os = "windows", target_os = "macos")))]
     {
         if !desktop_entry_exists() {
             return false;
@@ -291,7 +302,11 @@ pub fn register_pdf_handler() -> CmdResult<()> {
 
         Ok(())
     }
-    #[cfg(not(target_os = "windows"))]
+    #[cfg(target_os = "macos")]
+    {
+        crate::macos::make_default_pdf_reader().map_err(PdfError::from)
+    }
+    #[cfg(not(any(target_os = "windows", target_os = "macos")))]
     {
         let desktop_path = desktop_file_path()
             .ok_or_else(|| PdfError::from("Could not locate applications directory"))?;
@@ -895,6 +910,7 @@ mod tests {
 }
 
 #[cfg(not(target_os = "windows"))]
+#[cfg_attr(target_os = "macos", allow(dead_code))]
 fn strip_ezreader_from_mimeapps(content: &str) -> String {
     let mut out = Vec::new();
     for line in content.lines() {
@@ -967,7 +983,11 @@ pub fn unregister_pdf_handler() -> CmdResult<()> {
 
         Ok(())
     }
-    #[cfg(not(target_os = "windows"))]
+    #[cfg(target_os = "macos")]
+    {
+        crate::macos::stop_being_default_pdf_reader().map_err(PdfError::from)
+    }
+    #[cfg(not(any(target_os = "windows", target_os = "macos")))]
     {
         if let Some(desktop_path) = desktop_file_path() {
             if desktop_path.exists() {
@@ -1087,7 +1107,9 @@ pub fn open_url(url: String) -> CmdResult<()> {
     }
     #[cfg(not(target_os = "windows"))]
     {
-        Command::new("xdg-open")
+        // `open` on macOS, the desktop's handler elsewhere.
+        let opener = if cfg!(target_os = "macos") { "open" } else { "xdg-open" };
+        Command::new(opener)
             .arg(&url)
             .spawn()
             .map_err(|e| format!("could not open the link ({e})"))?;

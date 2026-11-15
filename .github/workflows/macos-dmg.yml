@@ -1,0 +1,151 @@
+name: macOS Disk Image
+
+# A universal .dmg (Intel and Apple Silicon), attached to the GitHub Release
+# of each version tag. It is signed ad hoc only (no Apple Developer account):
+# the Homebrew cask (alxbdn/homebrew-ezreader) lifts the quarantine on install.
+
+on:
+  push:
+    branches: [main]
+    tags:
+      - 'v*.*.*'
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      publish_release:
+        description: Publier dans une GitHub Release
+        required: false
+        default: false
+        type: boolean
+      release_tag:
+        description: 'Tag de la release (ex: v1.0.1, vide = version de tauri.conf.json)'
+        required: false
+        default: ''
+        type: string
+
+permissions:
+  contents: write
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  build-dmg:
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@39008827e6b4319a349e9a42dfc90579dd25f1ca # stable
+        with:
+          components: clippy
+          targets: aarch64-apple-darwin,x86_64-apple-darwin
+
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          workspaces: src-tauri
+
+      - name: Resolve version
+        id: version
+        shell: bash
+        run: |
+          if [[ "${{ github.ref }}" == refs/tags/v* ]]; then
+            TAG="${GITHUB_REF_NAME}"
+            VERSION="${TAG#v}"
+          elif [[ -n "${{ inputs.release_tag }}" ]]; then
+            RAW="${{ inputs.release_tag }}"
+            VERSION="${RAW#v}"
+            TAG="v${VERSION}"
+          else
+            VERSION="$(node -p "require('./src-tauri/tauri.conf.json').version")"
+            TAG="v${VERSION}"
+          fi
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+          if [[ "$VERSION" == *"-alpha"* ]] || [[ "$VERSION" == *"-beta"* ]] || [[ "$VERSION" == *"-rc"* ]]; then
+            echo "is_prerelease=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "is_prerelease=false" >> "$GITHUB_OUTPUT"
+          fi
+          echo "Resolved version=${VERSION} tag=${TAG}"
+
+      - name: Sync version in tauri.conf.json
+        shell: bash
+        run: |
+          node -e '
+            const fs = require("fs");
+            const path = "src-tauri/tauri.conf.json";
+            const conf = JSON.parse(fs.readFileSync(path, "utf8"));
+            conf.version = process.env.BUILD_VERSION;
+            fs.writeFileSync(path, JSON.stringify(conf, null, 2) + "\n");
+          '
+        env:
+          BUILD_VERSION: ${{ steps.version.outputs.version }}
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Run tests and lint checks
+        run: |
+          npx tsc --noEmit
+          npm test
+          cargo test --manifest-path src-tauri/Cargo.toml
+          cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
+
+      - name: Build universal app and disk image
+        run: npx tauri build --target universal-apple-darwin --bundles app,dmg
+
+      - name: Check the app
+        shell: bash
+        run: |
+          APP="src-tauri/target/universal-apple-darwin/release/bundle/macos/EzReader.app"
+          BIN="$APP/Contents/MacOS/$(/usr/libexec/PlistBuddy -c "Print :CFBundleExecutable" "$APP/Contents/Info.plist")"
+          ARCHS="$(lipo -archs "$BIN")"
+          echo "Architectures: $ARCHS"
+          [[ "$ARCHS" == *x86_64* && "$ARCHS" == *arm64* ]]
+          codesign --verify --deep --strict "$APP"
+          /usr/libexec/PlistBuddy -c "Print :CFBundleIdentifier" "$APP/Contents/Info.plist"
+
+      - name: Stage disk image
+        id: stage
+        shell: bash
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          mkdir -p dist-artifacts
+          DMG="ezreader-${VERSION}-macos-universal.dmg"
+          cp src-tauri/target/universal-apple-darwin/release/bundle/dmg/EzReader_*_universal.dmg "dist-artifacts/${DMG}"
+          shasum -a 256 "dist-artifacts/${DMG}" | tee "dist-artifacts/${DMG}.sha256"
+          echo "dmg=${DMG}" >> "$GITHUB_OUTPUT"
+          ls -lh dist-artifacts/
+
+      - name: Upload disk image artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ezreader-macos-${{ steps.version.outputs.version }}
+          path: dist-artifacts/${{ steps.stage.outputs.dmg }}
+          if-no-files-found: error
+
+      - name: Publish to GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v') || inputs.publish_release == true
+        uses: softprops/action-gh-release@8a0cd651e5b2365bd640854a3fa5dfc70e4875f3 # v3.0.4
+        with:
+          tag_name: ${{ steps.version.outputs.tag }}
+          name: ${{ steps.version.outputs.tag }}
+          generate_release_notes: true
+          prerelease: ${{ steps.version.outputs.is_prerelease == 'true' }}
+          files: |
+            dist-artifacts/${{ steps.stage.outputs.dmg }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

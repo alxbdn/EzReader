@@ -24,6 +24,16 @@ Read, annotate, sign, edit, reorganize, compress and protect your PDFs. Everythi
 
 EzReader runs on 64-bit Windows 10 (version 2004 or later) and Windows 11. The download is about 3 MB.
 
+### macOS
+
+On macOS 11 or later (Intel and Apple Silicon), install it with [Homebrew](https://brew.sh):
+
+```bash
+brew install --cask alxbdn/ezreader/ezreader
+```
+
+The release also has the disk image, `ezreader-<version>-macos-universal.dmg`. The app is not notarized by Apple: installed with Homebrew it opens straight away; from the disk image, right-click EzReader in Applications and choose **Open** the first time.
+
 ---
 
 ## Features
@@ -84,7 +94,7 @@ Extracted, split and rearranged files contain nothing from the pages you left ou
 - **Export** pages as PNG or JPEG images (96, 150 or 300 dpi), or as a flattened PDF copy, with or without annotations
 - **Convert** the text of a PDF to Word (.docx), Excel (.xlsx, one sheet per page), RTF, a web page (HTML), plain text or XML. Paragraphs, titles and tables are kept; pictures and the exact layout are not
 - **Select text in scans and pictures**: pages without text are read in the background by the OCR engine built into the system, and their words become selectable and copyable like any text. Only the pages on screen are read, once each, on your computer.
-- **Recognize text (OCR)** in scanned pages and pictures with the OCR engine built into Windows: the page on the left with the words found outlined, the text on the right, ready to copy. It reads the languages installed in Windows and adds nothing to the app's size. On Linux, the PaddleOCR models (RapidOCR) are built into the app: languages written in the Latin alphabet, nothing to install
+- **Recognize text (OCR)** in scanned pages and pictures with the OCR engine built into Windows: the page on the left with the words found outlined, the text on the right, ready to copy. It reads the languages installed in Windows and adds nothing to the app's size. On macOS it uses the engine built into macOS (Vision) the same way. On Linux, the PaddleOCR models (RapidOCR) are built into the app: languages written in the Latin alphabet, nothing to install
 - **Images to PDF**: turn a set of pictures into a PDF, one picture per page
 - **Compress** with a Lossless, Balanced or Maximum preset, or give a target size and let EzReader find the best quality under it. The estimated result is shown before you save
 - **Password**: protect a PDF with a password (with a strength meter and tips), open protected PDFs, or remove the protection

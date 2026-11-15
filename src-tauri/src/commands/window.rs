@@ -44,21 +44,46 @@ pub async fn open_pages_in_new_window(
     extract.await.map_err(|e| e.to_string())??;
 
     crate::allow_viewing(&app, &out_str);
-    let label = format!("doc-{n}");
-    app.state::<AppState>().window_args.lock().unwrap().insert(
-        label.clone(),
-        StartupArgs { file_path: Some(out_str), should_print: false, unsaved: true },
-    );
+    let args = StartupArgs { file_path: Some(out_str), should_print: false, unsaved: true };
+    // The pointer lands on the title bar, a little in from the left.
+    open_window(&app, args, x.zip(y).map(|(x, y)| (x - 160.0, y - 16.0)))
+}
 
-    let mut builder = WebviewWindowBuilder::new(&app, &label, WebviewUrl::App("index.html".into()))
+/// Opens `path` (a file the user already chose: a document opened from the
+/// Finder while this window shows another one) in a new EzReader window.
+#[tauri::command]
+pub fn open_file_in_new_window(app: AppHandle, path: String) -> CmdResult<()> {
+    crate::grants::check(&path)?;
+    open_window(&app, StartupArgs { file_path: Some(path), should_print: false, unsaved: false }, None)
+}
+
+/// A new document window, opening what `args` says, at `position` (logical
+/// pixels) or where the system puts it.
+pub(crate) fn open_window(app: &AppHandle, args: StartupArgs, position: Option<(f64, f64)>) -> CmdResult<()> {
+    let n = NEXT_WINDOW.fetch_add(1, Ordering::Relaxed);
+    let label = format!("doc-{n}");
+    app.state::<AppState>().window_args.lock().unwrap().insert(label.clone(), args);
+
+    let mut builder = WebviewWindowBuilder::new(app, &label, WebviewUrl::App("index.html".into()))
         .title("EzReader")
         .inner_size(1100.0, 760.0)
         .min_inner_size(720.0, 480.0)
-        .decorations(false)
         .resizable(true);
-    if let (Some(x), Some(y)) = (x, y) {
-        // The pointer lands on the title bar, a little in from the left.
-        builder = builder.position(x - 160.0, y - 16.0);
+    // Same title bar as the main window (tauri.macos.conf.json): the system
+    // buttons on the left, over the menu row.
+    #[cfg(target_os = "macos")]
+    {
+        builder = builder
+            .title_bar_style(tauri::TitleBarStyle::Overlay)
+            .hidden_title(true)
+            .traffic_light_position(tauri::LogicalPosition::new(crate::TRAFFIC_LIGHTS.0, crate::TRAFFIC_LIGHTS.1));
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        builder = builder.decorations(false);
+    }
+    if let Some((x, y)) = position {
+        builder = builder.position(x, y);
     }
     if let Err(e) = builder.build() {
         app.state::<AppState>().window_args.lock().unwrap().remove(&label);

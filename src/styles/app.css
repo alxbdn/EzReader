@@ -2419,6 +2419,13 @@ body.custom-titlebar #menubar-row {
   -webkit-user-select: none;
 }
 
+/* macOS: the menus are at the top of the screen and the system buttons sit
+   on the left of this row (tauri.macos.conf.json, TRAFFIC_LIGHTS in lib.rs). */
+body.mac #menubar-row { padding-left: 78px; }
+body.mac.mac-fullscreen #menubar-row { padding-left: 6px; }
+body.mac .menubar-menu,
+body.mac .titlebar-logo { display: none !important; }
+
 .window-controls {
   display: flex;
   align-self: stretch;
