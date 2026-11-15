@@ -52,7 +52,7 @@
     },
     "linux": {
       "deb": {
-        "depends": ["tesseract-ocr", "cups-client", "xdg-utils"]
+        "depends": ["cups-client", "xdg-utils"]
       }
     },
     "fileAssociations": [

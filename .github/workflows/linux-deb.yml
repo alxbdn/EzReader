@@ -44,9 +44,7 @@ jobs:
             libappindicator3-dev \
             librsvg2-dev \
             patchelf \
-            tesseract-ocr \
-            tesseract-ocr-eng \
-            tesseract-ocr-fra \
+            libssl-dev \
             cups-client \
             xdg-utils
 

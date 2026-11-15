@@ -6,6 +6,8 @@ mod fsutil;
 pub mod fuzzing;
 mod grants;
 mod ocr;
+#[cfg(not(windows))]
+mod rapid_ocr;
 mod pdf;
 mod ratio_lock;
 mod resize_border;
