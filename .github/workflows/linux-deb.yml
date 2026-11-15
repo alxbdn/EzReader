@@ -1,0 +1,151 @@
+name: Linux Debian Package
+
+on:
+  push:
+    branches: [main, portage_linux]
+    tags:
+      - 'v*.*.*'
+  pull_request:
+    branches: [main, portage_linux]
+  workflow_dispatch:
+    inputs:
+      publish_release:
+        description: Publier dans une GitHub Release
+        required: false
+        default: false
+        type: boolean
+      release_tag:
+        description: 'Tag de la release (ex: v0.2.31, vide = version de tauri.conf.json)'
+        required: false
+        default: ''
+        type: string
+
+permissions:
+  contents: write
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  build-deb:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Install Ubuntu system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libwebkit2gtk-4.1-dev \
+            libappindicator3-dev \
+            librsvg2-dev \
+            patchelf \
+            tesseract-ocr \
+            tesseract-ocr-eng \
+            tesseract-ocr-fra \
+            cups-client \
+            xdg-utils
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: Resolve version
+        id: version
+        shell: bash
+        run: |
+          if [[ "${{ github.ref }}" == refs/tags/v* ]]; then
+            TAG="${GITHUB_REF_NAME}"
+            VERSION="${TAG#v}"
+          elif [[ -n "${{ inputs.release_tag }}" ]]; then
+            RAW="${{ inputs.release_tag }}"
+            VERSION="${RAW#v}"
+            TAG="v${VERSION}"
+          else
+            VERSION="$(node -p "require('./src-tauri/tauri.conf.json').version")"
+            TAG="v${VERSION}"
+          fi
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+          if [[ "$VERSION" == *"-alpha"* ]] || [[ "$VERSION" == *"-beta"* ]] || [[ "$VERSION" == *"-rc"* ]]; then
+            echo "is_prerelease=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "is_prerelease=false" >> "$GITHUB_OUTPUT"
+          fi
+          echo "Resolved version=${VERSION} tag=${TAG}"
+
+      - name: Sync version in tauri.conf.json
+        shell: bash
+        run: |
+          node -e '
+            const fs = require("fs");
+            const path = "src-tauri/tauri.conf.json";
+            const conf = JSON.parse(fs.readFileSync(path, "utf8"));
+            conf.version = process.env.BUILD_VERSION;
+            fs.writeFileSync(path, JSON.stringify(conf, null, 2) + "\n");
+          '
+        env:
+          BUILD_VERSION: ${{ steps.version.outputs.version }}
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Run tests and lint checks
+        run: |
+          npx tsc --noEmit
+          npm test
+          cargo test --manifest-path src-tauri/Cargo.toml
+          cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
+
+      - name: Build Debian package (.deb)
+        run: npx tauri build --bundles deb
+
+      - name: Stage Debian artifacts
+        shell: bash
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          mkdir -p dist-artifacts
+          cp "src-tauri/target/release/bundle/deb/EzReader_${VERSION}_amd64.deb" \
+             "dist-artifacts/ezreader_${VERSION}_amd64.deb"
+          cp "src-tauri/target/release/ezreader-portable" \
+             "dist-artifacts/ezreader-portable-${VERSION}-linux-x64"
+          ls -lh dist-artifacts/
+
+      - name: Upload Debian package artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ezreader-linux-deb-${{ steps.version.outputs.version }}
+          path: |
+            dist-artifacts/ezreader_${{ steps.version.outputs.version }}_amd64.deb
+            dist-artifacts/ezreader-portable-${{ steps.version.outputs.version }}-linux-x64
+          if-no-files-found: error
+
+      - name: Publish to GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v') || inputs.publish_release == true
+        uses: softprops/action-gh-release@v3
+        with:
+          tag_name: ${{ steps.version.outputs.tag }}
+          name: ${{ steps.version.outputs.tag }}
+          generate_release_notes: true
+          prerelease: ${{ steps.prerelease.outputs.is_prerelease == 'true' }}
+          files: |
+            dist-artifacts/ezreader_${{ steps.version.outputs.version }}_amd64.deb
+            dist-artifacts/ezreader-portable-${{ steps.version.outputs.version }}-linux-x64
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
