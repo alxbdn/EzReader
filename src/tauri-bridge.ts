@@ -105,6 +105,11 @@ export interface StartupArgs {
 }
 
 /** Returns the CLI arguments parsed at startup (file path and print flag). */
+/** Opens `path` (a file the user already chose) in a new EzReader window. */
+export async function openFileInNewWindow(path: string): Promise<void> {
+  return call<void>("open_file_in_new_window", { path });
+}
+
 export async function getStartupArgs(): Promise<StartupArgs> {
   return call<StartupArgs>("get_startup_args");
 }

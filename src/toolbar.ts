@@ -8,7 +8,9 @@ import {
   MAX_SCALE,
 } from "./models";
 import { ToolRow, type SignatureChip } from "./tool-row";
-import type { Translations } from "./i18n";
+import { getTranslations, type Translations } from "./i18n";
+import { isMac } from "./platform";
+import { MacMenu } from "./mac-menu";
 import {
   ICON_INFO,
   ICON_FULLSCREEN,
@@ -96,6 +98,8 @@ type EventHandler = (e: ToolbarEvent) => void;
 
 interface MenuItemDef {
   label: keyof Translations;
+  /** macOS: in the app menu (EzReader ▸ Settings…). */
+  appMenu?: boolean;
   shortcut?: string;
   action: () => void;
   requiresDoc?: boolean;
@@ -159,6 +163,9 @@ export class Toolbar {
   private locked = false;
   private _lastScale = CSS_UNITS;
 
+  /** macOS: the same menus, at the top of the screen. */
+  private macMenu: MacMenu | null = null;
+
   private _i18nText  = new Map<HTMLElement, keyof Translations>();
   private _i18nTitle = new Map<HTMLElement, keyof Translations>();
 
@@ -168,6 +175,10 @@ export class Toolbar {
     this.search = new SearchPill();
     this.tools = new ToolRow((e) => this.emit(e), () => this.allowed());
     this.buildMenuBar();
+    if (isMac && "__TAURI_INTERNALS__" in window) {
+      document.body.classList.add("mac");
+      this.macMenu = new MacMenu(this.getMenuDefs(), getTranslations("en"));
+    }
     this.buildContextToolbar();
     this.setupMenuInteraction();
   }
@@ -190,6 +201,7 @@ export class Toolbar {
     for (const [el, raw] of this.shortcutEls) el.textContent = raw.replace("Shift", shift);
     this.search.applyTranslations(t);
     this.tools.applyTranslations(t);
+    this.macMenu?.applyTranslations(t);
   }
 
   private reg(el: HTMLElement, text?: keyof Translations, title?: keyof Translations): void {
@@ -273,6 +285,7 @@ export class Toolbar {
   }
 
   private setMark(id: string, on: boolean): void {
+    this.macMenu?.setMark(id, on);
     const entry = this.markEntries.get(id);
     if (!entry) return;
     entry.classList.toggle("marked", on);
@@ -317,6 +330,7 @@ export class Toolbar {
     for (const btn of this.docMenuEntries) {
       btn.disabled = !loaded;
     }
+    this.macMenu?.setLoaded(loaded);
     if (!loaded) this.search.close();
   }
 
@@ -401,7 +415,7 @@ export class Toolbar {
           { label: "menuExport", action: go({ type: "export" }), requiresDoc: true },
           { label: "menuPrintDialog", shortcut: "Ctrl+P", action: go({ type: "print" }), requiresDoc: true },
           null,
-          { label: "menuSettingsDialog", shortcut: "Ctrl+,", action: go({ type: "settings" }) },
+          { label: "menuSettingsDialog", shortcut: "Ctrl+,", action: go({ type: "settings" }), appMenu: true },
         ],
       },
       {
@@ -466,6 +480,7 @@ export class Toolbar {
     const menus = this.getMenuDefs();
     for (const menu of menus) {
       const wrapper = document.createElement("div");
+      wrapper.className = "menubar-menu";
       wrapper.style.position = "relative";
       wrapper.style.display = "inline-block";
 

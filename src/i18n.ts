@@ -1,4 +1,5 @@
-﻿// ── Types ─────────────────────────────────────────────────────────────────────
+﻿import { isMac, macShortcuts } from "./platform";
+// ── Types ─────────────────────────────────────────────────────────────────────
 
 export interface Translations {
   // Toolbar button labels
@@ -311,6 +312,8 @@ export interface Translations {
   menuPages3?: string;
   // Menu bar (reorganized)
   menuTools?: string;
+  /** The macOS Window menu. */
+  menuWindow?: string;
   menuOpen?: string;
   menuSaveAs?: string;
   menuExport?: string;
@@ -846,6 +849,7 @@ const EN: Translations = {
   menuSelectAllPages: "Select all pages",
   menuPages3: "Three pages per row",
   menuTools: "Tools",
+  menuWindow: "Window",
   menuOpen: "Open…",
   menuSaveAs: "Save as…",
   menuExport: "Export…",
@@ -1377,6 +1381,7 @@ const FR: Translations = {
   menuSelectAllPages: "Sélectionner toutes les pages",
   menuPages3: "3 pages par ligne",
   menuTools: "Outils",
+  menuWindow: "Fenêtre",
   menuOpen: "Ouvrir…",
   menuSaveAs: "Enregistrer sous…",
   menuExport: "Exporter…",
@@ -3619,6 +3624,22 @@ const TRANSLATIONS: Record<string, Translations> = {
 };
 
 export function getTranslations(lang: string): Translations {
+  const base = withFallback(lang);
+  if (!isMac) return base;
+  // macOS: "⌘Z" where the texts say "Ctrl+Z".
+  let mac = MAC_TEXTS.get(lang);
+  if (!mac) {
+    mac = Object.fromEntries(
+      Object.entries(base).map(([k, v]) => [k, typeof v === "string" ? macShortcuts(v) : v]),
+    ) as Translations;
+    MAC_TEXTS.set(lang, mac);
+  }
+  return mac;
+}
+
+const MAC_TEXTS = new Map<string, Translations>();
+
+function withFallback(lang: string): Translations {
   const t = TRANSLATIONS[lang];
   if (!t || t === EN) return EN;
   // Fill optional keys that the chosen language hasn't translated with the

@@ -7,6 +7,8 @@
 //! The same hook keeps the size of a window that Windows snapped (stretched
 //! to full height, or to a side): moving it afterwards no longer brings
 //! back the size it had before the snap.
+//!
+//! On macOS AppKit keeps the proportions itself (see `macos.rs`).
 
 // The geometry below is only used by the Windows hook (and the tests).
 #![cfg_attr(not(windows), allow(dead_code))]
@@ -243,7 +245,9 @@ pub fn set_ratio_lock(window: &tauri::WebviewWindow, locked: bool) {
     if let Ok(hwnd) = window.hwnd() {
         win::set(hwnd.0 as isize, locked);
     }
-    #[cfg(not(windows))]
+    #[cfg(target_os = "macos")]
+    crate::macos::set_ratio_lock(window, locked);
+    #[cfg(not(any(windows, target_os = "macos")))]
     let _ = (window, locked);
 }
 

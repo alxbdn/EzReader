@@ -47,12 +47,21 @@ windows = { version = "0.61", features = [
   "Win32_System_WinRT",
 ] }
 
-# Text recognition elsewhere (Linux): ONNX Runtime linked statically, running
+# Text recognition on Linux: ONNX Runtime linked statically, running
 # the PaddleOCR models RapidOCR uses (built into the binary). The runtime is
 # fetched once at build time, checked against its hash; the app itself never
 # goes online for it.
-[target.'cfg(not(windows))'.dependencies]
+[target.'cfg(not(any(windows, target_os = "macos")))'.dependencies]
 ort = { version = "=2.0.0-rc.15", default-features = false, features = ["std", "api-17", "download-binaries", "tls-native"] }
+
+# macOS: AppKit calls for the window's proportions, and text recognition
+# with the engine built into macOS (Vision): nothing to bundle, and the same
+# for Intel and Apple Silicon. The same versions Tauri already builds.
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2 = "0.6"
+objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSArray", "NSData", "NSDictionary", "NSError", "NSLocale", "NSRange", "NSString", "NSValue", "objc2-core-foundation"] }
+objc2-core-foundation = { version = "0.3", default-features = false, features = ["std", "CFCGTypes"] }
+objc2-vision = { version = "0.3", default-features = false, features = ["std", "objc2-core-foundation", "VNObservation", "VNRecognizeTextRequest", "VNRequest", "VNRequestHandler", "VNTypes"] }
 
 [features]
 # Exposes `ezreader_lib::fuzzing`, the entry points of the fuzz targets in

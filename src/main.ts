@@ -57,6 +57,7 @@ import {
   ocrLanguages,
   readAnnotations,
   getStartupArgs,
+  openFileInNewWindow,
   printPages,
   extractPdfPages,
   openPagesInNewWindow,
@@ -84,6 +85,7 @@ import { currentMonitor, getCurrentWindow } from "@tauri-apps/api/window";
 import { LogicalSize, PhysicalPosition, PhysicalSize } from "@tauri-apps/api/dpi";
 import { keepCentred, pageFitScale, planWindowFit, VIEWER_PADDING } from "./window-fit";
 import { mountWindowControls } from "./window-controls";
+import { menuOwnsKey } from "./mac-menu";
 import { InfoPanel } from "./info-panel";
 import { tempDir, basename } from "@tauri-apps/api/path";
 import { ask } from "@tauri-apps/plugin-dialog";
@@ -530,6 +532,18 @@ settingsModal.onChange(s => {
 // ── Startup handling ──────────────────────────────────────────────────────────
 
 (async () => {
+  try {
+    // macOS: documents opened from the Finder while the app runs. The first
+    // one replaces the launcher, the others (or all, when a document is
+    // already open) get windows of their own.
+    await appWindow.listen<string[]>("open-files", async ({ payload }) => {
+      const paths = [...payload];
+      if (!viewer.isLoaded() && !session.isDirty && paths.length > 0) await openPath(paths.shift()!);
+      for (const p of paths) await openFileInNewWindow(p).catch(() => {});
+    });
+  } catch {
+    // Not running in Tauri (browser preview)
+  }
   try {
     const startup = await getStartupArgs();
     if (startup.filePath) {
@@ -1692,6 +1706,8 @@ async function startPresentation(): Promise<void> {
 // ── Keyboard shortcuts ────────────────────────────────────────────────────────
 
 document.addEventListener("keydown", async (e) => {
+  // macOS: the menu at the top of the screen answers these.
+  if (menuOwnsKey(e)) return;
   const tag = (document.activeElement as HTMLElement)?.tagName ?? "";
   if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" ||
       (document.activeElement as HTMLElement)?.isContentEditable) return;
@@ -1899,6 +1915,7 @@ document.addEventListener("mousedown", (e: MouseEvent) => {
 // ── Escape / zoom keyboard shortcuts (window-level) ──────────────────────────
 
 window.addEventListener("keydown", async (e: KeyboardEvent) => {
+  if (menuOwnsKey(e)) return;
   if (e.ctrlKey && (e.key === "+" || e.key === "=" || e.key === "-")) {
     if (!viewer.isLoaded()) return;
     e.preventDefault();

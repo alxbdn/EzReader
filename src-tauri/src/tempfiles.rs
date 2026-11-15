@@ -96,9 +96,23 @@ fn is_running(pid: u32) -> bool {
     }
 }
 
-#[cfg(not(windows))]
+#[cfg(target_os = "linux")]
 fn is_running(pid: u32) -> bool {
     Path::new(&format!("/proc/{pid}")).exists()
+}
+
+/// No /proc on macOS: signal 0 checks that the process exists without
+/// touching it (EPERM: it exists, but belongs to another user).
+#[cfg(all(unix, not(target_os = "linux")))]
+fn is_running(pid: u32) -> bool {
+    extern "C" {
+        fn kill(pid: i32, sig: i32) -> i32;
+    }
+    const EPERM: i32 = 1;
+    let Ok(pid) = i32::try_from(pid) else { return false };
+    // SAFETY: signal 0 sends nothing, it only checks the pid.
+    let alive = unsafe { kill(pid, 0) == 0 };
+    alive || std::io::Error::last_os_error().raw_os_error() == Some(EPERM)
 }
 
 #[cfg(test)]

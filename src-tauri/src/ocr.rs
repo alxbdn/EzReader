@@ -1,6 +1,7 @@
 //! Text recognition (OCR): uses the engine built into Windows 10 and 11
-//! (`Windows.Media.Ocr`) on Windows, and the PaddleOCR models built into the
-//! app (see `rapid_ocr`) on Linux.
+//! (`Windows.Media.Ocr`) on Windows, the one built into macOS (Vision) on
+//! macOS, and the PaddleOCR models built into the app (see `rapid_ocr`) on
+//! Linux.
 
 use serde::Serialize;
 
@@ -166,7 +167,160 @@ mod engine {
     }
 }
 
-#[cfg(not(windows))]
+#[cfg(target_os = "macos")]
+mod engine {
+    use super::*;
+    use objc2::rc::Retained;
+    use objc2::AnyThread;
+    use objc2_foundation::{NSArray, NSData, NSDictionary, NSError, NSLocale, NSRange, NSString};
+    use objc2_vision::{
+        VNImageRequestHandler, VNRecognizeTextRequest, VNRecognizedText, VNRectangleObservation, VNRequest,
+        VNRequestTextRecognitionLevel,
+    };
+
+    fn message(e: &NSError) -> String {
+        e.localizedDescription().to_string()
+    }
+
+    fn accurate_request() -> Retained<VNRecognizeTextRequest> {
+        let request = VNRecognizeTextRequest::new();
+        request.setRecognitionLevel(VNRequestTextRecognitionLevel::Accurate);
+        request.setUsesLanguageCorrection(true);
+        request
+    }
+
+    /// Language tags Vision reads (en-US, fr-FR, …).
+    fn supported() -> Result<Vec<String>, String> {
+        // SAFETY: a plain query on a fresh request.
+        let tags = unsafe { accurate_request().supportedRecognitionLanguagesAndReturnError() }.map_err(|e| message(&e))?;
+        Ok(tags.iter().map(|t| t.to_string()).collect())
+    }
+
+    pub fn languages() -> Result<Vec<OcrLanguage>, String> {
+        let locale = NSLocale::currentLocale();
+        Ok(supported()?
+            .into_iter()
+            .map(|tag| {
+                let name = locale
+                    .localizedStringForLocaleIdentifier(&NSString::from_str(&tag))
+                    .to_string();
+                OcrLanguage { tag, name }
+            })
+            .collect())
+    }
+
+    /// The languages to read with: `language`, or else the user's own
+    /// languages (System Settings ▸ Language & Region) that Vision reads, in
+    /// their order, with English last.
+    fn languages_for(language: Option<&str>) -> Vec<String> {
+        let supported = supported().unwrap_or_default();
+        let base = |t: &str| t.split(['-', '_']).next().unwrap_or("").to_ascii_lowercase();
+        let wanted: Vec<String> = match language.filter(|t| !t.is_empty()) {
+            Some(tag) => vec![tag.to_string()],
+            None => NSLocale::preferredLanguages().iter().map(|t| t.to_string()).collect(),
+        };
+        let mut out: Vec<String> = Vec::new();
+        for w in wanted.iter().map(String::as_str).chain(["en-US"]) {
+            let hit = supported
+                .iter()
+                .find(|s| s.eq_ignore_ascii_case(w))
+                .or_else(|| supported.iter().find(|s| base(s) == base(w)));
+            if let Some(hit) = hit {
+                if !out.contains(hit) {
+                    out.push(hit.clone());
+                }
+            }
+        }
+        out
+    }
+
+    /// The box of `range` (UTF-16 units of the line) in fractions of the
+    /// picture, from the top left. Vision measures from the bottom left.
+    fn word_box(text: &VNRecognizedText, range: NSRange) -> Option<(f32, f32, f32, f32)> {
+        // SAFETY: `boundingBoxForRange:error:` takes an NSRange and returns
+        // the observation (or nil and an error).
+        let obs: Result<Retained<VNRectangleObservation>, Retained<NSError>> =
+            unsafe { objc2::msg_send![text, boundingBoxForRange: range, error: _] };
+        let r = unsafe { obs.ok()?.boundingBox() };
+        let (x, y, w, h) = (r.origin.x as f32, r.origin.y as f32, r.size.width as f32, r.size.height as f32);
+        Some((x, 1.0 - y - h, w, h))
+    }
+
+    pub fn recognize(bytes: &[u8], language: Option<&str>) -> Result<OcrResult, String> {
+        // Same picture as the other engines read: small text enlarged,
+        // transparency on white.
+        let rgba = prepare_rgba(bytes, 4000)?;
+        let mut png = Vec::new();
+        image::DynamicImage::ImageRgba8(rgba)
+            .write_to(&mut std::io::Cursor::new(&mut png), image::ImageFormat::Png)
+            .map_err(|e| e.to_string())?;
+
+        let request = accurate_request();
+        let langs = languages_for(language);
+        if !langs.is_empty() {
+            let tags: Vec<Retained<NSString>> = langs.iter().map(|t| NSString::from_str(t)).collect();
+            request.setRecognitionLanguages(&NSArray::from_retained_slice(&tags));
+        }
+        let handler = VNImageRequestHandler::initWithData_options(
+            VNImageRequestHandler::alloc(),
+            &NSData::with_bytes(&png),
+            &NSDictionary::new(),
+        );
+        let as_request: &VNRequest = &request;
+        handler
+            .performRequests_error(&NSArray::from_slice(&[as_request]))
+            .map_err(|e| message(&e))?;
+
+        let mut lines = Vec::new();
+        for obs in request.results().iter().flat_map(|r| r.iter()) {
+            let Some(top) = obs.topCandidates(1).firstObject() else { continue };
+            let line = top.string().to_string();
+            let mut words = Vec::new();
+            // Word by word, each with its own box; offsets in UTF-16 units.
+            let mut offset = 0usize;
+            for (is_space, chunk) in chunks(&line) {
+                let len = chunk.encode_utf16().count();
+                if !is_space {
+                    if let Some((x, y, w, h)) = word_box(&top, NSRange::new(offset, len)) {
+                        words.push(OcrWord { text: chunk.to_string(), x, y, w, h });
+                    }
+                }
+                offset += len;
+            }
+            lines.push(OcrLine { text: line, words });
+        }
+        let language = langs.first().cloned().unwrap_or_else(|| "en-US".into());
+        Ok(OcrResult { text: join_lines(&lines), lines, language })
+    }
+
+    /// `line` cut into runs of spaces and runs of anything else.
+    fn chunks(line: &str) -> Vec<(bool, &str)> {
+        let mut out = Vec::new();
+        let mut start = 0;
+        let mut space = None;
+        for (i, c) in line.char_indices() {
+            let s = c.is_whitespace();
+            if space.is_some_and(|prev| prev != s) {
+                out.push((space.unwrap(), &line[start..i]));
+                start = i;
+            }
+            space = Some(s);
+        }
+        if let Some(s) = space {
+            out.push((s, &line[start..]));
+        }
+        out
+    }
+
+    #[cfg(test)]
+    #[test]
+    fn lines_are_cut_into_words_and_spaces() {
+        assert_eq!(chunks("Bonjour  le monde"), vec![(false, "Bonjour"), (true, "  "), (false, "le"), (true, " "), (false, "monde")]);
+        assert_eq!(chunks(""), vec![]);
+    }
+}
+
+#[cfg(not(any(windows, target_os = "macos")))]
 mod engine {
     use super::*;
 
