@@ -3,6 +3,7 @@ name = "ezreader"
 version = "1.0.0"
 description = "A simple, lightweight PDF reader with annotations and signing"
 authors = []
+license = "MIT"
 edition = "2021"
 
 [[bin]]
@@ -22,7 +23,8 @@ tauri-plugin-dialog = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 lopdf = "0.47"
-image = { version = "0.25", features = ["png", "jpeg", "webp", "gif", "bmp"] }
+# Only the formats the app opens: fewer decoders a hostile file can reach.
+image = { version = "0.25", default-features = false, features = ["png", "jpeg", "webp", "gif", "bmp"] }
 base64 = "0.22"
 url = "2"
 getrandom = "0.4"
@@ -44,6 +46,14 @@ windows = { version = "0.61", features = [
   "Storage_Streams",
   "Win32_System_WinRT",
 ] }
+
+[features]
+# Exposes `ezreader_lib::fuzzing`, the entry points of the fuzz targets in
+# `fuzz/`. Never enabled in the app.
+fuzzing = []
+
+[dev-dependencies]
+proptest = "1"
 
 [profile.release]
 # A bug on a malformed PDF must fail that one command, not close every

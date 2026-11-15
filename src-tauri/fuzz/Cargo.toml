@@ -1,0 +1,36 @@
+[package]
+name = "ezreader-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2021"
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+ezreader = { path = "..", features = ["fuzzing"] }
+
+# Not part of the app's workspace.
+[workspace]
+
+[[bin]]
+name = "pdf"
+path = "fuzz_targets/pdf.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "picture"
+path = "fuzz_targets/picture.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "ocr_image"
+path = "fuzz_targets/ocr_image.rs"
+test = false
+doc = false
+bench = false

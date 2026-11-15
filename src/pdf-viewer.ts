@@ -1,4 +1,5 @@
 import * as pdfjs from "pdfjs-dist";
+import { SAFE_PDF } from "./pdf-options";
 import { AnnotationMode } from "pdfjs-dist";
 import type { PDFDocumentProxy, PDFPageProxy, PageViewport, RenderTask } from "pdfjs-dist";
 import { convertFileSrc } from "@tauri-apps/api/core";
@@ -776,7 +777,7 @@ export class PdfViewer {
     this._visiblePages.clear();
     if (this._scrollHandler) { this.scrollEl.removeEventListener("scroll", this._scrollHandler); this._scrollHandler = null; }
 
-    const loadingTask = pdfjs.getDocument(password ? { url, password } : { url });
+    const loadingTask = pdfjs.getDocument(password ? { ...SAFE_PDF, url, password } : { ...SAFE_PDF, url });
     this.pdfDoc = await loadingTask.promise;
     this._pageCount   = this.pdfDoc.numPages;
     this._currentPage = 1;
@@ -1196,7 +1197,7 @@ export class PdfViewer {
    * user's pending annotations burned in) without touching the open view.
    */
   async renderFileForPrint(filePath: string, pageNumbers: number[], dpi = 200): Promise<string[]> {
-    const doc = await pdfjs.getDocument({ url: convertFileSrc(filePath) + `?t=${Date.now()}` }).promise;
+    const doc = await pdfjs.getDocument({ ...SAFE_PDF, url: convertFileSrc(filePath) + `?t=${Date.now()}` }).promise;
     try {
       return await renderDocPages(doc, pageNumbers, dpi, 0);
     } finally {
@@ -1215,7 +1216,7 @@ export class PdfViewer {
     type: "image/png" | "image/jpeg",
     onPage: (dataUrl: string, page: number) => Promise<void>,
   ): Promise<void> {
-    const doc = await pdfjs.getDocument({ url: convertFileSrc(filePath) + `?t=${Date.now()}` }).promise;
+    const doc = await pdfjs.getDocument({ ...SAFE_PDF, url: convertFileSrc(filePath) + `?t=${Date.now()}` }).promise;
     try {
       for (const n of pageNumbers) {
         if (n < 1 || n > doc.numPages) continue;
@@ -1321,7 +1322,7 @@ export async function renderRedactedPages(
   const byPage = new Map<number, RedactAnnotation[]>();
   for (const r of redactions) byPage.set(r.page, [...(byPage.get(r.page) ?? []), r]);
 
-  const doc = await pdfjs.getDocument({ url: convertFileSrc(filePath) + `?t=${Date.now()}` }).promise;
+  const doc = await pdfjs.getDocument({ ...SAFE_PDF, url: convertFileSrc(filePath) + `?t=${Date.now()}` }).promise;
   try {
     const out: RedactedPage[] = [];
     for (const [pageNum, areas] of [...byPage.entries()].sort((a, b) => a[0] - b[0])) {
@@ -1397,7 +1398,7 @@ export async function renderStraightenedPages(
   items: { page: number; quad: [Point, Point, Point, Point] }[],
   dpi = 200,
 ): Promise<StraightenedPage[]> {
-  const doc = await pdfjs.getDocument({ url: convertFileSrc(filePath) + `?t=${Date.now()}` }).promise;
+  const doc = await pdfjs.getDocument({ ...SAFE_PDF, url: convertFileSrc(filePath) + `?t=${Date.now()}` }).promise;
   try {
     const out: StraightenedPage[] = [];
     for (const { page: pageNum, quad } of items) {

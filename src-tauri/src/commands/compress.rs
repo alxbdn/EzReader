@@ -60,7 +60,7 @@ impl Job<'_> {
 /// The document compressed in memory: streams recompressed and unused
 /// objects dropped; with `images`, pictures re-encoded. Form fields and
 /// annotations are kept as they are. Reports progress within `span`.
-fn compress_to_bytes(doc: &Document, images: Option<ImageSettings>, job: &Job, span: (f64, f64)) -> CmdResult<Vec<u8>> {
+pub(crate) fn compress_to_bytes(doc: &Document, images: Option<ImageSettings>, job: &Job, span: (f64, f64)) -> CmdResult<Vec<u8>> {
     if job.cancelled() {
         return Err(cancelled());
     }

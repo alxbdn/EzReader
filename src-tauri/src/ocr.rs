@@ -43,7 +43,7 @@ pub struct OcrLanguage {
 
 /// Resizes small images up so text reaches a comfortable height, clamps to
 /// `max_side`, and composites transparent pixels over white paper.
-fn prepare_rgba(bytes: &[u8], max_side: u32) -> Result<image::RgbaImage, String> {
+pub(crate) fn prepare_rgba(bytes: &[u8], max_side: u32) -> Result<image::RgbaImage, String> {
     let img = image::load_from_memory(bytes).map_err(|e| e.to_string())?;
     let (w, h) = (img.width().max(1), img.height().max(1));
     let side = w.max(h);

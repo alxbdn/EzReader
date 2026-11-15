@@ -199,6 +199,49 @@ mod tests {
         assert!(!g.allows(&temp().join("sub").join("ezreader-x.pdf"), &temp()));
     }
 
+    use proptest::prelude::*;
+
+    /// One path segment as a hostile webview could send it.
+    fn segment() -> impl Strategy<Value = String> {
+        prop_oneof![
+            "[a-zA-Z0-9 _.-]{1,12}",
+            Just("..".to_string()),
+            Just(".".to_string()),
+            "[a-z]{1,6}:[a-z]{0,6}",
+            "[a-z]{1,6}[/\\\\][a-z]{1,6}",
+        ]
+    }
+
+    proptest! {
+        /// Whatever is appended to a picked folder, only a plain file name
+        /// directly inside it gets through.
+        #[test]
+        fn nothing_escapes_a_picked_folder(parts in prop::collection::vec(segment(), 1..5)) {
+            let g = Grants::default();
+            let out = root().join("Export");
+            g.allow_dir(&out);
+            let mut p = out.clone();
+            for part in &parts {
+                p.push(part);
+            }
+            if g.allows(&p, &temp()) {
+                prop_assert_eq!(p.parent(), Some(out.as_path()), "{:?} got out of the folder", p);
+                let name = p.file_name().unwrap().to_str().unwrap();
+                prop_assert!(plain_name(name));
+                prop_assert!(!p.components().any(|c| c == Component::ParentDir));
+            }
+        }
+
+        /// A relative path is never allowed, even one naming a picked file.
+        #[test]
+        fn relative_paths_are_refused(parts in prop::collection::vec(segment(), 1..5)) {
+            let g = Grants::default();
+            let rel: PathBuf = parts.iter().collect();
+            g.allow_file(&rel);
+            prop_assert!(!g.allows(&rel, &temp()));
+        }
+    }
+
     #[cfg(windows)]
     #[test]
     fn windows_paths_ignore_case_and_separators() {
