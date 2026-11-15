@@ -1116,6 +1116,8 @@ input[type="color"].color-picker.is-off::-webkit-color-swatch {
 
 #viewer-scroll.hand-mode { cursor: grab; }
 #viewer-scroll.hand-mode .page-text-layer { pointer-events: none; }
+#viewer-scroll.hand-mode .page-link-layer a,
+#viewer-scroll.etext-mode .page-link-layer a { pointer-events: none; }
 #viewer-scroll.panning { cursor: grabbing; user-select: none; }
 
 /* ══ Page thumbnails sidebar (src/page-sidebar.ts) ════════════════════════ */

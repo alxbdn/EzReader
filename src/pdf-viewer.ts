@@ -87,6 +87,86 @@ export function matchOffsets(text: string, needle: string): number[] {
   return out;
 }
 
+export interface ResolvedDestination {
+  page: number;
+  point: [number, number] | null;
+}
+
+export interface DestinationDoc {
+  numPages: number;
+  getDestination(id: string): Promise<unknown[] | null>;
+  getPageIndex(ref: unknown): Promise<number>;
+}
+
+export interface LinkNavigationHandler {
+  goToDestination?: (dest: unknown) => void | Promise<void>;
+  executeNamedAction?: (action: string) => void;
+  goToPage?: (page: number) => void;
+}
+
+/**
+ * Resolve a PDF named destination (string) or explicit destination array into
+ * a 1-based page number and optional PDF-user-space target point.
+ */
+export async function resolveDestination(
+  pdfDoc: DestinationDoc,
+  dest: unknown,
+): Promise<ResolvedDestination | null> {
+  let explicit: unknown[] | null = null;
+  if (typeof dest === "string") {
+    explicit = await pdfDoc.getDestination(dest);
+  } else if (Array.isArray(dest)) {
+    explicit = dest;
+  }
+  if (!Array.isArray(explicit) || explicit.length === 0) return null;
+
+  const destRef = explicit[0];
+  let pageNumber = 0;
+  if (destRef && typeof destRef === "object") {
+    try {
+      pageNumber = (await pdfDoc.getPageIndex(destRef)) + 1;
+    } catch {
+      return null;
+    }
+  } else if (typeof destRef === "number" && Number.isInteger(destRef)) {
+    pageNumber = destRef + 1;
+  } else {
+    return null;
+  }
+
+  if (pageNumber < 1 || pageNumber > pdfDoc.numPages) return null;
+
+  const rawFit = explicit[1];
+  const fitName =
+    rawFit && typeof rawFit === "object" && "name" in rawFit
+      ? String((rawFit as { name: unknown }).name)
+      : typeof rawFit === "string"
+        ? rawFit
+        : "";
+
+  let point: [number, number] | null = null;
+  if (fitName === "XYZ") {
+    const left = explicit[2];
+    const top = explicit[3];
+    if (typeof top === "number" && Number.isFinite(top)) {
+      point = [typeof left === "number" && Number.isFinite(left) ? left : 0, top];
+    }
+  } else if (fitName === "FitH" || fitName === "FitBH") {
+    const top = explicit[2];
+    if (typeof top === "number" && Number.isFinite(top)) {
+      point = [0, top];
+    }
+  } else if (fitName === "FitR") {
+    const left = explicit[2];
+    const top = explicit[5];
+    if (typeof top === "number" && Number.isFinite(top)) {
+      point = [typeof left === "number" && Number.isFinite(left) ? left : 0, top];
+    }
+  }
+
+  return { page: pageNumber, point };
+}
+
 // ── PdfPageView ───────────────────────────────────────────────────────────────
 
 export class PdfPageView {
@@ -164,7 +244,8 @@ export class PdfPageView {
     scale: number,
     rotation: number,
     formValues: Map<string, string>,
-    onFormChange: (name: string, val: string) => void
+    onFormChange: (name: string, val: string) => void,
+    linkHandler?: LinkNavigationHandler
   ): Promise<void> {
     if (this.rendering) return;
     this.rendering = true;
@@ -230,7 +311,7 @@ export class PdfPageView {
       // A scan or a photo: read its words in the background, then lay them
       // over the picture so they can be selected like any text.
       if (!hasText && this.liveText) void this.addLiveText(page, viewport, stale);
-      await this.buildLinkLayer(page, viewport);
+      await this.buildLinkLayer(page, viewport, linkHandler);
       if (stale()) return;
       await this.buildFormLayer(page, viewport, formValues, onFormChange);
       if (stale()) return;
@@ -392,8 +473,14 @@ export class PdfPageView {
 
   // ── Link layer ──────────────────────────────────────────────────────────────
 
-  private async buildLinkLayer(page: PDFPageProxy, viewport: PageViewport): Promise<void> {
+  private async buildLinkLayer(
+    page: PDFPageProxy,
+    viewport: PageViewport,
+    linkHandler?: LinkNavigationHandler
+  ): Promise<void> {
     this.linkLayer.innerHTML = "";
+    this.linkLayer.style.width  = `${viewport.width}px`;
+    this.linkLayer.style.height = `${viewport.height}px`;
 
     // Collect text span positions for URL detection
     const mc = document.createElement("canvas").getContext("2d")!;
@@ -513,12 +600,42 @@ export class PdfPageView {
     const annotations: any[] = await (page as any).getAnnotations();
     const addedUrls = new Set<string>();
 
-    const addLink = (url: string, rects: Rect[]) => {
-      addedUrls.add(url);
+    const normalizeViewportRect = ([x1, y1, x2, y2]: number[]): Rect | null => {
+      const r: Rect = {
+        left: Math.min(x1, x2),
+        top: Math.min(y1, y2),
+        right: Math.max(x1, x2),
+        bottom: Math.max(y1, y2),
+      };
+      return r.right > r.left && r.bottom > r.top ? r : null;
+    };
+
+    const annRects = (ann: { quadPoints?: Float32Array | number[]; rect?: [number, number, number, number] }): Rect[] => {
+      const rects: Rect[] = [];
+      const qp = ann.quadPoints;
+      if (qp && qp.length >= 8 && qp.length % 8 === 0) {
+        for (let i = 0; i < qp.length; i += 8) {
+          const xs = [qp[i], qp[i + 2], qp[i + 4], qp[i + 6]];
+          const ys = [qp[i + 1], qp[i + 3], qp[i + 5], qp[i + 7]];
+          const r = normalizeViewportRect(viewport.convertToViewportRectangle([
+            Math.min(...xs), Math.min(...ys), Math.max(...xs), Math.max(...ys),
+          ]));
+          if (r) rects.push(r);
+        }
+      }
+      if (rects.length === 0 && ann.rect) {
+        const r = normalizeViewportRect(viewport.convertToViewportRectangle(ann.rect));
+        if (r) rects.push(r);
+      }
+      return rects;
+    };
+
+    const appendAnchors = (rects: Rect[], onClick: () => void, internal = false) => {
       for (const r of rects) {
         const a = document.createElement("a");
         a.style.cssText = `position:absolute;left:${r.left}px;top:${r.top}px;width:${r.right - r.left}px;height:${r.bottom - r.top}px;`;
-        a.addEventListener("click", (e) => { e.preventDefault(); void openUrl(url); });
+        if (internal) a.dataset.internalLink = "true";
+        a.addEventListener("click", (e) => { e.preventDefault(); onClick(); });
         this.linkLayer.appendChild(a);
       }
     };
@@ -526,32 +643,44 @@ export class PdfPageView {
     for (const ann of annotations) {
       if (ann.subtype !== "Link") continue;
       const url: string | undefined = ann.url ?? ann.unsafeUrl;
-      if (!url || (!url.startsWith("http://") && !url.startsWith("https://"))) continue;
-      if (addedUrls.has(url)) continue;
 
-      let bestDomUrl = "";
-      let bestEntry: DomEntry | undefined;
-      for (const [du, entry] of domLinks) {
-        if (du === url) { bestDomUrl = du; bestEntry = entry; break; }
-        const n = Math.min(du.length, url.length);
-        if (n >= 10 && du.slice(0, n) === url.slice(0, n) && du.length > bestDomUrl.length) {
-          bestDomUrl = du; bestEntry = entry;
+      if (url && (url.startsWith("http://") || url.startsWith("https://"))) {
+        let bestEntry: DomEntry | undefined;
+        if (!addedUrls.has(url)) {
+          let bestDomUrl = "";
+          for (const [du, entry] of domLinks) {
+            if (du === url) { bestDomUrl = du; bestEntry = entry; break; }
+            const n = Math.min(du.length, url.length);
+            if (n >= 10 && du.slice(0, n) === url.slice(0, n) && du.length > bestDomUrl.length) {
+              bestDomUrl = du; bestEntry = entry;
+            }
+          }
         }
-      }
+        addedUrls.add(url);
 
-      if (bestEntry) {
-        addLink(url, [...bestEntry.rects]);
-      } else {
-        const [x1, y1, x2, y2] = viewport.convertToViewportRectangle(
-          ann.rect as [number, number, number, number]
-        );
-        addLink(url, [{ left: Math.min(x1,x2), top: Math.min(y1,y2), right: Math.max(x1,x2), bottom: Math.max(y1,y2) }]);
+        const rects = bestEntry ? [...bestEntry.rects] : annRects(ann);
+        appendAnchors(rects, () => { void openUrl(url); });
+      } else if (ann.dest && linkHandler?.goToDestination) {
+        appendAnchors(annRects(ann), () => { void linkHandler.goToDestination!(ann.dest); }, true);
+      } else if (typeof ann.action === "string" && linkHandler?.executeNamedAction) {
+        appendAnchors(annRects(ann), () => { linkHandler.executeNamedAction!(ann.action); }, true);
+      } else if (typeof ann.unsafeUrl === "string" && ann.unsafeUrl.startsWith("#") && linkHandler) {
+        const rawHash = ann.unsafeUrl.slice(1);
+        let hash = rawHash;
+        try { hash = decodeURIComponent(rawHash); } catch { /* keep raw hash */ }
+        const pageMatch = /^page=(\d+)$/i.exec(hash);
+        if (pageMatch && linkHandler.goToPage) {
+          const targetPage = Number(pageMatch[1]);
+          appendAnchors(annRects(ann), () => { linkHandler.goToPage!(targetPage); }, true);
+        } else if (hash && linkHandler.goToDestination) {
+          appendAnchors(annRects(ann), () => { void linkHandler.goToDestination!(hash); }, true);
+        }
       }
     }
 
     // DOM-discovered URLs not covered by a formal annotation
     for (const [url, { rects }] of domLinks) {
-      if (!addedUrls.has(url)) addLink(url, rects);
+      if (!addedUrls.has(url)) appendAnchors(rects, () => { void openUrl(url); });
     }
   }
 
@@ -680,6 +809,11 @@ export class PdfViewer {
   private _annotations: AnnotationSession = new AnnotationSession();
   private _formValues: Map<string, string> = new Map();
   private _onFormChange: (name: string, val: string) => void = () => {};
+  private readonly _linkHandler: LinkNavigationHandler = {
+    goToDestination: (dest) => this.goToDestination(dest),
+    executeNamedAction: (action) => this.executeNamedAction(action),
+    goToPage: (page) => this.goToPage(page),
+  };
 
   pageDimensions: Array<{ width: number; height: number }> = [];
   pageViews: PdfPageView[] = [];
@@ -949,16 +1083,7 @@ export class PdfViewer {
         ? { start: pv.wrapper.offsetLeft, size: pv.wrapper.offsetWidth }
         : { start: pv.wrapper.offsetTop, size: pv.wrapper.offsetHeight }),
     );
-    if (best !== this._focusedPage) {
-      this._focusedPage = best;
-      this._currentPage = best;
-      this.scrollEl.dispatchEvent(
-        new CustomEvent("focused-page-changed", {
-          detail: { page: best },
-          bubbles: true,
-        })
-      );
-    }
+    this._setCurrentAndFocusedPage(best);
   }
 
   private async _renderPage(pageView: PdfPageView): Promise<void> {
@@ -971,7 +1096,8 @@ export class PdfViewer {
       expectedScale,
       expectedRotation,
       this._formValues,
-      this._onFormChange
+      this._onFormChange,
+      this._linkHandler
     );
     // If scale/rotation changed while this render was running (e.g. the user
     // zoomed again before the previous render finished), the render that just
@@ -1013,10 +1139,70 @@ export class PdfViewer {
 
   // ── Navigation (T015) ────────────────────────────────────────────────────────
 
+  private _setCurrentAndFocusedPage(page: number): void {
+    this._currentPage = page;
+    if (this._focusedPage !== page) {
+      this._focusedPage = page;
+      this.scrollEl.dispatchEvent(
+        new CustomEvent("focused-page-changed", {
+          detail: { page },
+          bubbles: true,
+        })
+      );
+    }
+  }
+
   goToPage(n: number, behavior: ScrollBehavior = "smooth"): void {
     const clamped = Math.max(1, Math.min(n, this._pageCount));
-    this._currentPage = clamped;
+    this._setCurrentAndFocusedPage(clamped);
     this.pageViews[clamped - 1]?.wrapper.scrollIntoView({ behavior, block: "start", inline: this._scrollMode === "horizontal" ? "start" : "nearest" });
+  }
+
+  async goToDestination(dest: unknown): Promise<void> {
+    const doc = this.pdfDoc;
+    if (!doc) return;
+    const resolved = await resolveDestination(doc, dest);
+    if (!resolved || this.pdfDoc !== doc) return;
+
+    const targetView = this.pageViews[resolved.page - 1];
+    if (resolved.point && this._scrollMode === "vertical" && targetView && targetView.wrapper.offsetHeight > 0) {
+      let vp = targetView.viewport;
+      if (!vp) {
+        const page = await doc.getPage(resolved.page);
+        if (this.pdfDoc !== doc) return;
+        vp = page.getViewport({ scale: this._scale, rotation: (page.rotate + this._rotation) % 360 });
+      }
+      const [, vy] = vp.convertToViewportPoint(resolved.point[0], resolved.point[1]);
+      if (vy > vp.height * 0.15 && vy < vp.height) {
+        this._setCurrentAndFocusedPage(resolved.page);
+        this.scrollEl.scrollTo({
+          top: Math.max(0, targetView.wrapper.offsetTop + vy - 16),
+          behavior: "smooth",
+        });
+        return;
+      }
+    }
+
+    this.goToPage(resolved.page);
+  }
+
+  executeNamedAction(action: string): void {
+    if (!this.pdfDoc) return;
+    switch (action) {
+      case "FirstPage":
+        this.goToPage(1);
+        break;
+      case "LastPage":
+        this.goToPage(this._pageCount);
+        break;
+      case "NextPage":
+        this.nextPage();
+        break;
+      case "PrevPage":
+      case "PreviousPage":
+        this.prevPage();
+        break;
+    }
   }
 
   /**
