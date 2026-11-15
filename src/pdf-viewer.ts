@@ -105,6 +105,8 @@ export class PdfPageView {
   /** Bumped by clear(); an in-flight render that sees a new value stops. */
   private _generation = 0;
   private _renderTask: RenderTask | null = null;
+  /** The pdf.js page last drawn here, whose caches clear() frees. */
+  private _page: PDFPageProxy | null = null;
 
   constructor(pageNum: number, tools: ToolSelection, annotations: AnnotationSession, private liveText: LiveText | null = null) {
     this.pageNum = pageNum;
@@ -135,10 +137,22 @@ export class PdfPageView {
       this.formLayer,
       this.annotationCanvas
     );
+    // No pixels until the page is drawn: a canvas starts at 300×150, and a
+    // 2D context allocates that much for each of the thousands of pages.
+    for (const c of [this.canvas, this.annotationCanvas]) { c.width = 0; c.height = 0; }
     this.overlay = new CanvasOverlay(this.annotationCanvas, this.wrapper, tools, annotations);
   }
 
+  /** The view is thrown away (new layout, document closed): stops its work and listeners. */
+  destroy(): void {
+    this.clear();
+    this.overlay.destroy();
+  }
+
   get viewport(): PageViewport | null { return this._viewport; }
+
+  /** True while the canvas holds a bitmap (drawn, or kept through a zoom). */
+  get hasPixels(): boolean { return this.canvas.width > 0; }
 
   setPlaceholderSize(width: number, height: number): void {
     this.wrapper.style.width  = `${Math.round(width)}px`;
@@ -158,6 +172,7 @@ export class PdfPageView {
     const stale = () => generation !== this._generation;
     try {
       const page = await pdfDoc.getPage(this.pageNum);
+      this._page = page;
       if (stale()) return;
       const viewport = page.getViewport({ scale, rotation: (page.rotate + rotation) % 360 });
       this._viewport = viewport;
@@ -242,8 +257,15 @@ export class PdfPageView {
     this._generation++;
     this._renderTask?.cancel();
     this._renderTask = null;
-    const ctx = this.canvas.getContext("2d");
-    if (ctx) ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+    // Give the pixels back: a cleared canvas keeps its full-size bitmap
+    // otherwise, and scrolling through a long document piles them up until
+    // the window runs out of memory. Width 0 frees them; the wrapper keeps
+    // the page's place in the layout.
+    for (const c of [this.canvas, this.annotationCanvas]) { c.width = 0; c.height = 0; }
+    // pdf.js keeps each drawn page's drawing commands and decoded pictures
+    // until told otherwise: free them too (it is drawn again from the file).
+    this._page?.cleanup();
+    this._page = null;
     this.textLayer.innerHTML  = "";
     this.linkLayer.innerHTML  = "";
     this.formLayer.innerHTML  = "";
@@ -825,6 +847,7 @@ export class PdfViewer {
     this.observer?.disconnect();
     this._visiblePages.clear();
     if (this._scrollHandler) { this.scrollEl.removeEventListener("scroll", this._scrollHandler); this._scrollHandler = null; }
+    for (const view of this.pageViews) view.destroy();
     this.scrollEl.innerHTML = "";
     this.pageViews = [];
 
@@ -885,12 +908,19 @@ export class PdfViewer {
             if (!pageView.rendered && !pageView.rendering) {
               void this._renderPage(pageView);
             }
-          } else if (visiblePages.length > 0) {
-            const minV = Math.min(...visiblePages);
-            const maxV = Math.max(...visiblePages);
-            if (pageNum < minV - 2 || pageNum > maxV + 2) {
-              pageView.clear();
-            }
+          }
+        }
+
+        // Clear every drawn page that is now more than 2 pages away from the
+        // view, not only the ones in this batch: a page usually leaves the
+        // area while still next to a visible one, gets no later event, and
+        // would keep its full-size bitmap for good (gigabytes after a fast
+        // scroll through a long document).
+        if (visiblePages.length > 0) {
+          const minV = Math.min(...visiblePages);
+          const maxV = Math.max(...visiblePages);
+          for (const view of this.pageViews) {
+            if ((view.rendered || view.rendering || view.hasPixels) && (view.pageNum < minV - 2 || view.pageNum > maxV + 2)) view.clear();
           }
         }
       },
@@ -1273,6 +1303,7 @@ export class PdfViewer {
     this._visiblePages.clear();
     if (this._scrollHandler) { this.scrollEl.removeEventListener("scroll", this._scrollHandler); this._scrollHandler = null; }
     this.resizeObserver?.disconnect();
+    for (const view of this.pageViews) view.destroy();
     this.scrollEl.innerHTML = "";
     this.pageViews = [];
     if (this.pdfDoc) {
