@@ -14,7 +14,7 @@ import { Toolbar } from "./toolbar";
 import { Presentation } from "./presentation";
 import { CompressModal } from "./compress-modal";
 import { ExportModal } from "./export-modal";
-import { OcrModal } from "./ocr-modal";
+import { OcrModal, savedLanguage as ocrLanguage } from "./ocr-modal";
 import { PasswordModal } from "./password-modal";
 import { PrintModal } from "./print-modal";
 import { SignatureModal } from "./signature-modal";
@@ -120,6 +120,9 @@ let editingShapeAnn: ShapeAnnotation | null = null;
 // ── Instances ─────────────────────────────────────────────────────────────────
 
 const viewer = new PdfViewer();
+// Scans and photos: their words can be selected and copied, read in the
+// background by the OCR built into the system.
+viewer.liveText.setRecognizer((data) => ocrImage(data, ocrLanguage()));
 /** The active tool, its style presets and the one selected annotation. */
 const tools = new ToolSelection();
 const toolState = tools.state;
