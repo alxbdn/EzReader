@@ -28,6 +28,13 @@ allow = [
     "0BSD",
 ]
 confidence-threshold = 0.9
+# Build-time only: ONNX Runtime's download of its prebuilt library (Linux OCR)
+# checks it with hmac-sha256 and trusts TLS roots from webpki-root-certs.
+# Neither ends up in the app.
+exceptions = [
+    { name = "hmac-sha256", allow = ["ISC"] },
+    { name = "webpki-root-certs", allow = ["CDLA-Permissive-2.0"] },
+]
 
 [bans]
 multiple-versions = "allow"
