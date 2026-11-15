@@ -47,6 +47,13 @@ windows = { version = "0.61", features = [
   "Win32_System_WinRT",
 ] }
 
+# Text recognition elsewhere (Linux): ONNX Runtime linked statically, running
+# the PaddleOCR models RapidOCR uses (built into the binary). The runtime is
+# fetched once at build time, checked against its hash; the app itself never
+# goes online for it.
+[target.'cfg(not(windows))'.dependencies]
+ort = { version = "=2.0.0-rc.15", default-features = false, features = ["std", "api-17", "download-binaries", "tls-native"] }
+
 [features]
 # Exposes `ezreader_lib::fuzzing`, the entry points of the fuzz targets in
 # `fuzz/`. Never enabled in the app.
