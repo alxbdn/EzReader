@@ -1,0 +1,170 @@
+name: App tests
+
+# Three suites that run on every PR, in parallel with CI:
+#   - end-to-end: the real app (Rust + webview) driven through WebDriver;
+#   - visual regression: screenshots compared with visual/__screenshots__;
+#   - PDF corpus: varied PDFs opened, annotated and saved, then re-read by
+#     qpdf and pdf.js.
+# The install test runs before each release instead (install-test.yml).
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      update_baselines:
+        description: Régénérer les captures de référence (artefact visual-baselines)
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+concurrency:
+  group: app-tests-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  e2e:
+    name: End-to-end (real app)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf \
+            webkit2gtk-driver xvfb
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - uses: dtolnay/rust-toolchain@39008827e6b4319a349e9a42dfc90579dd25f1ca # stable
+
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          workspaces: src-tauri
+          key: e2e
+
+      - name: Install tauri-driver
+        run: cargo install tauri-driver --locked --version 2.1.0
+
+      - run: npm ci
+
+      - name: Build the app (debug)
+        run: npx tauri build --debug --no-bundle
+
+      - name: Run the end-to-end tests
+        run: xvfb-run -a --server-args="-screen 0 1400x1000x24" npm run test:e2e
+
+      - name: Upload screenshots of failed tests
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-failures
+          path: e2e/results/
+          if-no-files-found: ignore
+
+  visual:
+    name: Visual regression
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    # The same image the baselines were made in: same fonts, same pixels.
+    container:
+      image: mcr.microsoft.com/playwright:v1.63.0-noble
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - run: npm ci
+
+      - name: Build the frontend
+        run: npm run build
+
+      - name: Compare screenshots
+        if: ${{ !inputs.update_baselines }}
+        run: npx playwright test
+        env:
+          HOME: /root
+
+      - name: Regenerate the baselines
+        if: ${{ inputs.update_baselines }}
+        run: npx playwright test --update-snapshots
+        env:
+          HOME: /root
+
+      - name: Upload the new baselines
+        if: ${{ inputs.update_baselines }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: visual-baselines
+          path: visual/__screenshots__/
+
+      - name: Upload the differences
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: visual-diff
+          path: |
+            visual/report/
+            visual/results/
+          if-no-files-found: ignore
+
+  corpus:
+    name: PDF compatibility corpus
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev qpdf
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - uses: dtolnay/rust-toolchain@39008827e6b4319a349e9a42dfc90579dd25f1ca # stable
+
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          workspaces: src-tauri
+          key: corpus
+
+      - run: npm ci
+
+      - name: Open, annotate and save every corpus file
+        run: cargo test --manifest-path src-tauri/Cargo.toml --lib corpus_tests
+        env:
+          EZREADER_CORPUS_OUT: ${{ runner.temp }}/corpus-out
+
+      - name: Check the saved files with qpdf and pdf.js
+        run: node scripts/corpus-check.mjs "${{ runner.temp }}/corpus-out"
+
+      - name: Upload the saved files
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: corpus-saved-files
+          path: ${{ runner.temp }}/corpus-out/files/
+          if-no-files-found: ignore

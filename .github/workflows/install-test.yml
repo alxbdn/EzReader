@@ -1,0 +1,120 @@
+name: Install test
+
+# Installs, upgrades (from the latest release), starts and uninstalls both the
+# NSIS installer and the MSIX on a clean Windows runner: scripts/install-test.ps1.
+#
+# Runs before every release (called by release.yml with the packages it just
+# built, and the release is only published if this passes), on PRs that touch
+# the packaging, and on demand.
+
+on:
+  workflow_call:
+    inputs:
+      artifact:
+        description: Name of the artifact holding the setup .exe and the .msix
+        required: true
+        type: string
+      version:
+        description: Version of those packages
+        required: true
+        type: string
+  pull_request:
+    paths:
+      - build-msix.ps1
+      - scripts/install-test.ps1
+      - src-tauri/AppxManifest.xml
+      - src-tauri/tauri.conf.json
+      - .github/workflows/install-test.yml
+      - .github/workflows/release.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  # Only when not called by the release, which passes its own packages.
+  build:
+    name: Build the packages
+    if: ${{ !inputs.artifact }}
+    runs-on: windows-latest
+    timeout-minutes: 45
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - uses: dtolnay/rust-toolchain@39008827e6b4319a349e9a42dfc90579dd25f1ca # stable
+
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          workspaces: src-tauri
+          key: install-test
+
+      # Higher than any real release, so the latest release upgrades to it.
+      - name: Test version
+        id: version
+        shell: bash
+        run: echo "version=99.0.${{ github.run_number }}" >> "$GITHUB_OUTPUT"
+
+      - name: Set the version
+        shell: pwsh
+        run: |
+          (Get-Content src-tauri/tauri.conf.json) `
+            -replace '"version": "[^"]*"', '"version": "${{ steps.version.outputs.version }}"' |
+            Set-Content src-tauri/tauri.conf.json
+
+      - run: npm ci
+
+      - name: Build the installer
+        run: npx tauri build --bundles nsis
+
+      - name: Build the MSIX
+        shell: pwsh
+        run: .\build-msix.ps1 -SkipBuild -Version "${{ steps.version.outputs.version }}"
+
+      - name: Stage packages
+        shell: bash
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          mkdir -p packages
+          cp "src-tauri/target/release/bundle/nsis/EzReader_${VERSION}_x64-setup.exe" "packages/ezreader-${VERSION}-win-x64-setup.exe"
+          cp "msix-output/EzReader_${VERSION}.0_x64.msix" "packages/ezreader-${VERSION}-win-x64.msix"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: install-test-packages
+          path: packages/
+          if-no-files-found: error
+
+  install:
+    name: Install, upgrade, uninstall
+    needs: build
+    if: ${{ always() && (needs.build.result == 'success' || needs.build.result == 'skipped') }}
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: ${{ inputs.artifact || 'install-test-packages' }}
+          path: packages
+
+      - name: Install test
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ inputs.version || needs.build.outputs.version }}
+        run: |
+          $setup = Get-ChildItem packages -Filter "*-setup.exe" | Select-Object -First 1 -ExpandProperty FullName
+          $msix = Get-ChildItem packages -Filter "*.msix" | Select-Object -First 1 -ExpandProperty FullName
+          ./scripts/install-test.ps1 -Setup $setup -Msix $msix -Version $env:VERSION

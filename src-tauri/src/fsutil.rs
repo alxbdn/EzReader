@@ -41,6 +41,23 @@ where
     result
 }
 
+/// Opens `path` to be saved as an incremental update (its bytes kept as they
+/// are, the changes appended). A file whose cross-reference table is wrong
+/// (lopdf had to repair it to read it) is first rewritten whole: appended to
+/// as it is, the result would keep pointing other readers at the wrong
+/// offsets of the old table, and they would lose objects.
+pub fn load_incremental(path: impl AsRef<Path>) -> Result<IncrementalDocument, String> {
+    let inc = IncrementalDocument::load(path.as_ref()).map_err(|e| e.to_string())?;
+    if inc.get_prev_documents().xref_recovery.is_none() {
+        return Ok(inc);
+    }
+    let mut doc = Document::load(path.as_ref()).map_err(|e| e.to_string())?;
+    let mut bytes = Vec::new();
+    doc.save_to(&mut bytes).map_err(|e| e.to_string())?;
+    let prev = Document::load_mem(&bytes).map_err(|e| e.to_string())?;
+    Ok(IncrementalDocument::create_from(bytes, prev))
+}
+
 /// Byte-for-byte copy of `src` to `dst`, atomically.
 pub fn copy_atomic(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> Result<(), String> {
     let src = src.as_ref();

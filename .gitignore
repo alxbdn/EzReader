@@ -34,3 +34,8 @@ pdfium.dll
 
 # Store promo material, kept locally only
 marketing/
+
+# Test outputs
+e2e/results/
+visual/results/
+visual/report/

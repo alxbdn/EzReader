@@ -33,7 +33,13 @@ pub fn assert_lengths_consistent(path: &str) {
         data += 1;
         // Nearest "/Length" before the keyword, inside the same object.
         let obj_start = bytes[..at].windows(3).rposition(|w| w == b"obj").unwrap_or(0);
-        let Some(len_at) = bytes[obj_start..at].windows(7).rposition(|w| w == b"/Length") else { continue };
+        // `/Length` itself, not `/Length1` (embedded font programs).
+        let Some(len_at) = bytes[obj_start..at]
+            .windows(8)
+            .rposition(|w| &w[..7] == b"/Length" && !w[7].is_ascii_alphanumeric())
+        else {
+            continue;
+        };
         let tail = &bytes[obj_start + len_at + 7..at];
         let txt = String::from_utf8_lossy(tail);
         let mut it = txt.split(|c: char| !c.is_ascii_digit()).filter(|t| !t.is_empty());
