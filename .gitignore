@@ -34,3 +34,7 @@ pdfium.dll
 
 # Store promo material, kept locally only
 marketing/
+
+# Load test (perf/)
+perf-big.pdf
+perf-results.json
