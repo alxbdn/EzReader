@@ -8,7 +8,7 @@ import type { ToolbarEvent } from "./toolbar";
  */
 const BLOCKED = new Set<ToolbarEvent["type"]>([
   "save", "save-as", "export", "compress", "rotate", "rename", "split",
-  "insert-blank", "insert-pdf", "extract-pages", "adjust", "image-browse",
+  "insert-blank", "insert-pdf", "insert-image", "insert-image-page", "extract-pages", "adjust", "image-browse",
   "signature", "signature-use", "draft-apply", "style-change", "layer-change",
   "undo", "redo",
 ]);

@@ -460,6 +460,35 @@ input::placeholder { color: var(--muted-foreground); }
   margin-left: 24px;
 }
 
+/* State marks: a dot (one of several) or a tick (on/off), in a left gutter. */
+.menu-dropdown.has-marks .menu-entry {
+  position: relative;
+  padding-left: 30px;
+}
+
+.menu-entry.marked::before {
+  content: "";
+  position: absolute;
+  left: 9px;
+  top: 50%;
+  width: 14px;
+  height: 14px;
+  transform: translateY(-50%);
+  background: currentColor;
+}
+
+.menu-radio.marked::before {
+  left: 13px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+}
+
+.menu-check.marked::before {
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M20 6 9 17l-5-5'/%3E%3C/svg%3E") center / contain no-repeat;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M20 6 9 17l-5-5'/%3E%3C/svg%3E") center / contain no-repeat;
+}
+
 .menu-sep {
   height: 1px;
   background: var(--border);

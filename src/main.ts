@@ -66,6 +66,7 @@ import {
   straightenPages,
   renameFile,
   openImageDialog,
+  openImagesDialog,
   adjustPages,
   encryptPdf,
   decryptPdf,
@@ -1177,6 +1178,11 @@ pageSidebar.onInsertBlank(async (after) => {
   await insertSlots(after, [{ kind: "blank", width: ref.width, height: ref.height, rotation: 0 }]);
 });
 
+pageSidebar.onInsertImages(async (after) => {
+  const paths = await openImagesDialog();
+  if (paths.length > 0) await insertPictures(after, paths);
+});
+
 pageSidebar.onInsertPdf(async (after) => {
   const path = await openPdfDialog();
   if (path) await insertPdfAt(after, path);
@@ -1473,18 +1479,21 @@ toolbar.on(async (e) => {
       openAdjust(e.kind);
       break;
 
-    case "image-browse": {
-      const path = await openImageDialog();
-      if (!path) break;
-      const pv = viewer.pageViews.find((p) => p.pageNum === viewer.currentPage);
-      if (!pv) break;
-      // Centred on the part of the page in view.
-      const r = pv.overlay.screenRect;
-      const view = document.getElementById("viewer-scroll")!.getBoundingClientRect();
-      const top = Math.max(r.top, view.top), bottom = Math.min(r.bottom, view.bottom);
-      await placePicture(path, pv, r.width / 2, (top + bottom) / 2 - r.top);
+    case "image-browse":
+      await browsePicture();
       break;
-    }
+
+    case "insert-image":
+      await insertPicture();
+      break;
+
+    case "insert-image-page":
+      pageSidebar.requestInsertImages();
+      break;
+
+    case "find":
+      if (viewer.isLoaded()) toolbar.search.open();
+      break;
 
     case "signature-use": {
       const sig = sigStore.getAll().find((x) => x.id === e.id);
@@ -1702,6 +1711,11 @@ document.addEventListener("keydown", async (e) => {
     e.preventDefault();
     if (!toolbar.allowed()) return;
     if (viewer.isLoaded()) printModal.open(viewer.pageCount, viewer.currentPage, { w: viewer.pageWidthPt, h: viewer.pageHeightPt });
+    return;
+  }
+  if (ctrl && !shift && e.key === ",") {
+    e.preventDefault();
+    if (toolbar.allowed()) settingsModal.open();
     return;
   }
   if (ctrl && !shift && e.key.toLowerCase() === "f") {
@@ -1960,9 +1974,9 @@ async function readPicture(path: string): Promise<Picture | null> {
   }
 }
 
-/** Places the picture at `path` centred on (x, y), canvas px of `pv`'s page. */
-async function placePicture(path: string, pv: PdfPageView, x: number, y: number): Promise<void> {
-  const pic = await readPicture(path);
+/** Places the picture (a file or one already read) centred on (x, y), canvas px of `pv`'s page. */
+async function placePicture(source: string | Picture, pv: PdfPageView, x: number, y: number): Promise<void> {
+  const pic = typeof source === "string" ? await readPicture(source) : source;
   if (!pic) return;
   // Natural size at 96 dpi, at most 60 % of the page.
   const page = pv.overlay.pageSizePt;
@@ -1971,6 +1985,64 @@ async function placePicture(path: string, pv: PdfPageView, x: number, y: number)
   // Ready to move and resize right away.
   if (toolState.tool !== "select") toolbar.clearActiveTool();
 }
+
+/** Places a picture on the page shown, centred on the part in view. */
+async function placeInView(source: string | Picture): Promise<void> {
+  const pv = viewer.pageViews.find((p) => p.pageNum === viewer.currentPage);
+  if (!pv) return;
+  const r = pv.overlay.screenRect;
+  const view = document.getElementById("viewer-scroll")!.getBoundingClientRect();
+  const top = Math.max(r.top, view.top), bottom = Math.min(r.bottom, view.bottom);
+  await placePicture(source, pv, r.width / 2, (top + bottom) / 2 - r.top);
+}
+
+/** Asks for a picture and places it on the page shown. */
+async function browsePicture(): Promise<void> {
+  const path = await openImageDialog();
+  if (path) await placeInView(path);
+}
+
+/**
+ * Edit › Insert a picture and Ctrl+V of a copied picture: both switch to
+ * Annotate (so it can be moved and resized right away) and place it on the
+ * page shown.
+ */
+async function insertPicture(source?: Picture): Promise<void> {
+  if (!viewer.isLoaded() || refuseIfProtected()) return;
+  toolbar.setMode("annotate");
+  if (toolbar.currentMode !== "annotate") return;
+  if (source) await placeInView(source);
+  else await browsePicture();
+}
+
+/** A copied picture as PNG (base64), whatever format the clipboard holds. */
+async function clipboardPicture(file: File): Promise<Picture | null> {
+  try {
+    const bmp = await createImageBitmap(file);
+    const canvas = document.createElement("canvas");
+    canvas.width = bmp.width;
+    canvas.height = bmp.height;
+    canvas.getContext("2d")!.drawImage(bmp, 0, 0);
+    bmp.close();
+    const data = canvas.toDataURL("image/png").split(",")[1] ?? "";
+    return { data, width: canvas.width, height: canvas.height };
+  } catch (err) {
+    showToast(msg("msgImageFailed", { err: errText(err) }), true);
+    return null;
+  }
+}
+
+document.addEventListener("paste", async (e) => {
+  const el = document.activeElement as HTMLElement | null;
+  if (el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.isContentEditable)) return;
+  const item = Array.from(e.clipboardData?.items ?? []).find((i) => i.kind === "file" && i.type.startsWith("image/"));
+  const file = item?.getAsFile();
+  if (!file || !viewer.isLoaded()) return;
+  e.preventDefault();
+  if (!toolbar.allowed()) return;
+  const pic = await clipboardPicture(file);
+  if (pic) await insertPicture(pic);
+});
 
 /** Adds each picture as a new page, after page `after`. */
 async function insertPictures(after: number, paths: string[]): Promise<void> {
