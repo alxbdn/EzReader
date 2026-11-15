@@ -103,6 +103,10 @@ foreach ($icon in $iconFiles) {
     }
 }
 
+# Taskbar / Start icons at each target size, plated and unplated. Without the
+# unplated ones Windows draws the icon on a square in the accent colour.
+Copy-Item ".\src-tauri\icons\msix\*.png" "$PackageDir\icons\" -Force
+
 # Step 5: Copy and update manifest with version
 Write-Host "Copying manifest..." -ForegroundColor Yellow
 # Read manifest, update version, write without BOM (makeappx requires no BOM)
@@ -114,6 +118,16 @@ $manifest = [System.IO.File]::ReadAllText($manifestPath.Path, $utf8NoBom)
 # Only replace the Identity Version="0.0.0.0", not MinVersion/MaxVersionTested
 $manifest = $manifest -creplace 'Version="0\.0\.0\.0"', "Version=`"$Version`""
 [System.IO.File]::WriteAllText($outPath, $manifest, $utf8NoBom)
+
+# Step 5b: Index the icon variants in resources.pri, so Windows can pick the
+# targetsize / unplated files (it ignores them without an index)
+Write-Host "Indexing resources..." -ForegroundColor Yellow
+$makepri = Join-Path (Split-Path $makeappx) "makepri.exe"
+$priConfig = "$OutputDir\priconfig.xml"
+& $makepri createconfig /cf $priConfig /dq en-US /pv 10.0.0 /o | Out-Null
+if ($LASTEXITCODE -ne 0) { Write-Error "makepri createconfig failed"; exit 1 }
+& $makepri new /pr $PackageDir /cf $priConfig /mn $outPath /of "$PackageDir\resources.pri" /o
+if ($LASTEXITCODE -ne 0) { Write-Error "makepri new failed"; exit 1 }
 
 # Step 6: Create MSIX package
 Write-Host "`n=== Creating MSIX package ===" -ForegroundColor Green

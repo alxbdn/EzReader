@@ -1095,7 +1095,7 @@ dependencies = [
 
 [[package]]
 name = "ezreader"
-version = "0.2.32"
+version = "0.2.34"
 dependencies = [
  "base64 0.22.1",
  "crc32fast",
