@@ -36,7 +36,7 @@
   },
   "bundle": {
     "active": true,
-    "targets": ["nsis"],
+    "targets": ["nsis", "deb", "appimage"],
     "publisher": "alxbdn",
     "icon": [
       "icons/32x32.png",
@@ -49,6 +49,11 @@
       "certificateThumbprint": null,
       "digestAlgorithm": "sha256",
       "timestampUrl": ""
+    },
+    "linux": {
+      "deb": {
+        "depends": ["tesseract-ocr", "cups-client", "xdg-utils"]
+      }
     },
     "fileAssociations": [
       {

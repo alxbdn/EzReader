@@ -30,7 +30,7 @@ pub async fn convert_text(doc: TextDoc, format: String, output: String) -> CmdRe
 
 /// A Save As dialog for a converted file: `suggested` is the file name,
 /// `format` sets the type filter. Returns the chosen path or null.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn save_as_dialog(app: AppHandle, suggested: String, format: String) -> CmdResult<Option<String>> {
     let format = Format::parse(&format)
         .ok_or_else(|| PdfError::new(ErrorCode::Other, format!("unknown format: {format}")))?;

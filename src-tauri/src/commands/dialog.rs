@@ -12,7 +12,7 @@ fn filepath_to_string(p: FilePath) -> String {
 
 /// Opens a native file-picker dialog filtered to PDF files.
 /// Returns the selected absolute path, or null if cancelled.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn open_pdf_dialog(app: AppHandle) -> CmdResult<Option<String>> {
     let result = app
         .dialog()
@@ -29,7 +29,7 @@ pub fn open_pdf_dialog(app: AppHandle) -> CmdResult<Option<String>> {
 
 /// Opens a native file-picker for a document to open: a PDF, or a picture
 /// that becomes a new one-page PDF. Returns the selected path, or null.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn open_document_dialog(app: AppHandle) -> CmdResult<Option<String>> {
     let mut all = vec!["pdf"];
     all.extend(IMAGE_EXTENSIONS);
@@ -53,7 +53,7 @@ pub const IMAGE_EXTENSIONS: [&str; 6] = ["png", "jpg", "jpeg", "webp", "gif", "b
 
 /// Opens a native file-picker dialog filtered to pictures.
 /// Returns the selected absolute path, or null if cancelled.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn open_image_dialog(app: AppHandle) -> CmdResult<Option<String>> {
     let result = app
         .dialog()
@@ -69,7 +69,7 @@ pub fn open_image_dialog(app: AppHandle) -> CmdResult<Option<String>> {
 
 /// Opens a native file-picker dialog for several pictures at once.
 /// Returns the selected paths (empty if cancelled).
-#[tauri::command]
+#[tauri::command(async)]
 pub fn open_images_dialog(app: AppHandle) -> CmdResult<Vec<String>> {
     let result = app
         .dialog()
@@ -86,7 +86,7 @@ pub fn open_images_dialog(app: AppHandle) -> CmdResult<Vec<String>> {
 /// Opens a native Save As dialog.
 /// Pre-fills the filename from `current_path` basename.
 /// Returns the chosen absolute path, or null if cancelled.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn save_pdf_dialog(
     app: AppHandle,
     current_path: String,
@@ -112,7 +112,7 @@ pub fn save_pdf_dialog(
 }
 
 /// Opens a native folder-picker dialog. Returns the chosen path or null.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn pick_directory_dialog(app: AppHandle) -> CmdResult<Option<String>> {
     let result = app.dialog().file().blocking_pick_folder();
     let picked = result.map(filepath_to_string);

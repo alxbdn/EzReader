@@ -3,7 +3,7 @@ use crate::ocr::{OcrLanguage, OcrResult};
 
 fn to_error(e: String) -> PdfError {
     if e == "no-ocr-language" {
-        PdfError::new(ErrorCode::NoOcrLanguage, "no OCR language is installed in Windows for this")
+        PdfError::new(ErrorCode::NoOcrLanguage, "no OCR language is installed for this")
     } else {
         PdfError::from(e)
     }

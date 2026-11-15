@@ -1413,6 +1413,10 @@ async function coversMonitor(): Promise<boolean> {
   const pos = await appWindow.outerPosition();
   const size = await appWindow.outerSize();
   const m = monitor.position, ms = monitor.size;
+  // Wayland always reports window outerPosition as (0, 0), even on secondary monitors.
+  if (pos.x === 0 && pos.y === 0 && size.width >= ms.width && size.height >= ms.height) {
+    return true;
+  }
   return pos.x <= m.x && pos.y <= m.y
     && pos.x + size.width >= m.x + ms.width
     && pos.y + size.height >= m.y + ms.height;

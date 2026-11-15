@@ -17,9 +17,10 @@ pub(crate) fn rename_no_clobber(from: &Path, to: &Path) -> CmdResult<()> {
         return Ok(());
     }
     // A case-only change ("a.pdf" -> "A.pdf") is the same file on Windows.
-    let same_file = from
-        .to_string_lossy()
-        .eq_ignore_ascii_case(&to.to_string_lossy());
+    let same_file = cfg!(windows)
+        && from
+            .to_string_lossy()
+            .eq_ignore_ascii_case(&to.to_string_lossy());
     if to.exists() && !same_file {
         return Err(PdfError::new(ErrorCode::Exists, "exists"));
     }
@@ -79,6 +80,23 @@ mod tests {
         assert_eq!(rename_no_clobber(&a, &b), Err(PdfError::new(ErrorCode::Exists, "exists")));
         assert_eq!(std::fs::read(&b).unwrap(), b"b");
         assert!(a.exists());
+        let _ = std::fs::remove_dir_all(d);
+    }
+
+    #[cfg(not(windows))]
+    #[test]
+    fn refuses_case_collision_on_case_sensitive_fs() {
+        let d = dir();
+        let lower = d.join("a.pdf");
+        let upper = d.join("A.pdf");
+        std::fs::write(&lower, b"lower").unwrap();
+        std::fs::write(&upper, b"upper").unwrap();
+        assert_eq!(
+            rename_no_clobber(&lower, &upper),
+            Err(PdfError::new(ErrorCode::Exists, "exists"))
+        );
+        assert_eq!(std::fs::read(&upper).unwrap(), b"upper");
+        assert!(lower.exists());
         let _ = std::fs::remove_dir_all(d);
     }
 
