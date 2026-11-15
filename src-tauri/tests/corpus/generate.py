@@ -11,7 +11,7 @@ below. Run this again only to add a case or to change one:
 Each file stands for a kind of PDF people open in EzReader: what Word,
 scanners, Acrobat, old tools and password tools write. The huge document is
 not here (it would weigh down the repository): corpus_tests.rs builds it.
-Every user password is "corpus" (see PASSWORD in corpus_tests.rs).
+Every user password is the one in password.txt (fixture data, not a secret).
 """
 
 import io
@@ -211,6 +211,8 @@ def existing_annotations():
 
 
 def encrypted():
+    with open(out("password.txt"), "w") as f:
+        f.write(PASSWORD + "\n")
     tmp = out("_enc.pdf")
     text_doc(tmp, pages=2)
     pdf = pikepdf.open(tmp)

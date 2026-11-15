@@ -21,8 +21,11 @@ use crate::pdf::models::Annotation;
 use crate::pdf::writer::FormFieldValue;
 use crate::test_util::assert_lengths_consistent;
 
-/// The user password of every encrypted file of the corpus.
-const PASSWORD: &str = "corpus";
+/// The user password of every encrypted file of the corpus. Kept beside the
+/// files (written by generate.py): it is fixture data, not a secret.
+fn password() -> String {
+    std::fs::read_to_string(corpus_dir().join("password.txt")).unwrap().trim().to_string()
+}
 
 /// Each corpus file and its page count (as qpdf counts them).
 const CORPUS: &[(&str, u32)] = &[
@@ -94,7 +97,7 @@ fn working_copy(src: &Path, out: &Path, name: &str) -> PathBuf {
     }
     assert!(raw.windows(8).any(|w| w == b"/Encrypt"), "{name} should be encrypted");
     let plain = out.join(format!("unlocked-{name}"));
-    decrypt_pdf(s(src), s(&plain), PASSWORD.into()).unwrap_or_else(|e| panic!("{name}: cannot unlock: {e:?}"));
+    decrypt_pdf(s(src), s(&plain), password()).unwrap_or_else(|e| panic!("{name}: cannot unlock: {e:?}"));
     plain
 }
 
