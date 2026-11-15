@@ -49,7 +49,7 @@ pub fn save_annotated_pdf(
     // / Acrobat output), producing files whose content streams render as
     // garbage. The incremental path preserves the input bytes verbatim and
     // only appends our modifications.
-    let mut inc = IncrementalDocument::load(&input_path).map_err(|e| e.to_string())?;
+    let mut inc = fsutil::load_incremental(&input_path)?;
 
     // Apply rotation to every page's Rotate entry before burning annotations.
     if rotation_delta != 0 {
@@ -297,7 +297,7 @@ pub fn strip_annotation_streams(
         return Ok(false);
     }
 
-    let mut inc = IncrementalDocument::load(&input_path).map_err(|e| e.to_string())?;
+    let mut inc = fsutil::load_incremental(&input_path)?;
     let meta = writer::load_meta(inc.get_prev_documents());
     for arr in meta.stream_ids.values() {
         let sid = (arr[0], arr[1] as u16);
@@ -379,7 +379,7 @@ pub struct PageAdjust {
 #[tauri::command(async)]
 pub fn adjust_pages(input_path: String, output_path: String, pages: Vec<PageAdjust>) -> CmdResult<()> {
     crate::grants::check_all([&input_path, &output_path])?;
-    let mut inc = IncrementalDocument::load(&input_path).map_err(|e| e.to_string())?;
+    let mut inc = fsutil::load_incremental(&input_path)?;
     let prev_pages = inc.get_prev_documents().get_pages();
     let meta = writer::load_meta(inc.get_prev_documents());
 
@@ -641,7 +641,7 @@ pub fn rearrange_pages(
             crate::grants::check(path)?;
         }
     }
-    let mut inc = IncrementalDocument::load(&input_path).map_err(|e| e.to_string())?;
+    let mut inc = fsutil::load_incremental(&input_path)?;
     rewrite_pages(&mut inc, &slots)?;
     // Compacted, not incremental: pages left out must not survive in the bytes.
     fsutil::save_compacted(&mut inc, &output_path)?;
@@ -1671,7 +1671,7 @@ pub fn export_flattened_pages(
 ) -> CmdResult<()> {
     crate::grants::check_all([&input_path, &output_path])?;
     let keep: HashSet<u32> = pages.into_iter().collect();
-    let mut inc = IncrementalDocument::load(&input_path).map_err(|e| e.to_string())?;
+    let mut inc = fsutil::load_incremental(&input_path)?;
     let total = inc.get_prev_documents().get_pages().len() as u32;
     let slots = kept_slots(&keep, total);
     if slots.is_empty() {
@@ -1689,7 +1689,7 @@ fn extract_pages(
     output_path: &str,
     keep: &HashSet<u32>,
 ) -> CmdResult<()> {
-    let mut inc = IncrementalDocument::load(input_path).map_err(|e| e.to_string())?;
+    let mut inc = fsutil::load_incremental(input_path)?;
     let total = inc.get_prev_documents().get_pages().len() as u32;
 
     let keeping_all = total > 0
