@@ -2,11 +2,11 @@ name: Linux Debian Package
 
 on:
   push:
-    branches: [main, portage_linux]
+    branches: [main]
     tags:
       - 'v*.*.*'
   pull_request:
-    branches: [main, portage_linux]
+    branches: [main]
   workflow_dispatch:
     inputs:
       publish_release:
@@ -143,7 +143,7 @@ jobs:
           tag_name: ${{ steps.version.outputs.tag }}
           name: ${{ steps.version.outputs.tag }}
           generate_release_notes: true
-          prerelease: ${{ steps.prerelease.outputs.is_prerelease == 'true' }}
+          prerelease: ${{ steps.version.outputs.is_prerelease == 'true' }}
           files: |
             dist-artifacts/ezreader_${{ steps.version.outputs.version }}_amd64.deb
             dist-artifacts/ezreader-portable-${{ steps.version.outputs.version }}-linux-x64

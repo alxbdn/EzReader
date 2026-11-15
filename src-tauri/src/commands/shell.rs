@@ -423,7 +423,7 @@ fn print_pages_linux(
         let bytes = base64::engine::general_purpose::STANDARD
             .decode(trimmed)
             .map_err(|e| format!("base64: {e}"))?;
-        decoded_pages.push(bytes);
+        decoded_pages.push((format!("page {}", decoded_pages.len() + 1), bytes));
     }
 
     struct TempCleanup(std::path::PathBuf);

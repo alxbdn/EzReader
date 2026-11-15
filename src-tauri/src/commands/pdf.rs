@@ -560,16 +560,17 @@ fn image_page_from_bytes(doc: &mut Document, bytes: &[u8]) -> Result<ObjectId, S
 }
 
 /// Builds a PDF with one page per encoded image (`images`, in order) and writes
-/// it atomically to `output_path`.
-pub(crate) fn image_bytes_to_pdf(images: &[Vec<u8>], output_path: &str) -> Result<(), String> {
+/// it atomically to `output_path`. Each image comes with a name (its path, or
+/// "page 3") that an error about it starts with.
+pub(crate) fn image_bytes_to_pdf(images: &[(String, Vec<u8>)], output_path: &str) -> Result<(), String> {
     if images.is_empty() {
         return Err("No pictures given".into());
     }
     let mut doc = Document::with_version("1.7");
     let pages_id = doc.new_object_id();
     let mut kids = Vec::with_capacity(images.len());
-    for bytes in images {
-        let page = image_page_from_bytes(&mut doc, bytes)?;
+    for (name, bytes) in images {
+        let page = image_page_from_bytes(&mut doc, bytes).map_err(|e| format!("{name}: {e}"))?;
         if let Ok(Object::Dictionary(d)) = doc.get_object_mut(page) {
             d.set("Parent", Object::Reference(pages_id));
         }
@@ -599,7 +600,7 @@ pub fn images_to_pdf(image_paths: Vec<String>, output_path: String) -> CmdResult
     }
     let mut images = Vec::with_capacity(image_paths.len());
     for path in &image_paths {
-        images.push(crate::commands::files::read_image_bytes(path)?);
+        images.push((path.clone(), crate::commands::files::read_image_bytes(path)?));
     }
     image_bytes_to_pdf(&images, &output_path).map_err(PdfError::from)
 }

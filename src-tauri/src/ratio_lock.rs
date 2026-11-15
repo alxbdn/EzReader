@@ -8,6 +8,9 @@
 //! to full height, or to a side): moving it afterwards no longer brings
 //! back the size it had before the snap.
 
+// The geometry below is only used by the Windows hook (and the tests).
+#![cfg_attr(not(windows), allow(dead_code))]
+
 /// Which edge or corner is dragged (the WMSZ_* values).
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Edge {
