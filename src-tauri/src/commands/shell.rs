@@ -25,6 +25,31 @@ fn is_packaged() -> bool {
         .unwrap_or(false)
 }
 
+#[cfg(not(target_os = "windows"))]
+fn desktop_file_path() -> Option<std::path::PathBuf> {
+    std::env::var_os("XDG_DATA_HOME")
+        .filter(|v| !v.is_empty())
+        .map(std::path::PathBuf::from)
+        .or_else(|| std::env::var_os("HOME").map(|h| std::path::PathBuf::from(h).join(".local/share")))
+        .map(|d| d.join("applications").join("ezreader.desktop"))
+}
+
+#[cfg(not(target_os = "windows"))]
+fn mimeapps_list_path() -> Option<std::path::PathBuf> {
+    std::env::var_os("XDG_CONFIG_HOME")
+        .filter(|v| !v.is_empty())
+        .map(std::path::PathBuf::from)
+        .or_else(|| std::env::var_os("HOME").map(|h| std::path::PathBuf::from(h).join(".config")))
+        .map(|d| d.join("mimeapps.list"))
+}
+
+#[cfg(not(target_os = "windows"))]
+fn desktop_entry_exists() -> bool {
+    desktop_file_path().is_some_and(|p| p.exists())
+        || std::path::Path::new("/usr/share/applications/ezreader.desktop").exists()
+        || std::path::Path::new("/usr/share/applications/EzReader.desktop").exists()
+}
+
 #[tauri::command]
 pub fn check_pdf_association() -> bool {
     #[cfg(target_os = "windows")]
@@ -41,7 +66,22 @@ pub fn check_pdf_association() -> bool {
     }
     #[cfg(not(target_os = "windows"))]
     {
-        false
+        if !desktop_entry_exists() {
+            return false;
+        }
+        let Ok(out) = Command::new("xdg-mime")
+            .args(["query", "default", "application/pdf"])
+            .output()
+        else {
+            return false;
+        };
+        if !out.status.success() {
+            return false;
+        }
+        String::from_utf8_lossy(&out.stdout)
+            .trim()
+            .to_ascii_lowercase()
+            .contains("ezreader")
     }
 }
 
@@ -134,7 +174,29 @@ pub fn register_pdf_handler() -> CmdResult<()> {
     }
     #[cfg(not(target_os = "windows"))]
     {
-        Err("Registration is only supported on Windows".into())
+        let desktop_path = desktop_file_path()
+            .ok_or_else(|| PdfError::from("Could not locate applications directory"))?;
+        if let Some(parent) = desktop_path.parent() {
+            std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+        }
+        let exe = std::env::current_exe()
+            .map_err(|e| e.to_string())?
+            .to_string_lossy()
+            .replace('\\', "\\\\")
+            .replace('"', "\\\"");
+        let desktop = format!(
+            "[Desktop Entry]\nType=Application\nName=EzReader\nComment=PDF Reader and Editor\nExec=\"{exe}\" %F\nTerminal=false\nMimeType=application/pdf;\nCategories=Office;Viewer;\n"
+        );
+        std::fs::write(&desktop_path, desktop).map_err(|e| e.to_string())?;
+
+        let status = Command::new("xdg-mime")
+            .args(["default", "ezreader.desktop", "application/pdf"])
+            .status()
+            .map_err(|e| e.to_string())?;
+        if !status.success() {
+            return Err("xdg-mime failed to set application/pdf default".into());
+        }
+        Ok(())
     }
 }
 
@@ -155,8 +217,62 @@ pub fn list_printers() -> CmdResult<PrinterList> {
     }
     #[cfg(not(target_os = "windows"))]
     {
-        Ok(PrinterList { printers: vec![], default_printer: String::new() })
+        list_printers_linux().map_err(PdfError::from)
     }
+}
+
+#[cfg(not(target_os = "windows"))]
+fn parse_lpstat_printers(stdout: &str) -> Vec<String> {
+    stdout
+        .lines()
+        .filter(|line| line.contains(" accepting requests"))
+        .filter_map(|line| line.split_whitespace().next())
+        .map(str::to_string)
+        .collect()
+}
+
+#[cfg(not(target_os = "windows"))]
+fn parse_lpstat_default(stdout: &str) -> Option<String> {
+    stdout
+        .lines()
+        .find_map(|line| {
+            line.split_once("system default destination:")
+                .map(|(_, rest)| rest.trim())
+        })
+        .filter(|s| !s.is_empty())
+        .map(str::to_string)
+}
+
+#[cfg(not(target_os = "windows"))]
+fn list_printers_linux() -> Result<PrinterList, String> {
+    let Ok(out) = Command::new("lpstat").env("LC_ALL", "C").arg("-a").output() else {
+        return Ok(PrinterList {
+            printers: vec![],
+            default_printer: String::new(),
+        });
+    };
+    if !out.status.success() {
+        return Ok(PrinterList {
+            printers: vec![],
+            default_printer: String::new(),
+        });
+    }
+    let printers = parse_lpstat_printers(&String::from_utf8_lossy(&out.stdout));
+    let default_printer = Command::new("lpstat")
+        .env("LC_ALL", "C")
+        .arg("-d")
+        .output()
+        .ok()
+        .filter(|o| o.status.success())
+        .and_then(|o| parse_lpstat_default(&String::from_utf8_lossy(&o.stdout)))
+        .filter(|d| printers.iter().any(|p| p == d))
+        .or_else(|| printers.first().cloned())
+        .unwrap_or_default();
+
+    Ok(PrinterList {
+        printers,
+        default_printer,
+    })
 }
 
 #[cfg(target_os = "windows")]
@@ -283,9 +399,96 @@ pub fn print_pages(
     }
     #[cfg(not(target_os = "windows"))]
     {
-        let _ = (pages_b64, printer_name, copies, orientation, fit_mode);
-        Err("Printing is only supported on Windows".into())
+        print_pages_linux(pages_b64, printer_name, copies, orientation, fit_mode).map_err(PdfError::from)
     }
+}
+
+#[cfg(not(target_os = "windows"))]
+fn print_pages_linux(
+    pages_b64: Vec<String>,
+    printer_name: Option<String>,
+    copies: Option<u32>,
+    orientation: Option<String>,
+    fit_mode: Option<String>,
+) -> Result<(), String> {
+    use base64::Engine;
+
+    if pages_b64.is_empty() {
+        return Err("No pages to print".into());
+    }
+
+    let mut decoded_pages = Vec::with_capacity(pages_b64.len());
+    for page_b64 in &pages_b64 {
+        let trimmed = page_b64.split_once(',').map_or(page_b64.as_str(), |(_, d)| d).trim();
+        let bytes = base64::engine::general_purpose::STANDARD
+            .decode(trimmed)
+            .map_err(|e| format!("base64: {e}"))?;
+        decoded_pages.push((format!("page {}", decoded_pages.len() + 1), bytes));
+    }
+
+    struct TempCleanup(std::path::PathBuf);
+    impl Drop for TempCleanup {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_file(&self.0);
+        }
+    }
+
+    let nanos = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_nanos();
+    let temp_path = std::env::temp_dir().join(format!(
+        "ezreader-{}-print-{nanos}.pdf",
+        crate::tempfiles::tag()
+    ));
+    let _cleanup = TempCleanup(temp_path.clone());
+    let temp_path_str = temp_path.to_string_lossy().into_owned();
+
+    crate::commands::pdf::image_bytes_to_pdf(&decoded_pages, &temp_path_str)?;
+
+    let mut args: Vec<String> = Vec::new();
+    if let Some(name) = printer_name
+        .as_deref()
+        .map(str::trim)
+        .filter(|n| !n.is_empty())
+    {
+        args.push("-d".to_string());
+        args.push(name.to_string());
+    }
+    let num_copies = copies.unwrap_or(1).clamp(1, 999);
+    args.push("-n".to_string());
+    args.push(num_copies.to_string());
+
+    args.push("-o".to_string());
+    args.push(if orientation.as_deref() == Some("landscape") {
+        "orientation-requested=4".to_string()
+    } else {
+        "orientation-requested=3".to_string()
+    });
+
+    if fit_mode.as_deref() != Some("actual") {
+        args.push("-o".to_string());
+        args.push("fit-to-page".to_string());
+    }
+
+    args.push(temp_path_str);
+
+    let out = Command::new("lp")
+        .args(&args)
+        .output()
+        .map_err(|e| format!("failed to run lp: {e}"))?;
+    drop(_cleanup);
+
+    if !out.status.success() {
+        let stderr = String::from_utf8_lossy(&out.stderr).trim().to_string();
+        return Err(if stderr.is_empty() {
+            "lp failed".to_string()
+        } else {
+            stderr
+        });
+    }
+
+    Ok(())
 }
 
 #[cfg(target_os = "windows")]
@@ -534,6 +737,73 @@ mod tests {
         assert_eq!(fit_within(0, 100, 50, 100), (50, 100));
         assert_eq!(fit_within(100, 100, 0, 100), (0, 100));
     }
+
+    #[cfg(not(windows))]
+    #[test]
+    fn parses_lpstat_output_and_strips_mimeapps() {
+        let lpstat_a = concat!(
+            "HP_LaserJet accepting requests since Mon Nov 10 10:00:00 2026\n",
+            "CUPS-PDF accepting requests since Tue Nov 11 08:00:00 2026\n",
+        );
+        assert_eq!(
+            super::parse_lpstat_printers(lpstat_a),
+            vec!["HP_LaserJet".to_string(), "CUPS-PDF".to_string()]
+        );
+        assert_eq!(
+            super::parse_lpstat_default("system default destination: HP_LaserJet\n").as_deref(),
+            Some("HP_LaserJet")
+        );
+        assert_eq!(super::parse_lpstat_default("no system default destination\n"), None);
+
+        let mimeapps = concat!(
+            "[Default Applications]\n",
+            "application/pdf=ezreader.desktop\n",
+            "text/plain=gedit.desktop\n",
+            "[Added Associations]\n",
+            "application/pdf=ezreader.desktop;org.gnome.Evince.desktop;\n",
+        );
+        let cleaned = super::strip_ezreader_from_mimeapps(mimeapps);
+        assert_eq!(
+            cleaned,
+            concat!(
+                "[Default Applications]\n",
+                "text/plain=gedit.desktop\n",
+                "[Added Associations]\n",
+                "application/pdf=org.gnome.Evince.desktop;\n",
+            )
+        );
+    }
+}
+
+#[cfg(not(target_os = "windows"))]
+fn strip_ezreader_from_mimeapps(content: &str) -> String {
+    let mut out = Vec::new();
+    for line in content.lines() {
+        if let Some((lhs, rhs)) = line.split_once('=') {
+            if lhs.trim() == "application/pdf" {
+                let trailing_semi = rhs.trim_end().ends_with(';');
+                let kept: Vec<&str> = rhs
+                    .split(';')
+                    .map(str::trim)
+                    .filter(|entry| !entry.is_empty() && !entry.eq_ignore_ascii_case("ezreader.desktop"))
+                    .collect();
+                if !kept.is_empty() {
+                    let mut joined = kept.join(";");
+                    if trailing_semi {
+                        joined.push(';');
+                    }
+                    out.push(format!("{lhs}={joined}"));
+                }
+                continue;
+            }
+        }
+        out.push(line.to_string());
+    }
+    let mut res = out.join("\n");
+    if content.ends_with('\n') && !res.is_empty() {
+        res.push('\n');
+    }
+    res
 }
 
 /// Removes all registry entries created by register_pdf_handler.
@@ -580,7 +850,21 @@ pub fn unregister_pdf_handler() -> CmdResult<()> {
     }
     #[cfg(not(target_os = "windows"))]
     {
-        Err("Only supported on Windows".into())
+        if let Some(desktop_path) = desktop_file_path() {
+            if desktop_path.exists() {
+                std::fs::remove_file(&desktop_path).map_err(|e| e.to_string())?;
+            }
+        }
+        if let Some(mimeapps) = mimeapps_list_path() {
+            if mimeapps.exists() {
+                let content = std::fs::read_to_string(&mimeapps).map_err(|e| e.to_string())?;
+                let updated = strip_ezreader_from_mimeapps(&content);
+                if updated != content {
+                    std::fs::write(&mimeapps, updated).map_err(|e| e.to_string())?;
+                }
+            }
+        }
+        Ok(())
     }
 }
 
@@ -684,8 +968,11 @@ pub fn open_url(url: String) -> CmdResult<()> {
     }
     #[cfg(not(target_os = "windows"))]
     {
-        let _ = url;
-        Err("Opening links is only supported on Windows".into())
+        Command::new("xdg-open")
+            .arg(&url)
+            .spawn()
+            .map_err(|e| format!("could not open the link ({e})"))?;
+        Ok(())
     }
 }
 
@@ -716,9 +1003,12 @@ mod url_tests {
 
 #[tauri::command]
 pub fn open_default_apps_settings() -> CmdResult<()> {
-    Command::new("cmd")
-        .args(["/C", "start", "", "ms-settings:defaultapps"])
-        .spawn()
-        .map_err(|e| e.to_string())?;
+    #[cfg(target_os = "windows")]
+    {
+        Command::new("cmd")
+            .args(["/C", "start", "", "ms-settings:defaultapps"])
+            .spawn()
+            .map_err(|e| e.to_string())?;
+    }
     Ok(())
 }

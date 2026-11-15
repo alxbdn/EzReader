@@ -25,6 +25,7 @@ fn owner(name: &str) -> Option<u32> {
     let rest = name.strip_prefix("ezreader-")?;
     let digits = rest
         .strip_prefix('p')
+        .or_else(|| rest.strip_prefix("window-new-"))
         .or_else(|| rest.strip_prefix("window-"))?;
     let end = digits.find('-')?;
     digits[..end].parse().ok()
@@ -108,6 +109,7 @@ mod tests {
     fn owners_are_read_from_names() {
         assert_eq!(owner("ezreader-p1234-lx2k-3-display-a.pdf"), Some(1234));
         assert_eq!(owner("ezreader-window-88-2"), Some(88));
+        assert_eq!(owner("ezreader-window-new-88-2"), Some(88));
         assert_eq!(owner("ezreader-lx2k-3-display-a.pdf"), None);
         assert_eq!(owner("ezreader-pages-x.pdf"), None);
         assert_eq!(owner("other-p12-x"), None);

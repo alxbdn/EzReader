@@ -559,20 +559,18 @@ fn image_page_from_bytes(doc: &mut Document, bytes: &[u8]) -> Result<ObjectId, S
     Ok(doc.add_object(dict))
 }
 
-/// Makes a new PDF with one page per picture of `image_paths`, in order
-/// (each page fits A4 in the picture's orientation).
-#[tauri::command(async)]
-pub fn images_to_pdf(image_paths: Vec<String>, output_path: String) -> CmdResult<()> {
-    crate::grants::check_all(image_paths.iter().chain([&output_path]))?;
-    if image_paths.is_empty() {
+/// Builds a PDF with one page per encoded image (`images`, in order) and writes
+/// it atomically to `output_path`. Each image comes with a name (its path, or
+/// "page 3") that an error about it starts with.
+pub(crate) fn image_bytes_to_pdf(images: &[(String, Vec<u8>)], output_path: &str) -> Result<(), String> {
+    if images.is_empty() {
         return Err("No pictures given".into());
     }
     let mut doc = Document::with_version("1.7");
     let pages_id = doc.new_object_id();
-    let mut kids = Vec::with_capacity(image_paths.len());
-    for path in &image_paths {
-        let bytes = crate::commands::files::read_image_bytes(path)?;
-        let page = image_page_from_bytes(&mut doc, &bytes).map_err(|e| format!("{path}: {e}"))?;
+    let mut kids = Vec::with_capacity(images.len());
+    for (name, bytes) in images {
+        let page = image_page_from_bytes(&mut doc, bytes).map_err(|e| format!("{name}: {e}"))?;
         if let Ok(Object::Dictionary(d)) = doc.get_object_mut(page) {
             d.set("Parent", Object::Reference(pages_id));
         }
@@ -589,7 +587,22 @@ pub fn images_to_pdf(image_paths: Vec<String>, output_path: String) -> CmdResult
     let catalog_id = doc.add_object(catalog);
     doc.trailer.set("Root", Object::Reference(catalog_id));
     doc.compress();
-    fsutil::save_document(&mut doc, &output_path).map_err(PdfError::from)
+    fsutil::save_document(&mut doc, output_path)
+}
+
+/// Makes a new PDF with one page per picture of `image_paths`, in order
+/// (each page fits A4 in the picture's orientation).
+#[tauri::command(async)]
+pub fn images_to_pdf(image_paths: Vec<String>, output_path: String) -> CmdResult<()> {
+    crate::grants::check_all(image_paths.iter().chain([&output_path]))?;
+    if image_paths.is_empty() {
+        return Err("No pictures given".into());
+    }
+    let mut images = Vec::with_capacity(image_paths.len());
+    for path in &image_paths {
+        images.push((path.clone(), crate::commands::files::read_image_bytes(path)?));
+    }
+    image_bytes_to_pdf(&images, &output_path).map_err(PdfError::from)
 }
 
 /// Attributes a page may inherit from its ancestors in the page tree
