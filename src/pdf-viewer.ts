@@ -1158,6 +1158,33 @@ export class PdfViewer {
 
   // ── Print (T027 — unchanged logic) ──────────────────────────────────────────
 
+  /**
+   * Renders page `n` of the open document as large as fits in `maxW` × `maxH`
+   * CSS pixels (view rotation applied), sharp at the screen's pixel density.
+   * Used by presentation mode; null when no document is open.
+   */
+  async renderPageToFit(n: number, maxW: number, maxH: number): Promise<HTMLCanvasElement | null> {
+    if (!this.pdfDoc || n < 1 || n > this.pdfDoc.numPages) return null;
+    const page = await this.pdfDoc.getPage(n);
+    const rotation = (page.rotate + this._rotation) % 360;
+    const unit = page.getViewport({ scale: 1, rotation });
+    const dpr = window.devicePixelRatio || 1;
+    const fit = Math.min(maxW / unit.width, maxH / unit.height);
+    // Cap the bitmap (~40 MP) so very large pages do not exhaust memory.
+    const scale = Math.min(fit * dpr, Math.sqrt(40e6 / (unit.width * unit.height)));
+    const viewport = page.getViewport({ scale, rotation });
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.max(1, Math.round(viewport.width));
+    canvas.height = Math.max(1, Math.round(viewport.height));
+    canvas.style.width = `${canvas.width / dpr}px`;
+    canvas.style.height = `${canvas.height / dpr}px`;
+    const ctx = canvas.getContext("2d")!;
+    ctx.fillStyle = "#fff";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    await page.render({ canvasContext: ctx, viewport }).promise;
+    return canvas;
+  }
+
   /** Rasterises pages of the document currently shown, applying the view rotation. */
   async renderPagesForPrint(pageNumbers: number[], dpi = 200): Promise<string[]> {
     if (!this.pdfDoc) return [];

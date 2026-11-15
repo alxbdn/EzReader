@@ -12,6 +12,7 @@ import type { Translations } from "./i18n";
 import {
   ICON_INFO,
   ICON_FULLSCREEN,
+  ICON_PRESENT,
   ICON_FULLSCREEN_EXIT,
   ICON_EYE,
   ICON_PEN,
@@ -60,6 +61,7 @@ export type ToolbarEvent =
   | { type: "scroll-mode"; mode: "vertical" | "horizontal" }
   | { type: "info" }
   | { type: "fullscreen" }
+  | { type: "present" }
   | { type: "fit-width" }
   | { type: "fit-height" }
   | { type: "mode-change"; mode: AppMode }
@@ -105,7 +107,7 @@ interface MenuDef {
 /** Actions that must wait until pending changes are validated or discarded. */
 const GUARDED = new Set<ToolbarEvent["type"]>([
   "open", "save", "save-as", "export", "compress", "password", "images-to-pdf", "ocr", "print", "settings", "split", "rotate",
-  "insert-blank", "insert-pdf", "extract-pages",
+  "insert-blank", "insert-pdf", "extract-pages", "present",
 ]);
 
 export class Toolbar {
@@ -411,6 +413,7 @@ export class Toolbar {
           { label: "menuRotate", action: () => this.emit({ type: "rotate" }), requiresDoc: true },
           { label: "menuPageSidebar", action: () => this.emit({ type: "toggle-sidebar" }), requiresDoc: true },
           null,
+          { label: "menuPresent", shortcut: "F5", action: () => this.emit({ type: "present" }), requiresDoc: true },
           { label: "ttFullscreen", shortcut: "F11", action: () => this.emit({ type: "fullscreen" }) },
         ],
       },
@@ -791,12 +794,15 @@ export class Toolbar {
     this.infoBtn = this.btn(ICON_INFO, "Document info", "icon-btn tb-square");
     this.reg(this.infoBtn, undefined, "ttInfo");
     this.infoBtn.addEventListener("click", () => this.emit({ type: "info" }));
+    const presentBtn = this.btn(ICON_PRESENT, "Present (F5)", "icon-btn tb-square");
+    this.reg(presentBtn, undefined, "ttPresent");
+    presentBtn.addEventListener("click", () => this.emit({ type: "present" }));
     this.fullscreenBtn = this.btn(ICON_FULLSCREEN, "Full screen (F11)", "icon-btn tb-square");
     this.reg(this.fullscreenBtn, undefined, "ttFullscreen");
     this.fullscreenBtn.addEventListener("click", () => this.emit({ type: "fullscreen" }));
     const right = document.createElement("div");
     right.className = "toolbar-group tb-right";
-    right.append(exportBtn, compressBtn, this.lockBtn, this.infoBtn, this.fullscreenBtn, this.sep(), this.search.el);
+    right.append(exportBtn, compressBtn, this.lockBtn, this.infoBtn, presentBtn, this.fullscreenBtn, this.sep(), this.search.el);
 
     // Left group, Read / Annotate / Edit in the middle of the bar, right group.
     const left = document.createElement("div");

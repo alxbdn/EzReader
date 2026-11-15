@@ -10,6 +10,7 @@ import { mountWelcomeDots } from "./welcome-dots";
 import { PdfViewer, PdfPageView, renderRedactedPages, renderStraightenedPages } from "./pdf-viewer";
 import { AdjustView, type PageSetting } from "./adjust-view";
 import { Toolbar } from "./toolbar";
+import { Presentation } from "./presentation";
 import { CompressModal } from "./compress-modal";
 import { ExportModal } from "./export-modal";
 import { OcrModal } from "./ocr-modal";
@@ -1501,6 +1502,10 @@ toolbar.on(async (e) => {
       refreshSignatures();
       break;
 
+    case "present":
+      await startPresentation();
+      break;
+
     case "fullscreen":
       await toggleFullscreen();
       break;
@@ -1609,6 +1614,36 @@ async function toggleFullscreen(on = !fullscreen): Promise<void> {
   toolbar.setFullscreen(on);
 }
 
+// ── Presentation ──────────────────────────────────────────────────────────────
+
+let presentation: Presentation | null = null;
+
+/**
+ * One page at a time over a black, full-screen view, from the current page.
+ * On exit the viewer shows the last page presented and the window goes back
+ * to how it was.
+ */
+async function startPresentation(): Promise<void> {
+  if (presentation || !viewer.isLoaded()) return;
+  const t = getTranslations(settingsModal.getSettings().language);
+  const wasFullscreen = fullscreen;
+  presentation = new Presentation({
+    pageCount: viewer.pageCount,
+    render: (n, w, h) => viewer.renderPageToFit(n, w, h),
+    onExit: (page) => {
+      presentation = null;
+      if (!wasFullscreen) void toggleFullscreen(false);
+      viewer.goToPage(page, "instant");
+    },
+  }, viewer.currentPage, {
+    prev: t.ttPagePrev,
+    next: t.ttPageNext,
+    exit: t.ttPresentExit ?? "Stop presenting (Esc)",
+  });
+  presentation.open();
+  if (!wasFullscreen) await toggleFullscreen(true);
+}
+
 // ── Keyboard shortcuts ────────────────────────────────────────────────────────
 
 document.addEventListener("keydown", async (e) => {
@@ -1622,6 +1657,12 @@ document.addEventListener("keydown", async (e) => {
   if (e.key === "F11") {
     e.preventDefault();
     await toggleFullscreen();
+    return;
+  }
+  if (e.key === "F5") {
+    // Also keeps WebView2 from reloading the app.
+    e.preventDefault();
+    if (!shift && !ctrl && toolbar.allowed()) await startPresentation();
     return;
   }
 
