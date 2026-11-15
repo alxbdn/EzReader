@@ -6,6 +6,7 @@ mod grants;
 mod ocr;
 mod pdf;
 mod ratio_lock;
+mod resize_border;
 mod tempfiles;
 #[cfg(test)]
 mod test_util;
@@ -164,6 +165,7 @@ pub fn run() {
             commands::window::open_pages_in_new_window,
             commands::window::pictures_to_new_pdf,
             ratio_lock::set_launcher_ratio_lock,
+            resize_border::set_resize_border,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")

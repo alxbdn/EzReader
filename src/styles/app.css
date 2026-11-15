@@ -1070,6 +1070,10 @@ input[type="color"].color-picker.is-off::-webkit-color-swatch {
   /* The viewer keeps its own place when pages are resized or redrawn; the
      browser's scroll anchoring on top of that made the end of a document jump. */
   overflow-anchor: none;
+  /* The vertical scroll bar's place is kept even when it is hidden: the page
+     area keeps its width when the bar comes and goes, so a page fitted to it
+     cannot make the bar come and go forever (see pageRoom in main.ts). */
+  scrollbar-gutter: stable;
   /* The launcher's dot matrix, standing still. */
   background-color: var(--viewer);
   background-image: radial-gradient(circle, var(--viewer-dot) 1px, transparent 1.6px);
