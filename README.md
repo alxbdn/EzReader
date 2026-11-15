@@ -91,6 +91,8 @@ Extracted, split and rearranged files contain nothing from the pages you left ou
 
 ### Privacy and security
 
+Full details in the [privacy policy](PRIVACY.md).
+
 - No account, no AI, no telemetry: EzReader never sends your documents or usage anywhere
 - PDFs open in a locked-down viewer: document scripts never run, and the page cannot reach the network
 - The app only reads and writes the files you open or pick in a dialog
