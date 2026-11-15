@@ -40,9 +40,12 @@ jobs:
       - name: Install system dependencies
         run: |
           sudo apt-get update
+          # WebKitWebDriver: webkit2gtk-driver up to Ubuntu 24.04, renamed since.
+          driver=webkitgtk-webdriver
+          apt-cache show "$driver" >/dev/null 2>&1 || driver=webkit2gtk-driver
           sudo apt-get install -y --no-install-recommends \
             libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf \
-            webkit2gtk-driver xvfb
+            "$driver" xvfb
 
       - uses: actions/setup-node@v7
         with:
