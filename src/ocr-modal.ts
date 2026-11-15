@@ -25,7 +25,8 @@ export interface OcrDeps {
 
 const LANG_KEY = "ezreader.ocrLanguage";
 
-function savedLanguage(): string {
+/** The language picked in the OCR dialog ("" = automatic). */
+export function savedLanguage(): string {
   try { return localStorage.getItem(LANG_KEY) ?? ""; } catch { return ""; }
 }
 

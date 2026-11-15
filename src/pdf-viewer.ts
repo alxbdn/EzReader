@@ -11,6 +11,7 @@ import { type RedactAnnotation, CSS_UNITS, MIN_SCALE, MAX_SCALE } from "./models
 import type { TextItem } from "pdfjs-dist/types/src/display/api";
 import { openUrl, type RedactedPage, type StraightenedPage } from "./tauri-bridge";
 import { moveTextRuns, pageMap, reproject, warpToRect, type Point } from "./page-adjustment";
+import { LiveText, hasRealText, layoutOcr, renderOcrLayer } from "./live-text";
 
 pdfjs.GlobalWorkerOptions.workerSrc = workerUrl;
 
@@ -105,7 +106,7 @@ export class PdfPageView {
   private _generation = 0;
   private _renderTask: RenderTask | null = null;
 
-  constructor(pageNum: number, tools: ToolSelection, annotations: AnnotationSession) {
+  constructor(pageNum: number, tools: ToolSelection, annotations: AnnotationSession, private liveText: LiveText | null = null) {
     this.pageNum = pageNum;
 
     this.wrapper = document.createElement("div");
@@ -209,8 +210,11 @@ export class PdfPageView {
       this.setPlaceholderSize(viewport.width, viewport.height);
 
       // Build overlay layers (text first — link layer scans text spans)
-      await this.buildTextLayer(page, viewport);
+      const hasText = await this.buildTextLayer(page, viewport);
       if (stale()) return;
+      // A scan or a photo: read its words in the background, then lay them
+      // over the picture so they can be selected like any text.
+      if (!hasText && this.liveText) void this.addLiveText(page, viewport, stale);
       await this.buildLinkLayer(page, viewport);
       if (stale()) return;
       await this.buildFormLayer(page, viewport, formValues, onFormChange);
@@ -249,8 +253,10 @@ export class PdfPageView {
 
   // ── Text layer ──────────────────────────────────────────────────────────────
 
-  private async buildTextLayer(page: PDFPageProxy, viewport: PageViewport): Promise<void> {
+  /** Builds the text layer; false when the page has no real text (a scan). */
+  private async buildTextLayer(page: PDFPageProxy, viewport: PageViewport): Promise<boolean> {
     this.textLayer.innerHTML = "";
+    this.textLayer.classList.remove("has-ocr");
     this.textLayer.style.width  = `${viewport.width}px`;
     this.textLayer.style.height = `${viewport.height}px`;
 
@@ -304,6 +310,19 @@ export class PdfPageView {
       fragment.appendChild(span);
     }
     this.textLayer.appendChild(fragment);
+    return hasRealText(textContent.items);
+  }
+
+  private async addLiveText(page: PDFPageProxy, viewport: PageViewport, stale: () => boolean): Promise<void> {
+    const result = await this.liveText!.read(page, viewport.rotation, () => !stale() && this.wrapper.isConnected);
+    // Zoomed or rotated meanwhile: the newer render lays the words out.
+    if (!result || stale() || this._viewport !== viewport) return;
+    const ctx = document.createElement("canvas").getContext("2d")!;
+    const measure = (text: string, size: number) => {
+      ctx.font = `${size}px sans-serif`;
+      return ctx.measureText(text).width;
+    };
+    renderOcrLayer(this.textLayer, layoutOcr(result, viewport.width, viewport.height, measure));
   }
 
   // ── Search highlights ──────────────────────────────────────────────────────
@@ -317,7 +336,7 @@ export class PdfPageView {
     const needle = query.toLocaleLowerCase();
     let n = 0;
     let activeMark: HTMLElement | null = null;
-    for (const span of this.textLayer.querySelectorAll<HTMLSpanElement>(":scope > span")) {
+    for (const span of this.textLayer.querySelectorAll<HTMLSpanElement>(":scope > span:not(.ocr-line)")) {
       const text = span.dataset.text ?? span.textContent ?? "";
       const hits = needle ? matchOffsets(text, needle) : [];
       if (hits.length === 0) {
@@ -379,7 +398,7 @@ export class PdfPageView {
     const lineBreakPos = new Set<number>();
     let prevTop = NaN;
 
-    for (const span of this.textLayer.querySelectorAll("span") as NodeListOf<HTMLSpanElement>) {
+    for (const span of this.textLayer.querySelectorAll(":scope > span:not(.ocr-line)") as NodeListOf<HTMLSpanElement>) {
       const text = span.textContent ?? "";
       if (!text) continue;
       const spanTop  = parseFloat(span.style.top)      || 0;
@@ -658,6 +677,8 @@ export class PdfViewer {
   private _search = { query: "", page: 0, index: -1, scroll: false };
   private resizeTimer: ReturnType<typeof setTimeout> | null = null;
   private scrollEl: HTMLElement;
+  /** Reads the text of scanned pages in the background (see live-text.ts). */
+  readonly liveText = new LiveText(null);
 
   constructor() {
     this.scrollEl = document.getElementById("viewer-scroll") as HTMLElement;
@@ -777,6 +798,7 @@ export class PdfViewer {
     this._visiblePages.clear();
     if (this._scrollHandler) { this.scrollEl.removeEventListener("scroll", this._scrollHandler); this._scrollHandler = null; }
 
+    this.liveText.reset();
     const loadingTask = pdfjs.getDocument(password ? { ...SAFE_PDF, url, password } : { ...SAFE_PDF, url });
     this.pdfDoc = await loadingTask.promise;
     this._pageCount   = this.pdfDoc.numPages;
@@ -822,7 +844,7 @@ export class PdfViewer {
       const rowEl = document.createElement("div");
       rowEl.className = "page-row";
       for (const pageNum of row) {
-        const view = new PdfPageView(pageNum, this._tools, this._annotations);
+        const view = new PdfPageView(pageNum, this._tools, this._annotations, this.liveText);
         const dim  = this.pageDimensions[pageNum - 1];
         if (dim) view.setPlaceholderSize(
           (swapped ? dim.height : dim.width) * this._scale,
