@@ -8,12 +8,10 @@
   IgnorableNamespaces="uap uap2 uap3 rescap">
 
   <!-- Name and Publisher must match the identity reserved for EzReader in
-       Microsoft Partner Center (Product identity page). The values below are
-       placeholders: the previous ones belonged to the upstream PDF Rider
-       listing. -->
+       Microsoft Partner Center (Product identity page). -->
   <Identity
-    Name="EzReader"
-    Publisher="CN=00000000-0000-0000-0000-000000000000"
+    Name="alxbdn.EzReader"
+    Publisher="CN=84E68D20-6D70-4B7F-B292-A07469E8D5A7"
     Version="0.0.0.0"
     ProcessorArchitecture="x64" />
 

@@ -1,6 +1,6 @@
 [package]
 name = "ezreader"
-version = "0.2.31"
+version = "0.2.34"
 description = "A simple, lightweight PDF reader with annotations and signing"
 authors = []
 edition = "2021"
@@ -32,7 +32,7 @@ crc32fast = "1"
 
 [target.'cfg(windows)'.dependencies]
 winreg = "0.52"
-winapi = { version = "0.3", features = ["winspool", "wingdi", "winnt", "shellapi", "processthreadsapi", "handleapi", "minwinbase", "minwindef", "errhandlingapi", "winerror", "winuser"] }
+winapi = { version = "0.3", features = ["winspool", "wingdi", "winnt", "shellapi", "processthreadsapi", "handleapi", "minwinbase", "minwindef", "errhandlingapi", "winerror", "winuser", "commctrl", "windef", "basetsd", "libloaderapi"] }
 # Text recognition with the OCR engine built into Windows (Windows.Media.Ocr):
 # same version Tauri already builds, nothing to bundle.
 windows = { version = "0.61", features = [

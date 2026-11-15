@@ -1,7 +1,7 @@
 {
   "name": "ezreader",
   "private": true,
-  "version": "0.2.31",
+  "version": "0.2.34",
   "type": "module",
   "scripts": {
     "dev": "vite",

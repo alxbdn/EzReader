@@ -44,6 +44,32 @@ export function buildRows(pageCount: number, columnCount: number): number[][] {
   return rows;
 }
 
+/**
+ * The page shown as the current one: the page whose middle is nearest a
+ * third of the way down the view. Scrolled all the way to the end, it is the
+ * last page, even when that page is too short to ever reach that line (a
+ * landscape page in a tall window): otherwise the counter stopped one page
+ * short and "next page" scrolled back up. `pages` are in page order, with
+ * their offset and size along the scroll direction.
+ */
+export function focusedPageAt(
+  pos: number,
+  viewSize: number,
+  maxPos: number,
+  pages: readonly { start: number; size: number }[],
+): number {
+  if (pages.length === 0) return 1;
+  if (maxPos > 1 && pos >= maxPos - 1) return pages.length;
+  const line = pos + viewSize / 3;
+  let best = 1;
+  let bestDist = Infinity;
+  pages.forEach((p, i) => {
+    const dist = Math.abs(p.start + p.size / 2 - line);
+    if (dist < bestDist) { bestDist = dist; best = i + 1; }
+  });
+  return best;
+}
+
 /** Start offsets of the non-overlapping occurrences of `needle` (already lower-cased) in `text`. */
 export function matchOffsets(text: string, needle: string): number[] {
   const out: number[] = [];
@@ -861,21 +887,15 @@ export class PdfViewer {
 
   private _updateFocusedPage(): void {
     const horizontal = this._scrollMode === "horizontal";
-    const viewportMid = horizontal
-      ? this.scrollEl.scrollLeft + this.scrollEl.clientWidth / 3
-      : this.scrollEl.scrollTop + this.scrollEl.clientHeight / 3;
-    let best = 1;
-    let bestDist = Infinity;
-    for (const pv of this.pageViews) {
-      const start = horizontal ? pv.wrapper.offsetLeft : pv.wrapper.offsetTop;
-      const size = horizontal ? pv.wrapper.offsetWidth : pv.wrapper.offsetHeight;
-      const mid = start + size / 2;
-      const dist = Math.abs(mid - viewportMid);
-      if (dist < bestDist) {
-        bestDist = dist;
-        best = pv.pageNum;
-      }
-    }
+    const el = this.scrollEl;
+    const best = focusedPageAt(
+      horizontal ? el.scrollLeft : el.scrollTop,
+      horizontal ? el.clientWidth : el.clientHeight,
+      horizontal ? el.scrollWidth - el.clientWidth : el.scrollHeight - el.clientHeight,
+      this.pageViews.map((pv) => horizontal
+        ? { start: pv.wrapper.offsetLeft, size: pv.wrapper.offsetWidth }
+        : { start: pv.wrapper.offsetTop, size: pv.wrapper.offsetHeight }),
+    );
     if (best !== this._focusedPage) {
       this._focusedPage = best;
       this._currentPage = best;
@@ -946,8 +966,33 @@ export class PdfViewer {
     this.pageViews[clamped - 1]?.wrapper.scrollIntoView({ behavior, block: "start", inline: this._scrollMode === "horizontal" ? "start" : "nearest" });
   }
 
-  async nextPage(): Promise<void> { this.goToPage(this._currentPage + this.columnCount); }
-  async prevPage(): Promise<void> { this.goToPage(this._currentPage - this.columnCount); }
+  /**
+   * Next row of pages. From the last row it goes to the very end instead of
+   * scrolling back up to the top of the last page.
+   */
+  nextPage(): void {
+    const target = this._currentPage + this.columnCount;
+    if (target <= this._pageCount) { this.goToPage(target); return; }
+    const el = this.scrollEl;
+    if (this._scrollMode === "horizontal") el.scrollTo({ left: el.scrollWidth, behavior: "smooth" });
+    else el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
+  }
+
+  /**
+   * Previous row of pages: the first one above the view's start, so it always
+   * moves (at the end, several short pages can sit below the start at once).
+   */
+  prevPage(): void {
+    const horizontal = this._scrollMode === "horizontal";
+    const pos = horizontal ? this.scrollEl.scrollLeft : this.scrollEl.scrollTop;
+    const startOf = (n: number): number => {
+      const w = this.pageViews[n - 1]?.wrapper;
+      return w ? (horizontal ? w.offsetLeft : w.offsetTop) : 0;
+    };
+    let target = this._currentPage - this.columnCount;
+    while (target > 1 && startOf(target) >= pos - 1) target -= this.columnCount;
+    this.goToPage(target);
+  }
 
   // ── Zoom / Rotate / Reflow (T022-T026) ──────────────────────────────────────
 
@@ -1112,6 +1157,33 @@ export class PdfViewer {
   }
 
   // ── Print (T027 — unchanged logic) ──────────────────────────────────────────
+
+  /**
+   * Renders page `n` of the open document as large as fits in `maxW` × `maxH`
+   * CSS pixels (view rotation applied), sharp at the screen's pixel density.
+   * Used by presentation mode; null when no document is open.
+   */
+  async renderPageToFit(n: number, maxW: number, maxH: number): Promise<HTMLCanvasElement | null> {
+    if (!this.pdfDoc || n < 1 || n > this.pdfDoc.numPages) return null;
+    const page = await this.pdfDoc.getPage(n);
+    const rotation = (page.rotate + this._rotation) % 360;
+    const unit = page.getViewport({ scale: 1, rotation });
+    const dpr = window.devicePixelRatio || 1;
+    const fit = Math.min(maxW / unit.width, maxH / unit.height);
+    // Cap the bitmap (~40 MP) so very large pages do not exhaust memory.
+    const scale = Math.min(fit * dpr, Math.sqrt(40e6 / (unit.width * unit.height)));
+    const viewport = page.getViewport({ scale, rotation });
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.max(1, Math.round(viewport.width));
+    canvas.height = Math.max(1, Math.round(viewport.height));
+    canvas.style.width = `${canvas.width / dpr}px`;
+    canvas.style.height = `${canvas.height / dpr}px`;
+    const ctx = canvas.getContext("2d")!;
+    ctx.fillStyle = "#fff";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    await page.render({ canvasContext: ctx, viewport }).promise;
+    return canvas;
+  }
 
   /** Rasterises pages of the document currently shown, applying the view rotation. */
   async renderPagesForPrint(pageNumbers: number[], dpi = 200): Promise<string[]> {

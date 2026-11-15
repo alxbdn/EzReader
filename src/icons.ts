@@ -61,6 +61,10 @@ export const ICON_COMPRESS = lucide(`<rect x="8" y="5" width="8" height="14" rx=
 export const ICON_LAYER_UP = lucide(`<path d="M12 19V5"/><path d="m5 12 7-7 7 7"/>`);
 export const ICON_LAYER_DOWN = lucide(`<path d="M12 5v14"/><path d="m19 12-7 7-7-7"/>`);
 /** Full screen: four corners pointing out / in. */
+export const ICON_PRESENT = lucide(`<path d="M2 3h20"/><path d="M21 3v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V3"/><path d="m7 21 5-5 5 5"/>`);
+export const ICON_CHEVRON_LEFT = lucide(`<path d="m15 18-6-6 6-6"/>`);
+export const ICON_CHEVRON_RIGHT = lucide(`<path d="m9 18 6-6-6-6"/>`);
+export const ICON_CLOSE = lucide(`<path d="M18 6 6 18"/><path d="m6 6 12 12"/>`);
 export const ICON_FULLSCREEN = lucide(`<path d="M8 3H5a2 2 0 0 0-2 2v3"/><path d="M21 8V5a2 2 0 0 0-2-2h-3"/><path d="M3 16v3a2 2 0 0 0 2 2h3"/><path d="M16 21h3a2 2 0 0 0 2-2v-3"/>`);
 export const ICON_FULLSCREEN_EXIT = lucide(`<path d="M8 3v3a2 2 0 0 1-2 2H3"/><path d="M21 8h-3a2 2 0 0 1-2-2V3"/><path d="M3 16h3a2 2 0 0 1 2 2v3"/><path d="M16 21v-3a2 2 0 0 1 2-2h3"/>`);
 export const ICON_INFO = lucide(`<circle cx="12" cy="12" r="9"/><path d="M12 16v-4"/><path d="M12 8h.01"/>`);
