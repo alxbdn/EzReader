@@ -410,3 +410,11 @@ export async function openPagesInNewWindow(
 export async function setLauncherRatioLock(locked: boolean): Promise<void> {
   return call<void>("set_launcher_ratio_lock", { locked });
 }
+
+/**
+ * Hides (full screen) or shows again the invisible resize strip Tauri keeps
+ * along the top edge of a frameless window. Windows only.
+ */
+export async function setResizeBorder(visible: boolean): Promise<void> {
+  return call<void>("set_resize_border", { visible });
+}

@@ -70,10 +70,11 @@ import {
   decryptPdf,
   tempTag,
   setLauncherRatioLock,
+  setResizeBorder,
 } from "./tauri-bridge";
 import { currentMonitor, getCurrentWindow } from "@tauri-apps/api/window";
 import { LogicalSize, PhysicalPosition, PhysicalSize } from "@tauri-apps/api/dpi";
-import { keepCentred, pageFitScale, planWindowFit } from "./window-fit";
+import { keepCentred, pageFitScale, planWindowFit, VIEWER_PADDING } from "./window-fit";
 import { mountWindowControls } from "./window-controls";
 import { InfoPanel } from "./info-panel";
 import { tempDir, basename } from "@tauri-apps/api/path";
@@ -226,17 +227,40 @@ const exportFlow = setUpExport({
   backend: tauriBackend,
 });
 
+/**
+ * The room the pages get in the viewer, CSS px, whether its scroll bars show
+ * right now or not. Fitting to the room left by the scroll bars of the
+ * moment looped: the fitted page made a scroll bar appear, which narrowed
+ * the room, which made the page smaller, which made the bar go away, and so
+ * on, the page flickering between two sizes. So the vertical bar keeps its
+ * place even when hidden (scrollbar-gutter in app.css) and the horizontal
+ * one is counted only where it is always there, pages side by side.
+ */
+function pageRoom(): { width: number; height: number } {
+  const scroll = document.getElementById("viewer-scroll")!;
+  const horizontal = viewer.scrollMode === "horizontal";
+  return {
+    width: scroll.clientWidth,
+    height: scroll.offsetHeight - (horizontal ? scrollbarSize() : 0),
+  };
+}
+
 async function applyFitMode(): Promise<void> {
   if (!viewer.isLoaded() || fitMode === "none") return;
-  const scroll = document.getElementById("viewer-scroll")!;
+  const room = pageRoom();
+  const page = firstPageShown();
+  let scale: number;
   if (fitMode === "fit-width") {
-    await viewer.setScale((scroll.clientWidth - 40) / viewer.pageWidthPt);
+    scale = (room.width - VIEWER_PADDING) / page.width;
   } else if (fitMode === "fit-page") {
     // The whole page, portrait or landscape: whichever side is tighter.
-    await viewer.setScale(pageFitScale(firstPageShown(), { width: scroll.clientWidth, height: scroll.clientHeight }));
+    scale = pageFitScale(page, room);
   } else {
-    await viewer.setScale(scroll.clientHeight / viewer.pageHeightPt);
+    scale = (room.height - VIEWER_PADDING) / page.height;
   }
+  // Same zoom as now (the window only grew a scroll bar, say): nothing to redraw.
+  if (Math.abs(viewer.clampScale(scale) - viewer.scale) > 1e-6) await viewer.setScale(scale);
+  else viewer.reflow();
   toolbar.updateZoom(viewer.scale);
 }
 
@@ -280,27 +304,31 @@ function scrollbarSize(): number {
  * Gives the window the shape of one page of the document just opened,
  * portrait or landscape (see window-fit.ts), and frees its proportions,
  * which stay locked only on the launcher. A maximized or full-screen
- * window keeps its size. Returns false when the zoom from Settings is too
- * big to show a whole page on this screen.
+ * window keeps its size. Returns false when the zoom from Settings does not
+ * show a whole page in the window as it ends up (too big for the screen,
+ * or a window that keeps its size): the page is fitted instead.
  */
 async function fitWindowToDocument(): Promise<boolean> {
   if (!("__TAURI_INTERNALS__" in window)) return true;
+  const pref = parseFloat(settingsModal.getSettings().defaultZoom);
   try {
     await setLauncherRatioLock(false);
-    if (!autoFitWindow || fullscreen || await appWindow.isMaximized()) return true;
+    if (!autoFitWindow) return true;
+    if (fullscreen || await appWindow.isMaximized()) return preferredZoomShowsPage(pref);
     const monitor = await currentMonitor();
-    if (!monitor) return true;
+    if (!monitor) return preferredZoomShowsPage(pref);
     const sf = monitor.scaleFactor || 1;
     const scroll = document.getElementById("viewer-scroll")!;
-    const pref = parseFloat(settingsModal.getSettings().defaultZoom);
-    const bar = viewer.pageCount > 1 ? scrollbarSize() : 0;
+    // The vertical scroll bar's place is always kept, the horizontal one is
+    // counted when pages sit side by side (see pageRoom).
+    const bar = scrollbarSize();
     const horizontal = viewer.scrollMode === "horizontal";
     const plan = planWindowFit({
       page: firstPageShown(),
       preferredScale: Number.isFinite(pref) ? pref / 100 * CSS_UNITS : null,
       window: { width: window.innerWidth, height: window.innerHeight },
       viewer: { width: scroll.offsetWidth, height: scroll.offsetHeight },
-      scrollbars: horizontal ? { width: 0, height: bar } : { width: bar, height: 0 },
+      scrollbars: { width: bar, height: horizontal ? bar : 0 },
       area: { width: monitor.workArea.size.width / sf, height: monitor.workArea.size.height / sf },
     });
     const target = plan.window;
@@ -320,11 +348,25 @@ async function fitWindowToDocument(): Promise<boolean> {
       await appWindow.setPosition(new PhysicalPosition(at.x, at.y));
       await windowSizeSettles(target);
     }
-    return plan.preferredFits || !Number.isFinite(pref);
+    // Judged on the window as it really ended up, not as planned: Windows
+    // may give it another size (a snapped window, a size it refuses).
+    return plan.preferredFits && preferredZoomShowsPage(pref);
   } catch (err) {
     console.warn("fit window:", err);
-    return true;
+    return preferredZoomShowsPage(pref);
   }
+}
+
+/**
+ * True when the zoom from Settings (`pref`, in percent) shows the whole
+ * first page in the viewer as it is now, or when Settings asks for a fit.
+ */
+function preferredZoomShowsPage(pref: number): boolean {
+  if (!Number.isFinite(pref)) return true;
+  const room = pageRoom();
+  // A pixel or two of slack: the window's size is rounded.
+  const biggest = pageFitScale(firstPageShown(), { width: room.width + 2, height: room.height + 2 });
+  return pref / 100 * CSS_UNITS <= biggest + 1e-6;
 }
 
 /** Waits (half a second at most) until the page sees the window's new size. */
@@ -1527,6 +1569,9 @@ async function toggleFullscreen(on = !fullscreen): Promise<void> {
       const pos = await appWindow.outerPosition();
       const size = await appWindow.outerSize();
       const before = { x: pos.x, y: pos.y, width: size.width, height: size.height };
+      // The invisible resize strip on the top edge would sit over the menu
+      // row (see resize_border.rs).
+      await setResizeBorder(false).catch(() => {});
       await appWindow.setFullscreen(true);
       await nextFrames();
       if (!(await appWindow.isFullscreen()) || !(await coversMonitor())) {
@@ -1553,6 +1598,7 @@ async function toggleFullscreen(on = !fullscreen): Promise<void> {
         maximizedBeforeFullscreen = false;
         await appWindow.maximize();
       }
+      await setResizeBorder(true).catch(() => {});
     }
   } catch (err) {
     // Browser preview: no window to resize.
