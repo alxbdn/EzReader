@@ -321,6 +321,15 @@ export class CanvasOverlay implements SelectionOwner {
     this.canvas.style.pointerEvents = DRAW_TOOLS.includes(tool) ? "auto" : "none";
   }
 
+  /**
+   * The page view is thrown away: drops the window listener, which would
+   * otherwise keep the whole old page (and its canvases) alive after every
+   * new layout.
+   */
+  destroy(): void {
+    window.removeEventListener("keydown", this.onKeyDown);
+  }
+
   /** The page was cleared (scrolled out of range): draws nothing until the next sync. */
   hide(): void {
     this.selected = null;

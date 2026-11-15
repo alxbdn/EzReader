@@ -13,6 +13,8 @@ mod ratio_lock;
 mod resize_border;
 mod tempfiles;
 #[cfg(test)]
+mod corpus_tests;
+#[cfg(test)]
 mod hostile_input_tests;
 #[cfg(test)]
 mod test_util;

@@ -1531,6 +1531,26 @@ input[type="color"].color-picker.is-off::-webkit-color-swatch {
   z-index: 1;
 }
 
+/* Live text: words read from a scan, invisible until selected. Each line is
+   a block (lines copy on their own lines); each word an inline block
+   stretched over the word on the picture. */
+.page-text-layer .ocr-line {
+  position: absolute;
+  font-family: sans-serif;
+  line-height: 1;
+  white-space: pre;
+  color: transparent;
+  cursor: text;
+  user-select: text;
+  -webkit-user-select: text;
+}
+.page-text-layer .ocr-line > span {
+  display: inline-block;
+  transform-origin: 0 0;
+}
+/* Edit text works on the PDF's own text only. */
+#viewer-scroll.etext-mode .page-text-layer .ocr-line span { cursor: inherit; outline: none; }
+
 /* Highlight colour when text is selected */
 .page-text-layer ::selection {
   background: rgba(229, 57, 53, 0.25);

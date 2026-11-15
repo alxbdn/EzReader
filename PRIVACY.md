@@ -24,7 +24,7 @@ EzReader does not connect to the internet on its own. The PDF viewer is locked d
 
 ## Windows features
 
-Text recognition (OCR) uses the engine built into Windows and runs on your computer. On Linux, it uses text-recognition models built into EzReader, also on your computer. EzReader displays pages with Microsoft Edge WebView2, a Windows component. These Windows features are covered by Microsoft's own privacy statement, and EzReader sends them no data of its own.
+Text recognition (OCR), including the automatic reading of scanned pages so their text can be selected, uses the engine built into Windows and runs on your computer. On Linux, it uses text-recognition models built into EzReader, also on your computer. EzReader displays pages with Microsoft Edge WebView2, a Windows component. These Windows features are covered by Microsoft's own privacy statement, and EzReader sends them no data of its own.
 
 If you install EzReader from the Microsoft Store, Microsoft handles the download and installation under its own privacy statement. EzReader does not receive any information about you from the Store.
 
