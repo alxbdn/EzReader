@@ -1,0 +1,23 @@
+/** The languages the app is translated into (the 20 most spoken). */
+export const LANGUAGES: { code: string; native: string; label: string }[] = [
+  { code: "en", native: "English",          label: "English" },
+  { code: "zh", native: "中文",              label: "Mandarin Chinese" },
+  { code: "hi", native: "हिन्दी",             label: "Hindi" },
+  { code: "es", native: "Español",          label: "Spanish" },
+  { code: "fr", native: "Français",         label: "French" },
+  { code: "ar", native: "العربية",           label: "Arabic" },
+  { code: "bn", native: "বাংলা",              label: "Bengali" },
+  { code: "ru", native: "Русский",           label: "Russian" },
+  { code: "pt", native: "Português",        label: "Portuguese" },
+  { code: "ur", native: "اردو",              label: "Urdu" },
+  { code: "id", native: "Bahasa Indonesia", label: "Indonesian" },
+  { code: "de", native: "Deutsch",          label: "German" },
+  { code: "ja", native: "日本語",             label: "Japanese" },
+  { code: "sw", native: "Kiswahili",        label: "Swahili" },
+  { code: "mr", native: "मराठी",              label: "Marathi" },
+  { code: "te", native: "తెలుగు",             label: "Telugu" },
+  { code: "tr", native: "Türkçe",           label: "Turkish" },
+  { code: "ta", native: "தமிழ்",              label: "Tamil" },
+  { code: "vi", native: "Tiếng Việt",       label: "Vietnamese" },
+  { code: "ko", native: "한국어",             label: "Korean" },
+];

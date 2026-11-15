@@ -7,6 +7,7 @@ import type { Feedback } from "./backend";
 import { tauriBackend } from "./tauri-backend";
 import { fileNameOf } from "./file-paths";
 import { mountWelcomeDots } from "./welcome-dots";
+import { WelcomePrefs } from "./welcome-prefs";
 import { PdfViewer, PdfPageView, renderRedactedPages, renderStraightenedPages } from "./pdf-viewer";
 import { AdjustView, type PageSetting } from "./adjust-view";
 import { Toolbar } from "./toolbar";
@@ -72,6 +73,11 @@ import {
   tempTag,
   setLauncherRatioLock,
   setResizeBorder,
+  isDefaultPdfReader,
+  registerPdfHandler,
+  registerPrintVerb,
+  unregisterPdfHandler,
+  openDefaultAppsSettings,
 } from "./tauri-bridge";
 import { currentMonitor, getCurrentWindow } from "@tauri-apps/api/window";
 import { LogicalSize, PhysicalPosition, PhysicalSize } from "@tauri-apps/api/dpi";
@@ -1274,6 +1280,29 @@ printModal.onConfirm(async (settings) => {
 // ── Welcome screen ────────────────────────────────────────────────────────────
 
 mountWelcomeDots(document.getElementById("welcome-screen")!);
+
+// Default reader checkbox + language picker at the bottom of the welcome screen.
+const welcomePrefs = new WelcomePrefs(document.getElementById("welcome-screen")!, {
+  language: () => settingsModal.getSettings().language,
+  setLanguage: (code) => settingsModal.setLanguage(code),
+  t: () => getTranslations(settingsModal.getSettings().language),
+  isDefault: () => isDefaultPdfReader(),
+  // Windows lets only the user pick the default app: register EzReader so it
+  // is offered, then open Default apps. On Linux registering sets it.
+  setDefault: async (on) => {
+    if (on) {
+      await registerPdfHandler();
+      await registerPrintVerb();
+    } else {
+      await unregisterPdfHandler();
+    }
+    await openDefaultAppsSettings();
+  },
+});
+void welcomePrefs.refresh();
+settingsModal.onChange(() => welcomePrefs.render());
+// Back from Windows' Default apps page: show what the user chose.
+window.addEventListener("focus", () => void welcomePrefs.refresh());
 
 document.getElementById("welcome-open-btn")?.addEventListener("click", async () => {
   await openFile();
