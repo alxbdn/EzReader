@@ -309,6 +309,21 @@ export interface Translations {
   menuExtractPages?: string;
   menuSelectAllPages?: string;
   menuPages3?: string;
+  // Menu bar (reorganized)
+  menuTools?: string;
+  menuOpen?: string;
+  menuSaveAs?: string;
+  menuExport?: string;
+  menuPrintDialog?: string;
+  menuSettingsDialog?: string;
+  menuFind?: string;
+  menuInsertImage?: string;
+  menuInsertImagePage?: string;
+  menuRotate90?: string;
+  menuActualSize?: string;
+  menuFullscreen?: string;
+  menuProtect?: string;
+  kbdShift?: string;
   menuScrollHorizontal?: string;
   msgRenamed?: string;
   msgRenameFailed?: string;
@@ -659,11 +674,11 @@ const EN: Translations = {
   menuAnnotate:      "Annotate",
   menuUndo:          "Undo",
   menuRedo:          "Redo",
-  menuZoomIn:        "Zoom In",
-  menuZoomOut:       "Zoom Out",
+  menuZoomIn:        "Zoom in",
+  menuZoomOut:       "Zoom out",
   menuResetZoom:     "Reset Zoom",
-  menuFitWidth:      "Fit to Width",
-  menuFitHeight:     "Fit to Height",
+  menuFitWidth:      "Fit to width",
+  menuFitHeight:     "Fit to height",
   menuRotate:        "Rotate",
   menuManagePages:   "Manage Pages",
   menuAnnotateMode:  "Annotation Mode",
@@ -830,7 +845,21 @@ const EN: Translations = {
   menuExtractPages: "Extract selected pages…",
   menuSelectAllPages: "Select all pages",
   menuPages3: "Three pages per row",
-  menuScrollHorizontal: "Horizontal scrolling",
+  menuTools: "Tools",
+  menuOpen: "Open…",
+  menuSaveAs: "Save as…",
+  menuExport: "Export…",
+  menuPrintDialog: "Print…",
+  menuSettingsDialog: "Settings…",
+  menuFind: "Find…",
+  menuInsertImage: "Insert picture…",
+  menuInsertImagePage: "Insert picture as a page…",
+  menuRotate90: "Rotate 90°",
+  menuActualSize: "Actual size",
+  menuFullscreen: "Full screen",
+  menuProtect: "Protect with a password…",
+  kbdShift: "Shift",
+  menuScrollHorizontal: "Scroll horizontally",
   msgRenamed: "Renamed to {name}",
   msgRenameFailed: "Rename failed: {err}",
   msgRenameExists: "A file with that name already exists.",
@@ -1346,7 +1375,21 @@ const FR: Translations = {
   menuInsertPdf: "Insérer un PDF…",
   menuExtractPages: "Extraire les pages sélectionnées…",
   menuSelectAllPages: "Sélectionner toutes les pages",
-  menuPages3: "Trois pages par ligne",
+  menuPages3: "3 pages par ligne",
+  menuTools: "Outils",
+  menuOpen: "Ouvrir…",
+  menuSaveAs: "Enregistrer sous…",
+  menuExport: "Exporter…",
+  menuPrintDialog: "Imprimer…",
+  menuSettingsDialog: "Paramètres…",
+  menuFind: "Rechercher…",
+  menuInsertImage: "Insérer une image…",
+  menuInsertImagePage: "Insérer une image comme page…",
+  menuRotate90: "Faire pivoter de 90°",
+  menuActualSize: "Taille réelle",
+  menuFullscreen: "Plein écran",
+  menuProtect: "Protéger par mot de passe…",
+  kbdShift: "Maj",
   menuScrollHorizontal: "Défilement horizontal",
   msgRenamed: "Renommé en {name}",
   msgRenameFailed: "Échec du renommage : {err}",

@@ -87,7 +87,10 @@ export type ToolbarEvent =
   | { type: "print" }
   | { type: "settings" }
   | { type: "undo" }
-  | { type: "redo" };
+  | { type: "redo" }
+  | { type: "find" }
+  | { type: "insert-image" }
+  | { type: "insert-image-page" };
 
 type EventHandler = (e: ToolbarEvent) => void;
 
@@ -96,6 +99,8 @@ interface MenuItemDef {
   shortcut?: string;
   action: () => void;
   requiresDoc?: boolean;
+  /** Shows a mark while on: a dot for one-of-several choices, a tick for a toggle. */
+  mark?: { id: string; kind: "radio" | "check" };
 }
 
 interface MenuDef {
@@ -107,7 +112,7 @@ interface MenuDef {
 /** Actions that must wait until pending changes are validated or discarded. */
 const GUARDED = new Set<ToolbarEvent["type"]>([
   "open", "save", "save-as", "export", "compress", "password", "images-to-pdf", "ocr", "print", "settings", "split", "rotate",
-  "insert-blank", "insert-pdf", "extract-pages", "present",
+  "insert-blank", "insert-pdf", "insert-image", "insert-image-page", "extract-pages", "present",
 ]);
 
 export class Toolbar {
@@ -125,6 +130,10 @@ export class Toolbar {
   private dropdowns = new Map<string, HTMLElement>();
   private menuButtons = new Map<string, HTMLButtonElement>();
   private docMenuEntries: HTMLButtonElement[] = [];
+  /** Menu entries that show a state (layout, thumbnails), by mark id. */
+  private markEntries = new Map<string, HTMLButtonElement>();
+  /** Shortcut labels, kept raw so "Shift" can be translated. */
+  private shortcutEls: [HTMLElement, string][] = [];
   private docTitleEl!: HTMLElement;
   private docTitleName!: HTMLButtonElement;
   private docTitleInput!: HTMLInputElement;
@@ -177,6 +186,8 @@ export class Toolbar {
     this.lockTitles = { on: t.ttLockOn ?? "Protected: remove the password", off: t.ttLockOff ?? "Protect with a password" };
     this.setProtected(this.locked);
     this.docTitleName.title = this.docName ? this.renameTitle : "";
+    const shift = t.kbdShift ?? "Shift";
+    for (const [el, raw] of this.shortcutEls) el.textContent = raw.replace("Shift", shift);
     this.search.applyTranslations(t);
     this.tools.applyTranslations(t);
   }
@@ -256,6 +267,16 @@ export class Toolbar {
     this.columnBtns.forEach(b => {
       b.classList.toggle("active", mode === "vertical" && Number(b.dataset["cols"]) === columns);
     });
+    for (const n of [1, 2, 3]) this.setMark(`cols-${n}`, mode === "vertical" && columns === n);
+    this.setMark("scroll-vertical", mode === "vertical");
+    this.setMark("scroll-horizontal", mode === "horizontal");
+  }
+
+  private setMark(id: string, on: boolean): void {
+    const entry = this.markEntries.get(id);
+    if (!entry) return;
+    entry.classList.toggle("marked", on);
+    entry.setAttribute("aria-checked", String(on));
   }
 
   setInfoOpen(open: boolean): void {
@@ -288,6 +309,7 @@ export class Toolbar {
   updateSidebar(visible: boolean): void {
     this.sidebarBtn.classList.toggle("active", visible);
     this.sidebarBtn.setAttribute("aria-pressed", String(visible));
+    this.setMark("sidebar", visible);
   }
 
   setLoaded(loaded: boolean): void {
@@ -365,69 +387,76 @@ export class Toolbar {
   // ── Menu Bar ────────────────────────────────────────────────────────────────
 
   private getMenuDefs(): MenuDef[] {
+    const go = (e: ToolbarEvent) => () => this.emit(e);
     return [
       {
         id: "file",
         label: "menuFile",
         items: [
-          { label: "btnOpen", shortcut: "Ctrl+O", action: () => this.emit({ type: "open" }) },
+          { label: "menuOpen", shortcut: "Ctrl+O", action: go({ type: "open" }) },
           null,
-          { label: "btnSave", shortcut: "Ctrl+S", action: () => this.emit({ type: "save" }), requiresDoc: true },
-          { label: "btnSaveAs", shortcut: "Ctrl+Shift+S", action: () => this.emit({ type: "save-as" }), requiresDoc: true },
-          { label: "btnExport", action: () => this.emit({ type: "export" }), requiresDoc: true },
-          { label: "btnCompress", shortcut: "Ctrl+Shift+E", action: () => this.emit({ type: "compress" }), requiresDoc: true },
-          { label: "menuPassword", action: () => this.emit({ type: "password" }), requiresDoc: true },
-          { label: "menuImagesToPdf", action: () => this.emit({ type: "images-to-pdf" }) },
-          { label: "menuOcr", action: () => this.emit({ type: "ocr" }) },
+          { label: "btnSave", shortcut: "Ctrl+S", action: go({ type: "save" }), requiresDoc: true },
+          { label: "menuSaveAs", shortcut: "Ctrl+Shift+S", action: go({ type: "save-as" }), requiresDoc: true },
           null,
-          { label: "menuPrint", shortcut: "Ctrl+P", action: () => this.emit({ type: "print" }), requiresDoc: true },
+          { label: "menuExport", action: go({ type: "export" }), requiresDoc: true },
+          { label: "menuPrintDialog", shortcut: "Ctrl+P", action: go({ type: "print" }), requiresDoc: true },
           null,
-          { label: "menuSettings", action: () => this.emit({ type: "settings" }) },
+          { label: "menuSettingsDialog", shortcut: "Ctrl+,", action: go({ type: "settings" }) },
         ],
       },
       {
         id: "edit",
         label: "menuEdit",
         items: [
-          { label: "menuUndo", shortcut: "Ctrl+Z", action: () => this.emit({ type: "undo" }), requiresDoc: true },
-          { label: "menuRedo", shortcut: "Ctrl+Y", action: () => this.emit({ type: "redo" }), requiresDoc: true },
+          { label: "menuUndo", shortcut: "Ctrl+Z", action: go({ type: "undo" }), requiresDoc: true },
+          { label: "menuRedo", shortcut: "Ctrl+Y", action: go({ type: "redo" }), requiresDoc: true },
+          null,
+          { label: "menuFind", shortcut: "Ctrl+F", action: go({ type: "find" }), requiresDoc: true },
+          { label: "menuSelectAllPages", action: go({ type: "select-all-pages" }), requiresDoc: true },
+          null,
+          { label: "menuInsertBlank", action: go({ type: "insert-blank" }), requiresDoc: true },
+          { label: "menuInsertPdf", action: go({ type: "insert-pdf" }), requiresDoc: true },
+          { label: "menuInsertImage", action: go({ type: "insert-image" }), requiresDoc: true },
+          { label: "menuInsertImagePage", action: go({ type: "insert-image-page" }), requiresDoc: true },
+          { label: "menuRotate90", action: go({ type: "rotate" }), requiresDoc: true },
+          null,
+          { label: "menuExtractPages", action: go({ type: "extract-pages" }), requiresDoc: true },
+          { label: "menuSplit", action: go({ type: "split" }), requiresDoc: true },
         ],
       },
       {
         id: "view",
         label: "menuView",
         items: [
-          { label: "menuZoomIn", shortcut: "Ctrl++", action: () => this.emit({ type: "zoom-in" }), requiresDoc: true },
-          { label: "menuZoomOut", shortcut: "Ctrl+−", action: () => this.emit({ type: "zoom-out" }), requiresDoc: true },
-          { label: "menuResetZoom", shortcut: "Ctrl+0", action: () => this.emit({ type: "zoom-reset" }), requiresDoc: true },
+          { label: "menuZoomIn", shortcut: "Ctrl++", action: go({ type: "zoom-in" }), requiresDoc: true },
+          { label: "menuZoomOut", shortcut: "Ctrl+-", action: go({ type: "zoom-out" }), requiresDoc: true },
+          { label: "menuActualSize", shortcut: "Ctrl+0", action: go({ type: "zoom-reset" }), requiresDoc: true },
           null,
-          { label: "menuFitWidth", action: () => this.emit({ type: "fit-width" }), requiresDoc: true },
-          { label: "menuFitHeight", action: () => this.emit({ type: "fit-height" }), requiresDoc: true },
+          { label: "menuFitWidth", action: go({ type: "fit-width" }), requiresDoc: true },
+          { label: "menuFitHeight", action: go({ type: "fit-height" }), requiresDoc: true },
           null,
-          { label: "ttPages1", action: () => this.emit({ type: "columns", n: 1 }), requiresDoc: true },
-          { label: "ttPages2", action: () => this.emit({ type: "columns", n: 2 }), requiresDoc: true },
-          { label: "menuPages3", action: () => this.emit({ type: "columns", n: 3 }), requiresDoc: true },
-          { label: "ttScrollVertical", action: () => this.emit({ type: "scroll-mode", mode: "vertical" }), requiresDoc: true },
-          { label: "menuScrollHorizontal", action: () => this.emit({ type: "scroll-mode", mode: "horizontal" }), requiresDoc: true },
+          { label: "ttPages1", action: go({ type: "columns", n: 1 }), requiresDoc: true, mark: { id: "cols-1", kind: "radio" } },
+          { label: "ttPages2", action: go({ type: "columns", n: 2 }), requiresDoc: true, mark: { id: "cols-2", kind: "radio" } },
+          { label: "menuPages3", action: go({ type: "columns", n: 3 }), requiresDoc: true, mark: { id: "cols-3", kind: "radio" } },
           null,
-          { label: "menuRotate", action: () => this.emit({ type: "rotate" }), requiresDoc: true },
-          { label: "menuPageSidebar", action: () => this.emit({ type: "toggle-sidebar" }), requiresDoc: true },
+          { label: "ttScrollVertical", action: go({ type: "scroll-mode", mode: "vertical" }), requiresDoc: true, mark: { id: "scroll-vertical", kind: "radio" } },
+          { label: "menuScrollHorizontal", action: go({ type: "scroll-mode", mode: "horizontal" }), requiresDoc: true, mark: { id: "scroll-horizontal", kind: "radio" } },
           null,
-          { label: "menuPresent", shortcut: "F5", action: () => this.emit({ type: "present" }), requiresDoc: true },
-          { label: "ttFullscreen", shortcut: "F11", action: () => this.emit({ type: "fullscreen" }) },
+          { label: "menuPageSidebar", action: go({ type: "toggle-sidebar" }), requiresDoc: true, mark: { id: "sidebar", kind: "check" } },
+          null,
+          { label: "menuPresent", shortcut: "F5", action: go({ type: "present" }), requiresDoc: true },
+          { label: "menuFullscreen", shortcut: "F11", action: go({ type: "fullscreen" }) },
         ],
       },
       {
-        id: "pages",
-        label: "menuPages",
+        id: "tools",
+        label: "menuTools",
         items: [
-          { label: "menuSelectAllPages", action: () => this.emit({ type: "select-all-pages" }), requiresDoc: true },
+          { label: "btnCompress", shortcut: "Ctrl+Shift+E", action: go({ type: "compress" }), requiresDoc: true },
+          { label: "menuProtect", action: go({ type: "password" }), requiresDoc: true },
           null,
-          { label: "menuInsertBlank", action: () => this.emit({ type: "insert-blank" }), requiresDoc: true },
-          { label: "menuInsertPdf", action: () => this.emit({ type: "insert-pdf" }), requiresDoc: true },
-          { label: "menuExtractPages", action: () => this.emit({ type: "extract-pages" }), requiresDoc: true },
-          null,
-          { label: "menuSplit", action: () => this.emit({ type: "split" }), requiresDoc: true },
+          { label: "menuOcr", action: go({ type: "ocr" }) },
+          { label: "menuImagesToPdf", action: go({ type: "images-to-pdf" }) },
         ],
       },
     ];
@@ -450,6 +479,8 @@ export class Toolbar {
       // Dropdown panel
       const dropdown = document.createElement("div");
       dropdown.className = "menu-dropdown";
+      // Room on the left for the dots and ticks, so every label lines up.
+      if (menu.items.some((i) => i?.mark)) dropdown.classList.add("has-marks");
 
       for (const item of menu.items) {
         if (item === null) {
@@ -464,13 +495,22 @@ export class Toolbar {
         entry.tabIndex = -1;
 
         const labelSpan = document.createElement("span");
+        labelSpan.className = "menu-label";
         this.reg(labelSpan, item.label);
         entry.append(labelSpan);
+
+        if (item.mark) {
+          entry.classList.add(`menu-${item.mark.kind}`);
+          entry.setAttribute("role", item.mark.kind === "radio" ? "menuitemradio" : "menuitemcheckbox");
+          entry.setAttribute("aria-checked", "false");
+          this.markEntries.set(item.mark.id, entry);
+        }
 
         if (item.shortcut) {
           const shortcutSpan = document.createElement("span");
           shortcutSpan.className = "shortcut";
           shortcutSpan.textContent = item.shortcut;
+          this.shortcutEls.push([shortcutSpan, item.shortcut]);
           entry.append(shortcutSpan);
         }
 

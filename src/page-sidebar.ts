@@ -87,6 +87,7 @@ export class PageSidebar {
   private moveHandlers: ((pages: number[], insertAt: number) => void)[] = [];
   private dragOutHandlers: ((pages: number[], screenX: number, screenY: number) => void)[] = [];
   private insertBlankHandlers: ((after: number) => void)[] = [];
+  private insertImagesHandlers: ((after: number) => void)[] = [];
   private insertPdfHandlers: ((after: number) => void)[] = [];
   private visibilityHandlers: ((visible: boolean) => void)[] = [];
   private selectionHandlers: ((pages: number[]) => void)[] = [];
@@ -196,12 +197,15 @@ export class PageSidebar {
   onInsertBlank(cb: (after: number) => void): void { this.insertBlankHandlers.push(cb); }
   /** Another PDF's pages are wanted after page `after` (0 = at the start). */
   onInsertPdf(cb: (after: number) => void): void { this.insertPdfHandlers.push(cb); }
+  /** Pictures are wanted as new pages after page `after` (0 = at the start). */
+  onInsertImages(cb: (after: number) => void): void { this.insertImagesHandlers.push(cb); }
   onVisibilityChange(cb: (visible: boolean) => void): void { this.visibilityHandlers.push(cb); }
   onSelectionChange(cb: (pages: number[]) => void): void { this.selectionHandlers.push(cb); }
 
   /** Menu commands acting on the selection, or after the page shown. */
   requestInsertBlank(): void { if (this.canAct()) for (const cb of this.insertBlankHandlers) cb(this.insertionPoint()); }
   requestInsertPdf(): void { if (this.canAct()) for (const cb of this.insertPdfHandlers) cb(this.insertionPoint()); }
+  requestInsertImages(): void { if (this.canAct()) for (const cb of this.insertImagesHandlers) cb(this.insertionPoint()); }
   requestExportSelection(): void {
     if (!this.canAct()) return;
     const pages = this.selected.size > 0 ? this.sortedSelection() : (this.current ? [this.current] : []);
