@@ -161,6 +161,7 @@ pub fn run() {
             commands::shell::print_pages,
             commands::shell::get_startup_args,
             commands::shell::check_pdf_association,
+            commands::shell::is_default_pdf_reader,
             commands::shell::register_pdf_handler,
             commands::shell::unregister_pdf_handler,
             commands::shell::register_print_verb,

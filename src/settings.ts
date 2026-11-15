@@ -6,6 +6,7 @@ import {
   openDefaultAppsSettings,
 } from "./tauri-bridge";
 import { getTranslations } from "./i18n";
+import { LANGUAGES } from "./languages";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -64,30 +65,9 @@ function saveSettings(s: AppSettings): void {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(s));
 }
 
-// ── Language list (20 most spoken) ────────────────────────────────────────────
+// ── Language list ─────────────────────────────────────────────────────────────
 
-export const LANGUAGES: { code: string; native: string; label: string }[] = [
-  { code: "en", native: "English",          label: "English" },
-  { code: "zh", native: "中文",              label: "Mandarin Chinese" },
-  { code: "hi", native: "हिन्दी",             label: "Hindi" },
-  { code: "es", native: "Español",          label: "Spanish" },
-  { code: "fr", native: "Français",         label: "French" },
-  { code: "ar", native: "العربية",           label: "Arabic" },
-  { code: "bn", native: "বাংলা",              label: "Bengali" },
-  { code: "ru", native: "Русский",           label: "Russian" },
-  { code: "pt", native: "Português",        label: "Portuguese" },
-  { code: "ur", native: "اردو",              label: "Urdu" },
-  { code: "id", native: "Bahasa Indonesia", label: "Indonesian" },
-  { code: "de", native: "Deutsch",          label: "German" },
-  { code: "ja", native: "日本語",             label: "Japanese" },
-  { code: "sw", native: "Kiswahili",        label: "Swahili" },
-  { code: "mr", native: "मराठी",              label: "Marathi" },
-  { code: "te", native: "తెలుగు",             label: "Telugu" },
-  { code: "tr", native: "Türkçe",           label: "Turkish" },
-  { code: "ta", native: "தமிழ்",              label: "Tamil" },
-  { code: "vi", native: "Tiếng Việt",       label: "Vietnamese" },
-  { code: "ko", native: "한국어",             label: "Korean" },
-];
+export { LANGUAGES } from "./languages";
 
 // ── Modal ─────────────────────────────────────────────────────────────────────
 
@@ -119,6 +99,13 @@ export class SettingsModal {
     void this.refreshDefaultBtn();
   }
   close(): void { this.backdrop.classList.add("hidden"); }
+
+  /** Language chosen elsewhere (the welcome screen): shown here, saved and applied. */
+  setLanguage(code: string): void {
+    const sel = document.getElementById("settings-lang") as HTMLSelectElement | null;
+    if (sel) sel.value = code;
+    if (code !== this.settings.language) this.set("language", code);
+  }
 
   /** Page brightness chosen elsewhere (the toolbar button): applied, shown here and saved. */
   setPageBrightness(pct: number): void {

@@ -85,6 +85,125 @@ pub fn check_pdf_association() -> bool {
     }
 }
 
+/// The package family name (`Name_PublisherId`) of a Store/MSIX install,
+/// from the path of its exe (`…\WindowsApps\Name_Ver_Arch_Res_PublisherId\…`).
+#[cfg_attr(not(target_os = "windows"), allow(dead_code))]
+fn package_family_from_exe(exe: &str) -> Option<String> {
+    let lower = exe.to_ascii_lowercase();
+    let start = lower.find(r"\windowsapps\")? + r"\windowsapps\".len();
+    let full = exe[start..].split('\\').next()?;
+    let parts: Vec<&str> = full.split('_').collect();
+    if parts.len() < 3 || parts[0].is_empty() || parts[parts.len() - 1].is_empty() {
+        return None;
+    }
+    Some(format!("{}_{}", parts[0], parts[parts.len() - 1]))
+}
+
+/// Whether Windows' choice for .pdf (`prog_id`, from UserChoice) is EzReader:
+/// our own ProgID, the `Applications\<exe>` entry Windows makes for an
+/// unregistered exe, or (Store version) a ProgID whose app belongs to our
+/// package family.
+#[cfg_attr(not(target_os = "windows"), allow(dead_code))]
+fn prog_id_is_ours(prog_id: &str, exe_name: &str, app_user_model_id: Option<&str>, family: Option<&str>) -> bool {
+    if prog_id.eq_ignore_ascii_case("com.ezreader.app") {
+        return true;
+    }
+    if !exe_name.is_empty() && prog_id.eq_ignore_ascii_case(&format!(r"Applications\{exe_name}")) {
+        return true;
+    }
+    match (app_user_model_id, family) {
+        (Some(aumid), Some(family)) => aumid
+            .split('!')
+            .next()
+            .is_some_and(|f| f.eq_ignore_ascii_case(family)),
+        _ => false,
+    }
+}
+
+/// True when EzReader is the app PDFs open with (what the welcome screen's
+/// "Default PDF reader" box shows). Unlike `check_pdf_association`, this
+/// reads the user's actual choice, and also works for the Store version.
+#[tauri::command]
+pub fn is_default_pdf_reader() -> bool {
+    #[cfg(target_os = "windows")]
+    {
+        use winreg::enums::{HKEY_CLASSES_ROOT, HKEY_CURRENT_USER};
+        use winreg::RegKey;
+        // Recent Windows 11 builds keep the choice in UserChoiceLatest
+        // (value or subkey "ProgId"); older ones in UserChoice.
+        const EXTS: &str = r"Software\Microsoft\Windows\CurrentVersion\Explorer\FileExts\.pdf";
+        let hkcu = RegKey::predef(HKEY_CURRENT_USER);
+        let read = |key: &str| {
+            hkcu.open_subkey(format!(r"{EXTS}\{key}"))
+                .and_then(|k| k.get_value::<String, _>("ProgId"))
+                .ok()
+                .filter(|v| !v.is_empty())
+        };
+        let Some(prog_id) = read("UserChoiceLatest")
+            .or_else(|| read(r"UserChoiceLatest\ProgId"))
+            .or_else(|| read("UserChoice"))
+        else {
+            return false;
+        };
+        let exe = std::env::current_exe()
+            .map(|p| p.to_string_lossy().to_string())
+            .unwrap_or_default();
+        let exe_name = std::path::Path::new(&exe)
+            .file_name()
+            .map(|n| n.to_string_lossy().to_string())
+            .unwrap_or_default();
+        let aumid = RegKey::predef(HKEY_CLASSES_ROOT)
+            .open_subkey(format!(r"{prog_id}\Application"))
+            .and_then(|k| k.get_value::<String, _>("AppUserModelID"))
+            .ok();
+        let family = package_family_from_exe(&exe);
+        prog_id_is_ours(&prog_id, &exe_name, aumid.as_deref(), family.as_deref())
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        check_pdf_association()
+    }
+}
+
+#[cfg(test)]
+mod default_reader_tests {
+    use super::{package_family_from_exe, prog_id_is_ours};
+
+    #[test]
+    fn family_comes_from_the_windowsapps_folder() {
+        assert_eq!(
+            package_family_from_exe(r"C:\Program Files\WindowsApps\AlexBoudon.EzReader_1.0.0.0_x64__8wekyb3d8bbwe\ezreader.exe").as_deref(),
+            Some("AlexBoudon.EzReader_8wekyb3d8bbwe")
+        );
+        assert_eq!(package_family_from_exe(r"C:\Users\a\Downloads\ezreader-portable.exe"), None);
+    }
+
+    #[test]
+    fn our_prog_ids_are_recognised() {
+        assert!(prog_id_is_ours("com.ezreader.app", "ezreader.exe", None, None));
+        assert!(prog_id_is_ours(r"Applications\ezreader-portable.exe", "ezreader-portable.exe", None, None));
+        assert!(prog_id_is_ours(
+            "AppXabc123",
+            "ezreader.exe",
+            Some("AlexBoudon.EzReader_8wekyb3d8bbwe!App"),
+            Some("alexboudon.ezreader_8wekyb3d8bbwe")
+        ));
+    }
+
+    #[test]
+    fn other_readers_are_not_ours() {
+        assert!(!prog_id_is_ours("AcroExch.Document.DC", "ezreader.exe", None, None));
+        assert!(!prog_id_is_ours("MSEdgePDF", "ezreader.exe", None, Some("AlexBoudon.EzReader_8wekyb3d8bbwe")));
+        assert!(!prog_id_is_ours(
+            "AppXother",
+            "ezreader.exe",
+            Some("Microsoft.MicrosoftEdge_8wekyb3d8bbwe!MSEDGE"),
+            Some("AlexBoudon.EzReader_8wekyb3d8bbwe")
+        ));
+        assert!(!prog_id_is_ours(r"Applications\", "", None, None));
+    }
+}
+
 #[tauri::command]
 pub fn register_pdf_handler() -> CmdResult<()> {
     #[cfg(target_os = "windows")]

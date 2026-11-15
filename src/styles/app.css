@@ -1759,6 +1759,151 @@ kbd,
   color: var(--foreground);
 }
 
+/* Bottom bar of the welcome screen: default-reader checkbox (left) and
+   language picker (right, opens upward). */
+#welcome-screen { padding-bottom: 72px; }
+
+.welcome-footer {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 20px;
+  pointer-events: none;
+}
+.welcome-footer > * { pointer-events: auto; }
+
+.welcome-default {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 32px;
+  padding: 0 10px 0 8px;
+  border: none;
+  border-radius: var(--radius-md);
+  background: transparent;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--muted-foreground);
+  cursor: pointer;
+  transition: background-color 120ms ease, color 120ms ease;
+}
+.welcome-default[hidden] { display: none; }
+.welcome-default:hover { background: var(--accent); color: var(--foreground); }
+.welcome-default:disabled { opacity: .5; pointer-events: none; }
+.welcome-default.on { color: var(--foreground); }
+
+.welcome-default-box {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--input);
+  border-radius: var(--radius-sm);
+  background: var(--background);
+  color: var(--primary-foreground);
+  transition: background-color 120ms ease, border-color 120ms ease;
+}
+.welcome-default-box svg { width: 12px; height: 12px; visibility: hidden; }
+.welcome-default.on .welcome-default-box { background: var(--primary); border-color: var(--primary); }
+.welcome-default.on .welcome-default-box svg { visibility: visible; }
+
+.lang-picker { position: relative; margin-left: auto; }
+
+.lang-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 32px;
+  padding: 0 8px 0 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--background);
+  color: var(--foreground);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+  cursor: pointer;
+  transition: background-color 120ms ease, border-color 120ms ease;
+}
+.lang-btn:hover { background: var(--accent); }
+.lang-btn.open { border-color: var(--ring); }
+.lang-btn-chevron { display: flex; color: var(--muted-foreground); }
+
+.lang-flag {
+  display: inline-flex;
+  flex-shrink: 0;
+  width: 20px;
+  height: 14px;
+  border-radius: 3px;
+  overflow: hidden;
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--foreground) 12%, transparent);
+}
+.lang-flag svg { display: block; }
+.lang-flag-globe {
+  align-items: center;
+  justify-content: center;
+  box-shadow: none;
+  color: var(--muted-foreground);
+}
+
+.lang-menu {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 6px);
+  width: 220px;
+  max-height: min(360px, calc(100vh - 120px));
+  overflow-y: auto;
+  padding: 4px;
+  background: var(--popover);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-lg);
+  text-align: left;
+  animation: pop-in 0.12s ease-out;
+}
+.lang-menu.hidden { display: none; }
+
+.lang-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  height: 32px;
+  padding: 0 8px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--foreground);
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+.lang-menu-item:hover,
+.lang-menu-item:focus-visible { background: var(--accent); outline: none; }
+.lang-menu-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lang-menu-tick { display: flex; color: var(--foreground); }
+.lang-menu-tick svg { width: 14px; height: 14px; }
+.lang-menu-sep { height: 1px; margin: 4px; background: var(--border); }
+
+@media (max-height: 700px) {
+  #welcome-screen { padding-bottom: 60px; }
+  .welcome-footer { padding: 10px 16px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lang-menu { animation: none; }
+}
+
 /* ══ Dialogs ══════════════════════════════════════════════════════════════ */
 
 .modal-backdrop {

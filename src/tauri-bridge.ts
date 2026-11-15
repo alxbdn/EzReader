@@ -115,6 +115,14 @@ export async function checkPdfAssociation(): Promise<boolean> {
 }
 
 /** Writes ProgID and .pdf association into HKCU (no admin required). */
+/**
+ * True when EzReader is the app PDFs open with: Windows' own choice for
+ * .pdf (installer, portable or Store version), or xdg-mime on Linux.
+ */
+export async function isDefaultPdfReader(): Promise<boolean> {
+  return call<boolean>("is_default_pdf_reader");
+}
+
 export async function registerPdfHandler(): Promise<void> {
   return call<void>("register_pdf_handler");
 }
