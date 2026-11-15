@@ -188,22 +188,26 @@ const MAX_PICTURE_SIDE: u32 = 4096;
 /// JPEG, as PNG otherwise (the PDF writer takes both).
 #[tauri::command(async)]
 pub fn load_picture(path: String) -> CmdResult<Picture> {
-    use base64::Engine;
     crate::grants::check(&path)?;
-    let bytes = read_image_bytes(&path)?;
+    picture_from_bytes(&read_image_bytes(&path)?)
+}
+
+/// [`load_picture`] on bytes already read (and the fuzzing entry point).
+pub(crate) fn picture_from_bytes(bytes: &[u8]) -> CmdResult<Picture> {
+    use base64::Engine;
     let not_an_image = |e: image::ImageError| PdfError::new(ErrorCode::NotAnImage, e.to_string());
-    let format = image::guess_format(&bytes).map_err(not_an_image)?;
+    let format = image::guess_format(bytes).map_err(not_an_image)?;
     let b64 = |b: &[u8]| base64::engine::general_purpose::STANDARD.encode(b);
     let keep = matches!(format, image::ImageFormat::Png | image::ImageFormat::Jpeg);
     if keep {
-        let (width, height) = image::ImageReader::with_format(std::io::Cursor::new(&bytes), format)
+        let (width, height) = image::ImageReader::with_format(std::io::Cursor::new(bytes), format)
             .into_dimensions()
             .map_err(not_an_image)?;
         if width.max(height) <= MAX_PICTURE_SIDE {
-            return Ok(Picture { data: b64(&bytes), width, height });
+            return Ok(Picture { data: b64(bytes), width, height });
         }
     }
-    let mut img = image::load_from_memory_with_format(&bytes, format).map_err(not_an_image)?;
+    let mut img = image::load_from_memory_with_format(bytes, format).map_err(not_an_image)?;
     if img.width().max(img.height()) > MAX_PICTURE_SIDE {
         img = img.resize(MAX_PICTURE_SIDE, MAX_PICTURE_SIDE, image::imageops::FilterType::Triangle);
     }

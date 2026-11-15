@@ -2,12 +2,16 @@ mod commands;
 mod convert;
 mod error;
 mod fsutil;
+#[cfg(feature = "fuzzing")]
+pub mod fuzzing;
 mod grants;
 mod ocr;
 mod pdf;
 mod ratio_lock;
 mod resize_border;
 mod tempfiles;
+#[cfg(test)]
+mod hostile_input_tests;
 #[cfg(test)]
 mod test_util;
 

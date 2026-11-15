@@ -1,0 +1,38 @@
+# Dependency checks run in CI by `cargo deny check` (see .github/workflows/security.yml).
+
+[graph]
+# The app ships on Windows and Linux: check the crates of both.
+targets = ["x86_64-pc-windows-msvc", "x86_64-unknown-linux-gnu"]
+
+[advisories]
+# Every vulnerability fails the build. Unmaintained crates fail too, except
+# the ones below, each pulled in by Tauri itself with no maintained
+# replacement upstream yet. Review them when Tauri updates.
+unmaintained = "all"
+ignore = [
+    # proc-macro-error: compile-time macro of the GTK 3 bindings (Linux webview).
+    { id = "RUSTSEC-2024-0370", reason = "build-time macro of gtk-rs 0.18, used by Tauri on Linux" },
+]
+
+[licenses]
+allow = [
+    "MIT",
+    "MIT-0",
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "BSD-3-Clause",
+    "Zlib",
+    "Unicode-3.0",
+    "MPL-2.0",
+    "CC0-1.0",
+    "0BSD",
+]
+confidence-threshold = 0.9
+
+[bans]
+multiple-versions = "allow"
+wildcards = "allow"
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
