@@ -2,7 +2,7 @@
 
 # EzReader
 
-**A fast, lightweight PDF reader and editor for Windows.**
+**A fast, lightweight PDF reader and editor for Windows and Linux.**
 Read, annotate, sign, edit, reorganize, compress and protect your PDFs. Everything runs on your computer: no account, no subscription, no AI, no telemetry. Free and open source.
 
 [![Latest Release](https://img.shields.io/github/v/release/alxbdn/EzReader?style=flat-square&label=Download)](https://github.com/alxbdn/EzReader/releases/latest)
@@ -21,8 +21,9 @@ Read, annotate, sign, edit, reorganize, compress and protect your PDFs. Everythi
 | `ezreader-<version>-win-x64-setup.exe` | Installer |
 | `ezreader-portable-<version>-win-x64.exe` | Portable app: a single file you can run from anywhere, nothing to install |
 | `ezreader-<version>-win-x64.msix` | Package for the Microsoft Store |
+| `ezreader_<version>_amd64.deb` | Debian / Ubuntu Linux package (`sudo apt install ./ezreader_<version>_amd64.deb`) |
 
-EzReader runs on 64-bit Windows 10 (version 2004 or later) and Windows 11. The download is about 3 MB.
+EzReader runs on 64-bit Windows 10 (version 2004 or later), Windows 11, and Ubuntu / Debian Linux (x86_64). The download is about 3–4 MB.
 
 ---
 
@@ -83,7 +84,7 @@ Extracted, split and rearranged files contain nothing from the pages you left ou
 
 - **Export** pages as PNG or JPEG images (96, 150 or 300 dpi), or as a flattened PDF copy, with or without annotations
 - **Convert** the text of a PDF to Word (.docx), Excel (.xlsx, one sheet per page), RTF, a web page (HTML), plain text or XML. Paragraphs, titles and tables are kept; pictures and the exact layout are not
-- **Recognize text (OCR)** in scanned pages and pictures with the OCR engine built into Windows: the page on the left with the words found outlined, the text on the right, ready to copy. It reads the languages installed in Windows and adds nothing to the app's size
+- **Recognize text (OCR)** in scanned pages and pictures using the OCR engine built into Windows or Tesseract (`tesseract-ocr`) on Linux: the page on the left with the words found outlined, the text on the right, ready to copy. It uses the language packs installed on your system without inflating the app's size
 - **Images to PDF**: turn a set of pictures into a PDF, one picture per page
 - **Compress** with a Lossless, Balanced or Maximum preset, or give a target size and let EzReader find the best quality under it. The estimated result is shown before you save
 - **Password**: protect a PDF with a password (with a strength meter and tips), open protected PDFs, or remove the protection
@@ -96,20 +97,22 @@ Extracted, split and rearranged files contain nothing from the pages you left ou
 - The app only reads and writes the files you open or pick in a dialog
 - Its temporary copies, including decrypted ones, are removed when you close it, or on the next start after a crash
 
-### Settings and Windows integration
+### Settings and system integration
 
 - Light, dark or system theme
 - Default zoom when a file opens
 - Page brightness, remembered between sessions
 - 20 interface languages, switched instantly: English, Français, 中文, हिन्दी, Español, العربية, বাংলা, Русский, Português, اردو, Bahasa Indonesia, Deutsch, 日本語, Kiswahili, मराठी, తెలుగు, Türkçe, தமிழ், Tiếng Việt, 한국어
-- Set EzReader as the default PDF viewer from Settings, no administrator rights needed
-- Print from the command line: `ezreader-portable.exe --print file.pdf`
+- Set EzReader as the default PDF viewer from Settings (registry on Windows without administrator rights, XDG `.desktop` / `xdg-mime` on Linux)
+- Print from the command line: `ezreader-portable.exe --print file.pdf` (Windows) or `ezreader-portable --print file.pdf` (Linux)
 
 ---
 
 ## Build from source
 
-EzReader is built with Rust, TypeScript and [Tauri 2](https://tauri.app). You need Rust (stable), Node.js 18 or later, and the Visual Studio C++ Build Tools.
+EzReader is built with Rust, TypeScript and [Tauri 2](https://tauri.app). You need Rust (stable), Node.js 18 or later, and:
+- **Windows**: Visual Studio C++ Build Tools.
+- **Ubuntu / Debian Linux**: `libwebkit2gtk-4.1-dev`, `librsvg2-dev`, `patchelf`, `tesseract-ocr`, `cups-client`, `xdg-utils`.
 
 ```bash
 npm install

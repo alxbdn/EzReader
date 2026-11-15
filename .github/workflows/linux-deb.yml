@@ -116,24 +116,20 @@ jobs:
       - name: Build Debian package (.deb)
         run: npx tauri build --bundles deb
 
-      - name: Stage Debian artifacts
+      - name: Stage Debian artifact
         shell: bash
         run: |
           VERSION="${{ steps.version.outputs.version }}"
           mkdir -p dist-artifacts
           cp "src-tauri/target/release/bundle/deb/EzReader_${VERSION}_amd64.deb" \
              "dist-artifacts/ezreader_${VERSION}_amd64.deb"
-          cp "src-tauri/target/release/ezreader-portable" \
-             "dist-artifacts/ezreader-portable-${VERSION}-linux-x64"
           ls -lh dist-artifacts/
 
       - name: Upload Debian package artifact
         uses: actions/upload-artifact@v4
         with:
           name: ezreader-linux-deb-${{ steps.version.outputs.version }}
-          path: |
-            dist-artifacts/ezreader_${{ steps.version.outputs.version }}_amd64.deb
-            dist-artifacts/ezreader-portable-${{ steps.version.outputs.version }}-linux-x64
+          path: dist-artifacts/ezreader_${{ steps.version.outputs.version }}_amd64.deb
           if-no-files-found: error
 
       - name: Publish to GitHub Release
@@ -144,8 +140,6 @@ jobs:
           name: ${{ steps.version.outputs.tag }}
           generate_release_notes: true
           prerelease: ${{ steps.prerelease.outputs.is_prerelease == 'true' }}
-          files: |
-            dist-artifacts/ezreader_${{ steps.version.outputs.version }}_amd64.deb
-            dist-artifacts/ezreader-portable-${{ steps.version.outputs.version }}-linux-x64
+          files: dist-artifacts/ezreader_${{ steps.version.outputs.version }}_amd64.deb
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
