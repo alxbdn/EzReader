@@ -180,7 +180,6 @@ describe("PdfPageView internal link layer", () => {
       height: 800,
       rotation: 0,
       scale: 1,
-      convertToViewportRectangle: ([x1, y1, x2, y2]: number[]) => [x1, 800 - y2, x2, 800 - y1],
       convertToViewportPoint: (x: number, y: number) => [x, 800 - y],
       convertToPdfPoint: (x: number, y: number) => [x, 800 - y],
     } as unknown as PageViewport;
