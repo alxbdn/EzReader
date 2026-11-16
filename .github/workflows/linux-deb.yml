@@ -17,8 +17,9 @@ on:
         required: false
         default: ''
         type: string
-  # Version tags go through the release workflow, which calls this one
-  # only once the security scans have passed.
+  # Version tags are built only once the security scans have passed:
+  # Bump & Release dispatches this workflow on its new tag, and the release
+  # workflow (tag pushed by hand) calls it.
   workflow_call:
     inputs:
       publish_release:
