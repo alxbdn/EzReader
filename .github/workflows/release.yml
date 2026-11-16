@@ -94,7 +94,7 @@ jobs:
              "ezreader-portable-${VERSION}-win-x64.exe"
           cp "src-tauri/target/release/bundle/nsis/EzReader_${VERSION}_x64-setup.exe" \
              "ezreader-${VERSION}-win-x64-setup.exe"
-          cp "msix-output/EzReader_${VERSION}.0_x64.msix" \
+          cp "store/EzReader_${VERSION}.0_x64.msix" \
              "ezreader-${VERSION}-win-x64.msix"
 
       # SLSA build provenance, signed with Sigstore and recorded in the
@@ -120,6 +120,17 @@ jobs:
         with:
           name: release-provenance
           path: ezreader-${{ steps.version.outputs.version }}-windows.intoto.jsonl
+          if-no-files-found: error
+
+      # The .msix is only for the Microsoft Store (which signs it), so it is not
+      # attached to the GitHub release. store-publish.yml and
+      # scripts/get-store-msix.ps1 fetch it from this artifact.
+      - name: Upload Store package
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: store-msix-${{ steps.version.outputs.version }}
+          path: ezreader-${{ steps.version.outputs.version }}-win-x64.msix
+          retention-days: 90
           if-no-files-found: error
 
       - name: Check pre-release
@@ -175,7 +186,6 @@ jobs:
           files: |
             ezreader-portable-${{ needs.build.outputs.version }}-win-x64.exe
             ezreader-${{ needs.build.outputs.version }}-win-x64-setup.exe
-            ezreader-${{ needs.build.outputs.version }}-win-x64.msix
             ezreader-${{ needs.build.outputs.version }}-windows.intoto.jsonl
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

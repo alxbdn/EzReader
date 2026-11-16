@@ -84,7 +84,6 @@ Prefer to download? **[Get the latest release](https://github.com/alxbdn/EzReade
 |--------|------|------------|
 | **Windows** | `ezreader-<version>-win-x64-setup.exe` | Installer |
 | | `ezreader-portable-<version>-win-x64.exe` | Portable app: a single file you can run from anywhere |
-| | `ezreader-<version>-win-x64.msix` | Package, also on the [Microsoft Store](https://apps.microsoft.com/detail/9P9PVN4DRVS8) |
 | **macOS** | `ezreader-<version>-macos-universal.dmg` | Disk image |
 | **Linux** | `ezreader_<version>_amd64.deb` | Package for Debian, Ubuntu and derivatives |
 | | `ezreader-portable-<version>-linux-x64` | Portable app: make it executable (`chmod +x`) and run it |
