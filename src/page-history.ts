@@ -46,6 +46,17 @@ export class PageHistory {
   /** Something else changed: the undone page edits can't be redone. */
   clearRedo(): void { this.redoStack = []; }
 
+  /** The history, to park it while another tab is shown. */
+  snapshot(): { undo: DocState[]; redo: DocState[] } {
+    return { undo: [...this.undoStack], redo: [...this.redoStack] };
+  }
+
+  /** Back to a parked history (`snapshot()`). */
+  restore(s: { undo: DocState[]; redo: DocState[] }): void {
+    this.undoStack = [...s.undo];
+    this.redoStack = [...s.redo];
+  }
+
   /** Another document: no history. */
   clear(): void {
     this.undoStack = [];
