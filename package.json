@@ -23,7 +23,7 @@
     "@playwright/test": "1.65.0",
     "@tauri-apps/cli": "^2.12.4",
     "@vitest/coverage-v8": "^5.1.0",
-    "jsdom": "^29.0.1",
+    "jsdom": "^31.0.1",
     "playwright": "^1.63.0",
     "selenium-webdriver": "^4.52.0",
     "typescript": "^7.0.2",
