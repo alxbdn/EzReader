@@ -1684,7 +1684,6 @@ async function toggleFullscreen(on = !fullscreen): Promise<void> {
   }
   fullscreen = on;
   document.body.classList.toggle("fullscreen", on);
-  toolbar.setFullscreen(on);
 }
 
 // ── Presentation ──────────────────────────────────────────────────────────────
