@@ -46,7 +46,7 @@ Every push, every pull request and every week, GitHub Actions runs:
 
 Dependabot proposes dependency updates every week, and third-party actions are pinned to a commit.
 
-A release is only published if all these scans pass. Each release carries a **security report** (PDF), a **performance report**, the **software bills of materials** (CycloneDX) of its dependencies and signed **build provenance** (SLSA, check it with `gh attestation verify <file> --repo alxbdn/EzReader`), in its assets on the [releases page](https://github.com/alxbdn/EzReader/releases).
+A release is only published if all these scans pass. Each release carries a **security report** (PDF), a **performance report** and the **software bills of materials** (CycloneDX) of its dependencies, together in `ezreader-reports.zip` ([latest](https://github.com/alxbdn/EzReader/releases/latest/download/ezreader-reports.zip)), and signed **build provenance** (SLSA, check it with `gh attestation verify <file> --repo alxbdn/EzReader`), in its assets on the [releases page](https://github.com/alxbdn/EzReader/releases).
 
 ## Design
 
