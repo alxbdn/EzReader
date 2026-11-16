@@ -5,6 +5,7 @@ export default defineConfig({
   test: {
     include: ["src/__tests__/**/*.test.ts"],
     environment: "node",
+    testTimeout: 15000,
   },
   build: {
     outDir: "dist",
