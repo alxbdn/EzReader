@@ -527,11 +527,29 @@ export class PageSidebar {
 
   private onIntersect(entries: IntersectionObserverEntry[]): void {
     for (const entry of entries) {
-      if (!entry.isIntersecting) continue;
       const page = Number((entry.target as HTMLElement).dataset.page);
       const thumb = this.thumbs[page - 1];
-      if (thumb && !thumb.rendered && !thumb.task) void this.render(thumb);
+      if (!thumb) continue;
+      if (entry.isIntersecting) {
+        if (!thumb.rendered && !thumb.task) void this.render(thumb);
+      } else {
+        this.release(thumb);
+      }
     }
+  }
+
+  /**
+   * A thumbnail far out of view gives its pixels back (its place in the list
+   * is kept by the aspect ratio) and is drawn again when it comes near.
+   * Otherwise every page the panel ever showed stays in memory: 1500 pages
+   * held about 900 MB.
+   */
+  private release(thumb: Thumb): void {
+    thumb.task?.cancel();
+    thumb.task = null;
+    if (!thumb.rendered) return;
+    thumb.canvas.width = thumb.canvas.height = 0;
+    thumb.rendered = false;
   }
 
   private async render(thumb: Thumb): Promise<void> {
@@ -559,6 +577,10 @@ export class PageSidebar {
       thumb.canvas.replaceWith(canvas);
       thumb.canvas = canvas;
       thumb.rendered = true;
+      // pdf.js keeps the page's drawing commands and decoded pictures until
+      // told otherwise; the thumbnail is a plain bitmap now, so give them back
+      // (otherwise every page the panel ever showed stays decoded in memory).
+      page.cleanup();
     } catch {
       // Cancelled, or the document was replaced meanwhile.
       thumb.task = null;

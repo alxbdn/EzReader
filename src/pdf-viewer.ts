@@ -310,6 +310,9 @@ export class PdfPageView {
       this.canvas.style.width  = `${cssW}px`;
       this.canvas.style.height = `${cssH}px`;
       this.canvas.getContext("2d")!.drawImage(buf, 0, 0);
+      // The buffer is garbage now, but its bitmap lives outside the JS heap
+      // and would wait for a garbage collection: free it right away.
+      buf.width = buf.height = 0;
 
       // Size annotation canvas (no content to preserve here).
       this.annotationCanvas.width  = pxW;

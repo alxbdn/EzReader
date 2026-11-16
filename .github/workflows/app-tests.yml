@@ -85,7 +85,7 @@ jobs:
     timeout-minutes: 15
     # The same image the baselines were made in: same fonts, same pixels.
     container:
-      image: mcr.microsoft.com/playwright:v1.63.0-noble
+      image: mcr.microsoft.com/playwright:v1.65.0-noble
     steps:
       - uses: actions/checkout@v7
 
