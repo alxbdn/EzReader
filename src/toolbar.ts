@@ -843,16 +843,17 @@ export class Toolbar {
     right.className = "toolbar-group tb-right";
     right.append(exportBtn, compressBtn, this.lockBtn, this.infoBtn, presentBtn, this.sep(), this.search.el);
 
-    // Left group, Read / Annotate / Edit in the middle of the bar, right group.
+    // Left group (side panel, then Read / Annotate / Edit), right group.
     const left = document.createElement("div");
     left.className = "toolbar-group tb-left";
     left.append(
-      this.sidebarBtn, this.saveBtn, this.segment(undo, redo), this.sep(),
+      this.sidebarBtn, modeSeg, this.sep(),
+      this.saveBtn, this.segment(undo, redo), this.sep(),
       this.segment(...this.pointerBtns),
       this.segment(zoomOut, this.zoomLabel, this.zoomInput, zoomIn, realSizeBtn),
       brightnessSeg, columnsSeg,
     );
-    main.append(left, modeSeg, right);
+    main.append(left, right);
     this.updateLayout(null, "vertical");
     this.syncModeBtns();
 
@@ -878,8 +879,8 @@ export class Toolbar {
     const open = pill.classList.contains("open");
     // Laid out on one line, how much wider than the row the content is, with
     // the search box at its final width (not the one mid-animation). The side
-    // groups stretch to keep the modes centred, so add up what they hold.
-    const [left, modes, right] = Array.from(main.children) as HTMLElement[];
+    // groups stretch to fill the row, so add up what they hold.
+    const [left, right] = Array.from(main.children) as HTMLElement[];
     const gapOf = (el: HTMLElement) => parseFloat(getComputedStyle(el).columnGap) || 0;
     const held = (group: HTMLElement): number => {
       const shown = (Array.from(group.children) as HTMLElement[]).filter((c) => c.offsetWidth > 0);
@@ -889,10 +890,8 @@ export class Toolbar {
       const style = getComputedStyle(main);
       const room = main.clientWidth - (parseFloat(style.paddingLeft) || 0) - (parseFloat(style.paddingRight) || 0);
       const rightW = held(right) - pill.offsetWidth + (open ? searchOpen[level] : 34);
-      // The modes sit in the middle when both sides fit in half of what is
-      // left; otherwise they slide over (CSS), and only a row too full for
-      // everything gets compacted.
-      return held(left) + modes.offsetWidth + rightW + 2 * gapOf(main) - room;
+      // Only a row too full for everything gets compacted.
+      return held(left) + rightW + gapOf(main) - room;
     };
     main.style.flexWrap = "nowrap";
     main.classList.remove(...levels);

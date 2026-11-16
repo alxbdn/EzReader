@@ -688,8 +688,8 @@ body.tab-dragging, body.tab-dragging * { cursor: grabbing !important; }
 
 .tb-tool-group { gap: 6px; }
 
-/* The two side groups share the room equally: Read / Annotate / Edit stay
-   in the middle of the bar. */
+/* The two side groups share the room; Read / Annotate / Edit sit at the
+   start of the left one, right after the side panel button. */
 .tb-left, .tb-right { flex: 1 1 0; min-width: max-content; }
 .toolbar-group.tb-left { gap: 8px; }
 .tb-right {
