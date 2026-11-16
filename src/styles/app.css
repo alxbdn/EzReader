@@ -1431,7 +1431,7 @@ input[type="color"].color-picker.is-off::-webkit-color-swatch {
   height: 12px;
   flex-shrink: 0;
   box-sizing: border-box;
-  border: 1.5px solid var(--ring);
+  border: 1.5px solid var(--sidebar-select);
   border-radius: 3px;
 }
 
@@ -1564,7 +1564,7 @@ input[type="color"].color-picker.is-off::-webkit-color-swatch {
   width: 16px;
   height: 16px;
   box-sizing: border-box;
-  border: 1.5px solid #a1a1aa;
+  border: 1.5px solid var(--sidebar-select);
   border-radius: 4px;
   background: rgba(255, 255, 255, 0.9);
   opacity: 0;
