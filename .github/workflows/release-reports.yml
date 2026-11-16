@@ -81,8 +81,8 @@ jobs:
           # A release older than src-tauri/deny.toml is checked with today's policy.
           CONFIG=src-tauri/deny.toml
           [ -f "$CONFIG" ] || CONFIG=.report-tools/src-tauri/deny.toml
-          cargo deny -L info --manifest-path src-tauri/Cargo.toml --format json \
-            check --config "$CONFIG" advisories licenses bans sources 2> cargo-deny.jsonl || true
+          cargo deny -L info --manifest-path src-tauri/Cargo.toml --format json --config "$CONFIG" \
+            check advisories licenses bans sources 2> cargo-deny.jsonl || true
 
       - name: SAST - open CodeQL alerts
         env:
