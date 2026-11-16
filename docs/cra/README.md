@@ -29,7 +29,7 @@ Status against Annex I. ✅ met, 🟡 partly met, ⬜ only needed if the CRA app
 
 | Requirement | Status | How |
 |---|---|---|
-| 1. Identify components, SBOM | ✅ | CycloneDX SBOMs (npm and Cargo) attached to every release |
+| 1. Identify components, SBOM | ✅ | CycloneDX SBOMs (npm and Cargo) attached to every release, in `ezreader-reports.zip` |
 | 2. Fix vulnerabilities without delay | ✅ | Dependabot security updates, `npm audit` and `cargo deny` on every push and weekly; fix targets in [SECURITY.md](../../SECURITY.md) |
 | 3. Regular security testing | ✅ | CodeQL `security-extended`, cargo-fuzz on the PDF and image parsers, hostile-input tests, OpenSSF Scorecard |
 | 4. Public disclosure of fixed vulnerabilities | ✅ | GitHub security advisories (with CVE through GitHub's CNA) published with the fix |

@@ -64,7 +64,7 @@ No harmonised standard under the CRA has been published yet. EzReader follows:
 
 ## 6. Test reports
 
-Attached to every release on the [releases page](https://github.com/alxbdn/EzReader/releases): security report (SCA, SAST, fuzzing results), performance report, SBOMs. CI history: GitHub Actions on the repository.
+Attached to every release on the [releases page](https://github.com/alxbdn/EzReader/releases): security report (SCA, SAST, fuzzing results), performance report, SBOMs, together in `ezreader-reports.zip`. CI history: GitHub Actions on the repository.
 
 ## 7. EU declaration of conformity
 

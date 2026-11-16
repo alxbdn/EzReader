@@ -1,11 +1,14 @@
 name: Release reports
 
-# Attaches to a GitHub release:
+# Attaches to a GitHub release one zip, ezreader-reports.zip, holding:
 #   - a security report (PDF): npm audit, cargo deny, open CodeQL alerts and
 #     the fuzzing jobs of the Security workflow, checked on the release commit;
 #   - a performance report (PDF) and its raw measurements, from the load test;
 #   - the software bills of materials (CycloneDX) of the JavaScript and Rust
 #     dependencies.
+# One file keeps the release page down to the packages. The zip has the same
+# name on every release, so releases/latest/download/ezreader-reports.zip in
+# the README always gives the newest one.
 #
 # Called by the Release workflow once the release is published. Run it by
 # hand to add or refresh the reports of an existing release.
@@ -36,9 +39,9 @@ jobs:
   security:
     name: Security report and SBOMs
     runs-on: ubuntu-latest
-    # Reads the CodeQL alerts and the Security workflow's runs, uploads to the release.
+    # Reads the CodeQL alerts and the Security workflow's runs.
     permissions:
-      contents: write
+      contents: read
       security-events: read
       actions: read
     steps:
@@ -127,23 +130,20 @@ jobs:
             --npm npm-audit.json --deny cargo-deny.jsonl --codeql codeql-alerts.json --runs security-jobs.json \
             --out "ezreader-${TAG#v}-security-report.pdf"
 
-      - name: Attach to the release
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          # Also under a fixed name, so releases/latest/download/... in the
-          # README always opens the newest report.
-          cp "ezreader-${TAG#v}-security-report.pdf" ezreader-security-report.pdf
-          gh release upload "$TAG" --clobber --repo "${{ github.repository }}" \
-            "ezreader-${TAG#v}-security-report.pdf" ezreader-security-report.pdf \
-            "ezreader-${TAG#v}-sbom-npm.cdx.json" \
-            "ezreader-${TAG#v}-sbom-cargo.cdx.json"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: reports-security
+          path: |
+            ezreader-${{ steps.meta.outputs.version }}-security-report.pdf
+            ezreader-${{ steps.meta.outputs.version }}-sbom-npm.cdx.json
+            ezreader-${{ steps.meta.outputs.version }}-sbom-cargo.cdx.json
+          if-no-files-found: error
 
   performance:
     name: Performance report
     runs-on: ubuntu-latest
     permissions:
-      contents: write
+      contents: read
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -192,11 +192,64 @@ jobs:
             --results "ezreader-${TAG#v}-perf-results.json" --log perf-log.txt \
             --out "ezreader-${TAG#v}-performance-report.pdf"
 
-      - name: Attach to the release
+      # The raw measurements are missing if the load test crashed: the report
+      # says so, and the zip goes out without them.
+      - name: Version
+        id: meta
+        run: echo "version=${TAG#v}" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: reports-performance
+          path: |
+            ezreader-${{ steps.meta.outputs.version }}-performance-report.pdf
+            ezreader-${{ steps.meta.outputs.version }}-perf-results.json
+          if-no-files-found: error
+
+  # Zips whatever reports were produced and attaches the zip to the release.
+  # Also removes the separate report files that releases used to carry, so
+  # running this by hand on an older release tidies its page too.
+  bundle:
+    name: Attach the reports zip
+    needs: [security, performance]
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: reports-*
+          path: reports
+          merge-multiple: true
+
+      - name: Zip and attach to the release
         env:
           GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
         run: |
-          cp "ezreader-${TAG#v}-performance-report.pdf" ezreader-performance-report.pdf
-          FILES=("ezreader-${TAG#v}-performance-report.pdf" ezreader-performance-report.pdf)
-          [ -f "ezreader-${TAG#v}-perf-results.json" ] && FILES+=("ezreader-${TAG#v}-perf-results.json")
-          gh release upload "$TAG" --clobber --repo "${{ github.repository }}" "${FILES[@]}"
+          shopt -s nullglob
+          files=(reports/*)
+          if [ ${#files[@]} -eq 0 ]; then
+            echo "::error::No report was produced."
+            exit 1
+          fi
+          (cd reports && zip -9 ../ezreader-reports.zip *)
+          gh release upload "$TAG" --clobber ezreader-reports.zip
+
+          V="${TAG#v}"
+          for old in ezreader-security-report.pdf ezreader-performance-report.pdf \
+                     "ezreader-$V-security-report.pdf" "ezreader-$V-performance-report.pdf" \
+                     "ezreader-$V-perf-results.json" \
+                     "ezreader-$V-sbom-npm.cdx.json" "ezreader-$V-sbom-cargo.cdx.json"; do
+            if gh release view "$TAG" --json assets --jq '.assets[].name' | grep -qxF "$old"; then
+              gh release delete-asset "$TAG" "$old" --yes
+            fi
+          done
+
+      # A failed report job still fails the run, even though the zip went out.
+      - name: Check that both reports were made
+        if: needs.security.result != 'success' || needs.performance.result != 'success'
+        run: |
+          echo "::error::Security report: ${{ needs.security.result }}, performance report: ${{ needs.performance.result }}"
+          exit 1
