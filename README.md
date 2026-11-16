@@ -11,7 +11,7 @@ Everything runs on your computer: no account, no subscription, no AI, no telemet
 
 [![Release](https://img.shields.io/github/v/release/alxbdn/EzReader?style=flat-square&label=release&color=c4314b)](https://github.com/alxbdn/EzReader/releases/latest)
 [![Downloads](https://img.shields.io/github/downloads/alxbdn/EzReader/total?style=flat-square&label=downloads)](https://github.com/alxbdn/EzReader/releases)
-[![Platforms](https://img.shields.io/badge/platforms-Windows%20%7C%20macOS%20%7C%20Linux-informational?style=flat-square)](#download)
+[![Platforms](https://img.shields.io/badge/platforms-Windows%20%7C%20macOS%20%7C%20Linux-informational?style=flat-square)](#installation)
 [![Microsoft Store](https://img.shields.io/badge/Microsoft%20Store-get%20it-0078d4?style=flat-square)](https://apps.microsoft.com/detail/9P9PVN4DRVS8)
 [![License: MIT](https://img.shields.io/github/license/alxbdn/EzReader?style=flat-square)](LICENSE)
 
@@ -20,7 +20,7 @@ Everything runs on your computer: no account, no subscription, no AI, no telemet
 [![Performance](https://img.shields.io/github/actions/workflow/status/alxbdn/EzReader/perf.yml?branch=main&style=flat-square&label=load%20test)](https://github.com/alxbdn/EzReader/actions/workflows/perf.yml)
 [![OpenSSF Scorecard](https://img.shields.io/ossf-scorecard/github.com/alxbdn/EzReader?style=flat-square&label=openssf%20scorecard)](https://scorecard.dev/viewer/?uri=github.com/alxbdn/EzReader)
 
-[Download](#download) · [Features](#features) · [Security](#security-and-privacy) · [Build](#build-from-source) · [Contributing](CONTRIBUTING.md)
+[Install](#installation) · [Features](#features) · [Security](#security-and-privacy) · [Build](#build-from-source) · [Contributing](CONTRIBUTING.md)
 
 <br>
 
@@ -30,28 +30,45 @@ Everything runs on your computer: no account, no subscription, no AI, no telemet
 
 ---
 
-## Download
+## Installation
 
-**[Get the latest release](https://github.com/alxbdn/EzReader/releases/latest)**, about 3 MB, and pick the file for your system.
+Pick your system and paste the command.
 
-| System | File | What it is |
-|--------|------|------------|
-| **Windows** 10 (2004+) and 11, 64-bit | `ezreader-<version>-win-x64-setup.exe` | Installer |
-| | `ezreader-portable-<version>-win-x64.exe` | Portable app: a single file you can run from anywhere |
-| | `ezreader-<version>-win-x64.msix` | Package, also on the [Microsoft Store](https://apps.microsoft.com/detail/9P9PVN4DRVS8) |
-| **macOS** 11+, Intel and Apple Silicon | `ezreader-<version>-macos-universal.dmg` | Disk image |
-| **Linux** x64 | `ezreader_<version>_amd64.deb` | Package for Debian, Ubuntu and derivatives |
-| | `ezreader-portable-<version>-linux-x64` | Portable app |
+**Windows** 10 (2004+) and 11, in PowerShell or the Terminal, from the Microsoft Store:
 
-On macOS, the simplest is [Homebrew](https://brew.sh):
+```powershell
+winget install --id 9P9PVN4DRVS8 --source msstore --accept-package-agreements
+```
+
+**macOS** 11+, Intel and Apple Silicon, with [Homebrew](https://brew.sh):
 
 ```bash
 brew install --cask alxbdn/ezreader/ezreader
 ```
 
-The app is not notarized by Apple: installed with Homebrew it opens straight away; from the disk image, right-click EzReader in Applications and choose **Open** the first time.
+**Linux** x64, Debian, Ubuntu and derivatives:
 
-On Linux, install the package with `sudo apt install ./ezreader_<version>_amd64.deb`, or make the portable file executable (`chmod +x`) and run it.
+```bash
+curl -sL https://api.github.com/repos/alxbdn/EzReader/releases/latest | grep -o 'https://[^"]*_amd64\.deb' | xargs curl -LO
+sudo apt install ./ezreader_*_amd64.deb
+```
+
+To update: `winget upgrade --id 9P9PVN4DRVS8`, `brew upgrade --cask ezreader`, or the same Linux commands again.
+
+### Download the files
+
+Prefer to download? **[Get the latest release](https://github.com/alxbdn/EzReader/releases/latest)**, about 3 MB, and pick the file for your system.
+
+| System | File | What it is |
+|--------|------|------------|
+| **Windows** | `ezreader-<version>-win-x64-setup.exe` | Installer |
+| | `ezreader-portable-<version>-win-x64.exe` | Portable app: a single file you can run from anywhere |
+| | `ezreader-<version>-win-x64.msix` | Package, also on the [Microsoft Store](https://apps.microsoft.com/detail/9P9PVN4DRVS8) |
+| **macOS** | `ezreader-<version>-macos-universal.dmg` | Disk image |
+| **Linux** | `ezreader_<version>_amd64.deb` | Package for Debian, Ubuntu and derivatives |
+| | `ezreader-portable-<version>-linux-x64` | Portable app: make it executable (`chmod +x`) and run it |
+
+The macOS app is not notarized by Apple: installed with Homebrew it opens straight away; from the disk image, right-click EzReader in Applications and choose **Open** the first time.
 
 Each release also carries its **security report**, its **performance report** and the **software bills of materials** (CycloneDX) of its dependencies.
 
