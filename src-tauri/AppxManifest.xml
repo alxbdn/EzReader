@@ -17,7 +17,7 @@
 
   <Properties>
     <DisplayName>EzReader</DisplayName>
-    <PublisherDisplayName>alxbdn</PublisherDisplayName>
+    <PublisherDisplayName>Alexandre Boudon</PublisherDisplayName>
     <Logo>icons\StoreLogo.png</Logo>
     <Description>A simple, lightweight PDF reader with annotations and signing</Description>
   </Properties>
