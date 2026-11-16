@@ -14,17 +14,41 @@ permissions:
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+  # Store ID of EzReader in Partner Center (public, not a secret).
+  STORE_APP_ID: ${{ vars.MICROSOFT_STORE_APP_ID || '9P9PVN4DRVS8' }}
 
 jobs:
   publish:
-    # Set the MICROSOFT_STORE_SELLER_ID and MICROSOFT_STORE_APP_ID repository
-    # variables (Settings > Secrets and variables > Actions > Variables) to
-    # enable Store submission.
-    if: vars.MICROSOFT_STORE_APP_ID != ''
     runs-on: windows-latest
 
     steps:
+      # Needs, in Settings > Secrets and variables > Actions: the variable
+      # MICROSOFT_STORE_SELLER_ID and the secrets MICROSOFT_STORE_TENANT_ID,
+      # MICROSOFT_STORE_CLIENT_ID and MICROSOFT_STORE_CLIENT_SECRET (a
+      # Microsoft Entra app added in Partner Center with the Manager role).
+      - name: Check Store credentials
+        id: creds
+        shell: bash
+        env:
+          SELLER_ID: ${{ vars.MICROSOFT_STORE_SELLER_ID }}
+          TENANT_ID: ${{ secrets.MICROSOFT_STORE_TENANT_ID }}
+          CLIENT_ID: ${{ secrets.MICROSOFT_STORE_CLIENT_ID }}
+          CLIENT_SECRET: ${{ secrets.MICROSOFT_STORE_CLIENT_SECRET }}
+        run: |
+          missing=()
+          [ -n "$SELLER_ID" ] || missing+=("variable MICROSOFT_STORE_SELLER_ID")
+          [ -n "$TENANT_ID" ] || missing+=("secret MICROSOFT_STORE_TENANT_ID")
+          [ -n "$CLIENT_ID" ] || missing+=("secret MICROSOFT_STORE_CLIENT_ID")
+          [ -n "$CLIENT_SECRET" ] || missing+=("secret MICROSOFT_STORE_CLIENT_SECRET")
+          if [ ${#missing[@]} -gt 0 ]; then
+            echo "::warning title=Microsoft Store submission skipped::Missing: $(printf '%s; ' "${missing[@]}")"
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Determine version
+        if: steps.creds.outputs.ready == 'true'
         id: version
         shell: bash
         run: |
@@ -38,6 +62,7 @@ jobs:
           echo "tag=$TAG" >> $GITHUB_OUTPUT
 
       - name: Download MSIX from release
+        if: steps.creds.outputs.ready == 'true'
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -50,6 +75,7 @@ jobs:
             --dir .
 
       - name: Install Microsoft Store Developer CLI
+        if: steps.creds.outputs.ready == 'true'
         shell: pwsh
         run: |
           $release = Invoke-RestMethod "https://api.github.com/repos/microsoft/msstore-cli/releases/latest"
@@ -59,6 +85,7 @@ jobs:
           echo "$env:LOCALAPPDATA\msstore-cli" >> $env:GITHUB_PATH
 
       - name: Configure and submit to Microsoft Store
+        if: steps.creds.outputs.ready == 'true'
         shell: pwsh
         env:
           MICROSOFT_STORE_TENANT_ID: ${{ secrets.MICROSOFT_STORE_TENANT_ID }}
@@ -88,4 +115,4 @@ jobs:
           $version = "${{ steps.version.outputs.version }}"
           $msixFile = "ezreader-${version}-win-x64.msix"
           Write-Host "Submitting $msixFile to Microsoft Store..."
-          msstore publish $msixFile --appId ${{ vars.MICROSOFT_STORE_APP_ID }}
+          msstore publish $msixFile --appId $env:STORE_APP_ID

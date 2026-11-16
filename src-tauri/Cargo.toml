@@ -39,7 +39,7 @@ winreg = "0.55"
 winapi = { version = "0.3", features = ["winspool", "wingdi", "winnt", "shellapi", "processthreadsapi", "handleapi", "minwinbase", "minwindef", "errhandlingapi", "winerror", "winuser", "commctrl", "windef", "basetsd", "libloaderapi"] }
 # Text recognition with the OCR engine built into Windows (Windows.Media.Ocr):
 # same version Tauri already builds, nothing to bundle.
-windows = { version = "0.61", features = [
+windows = { version = "0.62", features = [
   "Foundation",
   "Foundation_Collections",
   "Globalization",
