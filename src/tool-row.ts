@@ -1,6 +1,7 @@
 import {
   defaultToolState,
   FONT_FAMILIES,
+  SYSTEM_FONTS,
   type ActiveToolState,
   type FontFamilyValue,
   type RedactShape,
@@ -126,9 +127,12 @@ export class ToolRow {
   private titles: [HTMLElement, Key, string][] = [];
   private colorRows: [ColorRow, Key, [string, string][], Key | null][] = [];
   private sliders: [SliderRow, Key, string][] = [];
+  private fontGroups: [HTMLOptGroupElement, Key, string][] = [];
 
   // Text options
   private fontSelect!: HTMLSelectElement;
+  private stdFonts!: HTMLOptGroupElement;
+  private sysFonts!: HTMLOptGroupElement;
   private sizeSelect!: HTMLSelectElement;
   private biuBtns: HTMLButtonElement[] = [];
   private textColor!: ColorRow;
@@ -266,9 +270,10 @@ export class ToolRow {
   }
 
   /** Options of the selected text annotation (or of new text). */
-  showTextStyles(st: Pick<ActiveToolState, "color" | "fontSize" | "bold" | "italic" | "underline"> & { fontFamily?: FontFamilyValue; backgroundColor?: RgbColor | null }): void {
+  showTextStyles(st: Pick<ActiveToolState, "color" | "fontSize" | "bold" | "italic" | "underline"> & { fontFamily?: FontFamilyValue; fontName?: string | null; backgroundColor?: RgbColor | null }): void {
     this.state.color = { ...st.color };
     this.state.fontFamily = st.fontFamily ?? "helvetica";
+    this.state.fontName = st.fontName ?? null;
     this.state.fontSize = st.fontSize;
     this.state.bold = st.bold;
     this.state.italic = st.italic;
@@ -317,6 +322,19 @@ export class ToolRow {
     this.syncHint();
   }
 
+  /** The fonts of SYSTEM_FONTS installed on this computer. */
+  setSystemFonts(names: string[]): void {
+    this.sysFonts.replaceChildren(...SYSTEM_FONTS.filter((f) => names.includes(f.name)).map((f) => {
+      const o = document.createElement("option");
+      o.value = `sys:${f.name}`;
+      o.textContent = f.name;
+      o.style.fontFamily = `"${f.name}"`;
+      return o;
+    }));
+    this.sysFonts.hidden = this.sysFonts.children.length === 0;
+    this.syncAll();
+  }
+
   setSignatures(list: SignatureChip[]): void {
     this.signatures = list;
     this.renderSignatures();
@@ -342,6 +360,7 @@ export class ToolRow {
         noneKey ? this.tr(noneKey, "No background") : undefined, this.tr("optCustomColor", "Custom color"));
     }
     for (const [s, key, fb] of this.sliders) s.setLabel(this.tr(key, fb));
+    for (const [g, key, fb] of this.fontGroups) g.label = this.tr(key, fb);
     this.renderSignatures();
     this.syncPageBtns();
     this.syncHint();
@@ -416,15 +435,25 @@ export class ToolRow {
     this.fontSelect = document.createElement("select");
     this.fontSelect.className = "opt-select";
     this.title(this.fontSelect, "optFont", "Font");
+    // The standard fonts, then the common fonts installed on this computer.
+    this.stdFonts = document.createElement("optgroup");
+    this.fontGroups.push([this.stdFonts, "optFontsStandard", "Standard"]);
     for (const f of FONT_FAMILIES) {
       const o = document.createElement("option");
       o.value = f.value;
       o.textContent = f.label;
       o.style.fontFamily = f.css;
-      this.fontSelect.append(o);
+      this.stdFonts.append(o);
     }
+    this.sysFonts = document.createElement("optgroup");
+    this.fontGroups.push([this.sysFonts, "optFontsInstalled", "On this computer"]);
+    this.sysFonts.hidden = true;
+    this.fontSelect.append(this.stdFonts, this.sysFonts);
     this.fontSelect.addEventListener("change", () => {
-      this.state.fontFamily = this.fontSelect.value as FontFamilyValue;
+      const v = this.fontSelect.value;
+      const sys = v.startsWith("sys:") ? SYSTEM_FONTS.find((f) => f.name === v.slice(4)) : undefined;
+      this.state.fontName = sys ? sys.name : null;
+      this.state.fontFamily = sys ? sys.fallback : v as FontFamilyValue;
       this.changed();
     });
     this.sizeSelect = document.createElement("select");
@@ -696,7 +725,16 @@ export class ToolRow {
     this.textBgWrap.hidden = editText;
 
     const st = this.state;
-    this.fontSelect.value = st.fontFamily;
+    this.fontSelect.value = st.fontName ? `sys:${st.fontName}` : st.fontFamily;
+    if (st.fontName && this.fontSelect.value !== `sys:${st.fontName}`) {
+      // A font of another computer (from an opened file): shown, kept as is.
+      const o = document.createElement("option");
+      o.value = `sys:${st.fontName}`;
+      o.textContent = st.fontName;
+      this.sysFonts.append(o);
+      this.sysFonts.hidden = false;
+      this.fontSelect.value = o.value;
+    }
     this.sizeSelect.value = String(st.fontSize);
     if (this.sizeSelect.value !== String(st.fontSize)) {
       // A size not in the list (from an existing annotation): show it anyway.

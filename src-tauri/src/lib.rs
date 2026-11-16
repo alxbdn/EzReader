@@ -151,6 +151,7 @@ pub fn run() {
         })
         .manage(commands::compress::CompressCancel::default())
         .invoke_handler(tauri::generate_handler![
+            commands::pdf::list_system_fonts,
             commands::compress::compress_pdf,
             commands::compress::cancel_compression,
             commands::compress::estimate_compression,

@@ -53,6 +53,7 @@ import {
   openDocumentDialog,
   picturesToNewPdf,
   getPageCount,
+  listSystemFonts,
   savePdfDialog,
   loadPictureFile,
   saveAnnotatedPdf,
@@ -220,6 +221,8 @@ const studio = new StudioPanel(toolbar.toolOptions, {
   remove: (ann) => removeAnnotation(ann),
 });
 document.getElementById("viewer-area")!.append(studio.el);
+// The common fonts of this computer, offered for text (embedded when saved).
+void listSystemFonts().then((names) => toolbar.setSystemFonts(names ?? [])).catch(() => {});
 toolbar.onToolOptions((title, mode) => {
   studio.setOptions(title);
   studio.setShown(mode !== "read");

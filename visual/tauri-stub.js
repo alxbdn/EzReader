@@ -13,6 +13,7 @@
   const answers = {
     get_startup_args: () => ({ filePath: opts.startupFile ?? null, shouldPrint: false, unsaved: false }),
     get_page_count: () => opts.pages ?? 1,
+    list_system_fonts: () => opts.fonts ?? [],
     read_annotations: () => [],
     strip_annotation_streams: () => false,
     temp_tag: () => "visual",

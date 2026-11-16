@@ -272,12 +272,13 @@ export class CanvasOverlay implements SelectionOwner {
   /** Apply text style fields to an existing annotation and redraw. */
   applyTextAnnotationStyle(
     ann: TextAnnotation,
-    style: Pick<ActiveToolState, "color" | "fontSize" | "bold" | "italic" | "underline" | "alignment" | "fontFamily" | "textBackground">
+    style: Pick<ActiveToolState, "color" | "fontSize" | "bold" | "italic" | "underline" | "alignment" | "fontFamily" | "fontName" | "textBackground">
   ): void {
     this.session.beginEdit();
     ann.color     = { ...style.color };
     ann.backgroundColor = style.textBackground ? { ...style.textBackground } : null;
     ann.fontFamily = style.fontFamily;
+    if (style.fontName) ann.fontName = style.fontName; else delete ann.fontName;
     ann.fontSize  = style.fontSize;
     ann.bold      = style.bold;
     ann.italic    = style.italic;
@@ -628,7 +629,7 @@ export class CanvasOverlay implements SelectionOwner {
   private textLineCount(ann: TextAnnotation): number {
     const { scale } = this;
     const saved = this.ctx.font;
-    this.ctx.font = `${ann.italic ? "italic" : "normal"} ${ann.bold ? "bold" : "300"} ${ann.fontSize * scale}px ${fontCss(ann.fontFamily)}`;
+    this.ctx.font = `${ann.italic ? "italic" : "normal"} ${ann.bold ? "bold" : "300"} ${ann.fontSize * scale}px ${fontCss(ann.fontFamily, ann.fontName)}`;
     const count = this.wrapLines(this.ctx, ann.content, ann.width * scale).length;
     this.ctx.font = saved;
     return count;
@@ -724,7 +725,7 @@ export class CanvasOverlay implements SelectionOwner {
       ctx.save();
       ctx.translate(x, y);
       if (rotRad !== 0) ctx.rotate(rotRad);
-      ctx.font      = `${ann.italic ? "italic" : "normal"} ${ann.bold ? "bold" : "300"} ${ann.fontSize * scale}px ${fontCss(ann.fontFamily)}`;
+      ctx.font      = `${ann.italic ? "italic" : "normal"} ${ann.bold ? "bold" : "300"} ${ann.fontSize * scale}px ${fontCss(ann.fontFamily, ann.fontName)}`;
       const lineH   = ann.fontSize * scale * 1.2;
       const maxW    = ann.width * scale;
       const lines   = this.wrapLines(ctx, ann.content, maxW);
@@ -1564,7 +1565,7 @@ export class CanvasOverlay implements SelectionOwner {
       position: absolute;
       left: ${left}px; top: ${top}px;
       ${hasWidth ? `width: ${widthPx}px;` : "min-width: 120px;"}
-      font-size: ${fontSize}px; line-height: 1.2; font-family: ${fontCss(this.style.fontFamily)};
+      font-size: ${fontSize}px; line-height: 1.2; font-family: ${fontCss(this.style.fontFamily, this.style.fontName)};
       font-weight: ${this.style.bold ? "bold" : "300"};
       font-style: ${this.style.italic ? "italic" : "normal"};
       text-decoration: ${this.style.underline ? "underline" : "none"};
@@ -1608,6 +1609,7 @@ export class CanvasOverlay implements SelectionOwner {
           bold: this.style.bold, italic: this.style.italic, underline: this.style.underline,
           alignment: this.style.alignment,
           fontFamily: this.style.fontFamily,
+          ...(this.style.fontName ? { fontName: this.style.fontName } : {}),
           backgroundColor: this.style.textBackground ? { ...this.style.textBackground } : null,
         };
         this.addInside(ann);
@@ -1675,7 +1677,7 @@ export class CanvasOverlay implements SelectionOwner {
       position: absolute;
       left: ${canvasX}px; top: ${boxTop}px;
       width: ${boxW}px;
-      font-size: ${ann.fontSize * scale}px; line-height: 1.2; font-family: ${fontCss(ann.fontFamily)};
+      font-size: ${ann.fontSize * scale}px; line-height: 1.2; font-family: ${fontCss(ann.fontFamily, ann.fontName)};
       font-weight: ${ann.bold ? "bold" : "300"};
       font-style: ${ann.italic ? "italic" : "normal"};
       text-decoration: ${ann.underline ? "underline" : "none"};
@@ -1705,7 +1707,7 @@ export class CanvasOverlay implements SelectionOwner {
         this.session.beginEdit();
         ann.content = content;
         // Text placed with a click grows with what is typed.
-        ann.width = Math.max(ann.width, this.fitTextWidth(content, { ...ann, fontFamily: ann.fontFamily ?? "helvetica" }));
+        ann.width = Math.max(ann.width, this.fitTextWidth(content, { ...ann, fontFamily: ann.fontFamily ?? "helvetica", fontName: ann.fontName }));
         this.session.edited();
       }
       this.redrawCommitted();
@@ -1735,10 +1737,10 @@ export class CanvasOverlay implements SelectionOwner {
   }
 
   /** Width (pt) that fits every line on screen and in the saved PDF. */
-  private fitTextWidth(content: string, st: Pick<TextAnnotation, "fontSize" | "bold" | "italic"> & { fontFamily: string }): number {
+  private fitTextWidth(content: string, st: Pick<TextAnnotation, "fontSize" | "bold" | "italic"> & { fontFamily: string; fontName?: string | null }): number {
     const ctx = this.ctx;
     ctx.save();
-    ctx.font = `${st.italic ? "italic" : "normal"} ${st.bold ? "bold" : "300"} ${st.fontSize}px ${fontCss(st.fontFamily as TextAnnotation["fontFamily"])}`;
+    ctx.font = `${st.italic ? "italic" : "normal"} ${st.bold ? "bold" : "300"} ${st.fontSize}px ${fontCss(st.fontFamily as TextAnnotation["fontFamily"], st.fontName)}`;
     const lines = content.split("\n");
     const measured = Math.max(...lines.map(l => ctx.measureText(l).width));
     ctx.restore();

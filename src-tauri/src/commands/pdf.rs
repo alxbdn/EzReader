@@ -1661,3 +1661,9 @@ fn unique_path(dir: &std::path::Path, stem: &str, ext: &str) -> std::path::PathB
     }
     dir.join(format!("{stem}-conflict.{ext}"))
 }
+
+/// The fonts offered for text that are installed on this computer.
+#[tauri::command]
+pub async fn list_system_fonts() -> Vec<String> {
+    tauri::async_runtime::spawn_blocking(crate::pdf::sysfont::installed).await.unwrap_or_default()
+}

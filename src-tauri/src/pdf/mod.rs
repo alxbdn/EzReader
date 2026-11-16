@@ -4,4 +4,5 @@ pub mod forms;
 pub mod models;
 pub mod redact;
 pub mod straighten;
+pub mod sysfont;
 pub mod writer;
