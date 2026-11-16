@@ -5,16 +5,15 @@ name: macOS Disk Image
 # the Homebrew cask (alxbdn/homebrew-ezreader) lifts the quarantine on install.
 
 # macOS runners are scarce on GitHub: jobs often wait in the queue and get
-# dropped ("job was not acquired by Runner"). So this build no longer runs on
-# every push to main: only on version tags, on demand, and on pull requests
-# that touch the native side or the dependencies. The cross-platform tests
-# already run in the CI workflow.
+# dropped ("job was not acquired by Runner"). So this build never runs on pull
+# requests, where a dropped job left every PR looking red. It runs on version
+# tags, on demand, and after a merge to main that touches the native side or
+# the dependencies. The cross-platform tests already run in CI on each PR.
 on:
   push:
+    branches: [main]
     tags:
       - 'v*.*.*'
-  pull_request:
-    branches: [main]
     paths:
       - 'src-tauri/**'
       - 'package.json'
@@ -36,8 +35,8 @@ on:
 permissions:
   contents: write
 
-# A newer push to the same pull request replaces the run still waiting for a
-# Mac. Tag builds are never cancelled.
+# A newer push to main replaces the run still waiting for a Mac.
+# Tag builds are never cancelled.
 concurrency:
   group: macos-dmg-${{ github.ref }}
   cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
