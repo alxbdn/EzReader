@@ -90,7 +90,7 @@ Prefer to download? **[Get the latest release](https://github.com/alxbdn/EzReade
 
 The macOS app is not notarized by Apple: installed with Homebrew it opens straight away; from the disk image, right-click EzReader in Applications and choose **Open** the first time.
 
-Each release also carries its **security report**, its **performance report** and the **software bills of materials** (CycloneDX) of its dependencies.
+Each release also carries its **[security report](https://github.com/alxbdn/EzReader/releases/latest/download/ezreader-security-report.pdf)**, its **[performance report](https://github.com/alxbdn/EzReader/releases/latest/download/ezreader-performance-report.pdf)** and the **software bills of materials** (CycloneDX) of its dependencies.
 
 ---
 
@@ -189,7 +189,7 @@ Every push, every pull request and every week, GitHub Actions checks the code:
 | Load test | A 1,500-page PDF opened, scrolled and zoomed while memory and CPU are measured |
 | Supply chain | Dependabot updates, third-party actions pinned to a commit, [OpenSSF Scorecard](https://scorecard.dev/viewer/?uri=github.com/alxbdn/EzReader) |
 
-The results of each release are attached to it as PDF reports. To report a vulnerability privately, see [SECURITY.md](SECURITY.md). Self-assessment against the OWASP Desktop App Security Top 10: [docs/security](docs/security/owasp-desktop-top10.md).
+The results of each release are attached to it as PDF reports: [latest security report](https://github.com/alxbdn/EzReader/releases/latest/download/ezreader-security-report.pdf), [latest performance report](https://github.com/alxbdn/EzReader/releases/latest/download/ezreader-performance-report.pdf). To report a vulnerability privately, see [SECURITY.md](SECURITY.md). Self-assessment against the OWASP Desktop App Security Top 10: [docs/security](docs/security/owasp-desktop-top10.md).
 
 ---
 
