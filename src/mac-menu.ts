@@ -110,7 +110,8 @@ export class MacMenu {
     const subs: Submenu[] = [app];
     for (const menu of menus) {
       const items: (MenuItem | CheckMenuItem | PredefinedMenuItem)[] = [];
-      const defs = menu.items.filter((i) => !i?.appMenu);
+      // macOS adds its own Enter Full Screen to the View menu.
+      const defs = menu.items.filter((i) => !i?.appMenu && i?.shortcut !== "F11");
       for (const [i, def] of defs.entries()) {
         if (def === null) {
           // No separator at either end, nor two in a row.

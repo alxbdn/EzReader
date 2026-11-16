@@ -177,6 +177,8 @@ export class Toolbar {
     this.buildMenuBar();
     if (isMac && "__TAURI_INTERNALS__" in window) {
       document.body.classList.add("mac");
+      const welcomeKeys = document.querySelector(".welcome-shortcut");
+      if (welcomeKeys) welcomeKeys.innerHTML = "<kbd>⌘</kbd> <kbd>O</kbd>";
       this.macMenu = new MacMenu(this.getMenuDefs(), getTranslations("en"));
     }
     this.buildContextToolbar();
