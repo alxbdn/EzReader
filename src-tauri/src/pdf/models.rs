@@ -91,6 +91,10 @@ pub struct TextAnnotation {
     /// Absent in files saved before font choice existed.
     #[serde(default)]
     pub font_family: FontFamily,
+    /// A font of the computer (one of `sysfont::FAMILIES`), embedded when
+    /// installed; `font_family` is used when it is not.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub font_name: Option<String>,
     /// Box colour behind the text.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub background_color: Option<RgbColor>,

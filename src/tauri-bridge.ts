@@ -52,6 +52,11 @@ export async function renameFile(from: string, to: string): Promise<void> {
   return call<void>("rename_file", { from, to });
 }
 
+/** The common fonts (models.SYSTEM_FONTS) installed on this computer. */
+export async function listSystemFonts(): Promise<string[]> {
+  return call<string[]>("list_system_fonts", {});
+}
+
 /** Returns the number of pages in the PDF at `filePath`. */
 export async function getPageCount(filePath: string): Promise<number> {
   return call<number>("get_page_count", { filePath });

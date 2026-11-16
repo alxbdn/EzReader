@@ -348,7 +348,7 @@ export class Toolbar {
 
   getStyle(): ActiveToolState { return this.tools.getStyle(); }
 
-  showTextStyles(state: Pick<ActiveToolState, "color" | "fontSize" | "bold" | "italic" | "underline"> & { fontFamily?: FontFamilyValue; backgroundColor?: RgbColor | null }): void {
+  showTextStyles(state: Pick<ActiveToolState, "color" | "fontSize" | "bold" | "italic" | "underline"> & { fontFamily?: FontFamilyValue; fontName?: string | null; backgroundColor?: RgbColor | null }): void {
     this.tools.showTextStyles(state);
   }
 
@@ -359,6 +359,9 @@ export class Toolbar {
   }
 
   hideShapeStyles(): void { this.tools.hideShapeStyles(); }
+
+  /** The common fonts installed on this computer, offered for text. */
+  setSystemFonts(names: string[]): void { this.tools.setSystemFonts(names); }
 
   showSignatureStyles(color: RgbColor): void { this.tools.showSignatureStyles(color); }
   hideSignatureStyles(): void { this.tools.hideSignatureStyles(); }

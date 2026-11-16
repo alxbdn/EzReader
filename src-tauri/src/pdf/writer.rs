@@ -13,6 +13,8 @@ use super::models::{
 
 use serde::{Deserialize, Serialize};
 
+use super::sysfont;
+
 /// Stored in the PDF catalog under `CCAnnot`.
 /// Holds the editable annotation data AND the object IDs of the burned content
 /// streams so they can be updated in-place on re-save (preventing accumulation).
@@ -329,6 +331,7 @@ pub fn write_note(buf: &mut Vec<u8>, ann: &NoteAnnotation) -> (&'static str, &'s
         underline: false,
         alignment: TextAlignment::Left,
         font_family: FontFamily::Helvetica,
+        font_name: None,
         background_color: None,
         cover: None,
     };
@@ -397,8 +400,9 @@ fn pdf_escape(s: &str) -> String {
 }
 
 /// Split `text` on explicit `\n` then word-wrap each paragraph to `max_width`,
-/// using `char_w` as the average character width estimate.
-fn wrap_text(text: &str, max_width: f64, char_w: f64) -> Vec<String> {
+/// measuring with `width`.
+fn wrap_text_by(text: &str, max_width: f64, width: &dyn Fn(&str) -> f64) -> Vec<String> {
+    let space_w = width(" ");
     let mut result = Vec::new();
     for para in text.split('\n') {
         if para.is_empty() {
@@ -408,9 +412,9 @@ fn wrap_text(text: &str, max_width: f64, char_w: f64) -> Vec<String> {
         let mut line = String::new();
         let mut line_w = 0.0_f64;
         for word in para.split(' ') {
-            let word_w = word.len() as f64 * char_w;
+            let word_w = width(word);
             // Width if we append this word (with a leading space if line is non-empty)
-            let candidate_w = if line.is_empty() { word_w } else { line_w + char_w + word_w };
+            let candidate_w = if line.is_empty() { word_w } else { line_w + space_w + word_w };
             if !line.is_empty() && candidate_w > max_width {
                 result.push(line.clone());
                 line = word.to_string();
@@ -418,7 +422,7 @@ fn wrap_text(text: &str, max_width: f64, char_w: f64) -> Vec<String> {
             } else {
                 if !line.is_empty() {
                     line.push(' ');
-                    line_w += char_w;
+                    line_w += space_w;
                 }
                 line.push_str(word);
                 line_w += word_w;
@@ -434,9 +438,37 @@ fn wrap_text(text: &str, max_width: f64, char_w: f64) -> Vec<String> {
 pub fn write_text(buf: &mut Vec<u8>, ann: &TextAnnotation) -> (&'static str, &'static str) {
     let fkey = font_key(ann.font_family, ann.bold, ann.italic);
     let fname = font_name(ann.font_family, ann.bold, ann.italic);
-    let char_w = ann.font_size * avg_char_width(ann.font_family);
+    write_text_in(buf, ann, fkey, &TextFace::Standard(ann.font_family));
+    (fkey, fname)
+}
+
+/// The font text is written in: a standard one, or one embedded from the computer.
+pub enum TextFace<'a> {
+    Standard(FontFamily),
+    Embedded(&'a sysfont::EmbeddedFont),
+}
+
+impl TextFace<'_> {
+    fn width(&self, s: &str, size: f64) -> f64 {
+        match self {
+            TextFace::Standard(f) => s.len() as f64 * size * avg_char_width(*f),
+            TextFace::Embedded(e) => e.width(s, size),
+        }
+    }
+
+    fn show(&self, s: &str) -> String {
+        match self {
+            TextFace::Standard(_) => format!("({})", pdf_escape(s)),
+            TextFace::Embedded(e) => e.show(s),
+        }
+    }
+}
+
+/// Appends the text operators of `ann` in `face`, its resource being `fkey`.
+pub fn write_text_in(buf: &mut Vec<u8>, ann: &TextAnnotation, fkey: &str, face: &TextFace) {
     let line_h = ann.font_size * 1.2;
-    let lines = wrap_text(&ann.content, ann.width, char_w);
+    let measure = |s: &str| face.width(s, ann.font_size);
+    let lines = wrap_text_by(&ann.content, ann.width, &measure);
 
     let mut ops = String::from("q\n");
     if let Some(c) = &ann.cover {
@@ -469,7 +501,7 @@ pub fn write_text(buf: &mut Vec<u8>, ann: &TextAnnotation) -> (&'static str, &'s
     let mut underlines: Vec<(f64, f64, f64)> = Vec::new();
 
     for (i, line) in lines.iter().enumerate() {
-        let line_w = line.len() as f64 * char_w;
+        let line_w = measure(line);
         let x_off = match ann.alignment {
             TextAlignment::Left => 0.0,
             TextAlignment::Center => ((ann.width - line_w) / 2.0).max(0.0),
@@ -479,7 +511,7 @@ pub fn write_text(buf: &mut Vec<u8>, ann: &TextAnnotation) -> (&'static str, &'s
         let y = ann.y - i as f64 * line_h;
 
         // 1 0 0 1 x y Tm = absolute text position
-        ops.push_str(&format!("1 0 0 1 {:.4} {:.4} Tm\n({}) Tj\n", x, y, pdf_escape(line)));
+        ops.push_str(&format!("1 0 0 1 {:.4} {:.4} Tm\n{} Tj\n", x, y, face.show(line)));
 
         if ann.underline {
             underlines.push((x, y - ann.font_size * 0.12, line_w.min(ann.width)));
@@ -503,7 +535,6 @@ pub fn write_text(buf: &mut Vec<u8>, ann: &TextAnnotation) -> (&'static str, &'s
 
     ops.push_str("Q\n");
     buf.extend_from_slice(ops.as_bytes());
-    (fkey, fname)
 }
 
 /// Decode a base64 picture (PNG, JPEG, …), embed it as an image XObject and
@@ -674,7 +705,11 @@ fn add_font_to_page(doc: &mut Document, page_id: ObjectId, fkey: &str, base_font
         "BaseFont" => Object::Name(base_font.as_bytes().to_vec()),
     };
     let font_id = doc.add_object(Object::Dictionary(font_obj));
+    add_font_ref_to_page(doc, page_id, fkey, font_id)
+}
 
+/// Adds the font object `font_id` to the page's Resources.Font dict as `fkey`.
+fn add_font_ref_to_page(doc: &mut Document, page_id: ObjectId, fkey: &str, font_id: ObjectId) -> Result<(), String> {
     // Mutably access the page dict
     let page = doc.get_object_mut(page_id).map_err(|e| e.to_string())?;
     let page_dict = match page {
@@ -816,6 +851,7 @@ pub fn write_annotations_for_page(
 ) -> Result<Option<ObjectId>, String> {
     let mut ops: Vec<u8> = Vec::new();
     let mut fonts_needed: HashMap<&'static str, &'static str> = HashMap::new();
+    let mut embedded: Vec<(String, sysfont::EmbeddedFont)> = Vec::new();
     let mut xobjects: Vec<(String, ObjectId)> = Vec::new();
     let mut alphas: Vec<Alpha> = Vec::new();
 
@@ -831,8 +867,20 @@ pub fn write_annotations_for_page(
                 None
             }
             Annotation::Text(t) => {
-                let (fkey, fname) = write_text(&mut ops, t);
-                fonts_needed.insert(fkey, fname);
+                // A font of the computer, embedded; the standard one when it is not installed.
+                let font = t
+                    .font_name
+                    .as_deref()
+                    .and_then(|name| sysfont::find(name, t.bold, t.italic))
+                    .and_then(|data| sysfont::EmbeddedFont::new(data, &t.content));
+                if let Some(font) = font {
+                    let fkey = format!("EzF{}_{}", page_id.0, embedded.len());
+                    write_text_in(&mut ops, t, &fkey, &TextFace::Embedded(&font));
+                    embedded.push((fkey, font));
+                } else {
+                    let (fkey, fname) = write_text(&mut ops, t);
+                    fonts_needed.insert(fkey, fname);
+                }
                 None
             }
             Annotation::Signature(s) if s.vector.as_ref().is_some_and(write_vector_ok) => {
@@ -871,6 +919,10 @@ pub fn write_annotations_for_page(
     // Register font resources
     for (fkey, fname) in &fonts_needed {
         add_font_to_page(doc, page_id, fkey, fname)?;
+    }
+    for (fkey, font) in &embedded {
+        let font_id = font.write(doc)?;
+        add_font_ref_to_page(doc, page_id, fkey, font_id)?;
     }
 
     // Register image XObject resources
@@ -954,6 +1006,7 @@ mod tests {
             underline: false,
             alignment: TextAlignment::Left,
             font_family: FontFamily::Helvetica,
+            font_name: None,
             background_color: None,
             cover: None,
         }
@@ -1220,6 +1273,7 @@ mod tests {
             underline: false,
             alignment: TextAlignment::Left,
             font_family: FontFamily::Helvetica,
+            font_name: None,
             background_color: Some(red()),
             cover: None,
         };
@@ -1268,6 +1322,7 @@ mod tests {
             underline: false,
             alignment: TextAlignment::Left,
             font_family: FontFamily::Helvetica,
+            font_name: None,
             background_color: None,
             cover: None,
         };
@@ -1299,6 +1354,7 @@ mod tests {
             underline: false,
             alignment: TextAlignment::Center,
             font_family: FontFamily::Helvetica,
+            font_name: None,
             background_color: None,
             cover: None,
         };
@@ -1323,6 +1379,7 @@ mod tests {
             underline: false,
             alignment: TextAlignment::Left,
             font_family: FontFamily::Times,
+            font_name: None,
             background_color: None,
             cover: None,
         };
@@ -1330,6 +1387,18 @@ mod tests {
         let (fkey, fname) = write_text(&mut buf, &ann);
         assert_eq!(fkey, "TimesI");
         assert_eq!(fname, "Times-Italic");
+    }
+
+    #[test]
+    fn a_font_not_installed_falls_back_to_the_standard_one() {
+        let mut ann = text_ann("Hello");
+        ann.font_name = Some("No Such Font".into());
+        let (mut doc, _) = make_doc_with_catalog();
+        let page_id = doc.add_object(dictionary! { "Type" => "Page", "Resources" => dictionary! {} });
+        let sid = write_annotations_for_page(&mut doc, page_id, &[Annotation::Text(ann)], None).unwrap().unwrap();
+        let s = String::from_utf8(doc.get_object(sid).unwrap().as_stream().unwrap().content.clone()).unwrap();
+        assert!(s.contains("/Helv 12.0000 Tf"), "{s}");
+        assert!(s.contains("(Hello) Tj"), "{s}");
     }
 
     #[test]
@@ -1671,6 +1740,7 @@ mod tests {
             underline: false,
             alignment: TextAlignment::Left,
             font_family: FontFamily::Helvetica,
+            font_name: None,
             background_color: None,
             cover: None,
         });
@@ -1749,6 +1819,7 @@ mod tests {
             underline: false,
             alignment: TextAlignment::Left,
             font_family: FontFamily::Helvetica,
+            font_name: None,
             background_color: None,
             cover: None,
         });

@@ -363,6 +363,8 @@ export interface Translations {
   optColor?: string;
   optCustomColor?: string;
   optThickness?: string;
+  optFontsStandard?: string;
+  optFontsInstalled?: string;
   annText?: string;
   annEditedText?: string;
   annNote?: string;
@@ -943,6 +945,8 @@ const EN: Translations = {
   optColor: "Color",
   optCustomColor: "Custom color",
   optThickness: "Thickness",
+  optFontsStandard: "Standard",
+  optFontsInstalled: "On this computer",
   annText: "Text",
   annEditedText: "Edited text",
   annNote: "Sticky note",
@@ -1520,6 +1524,8 @@ const FR: Translations = {
   optColor: "Couleur",
   optCustomColor: "Couleur personnalisée",
   optThickness: "Épaisseur",
+  optFontsStandard: "Standard",
+  optFontsInstalled: "Sur cet ordinateur",
   annText: "Texte",
   annEditedText: "Texte modifié",
   annNote: "Post-it",
