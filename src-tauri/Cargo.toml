@@ -25,17 +25,17 @@ serde_json = "1"
 lopdf = "0.47"
 # Only the formats the app opens: fewer decoders a hostile file can reach.
 image = { version = "0.25", default-features = false, features = ["png", "jpeg", "webp", "gif", "bmp"] }
-base64 = "0.22"
+base64 = "0.23"
 url = "2"
 getrandom = "0.4"
 # Already built for lopdf / png; used directly to pack .docx / .xlsx (ZIP) files.
 flate2 = "1"
 crc32fast = "1"
 # Checks downloaded updates against the SHA-256 GitHub gives (already built for Tauri).
-sha2 = "0.10"
+sha2 = "0.11"
 
 [target.'cfg(windows)'.dependencies]
-winreg = "0.52"
+winreg = "0.55"
 winapi = { version = "0.3", features = ["winspool", "wingdi", "winnt", "shellapi", "processthreadsapi", "handleapi", "minwinbase", "minwindef", "errhandlingapi", "winerror", "winuser", "commctrl", "windef", "basetsd", "libloaderapi"] }
 # Text recognition with the OCR engine built into Windows (Windows.Media.Ocr):
 # same version Tauri already builds, nothing to bundle.
