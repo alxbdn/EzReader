@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use base64::Engine;
 use image::ImageReader;
-use lopdf::{dictionary, Document, Object, ObjectId, Stream, StringFormat};
+use lopdf::{dictionary, Document, Object, ObjectId, Stream};
 
 use super::models::{
     Annotation, CircleAnnotation, FontFamily, HighlightAnnotation, InkAnnotation, InkVector, NoteAnnotation,
@@ -22,26 +22,6 @@ pub struct AnnotationMeta {
     pub annotations: Vec<Annotation>,
     /// Per-page annotation stream object IDs: page_num → [object_id, generation].
     pub stream_ids: HashMap<u32, [u32; 2]>,
-}
-
-/// Decode a PDF text string (bytes from a /T, /V, etc. entry) into a Rust String.
-/// Handles UTF-16BE (BOM 0xFE 0xFF prefix) and PDFDocEncoding (Latin-1-like fallback).
-fn pdf_text_to_string(bytes: &[u8]) -> Option<String> {
-    if bytes.starts_with(&[0xFE, 0xFF]) {
-        // UTF-16BE with BOM
-        let u16s: Vec<u16> = bytes[2..]
-            .as_chunks::<2>()
-            .0
-            .iter()
-            .map(|&c| u16::from_be_bytes(c))
-            .collect();
-        String::from_utf16(&u16s).ok()
-    } else {
-        // Try UTF-8 first; fall back to PDFDocEncoding (≈ Latin-1 for 0x80..0xFF)
-        String::from_utf8(bytes.to_vec()).ok().or_else(|| {
-            Some(bytes.iter().map(|&b| b as char).collect())
-        })
-    }
 }
 
 fn catalog_id(doc: &Document) -> Result<ObjectId, String> {
@@ -909,188 +889,7 @@ pub fn write_annotations_for_page(
 
 // ── AcroForm field writing ────────────────────────────────────────────────────
 
-/// A form field name/value pair sent from the frontend.
-#[derive(serde::Deserialize, Clone)]
-pub struct FormFieldValue {
-    pub name: String,
-    /// Plain text for Tx/Ch, "true"/"false" for checkboxes, export value for radios.
-    pub value: String,
-}
-
-/// Write user-supplied form field values into the document's AcroForm structure.
-/// Sets `/NeedAppearances true` so viewers regenerate visual appearances.
-/// Silently succeeds if the document has no AcroForm or `fields` is empty.
-pub fn write_form_fields(doc: &mut Document, fields: &[FormFieldValue]) -> Result<(), String> {
-    if fields.is_empty() {
-        return Ok(());
-    }
-
-    let values_map: HashMap<String, String> = fields
-        .iter()
-        .map(|f| (f.name.clone(), f.value.clone()))
-        .collect();
-
-    let cat_id = catalog_id(doc)?;
-
-    // Locate the AcroForm — handle both referenced and inline dict cases
-    let acroform_id = {
-        let cat  = doc.get_object(cat_id).map_err(|e| e.to_string())?;
-        let dict = cat.as_dict().map_err(|e| e.to_string())?;
-        match dict.get(b"AcroForm") {
-            Ok(Object::Reference(id)) => *id,
-            Ok(Object::Dictionary(_)) => {
-                let inline = dict.get(b"AcroForm").unwrap().clone();
-                let new_id = doc.add_object(inline);
-                let cat_obj = doc.get_object_mut(cat_id).map_err(|e| e.to_string())?;
-                if let Object::Dictionary(cat_dict) = cat_obj {
-                    cat_dict.set(b"AcroForm", Object::Reference(new_id));
-                }
-                new_id
-            }
-            _ => return Ok(()),
-        }
-    };
-
-    // Set NeedAppearances = true so viewers regenerate field appearances
-    {
-        let acroform = doc.get_object_mut(acroform_id).map_err(|e| e.to_string())?;
-        if let Object::Dictionary(d) = acroform {
-            d.set(b"NeedAppearances", Object::Boolean(true));
-        }
-    }
-
-    // Collect the top-level Fields array (cloned to release the borrow)
-    let field_refs: Vec<Object> = {
-        let acroform = doc.get_object(acroform_id).map_err(|e| e.to_string())?;
-        let dict     = acroform.as_dict().map_err(|e| e.to_string())?;
-        match dict.get(b"Fields") {
-            Ok(Object::Array(arr)) => arr.clone(),
-            _ => return Ok(()),
-        }
-    };
-
-    // First pass (immutable): collect what needs to be updated
-    let updates = collect_field_updates(doc, &field_refs, "", "", &values_map)?;
-
-    // Second pass (mutable): apply the updates
-    for (id, ft, value, on_state, set_as) in updates {
-        let obj = doc.get_object_mut(id).map_err(|e| e.to_string())?;
-        if let Object::Dictionary(d) = obj {
-            match ft.as_str() {
-                "Tx" | "Ch" => {
-                    d.set(b"V", Object::String(value.into_bytes(), StringFormat::Literal));
-                }
-                "Btn" => {
-                    let (v_bytes, as_bytes) = match value.as_str() {
-                        "true"  => (on_state.clone(), on_state),
-                        "false" | "" => (b"Off".to_vec(), b"Off".to_vec()),
-                        export_val => {
-                            let b = export_val.as_bytes().to_vec();
-                            (b.clone(), b)
-                        }
-                    };
-                    d.set(b"V", Object::Name(v_bytes));
-                    if set_as {
-                        d.set(b"AS", Object::Name(as_bytes));
-                    }
-                }
-                _ => {
-                    d.set(b"V", Object::String(value.into_bytes(), StringFormat::Literal));
-                }
-            }
-        }
-    }
-
-    Ok(())
-}
-
-/// Recursively traverse the AcroForm field tree, collecting updates.
-/// Returns `Vec<(ObjectId, field_type, new_value, on_state_name, set_as_flag)>`.
-#[allow(clippy::type_complexity)]
-fn collect_field_updates(
-    doc: &Document,
-    refs: &[Object],
-    parent_name: &str,
-    inherited_ft: &str,
-    values: &HashMap<String, String>,
-) -> Result<Vec<(ObjectId, String, String, Vec<u8>, bool)>, String> {
-    let mut result = Vec::new();
-
-    for obj_ref in refs {
-        let id = match obj_ref {
-            Object::Reference(id) => *id,
-            _ => continue,
-        };
-
-        let obj  = match doc.get_object(id) { Ok(o) => o, Err(_) => continue };
-        let dict = match obj.as_dict()       { Ok(d) => d, Err(_) => continue };
-
-        // Partial field name (/T)
-        let partial: String = dict.get(b"T")
-            .ok()
-            .and_then(|o| match o {
-                Object::String(s, _) => pdf_text_to_string(s),
-                _ => None,
-            })
-            .unwrap_or_default();
-
-        let full_name = if parent_name.is_empty() {
-            partial.clone()
-        } else if partial.is_empty() {
-            parent_name.to_string()
-        } else {
-            format!("{}.{}", parent_name, partial)
-        };
-
-        // Field type — inherit from parent if not set on this node
-        let ft: String = dict.get(b"FT")
-            .ok()
-            .and_then(|o| if let Object::Name(n) = o { String::from_utf8(n.clone()).ok() } else { None })
-            .unwrap_or_else(|| inherited_ft.to_string());
-
-        let has_kids = dict.has(b"Kids");
-
-        // If this node has a /T and we have a value for it, schedule an update
-        if !partial.is_empty() {
-            let maybe_val = values.get(&full_name)
-                .or_else(|| values.get(&partial))
-                .cloned();
-            if let Some(val) = maybe_val {
-                let on_state = field_on_state_name(dict);
-                // Only set /AS on terminal widget nodes (checkbox merged with field)
-                let set_as = !has_kids && ft == "Btn";
-                result.push((id, ft.clone(), val, on_state, set_as));
-            }
-        }
-
-        // Recurse into Kids
-        if has_kids {
-            let kids: Vec<Object> = match dict.get(b"Kids") {
-                Ok(Object::Array(arr)) => arr.clone(),
-                _ => continue,
-            };
-            let child_results = collect_field_updates(doc, &kids, &full_name, &ft, values)?;
-            result.extend(child_results);
-        }
-    }
-
-    Ok(result)
-}
-
-/// Determine the on-state name for a checkbox/radio from its appearance dict.
-/// Falls back to `b"Yes"` if no appearance dictionary is present.
-fn field_on_state_name(dict: &lopdf::Dictionary) -> Vec<u8> {
-    if let Ok(Object::Dictionary(ap)) = dict.get(b"AP") {
-        if let Ok(Object::Dictionary(n_dict)) = ap.get(b"N") {
-            for (key, _) in n_dict.iter() {
-                if key.as_slice() != b"Off" {
-                    return key.clone();
-                }
-            }
-        }
-    }
-    b"Yes".to_vec()
-}
+pub use super::forms::{write_form_fields, FormFieldValue};
 
 /// Clear the content streams referenced by `meta.stream_ids` directly on a
 /// loaded `Document`. Production code uses `IncrementalDocument` paths (see
@@ -1121,6 +920,7 @@ fn clear_annotation_streams(doc: &mut Document, meta: &AnnotationMeta) -> Result
 
 #[cfg(test)]
 mod tests {
+    use lopdf::StringFormat;
     use super::*;
     use crate::pdf::models::PdfRect;
     use crate::pdf::models::{RgbColor, TextAlignment};

@@ -5,6 +5,7 @@ import type { PDFDocumentProxy, PDFPageProxy, PageViewport, RenderTask } from "p
 import { convertFileSrc } from "@tauri-apps/api/core";
 import workerUrl from "pdfjs-dist/build/pdf.worker.min.mjs?url";
 import { CanvasOverlay } from "./canvas-overlay";
+import { createFieldControl, type WidgetData } from "./form-fields";
 import { ToolSelection } from "./tool-selection";
 import { AnnotationSession } from "./annotation-session";
 import { type RedactAnnotation, CSS_UNITS, MIN_SCALE, MAX_SCALE } from "./models";
@@ -696,90 +697,20 @@ export class PdfPageView {
     this.formLayer.style.width  = `${viewport.width}px`;
     this.formLayer.style.height = `${viewport.height}px`;
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const annotations: any[] = await (page as any).getAnnotations({ intent: "display" });
+    const annotations = (await page.getAnnotations({ intent: "display" })) as WidgetData[];
     const fieldEls: { el: HTMLElement; top: number }[] = [];
 
     for (const a of annotations) {
-      if (a.subtype !== "Widget") continue;
-      if (a.hidden || a.readOnly) continue;
-      const fieldName: string = a.fieldName ?? "";
-      if (!fieldName) continue;
-
-      const [x1, y1, x2, y2] = viewport.convertToViewportRectangle(a.rect as [number, number, number, number]);
-      const left   = Math.min(x1, x2);
-      const top    = Math.min(y1, y2);
-      const width  = Math.abs(x2 - x1);
-      const height = Math.abs(y2 - y1);
-      const fontSize  = Math.max(height * 0.65, 8);
-      const storedVal = storedValues.get(fieldName);
-      const initialVal: string = storedVal ?? (a.fieldValue ?? "");
-
-      let el: HTMLElement;
-
-      if (a.fieldType === "Tx") {
-        if (a.multiLine) {
-          const ta = document.createElement("textarea");
-          ta.value = initialVal;
-          ta.style.resize = "none";
-          ta.style.overflow = "hidden";
-          ta.addEventListener("input", () => onChange(fieldName, ta.value));
-          el = ta;
-        } else {
-          const inp = document.createElement("input");
-          inp.type = "text";
-          inp.value = initialVal;
-          inp.addEventListener("input", () => onChange(fieldName, inp.value));
-          el = inp;
-        }
-      } else if (a.fieldType === "Btn") {
-        if (a.checkBox) {
-          const inp = document.createElement("input");
-          inp.type = "checkbox";
-          inp.checked = !!initialVal && initialVal !== "Off" && initialVal !== "false";
-          inp.addEventListener("change", () => onChange(fieldName, inp.checked ? "true" : "false"));
-          inp.style.cssText = `position:absolute;left:${left}px;top:${top}px;width:${width}px;height:${height}px;`;
-          this.formLayer.appendChild(inp);
-          fieldEls.push({ el: inp, top });
-          continue;
-        } else if (a.radioButton) {
-          const inp = document.createElement("input");
-          inp.type  = "radio";
-          inp.name  = fieldName;
-          inp.value = a.exportValue ?? "true";
-          inp.checked = storedVal === inp.value || (!storedVal && a.fieldValue === a.exportValue);
-          inp.addEventListener("change", () => { if (inp.checked) onChange(fieldName, inp.value); });
-          inp.style.cssText = `position:absolute;left:${left}px;top:${top}px;width:${width}px;height:${height}px;`;
-          this.formLayer.appendChild(inp);
-          fieldEls.push({ el: inp, top });
-          continue;
-        } else {
-          continue;
-        }
-      } else if (a.fieldType === "Ch") {
-        const sel = document.createElement("select");
-        const opts: Array<{ exportValue: string; displayValue: string }> = a.options ?? [];
-        for (const opt of opts) {
-          const option = document.createElement("option");
-          option.value = opt.exportValue;
-          option.textContent = opt.displayValue;
-          if (opt.exportValue === initialVal) option.selected = true;
-          sel.appendChild(option);
-        }
-        sel.addEventListener("change", () => onChange(fieldName, sel.value));
-        el = sel;
-      } else {
-        continue;
-      }
-
-      el.style.position = "absolute";
-      el.style.left      = `${left}px`;
-      el.style.top       = `${top}px`;
-      el.style.width     = `${width}px`;
-      el.style.height    = `${height}px`;
-      el.style.fontSize  = `${fontSize}px`;
+      if (a.subtype !== "Widget" || !a.fieldName) continue;
+      const [x1, y1, x2, y2] = viewport.convertToViewportRectangle(a.rect);
+      const box = {
+        left: Math.min(x1, x2), top: Math.min(y1, y2),
+        width: Math.abs(x2 - x1), height: Math.abs(y2 - y1),
+      };
+      const el = createFieldControl(a, box, viewport.scale, storedValues.get(a.fieldName), onChange);
+      if (!el) continue;
       this.formLayer.appendChild(el);
-      fieldEls.push({ el, top });
+      fieldEls.push({ el, top: box.top });
     }
 
     fieldEls.sort((a, b) => a.top - b.top);
@@ -788,6 +719,8 @@ export class PdfPageView {
       els[i].addEventListener("keydown", (e: Event) => {
         const ke = e as KeyboardEvent;
         if (ke.key !== "ArrowDown" && ke.key !== "ArrowUp") return;
+        // Lists and multi-line fields use the arrows themselves.
+        if (els[i] instanceof HTMLTextAreaElement || els[i] instanceof HTMLSelectElement) return;
         ke.preventDefault();
         const next = ke.key === "ArrowDown" ? els[i + 1] : els[i - 1];
         if (next) next.focus();
