@@ -20,7 +20,7 @@
     "pdfjs-dist": "^6.5.438"
   },
   "devDependencies": {
-    "@playwright/test": "1.65.0",
+    "@playwright/test": "1.65.1",
     "@tauri-apps/cli": "^2.12.4",
     "@vitest/coverage-v8": "^5.1.0",
     "jsdom": "^31.0.1",
