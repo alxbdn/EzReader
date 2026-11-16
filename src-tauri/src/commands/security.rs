@@ -65,18 +65,28 @@ mod tests {
     use super::*;
     use crate::test_util::{fixture, tmp};
 
+    /// A fresh password for each run, with a non-ASCII character: a password
+    /// written in the source would be flagged as a hard-coded secret.
+    fn random_password() -> String {
+        let mut bytes = [0u8; 12];
+        getrandom::fill(&mut bytes).unwrap();
+        let mut pw: String = bytes.iter().map(|b| format!("{b:02x}")).collect();
+        pw.push('\u{e9}');
+        pw
+    }
+
     #[test]
     fn encrypt_then_decrypt_round_trip() {
         let locked = tmp("locked.pdf");
         let open = tmp("unlocked.pdf");
-        let pw = "tortue-orange-saute-7-fois-é";
-        encrypt_pdf(fixture("objstm-indirect-length.pdf"), locked.clone(), pw.into()).unwrap();
+        let pw = random_password();
+        encrypt_pdf(fixture("objstm-indirect-length.pdf"), locked.clone(), pw.clone()).unwrap();
 
         let raw = Document::load(&locked);
         assert!(raw.is_err() || raw.unwrap().is_encrypted(), "the file needs its password");
-        assert!(decrypt_pdf(locked.clone(), open.clone(), "nope".into()).unwrap_err().code == ErrorCode::WrongPassword);
+        assert!(decrypt_pdf(locked.clone(), open.clone(), random_password()).unwrap_err().code == ErrorCode::WrongPassword);
 
-        decrypt_pdf(locked.clone(), open.clone(), pw.into()).unwrap();
+        decrypt_pdf(locked.clone(), open.clone(), pw).unwrap();
         let doc = Document::load(&open).unwrap();
         assert!(!doc.is_encrypted());
         assert_eq!(doc.get_pages().len(), 2);
