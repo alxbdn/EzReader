@@ -298,6 +298,9 @@ export class Toolbar {
     this.infoBtn.classList.toggle("active", open);
   }
 
+  /** The file name in the title bar (the tab strip holds it in the active tab). */
+  get titleElement(): HTMLElement { return this.docTitleEl; }
+
   /** Shows the open file's name in the title bar, with a dot while it has unsaved changes. */
   setDocTitle(name: string | null, dirty: boolean): void {
     this.docName = name;

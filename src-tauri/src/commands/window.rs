@@ -1,7 +1,9 @@
 use crate::error::{CmdResult, PdfError};
 use std::sync::atomic::{AtomicU32, Ordering};
 
-use tauri::{AppHandle, Manager, WebviewUrl, WebviewWindowBuilder};
+use std::sync::Mutex;
+
+use tauri::{AppHandle, Emitter, Manager, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
 
 use crate::{AppState, StartupArgs};
 
@@ -44,7 +46,7 @@ pub async fn open_pages_in_new_window(
     extract.await.map_err(|e| e.to_string())??;
 
     crate::allow_viewing(&app, &out_str);
-    let args = StartupArgs { file_path: Some(out_str), should_print: false, unsaved: true };
+    let args = StartupArgs { file_path: Some(out_str), unsaved: true, ..Default::default() };
     // The pointer lands on the title bar, a little in from the left.
     open_window(&app, args, x.zip(y).map(|(x, y)| (x - 160.0, y - 16.0)))
 }
@@ -54,7 +56,7 @@ pub async fn open_pages_in_new_window(
 #[tauri::command]
 pub fn open_file_in_new_window(app: AppHandle, path: String) -> CmdResult<()> {
     crate::grants::check(&path)?;
-    open_window(&app, StartupArgs { file_path: Some(path), should_print: false, unsaved: false }, None)
+    open_window(&app, StartupArgs { file_path: Some(path), ..Default::default() }, None)
 }
 
 /// A new document window, opening what `args` says, at `position` (logical
@@ -92,6 +94,121 @@ pub(crate) fn open_window(app: &AppHandle, args: StartupArgs, position: Option<(
     Ok(())
 }
 
+// ── Tabs dragged between windows ─────────────────────────────────────────────
+
+/// The window a dragged tab is over right now (it shows where it lands).
+static TAB_HOVER: Mutex<Option<String>> = Mutex::new(None);
+
+/// A visible, not minimized EzReader window other than `own` under the
+/// screen point (`x`, `y`) (logical pixels), if any.
+fn window_at(app: &AppHandle, own: &str, x: f64, y: f64) -> Option<String> {
+    let mut hits: Vec<String> = app
+        .webview_windows()
+        .into_iter()
+        .filter(|(label, w)| {
+            if label == own || !w.is_visible().unwrap_or(false) || w.is_minimized().unwrap_or(false) {
+                return false;
+            }
+            let (Ok(sf), Ok(pos), Ok(size)) = (w.scale_factor(), w.outer_position(), w.outer_size()) else { return false };
+            let pos = pos.to_logical::<f64>(sf);
+            let size = size.to_logical::<f64>(sf);
+            contains((pos.x, pos.y, size.width, size.height), (x, y))
+        })
+        .map(|(label, _)| label)
+        .collect();
+    // Overlapping windows: the focused one is on top.
+    hits.sort_by_key(|l| !app.get_webview_window(l).and_then(|w| w.is_focused().ok()).unwrap_or(false));
+    hits.into_iter().next()
+}
+
+fn contains((left, top, width, height): (f64, f64, f64, f64), (x, y): (f64, f64)) -> bool {
+    x >= left && x < left + width && y >= top && y < top + height
+}
+
+/// Tells the window under the dragged tab, and the one it just left.
+fn set_hover(app: &AppHandle, target: Option<String>) {
+    let mut hover = TAB_HOVER.lock().unwrap();
+    if *hover == target {
+        return;
+    }
+    if let Some(old) = hover.take() {
+        let _ = app.emit_to(old.as_str(), "tab-drag-hover", false);
+    }
+    if let Some(new) = &target {
+        let _ = app.emit_to(new.as_str(), "tab-drag-hover", true);
+    }
+    *hover = target;
+}
+
+/// A tab of `window` is dragged out of its title bar, the pointer at the
+/// screen point (`x`, `y`): true when another EzReader window is under it,
+/// which then shows that the tab would land there.
+#[tauri::command]
+pub fn tab_drag_hover(app: AppHandle, window: WebviewWindow, x: f64, y: f64) -> bool {
+    let target = window_at(&app, window.label(), x, y);
+    let over = target.is_some();
+    set_hover(&app, target);
+    over
+}
+
+/// The tab drag is over.
+#[tauri::command]
+pub fn tab_drag_end(app: AppHandle) {
+    set_hover(&app, None);
+}
+
+/// Moves a tab of `window` (its document as `tab` describes it) to the
+/// EzReader window under the screen point (`x`, `y`), or to a new window
+/// there when there is none and `allow_new`. Returns "merged", "window" or,
+/// when nothing happened, "stayed".
+///
+/// `name`: the tab's file is a temp copy and the new window must show it
+/// under this name; it is copied to a fresh temp folder as that.
+#[tauri::command]
+pub async fn move_tab(
+    app: AppHandle,
+    window: WebviewWindow,
+    x: f64,
+    y: f64,
+    mut tab: StartupArgs,
+    name: Option<String>,
+    allow_new: bool,
+) -> CmdResult<String> {
+    let Some(file) = tab.file_path.clone() else { return Err(PdfError::from("No file".to_string())) };
+    crate::grants::check(&file)?;
+    if let Some(save) = &tab.save_path {
+        crate::grants::check(save)?;
+    }
+    tab.should_print = false;
+    let target = window_at(&app, window.label(), x, y);
+    set_hover(&app, None);
+    if target.is_none() && !allow_new {
+        return Ok("stayed".into());
+    }
+    if let Some(name) = name {
+        let n = NEXT_WINDOW.fetch_add(1, Ordering::Relaxed);
+        let dir = std::env::temp_dir().join(format!("ezreader-window-{}-{n}", std::process::id()));
+        std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+        let out = dir.join(safe_file_name(&name));
+        std::fs::copy(&file, &out).map_err(|e| e.to_string())?;
+        let out = out.to_string_lossy().into_owned();
+        crate::allow_viewing(&app, &out);
+        tab.file_path = Some(out);
+    }
+    match target.and_then(|l| app.get_webview_window(&l)) {
+        Some(w) => {
+            w.emit_to(w.label(), "tab-received", &tab).map_err(|e| e.to_string())?;
+            let _ = w.set_focus();
+            Ok("merged".into())
+        }
+        None => {
+            // The pointer lands on the title bar, a little in from the left.
+            open_window(&app, tab, Some((x - 160.0, y - 16.0)))?;
+            Ok("window".into())
+        }
+    }
+}
+
 /// A fresh temp folder for a new, never-saved document, which the commands
 /// may use (see `grants`): `%TEMP%\ezreader-window-new-…`.
 fn new_document_dir() -> CmdResult<std::path::PathBuf> {
@@ -119,7 +236,17 @@ pub async fn pictures_to_new_pdf(app: AppHandle, image_paths: Vec<String>, name:
 
 #[cfg(test)]
 mod tests {
-    use super::{new_document_dir, safe_file_name};
+    use super::{contains, new_document_dir, safe_file_name};
+
+    #[test]
+    fn a_point_is_in_a_window_up_to_its_edge() {
+        let w = (100.0, 50.0, 800.0, 600.0);
+        assert!(contains(w, (100.0, 50.0)));
+        assert!(contains(w, (899.0, 649.0)));
+        assert!(!contains(w, (900.0, 300.0)));
+        assert!(!contains(w, (99.0, 300.0)));
+        assert!(!contains(w, (300.0, 650.0)));
+    }
 
     #[test]
     fn new_documents_get_their_own_temp_folder() {

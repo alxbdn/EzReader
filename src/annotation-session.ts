@@ -5,7 +5,7 @@ function redactionsOf(anns: Annotation[]): string {
   return JSON.stringify(anns.filter((a) => a.kind === "redact"));
 }
 
-interface Snapshot {
+export interface Snapshot {
   /** Every annotation, as JSON. */
   annotations: string;
   /** The redactions among them, as JSON (to see whether a change touched one). */
@@ -32,6 +32,14 @@ export interface AnnotationSessionOptions {
  * Changes made by the user notify `onChange`; restoring a state (undo, redo,
  * discard, load) does not — the caller redraws and sets the dirty flag.
  */
+/** A parked `AnnotationSession` (see `snapshot()`). */
+export interface AnnotationSnapshot {
+  pages: Map<number, Annotation[]>;
+  undo: string[];
+  redo: string[];
+  draft: Snapshot | null;
+}
+
 export class AnnotationSession {
   private static readonly MAX_HISTORY = 50;
 
@@ -219,6 +227,25 @@ export class AnnotationSession {
       this.draft = null;
       this.emitPending(false);
     }
+  }
+
+  /** Everything, to park it while another tab is shown (see `restoreParked`). */
+  snapshot(): AnnotationSnapshot {
+    const pages = new Map<number, Annotation[]>();
+    for (const [n, list] of this.pages) pages.set(n, [...list]);
+    return { pages, undo: [...this.undoStack], redo: [...this.redoStack], draft: this.draft };
+  }
+
+  /** Back to a parked state, without notifying `onChange`. */
+  restoreParked(s: AnnotationSnapshot): void {
+    this.pages = new Map([...s.pages].map(([n, list]) => [n, [...list]]));
+    this.undoStack = [...s.undo];
+    this.redoStack = [...s.redo];
+    this.candidate = null;
+    this.depth = 0;
+    const was = this.draft !== null;
+    this.draft = s.draft;
+    if (was !== (s.draft !== null)) this.emitPending(s.draft !== null);
   }
 
   /** Forgets every annotation (and the history). */

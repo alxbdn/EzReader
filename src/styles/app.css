@@ -320,12 +320,170 @@ input::placeholder { color: var(--muted-foreground); }
   color: var(--accent-foreground);
 }
 
-.doc-title {
-  /* Centred on the window, whatever sits on either side. */
+/* ══ Tabs ══ */
+/* One document: just its name, centred on the window whatever sits on
+   either side. More: a quiet chip per document between the menus and the
+   window buttons. */
+.doc-tabs {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+.doc-tabs.single {
   position: absolute;
   left: 50%;
   transform: translateX(-50%);
   max-width: 28%;
+  justify-content: center;
+  pointer-events: none;
+}
+.doc-tabs.single:has(.doc-title.renaming) { max-width: 50%; }
+.doc-tabs.single .doc-tab { display: contents; }
+.doc-tabs:not(.single) {
+  flex: 1 1 auto;
+  justify-content: center;
+  gap: 2px;
+  margin: 0 8px;
+  height: 100%;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.doc-tabs:not(.single)::-webkit-scrollbar { display: none; }
+
+.doc-tabs:not(.single) .doc-tab {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex: 0 1 184px;
+  min-width: 84px;
+  height: 28px;
+  padding: 0 4px 0 10px;
+  border-radius: var(--radius-md);
+  color: var(--muted-foreground);
+  font-size: 12px;
+  white-space: nowrap;
+  cursor: default;
+  transition: background-color 0.12s ease-out, color 0.12s ease-out;
+}
+.doc-tabs:not(.single) .doc-tab:hover { background: color-mix(in srgb, var(--muted) 60%, var(--background)); }
+.doc-tabs:not(.single) .doc-tab.active {
+  background: var(--muted);
+  color: var(--foreground);
+  font-weight: 500;
+}
+/* A thin line between two inactive tabs, as in a browser. */
+.doc-tabs:not(.single) .doc-tab:not(.active):not(:hover) + .doc-tab:not(.active):not(:hover)::before {
+  content: "";
+  position: absolute;
+  left: -2px;
+  top: 8px;
+  bottom: 8px;
+  width: 1px;
+  background: var(--border);
+}
+.doc-tab-name {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.doc-tab-dirty {
+  display: none;
+  flex-shrink: 0;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--foreground);
+}
+.doc-tab.dirty .doc-tab-dirty { display: block; }
+.doc-tab.dirty .doc-tab-name { color: var(--foreground); }
+
+/* In a chip, the file name fills it and is no longer centred. */
+.doc-tabs:not(.single) .doc-title {
+  flex: 1 1 auto;
+  min-width: 0;
+  max-width: none;
+  justify-content: flex-start;
+  padding: 0;
+  gap: 4px;
+  color: inherit;
+  font-size: inherit;
+}
+.doc-tabs:not(.single) .doc-title-name { padding: 0 4px; margin-left: -5px; height: 22px; }
+.doc-tabs:not(.single) .doc-title.renaming .doc-title-input { max-width: 160px; }
+
+.doc-tab-close {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--muted-foreground);
+  opacity: 0;
+  cursor: pointer;
+}
+.doc-tab-close svg { width: 12px; height: 12px; }
+.doc-tab:hover .doc-tab-close,
+.doc-tab.active .doc-tab-close,
+.doc-tab-close:focus-visible { opacity: 1; }
+.doc-tab-close:hover { background: var(--accent); color: var(--foreground); }
+
+.doc-tab.dragging {
+  z-index: 1;
+  background: var(--muted);
+  color: var(--foreground);
+  box-shadow: var(--shadow-md);
+  transition: none;
+}
+.doc-tab.dragging.torn { opacity: 0.4; box-shadow: none; transform: none !important; }
+body.tab-dragging, body.tab-dragging * { cursor: grabbing !important; }
+
+/* A tab torn off the title bar: its name, and what releasing it does. */
+.tab-ghost {
+  position: fixed;
+  z-index: 1000;
+  pointer-events: none;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-width: 260px;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--popover);
+  color: var(--foreground);
+  box-shadow: var(--shadow-lg);
+  animation: pop-in 0.12s ease-out;
+}
+.tab-ghost-name {
+  font-size: 13px;
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tab-ghost-hint { font-size: 12px; color: var(--muted-foreground); }
+.tab-ghost-hint:empty { display: none; }
+
+/* Another window's tab is dragged over this one: it lands in the title bar. */
+#menubar-row.tab-drop-target {
+  background: var(--muted);
+  box-shadow: inset 0 0 0 1px var(--ring);
+  transition: background-color 0.12s ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .doc-tab, .tab-ghost { transition: none; animation: none; }
+}
+
+.doc-title {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -370,7 +528,6 @@ input::placeholder { color: var(--muted-foreground); }
 }
 .doc-title.renaming .doc-title-name { display: none; }
 .doc-title.renaming .doc-title-field { display: flex; }
-.doc-title.renaming { max-width: 50%; }
 
 .doc-title-input {
   min-width: 4ch;
