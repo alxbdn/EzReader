@@ -5,6 +5,10 @@ updates:
     schedule:
       interval: weekly
     groups:
+      # vitest and its plugins share an exact peer version: bumped one by
+      # one, npm ci fails on the conflict.
+      vitest:
+        patterns: ['vitest', '@vitest/*']
       npm-minor-and-patch:
         update-types: [minor, patch]
 
