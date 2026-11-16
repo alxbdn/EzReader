@@ -132,3 +132,14 @@ jobs:
             ezreader-${{ needs.build.outputs.version }}-win-x64.msix
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # Security and performance reports, plus the SBOMs, attached to the release.
+  reports:
+    needs: publish
+    permissions:
+      contents: write
+      security-events: read
+      actions: read
+    uses: ./.github/workflows/release-reports.yml
+    with:
+      tag: ${{ github.ref_name }}
