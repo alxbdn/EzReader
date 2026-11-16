@@ -32,7 +32,7 @@ getrandom = "0.4"
 flate2 = "1"
 crc32fast = "1"
 # Checks downloaded updates against the SHA-256 GitHub gives (already built for Tauri).
-sha2 = "0.10"
+sha2 = "0.11"
 
 [target.'cfg(windows)'.dependencies]
 winreg = "0.52"
