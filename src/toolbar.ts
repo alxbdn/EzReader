@@ -13,9 +13,7 @@ import { isMac } from "./platform";
 import { MacMenu } from "./mac-menu";
 import {
   ICON_INFO,
-  ICON_FULLSCREEN,
   ICON_PRESENT,
-  ICON_FULLSCREEN_EXIT,
   ICON_EYE,
   ICON_PEN,
   ICON_EDIT_TEXT,
@@ -365,17 +363,6 @@ export class Toolbar {
     void this.saveBtn.offsetWidth; // restart the animation
     this.saveBtn.classList.add(cls);
     window.setTimeout(() => this.saveBtn.classList.remove(cls), 1200);
-  }
-
-  private fullscreenBtn!: HTMLButtonElement;
-
-  /** Shows whether the window is full screen (the button then exits it). */
-  setFullscreen(on: boolean): void {
-    this.fullscreenBtn.innerHTML = on ? ICON_FULLSCREEN_EXIT : ICON_FULLSCREEN;
-    this.fullscreenBtn.classList.toggle("active", on);
-    this.fullscreenBtn.setAttribute("aria-pressed", String(on));
-    this._i18nTitle.set(this.fullscreenBtn, on ? "ttFullscreenExit" : "ttFullscreen");
-    this.fullscreenBtn.title = this._lastT?.[on ? "ttFullscreenExit" : "ttFullscreen"] ?? (on ? "Exit full screen (F11 or Esc)" : "Full screen (F11)");
   }
 
   setActiveSignature(id: string | null): void { this.tools.setActiveSignature(id); }
@@ -741,12 +728,7 @@ export class Toolbar {
     this.sidebarBtn.addEventListener("click", () => this.emit({ type: "toggle-sidebar" }));
 
     // Save, then undo / redo
-    this.saveBtn = this.btn(ICON_SAVE, "Save (Ctrl+S)", "btn tb-save");
-    const saveLabel = document.createElement("span");
-    saveLabel.textContent = "Save";
-    saveLabel.className = "tb-save-label";
-    this.saveBtn.append(saveLabel);
-    this.reg(saveLabel, "btnSave");
+    this.saveBtn = this.btn(ICON_SAVE, "Save (Ctrl+S)", "icon-btn tb-square tb-save");
     this.reg(this.saveBtn, undefined, "ttSave");
     this.saveBtn.addEventListener("click", () => this.emit({ type: "save" }));
 
@@ -857,23 +839,21 @@ export class Toolbar {
     const presentBtn = this.btn(ICON_PRESENT, "Present (F5)", "icon-btn tb-square");
     this.reg(presentBtn, undefined, "ttPresent");
     presentBtn.addEventListener("click", () => this.emit({ type: "present" }));
-    this.fullscreenBtn = this.btn(ICON_FULLSCREEN, "Full screen (F11)", "icon-btn tb-square");
-    this.reg(this.fullscreenBtn, undefined, "ttFullscreen");
-    this.fullscreenBtn.addEventListener("click", () => this.emit({ type: "fullscreen" }));
     const right = document.createElement("div");
     right.className = "toolbar-group tb-right";
-    right.append(exportBtn, compressBtn, this.lockBtn, this.infoBtn, presentBtn, this.fullscreenBtn, this.sep(), this.search.el);
+    right.append(exportBtn, compressBtn, this.lockBtn, this.infoBtn, presentBtn, this.sep(), this.search.el);
 
-    // Left group, Read / Annotate / Edit in the middle of the bar, right group.
+    // Left group (side panel, then Read / Annotate / Edit), right group.
     const left = document.createElement("div");
     left.className = "toolbar-group tb-left";
     left.append(
-      this.sidebarBtn, this.saveBtn, this.segment(undo, redo), this.sep(),
+      this.sidebarBtn, modeSeg, this.sep(),
+      this.saveBtn, this.segment(undo, redo), this.sep(),
       this.segment(...this.pointerBtns),
       this.segment(zoomOut, this.zoomLabel, this.zoomInput, zoomIn, realSizeBtn),
       brightnessSeg, columnsSeg,
     );
-    main.append(left, modeSeg, right);
+    main.append(left, right);
     this.updateLayout(null, "vertical");
     this.syncModeBtns();
 
@@ -899,8 +879,8 @@ export class Toolbar {
     const open = pill.classList.contains("open");
     // Laid out on one line, how much wider than the row the content is, with
     // the search box at its final width (not the one mid-animation). The side
-    // groups stretch to keep the modes centred, so add up what they hold.
-    const [left, modes, right] = Array.from(main.children) as HTMLElement[];
+    // groups stretch to fill the row, so add up what they hold.
+    const [left, right] = Array.from(main.children) as HTMLElement[];
     const gapOf = (el: HTMLElement) => parseFloat(getComputedStyle(el).columnGap) || 0;
     const held = (group: HTMLElement): number => {
       const shown = (Array.from(group.children) as HTMLElement[]).filter((c) => c.offsetWidth > 0);
@@ -910,10 +890,8 @@ export class Toolbar {
       const style = getComputedStyle(main);
       const room = main.clientWidth - (parseFloat(style.paddingLeft) || 0) - (parseFloat(style.paddingRight) || 0);
       const rightW = held(right) - pill.offsetWidth + (open ? searchOpen[level] : 34);
-      // The modes sit in the middle when both sides fit in half of what is
-      // left; otherwise they slide over (CSS), and only a row too full for
-      // everything gets compacted.
-      return held(left) + modes.offsetWidth + rightW + 2 * gapOf(main) - room;
+      // Only a row too full for everything gets compacted.
+      return held(left) + rightW + gapOf(main) - room;
     };
     main.style.flexWrap = "nowrap";
     main.classList.remove(...levels);
