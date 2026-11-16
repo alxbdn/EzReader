@@ -73,7 +73,7 @@ curl -sL https://api.github.com/repos/alxbdn/EzReader/releases/latest | grep -o 
 chmod +x ezreader && ./ezreader
 ```
 
-To update: `winget upgrade --id 9P9PVN4DRVS8`, `brew upgrade --cask ezreader`, or run the same GitHub commands again.
+The welcome screen shows whether your version is up to date: a green check, or a red cross and an *Update* button that installs the new version (the Store version opens the Microsoft Store). You can also update by hand: `winget upgrade --id 9P9PVN4DRVS8`, `brew upgrade --cask ezreader`, or run the same GitHub commands again.
 
 ### Download the files
 
@@ -174,6 +174,7 @@ Extracted, split and rearranged files contain nothing from the pages you left ou
 EzReader never sends your documents or your usage anywhere. Full details in the [privacy policy](PRIVACY.md).
 
 - No account, no AI, no telemetry
+- One request on its own: the latest version number, from GitHub, at startup
 - PDFs open in a locked-down viewer: document scripts never run, and the page cannot reach the network
 - The app only reads and writes the files you open or pick in a dialog
 - Its temporary copies, including decrypted ones, are removed when you close it, or on the next start after a crash

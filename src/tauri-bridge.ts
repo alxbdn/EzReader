@@ -210,6 +210,29 @@ export async function openUrl(url: string): Promise<void> {
   return call<void>("open_url", { url });
 }
 
+/** How this copy was installed: decides what "update" does. */
+export type UpdateChannel = "store" | "installer" | "portable" | "deb" | "homebrew" | "dmg" | "other";
+
+export interface UpdateStatus {
+  current: string;
+  latest: string;
+  upToDate: boolean;
+  channel: UpdateChannel;
+}
+
+/** What the update button did (see src-tauri/src/commands/update.rs). */
+export type UpdateOutcome = "restarting" | "opened" | "otherWindows";
+
+/** Asks GitHub for the latest release. Rejects offline. */
+export async function checkForUpdate(): Promise<UpdateStatus> {
+  return call<UpdateStatus>("check_for_update");
+}
+
+/** Installs the latest release; on "restarting" the app closes and reopens. */
+export async function installUpdate(): Promise<UpdateOutcome> {
+  return call<UpdateOutcome>("install_update");
+}
+
 /** One page of the document built by `rearrangePages`, in output order. */
 export type PageSlot =
   | { kind: "original"; page: number; rotation: number }

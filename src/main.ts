@@ -8,6 +8,7 @@ import { tauriBackend } from "./tauri-backend";
 import { fileNameOf } from "./file-paths";
 import { mountWelcomeDots } from "./welcome-dots";
 import { WelcomePrefs } from "./welcome-prefs";
+import { UpdateBadge } from "./update-badge";
 import { PdfViewer, PdfPageView, renderRedactedPages, renderStraightenedPages } from "./pdf-viewer";
 import { AdjustView, type PageSetting } from "./adjust-view";
 import { Toolbar } from "./toolbar";
@@ -76,6 +77,8 @@ import {
   setLauncherRatioLock,
   setResizeBorder,
   isDefaultPdfReader,
+  checkForUpdate,
+  installUpdate,
   registerPdfHandler,
   registerPrintVerb,
   unregisterPdfHandler,
@@ -1323,7 +1326,18 @@ const welcomePrefs = new WelcomePrefs(document.getElementById("welcome-screen")!
   },
 });
 void welcomePrefs.refresh();
-settingsModal.onChange(() => welcomePrefs.render());
+// Up to date? Checked once per launch, next to the language picker.
+const updateBadge = new UpdateBadge(welcomePrefs.root, {
+  t: () => getTranslations(settingsModal.getSettings().language),
+  check: () => checkForUpdate(),
+  install: () => installUpdate(),
+  notify: (text, isError) => showToast(text, isError),
+});
+void updateBadge.refresh();
+settingsModal.onChange(() => {
+  welcomePrefs.render();
+  updateBadge.render();
+});
 // Back from Windows' Default apps page: show what the user chose.
 window.addEventListener("focus", () => void welcomePrefs.refresh());
 
