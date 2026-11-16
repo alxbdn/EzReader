@@ -34,26 +34,46 @@ Everything runs on your computer: no account, no subscription, no AI, no telemet
 
 Pick your system and paste the command.
 
-**Windows** 10 (2004+) and 11, in PowerShell or the Terminal, from the Microsoft Store:
+### Windows
+
+Windows 10 (2004+) and 11, 64-bit. From the Microsoft Store, in PowerShell or the Terminal:
 
 ```powershell
 winget install --id 9P9PVN4DRVS8 --source msstore --accept-package-agreements
 ```
 
-**macOS** 11+, Intel and Apple Silicon, with [Homebrew](https://brew.sh):
+Without the Store, this downloads the latest installer from GitHub and runs it:
+
+```powershell
+$u = (irm https://api.github.com/repos/alxbdn/EzReader/releases/latest).assets.browser_download_url -like '*-win-x64-setup.exe'
+iwr "$u" -OutFile "$env:TEMP\ezreader-setup.exe"; & "$env:TEMP\ezreader-setup.exe"
+```
+
+### macOS
+
+macOS 11+, Intel and Apple Silicon, with [Homebrew](https://brew.sh):
 
 ```bash
 brew install --cask alxbdn/ezreader/ezreader
 ```
 
-**Linux** x64, Debian, Ubuntu and derivatives:
+### Linux
+
+x64. On Debian, Ubuntu and derivatives, this downloads the latest package and installs it:
 
 ```bash
 curl -sL https://api.github.com/repos/alxbdn/EzReader/releases/latest | grep -o 'https://[^"]*_amd64\.deb' | xargs curl -LO
 sudo apt install ./ezreader_*_amd64.deb
 ```
 
-To update: `winget upgrade --id 9P9PVN4DRVS8`, `brew upgrade --cask ezreader`, or the same Linux commands again.
+On any other distribution, the portable app needs nothing installed:
+
+```bash
+curl -sL https://api.github.com/repos/alxbdn/EzReader/releases/latest | grep -o 'https://[^"]*-linux-x64"' | tr -d '"' | xargs curl -L -o ezreader
+chmod +x ezreader && ./ezreader
+```
+
+To update: `winget upgrade --id 9P9PVN4DRVS8`, `brew upgrade --cask ezreader`, or run the same GitHub commands again.
 
 ### Download the files
 
