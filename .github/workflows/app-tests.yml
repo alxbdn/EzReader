@@ -73,7 +73,7 @@ jobs:
 
       - name: Upload screenshots of failed tests
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: e2e-failures
           path: e2e/results/
@@ -113,14 +113,14 @@ jobs:
 
       - name: Upload the new baselines
         if: ${{ inputs.update_baselines }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: visual-baselines
           path: visual/__screenshots__/
 
       - name: Upload the differences
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: visual-diff
           path: |
@@ -166,7 +166,7 @@ jobs:
 
       - name: Upload the saved files
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: corpus-saved-files
           path: ${{ runner.temp }}/corpus-out/files/
