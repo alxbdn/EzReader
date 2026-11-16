@@ -1,0 +1,164 @@
+name: Release reports
+
+# Attaches to a GitHub release:
+#   - a security report (PDF): npm audit, cargo deny, open CodeQL alerts and
+#     the fuzzing jobs of the Security workflow, checked on the release commit;
+#   - a performance report (PDF) and its raw measurements, from the load test;
+#   - the software bills of materials (CycloneDX) of the JavaScript and Rust
+#     dependencies.
+#
+# Called by the Release workflow once the release is published. Run it by
+# hand to add or refresh the reports of an existing release.
+
+on:
+  workflow_call:
+    inputs:
+      tag:
+        description: Release tag (e.g. v1.0.1)
+        required: true
+        type: string
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag de la release (ex: v1.0.0)'
+        required: true
+        type: string
+
+permissions:
+  contents: write
+  security-events: read
+  actions: read
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+  TAG: ${{ inputs.tag }}
+
+jobs:
+  security:
+    name: Security report and SBOMs
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.tag }}
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Install dependencies and Chromium
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+
+      - name: Version and commit
+        id: meta
+        run: |
+          echo "version=${TAG#v}" >> "$GITHUB_OUTPUT"
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: SCA - npm audit
+        run: npm audit --json > npm-audit.json || true
+
+      - uses: taiki-e/install-action@ab49d3c64680143e184118bed66a46419fc15519 # v2.90.5
+        with:
+          tool: cargo-deny,cargo-cyclonedx
+
+      - name: SCA - cargo deny
+        run: |
+          cargo deny -L info --manifest-path src-tauri/Cargo.toml --format json \
+            check advisories licenses bans sources 2> cargo-deny.jsonl || true
+
+      - name: SAST - open CodeQL alerts
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh api "repos/${{ github.repository }}/code-scanning/alerts?state=open&per_page=100" \
+            > codeql-alerts.json || echo null > codeql-alerts.json
+
+      - name: Dynamic - fuzzing jobs of the Security workflow
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SHA: ${{ steps.meta.outputs.sha }}
+        run: |
+          # The run on the release commit, else the latest one on main.
+          RUN=$(gh api "repos/${{ github.repository }}/actions/workflows/security.yml/runs?head_sha=$SHA&status=completed&per_page=1" -q '.workflow_runs[0]')
+          if [ -z "$RUN" ] || [ "$RUN" = "null" ]; then
+            RUN=$(gh api "repos/${{ github.repository }}/actions/workflows/security.yml/runs?branch=main&status=completed&per_page=1" -q '.workflow_runs[0]')
+          fi
+          if [ -n "$RUN" ] && [ "$RUN" != "null" ]; then
+            ID=$(echo "$RUN" | jq -r .id)
+            JOBS=$(gh api "repos/${{ github.repository }}/actions/runs/$ID/jobs?per_page=100" -q '.jobs')
+            echo "$RUN" | jq --argjson jobs "$JOBS" '{html_url, head_sha, created_at, jobs: [$jobs[] | {name, conclusion}]}' > security-jobs.json
+          else
+            echo null > security-jobs.json
+          fi
+
+      - name: Software bills of materials (CycloneDX)
+        run: |
+          npm sbom --sbom-format cyclonedx --omit dev > "ezreader-${TAG#v}-sbom-npm.cdx.json"
+          cargo cyclonedx --manifest-path src-tauri/Cargo.toml --format json --spec-version 1.5
+          cp src-tauri/*.cdx.json "ezreader-${TAG#v}-sbom-cargo.cdx.json"
+
+      - name: Security report
+        run: |
+          node scripts/release-report.mjs security \
+            --version "${{ steps.meta.outputs.version }}" --commit "${{ steps.meta.outputs.sha }}" \
+            --repo "${{ github.repository }}" \
+            --npm npm-audit.json --deny cargo-deny.jsonl --codeql codeql-alerts.json --runs security-jobs.json \
+            --out "ezreader-${TAG#v}-security-report.pdf"
+
+      - name: Attach to the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release upload "$TAG" --clobber --repo "${{ github.repository }}" \
+            "ezreader-${TAG#v}-security-report.pdf" \
+            "ezreader-${TAG#v}-sbom-npm.cdx.json" \
+            "ezreader-${TAG#v}-sbom-cargo.cdx.json"
+
+  performance:
+    name: Performance report
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.tag }}
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Install dependencies and Chromium
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+
+      - name: Build the front end
+        run: npm run build
+
+      # The same quick load test as on pull requests. A figure past its
+      # threshold is shown in the report rather than blocking the release.
+      - name: Load test
+        continue-on-error: true
+        run: |
+          node perf/make-big-pdf.mjs "$RUNNER_TEMP/big.pdf" 1500
+          node perf/stress.mjs "$RUNNER_TEMP/big.pdf" --rounds 3 --out "ezreader-${TAG#v}-perf-results.json"
+
+      - name: Performance report
+        run: |
+          node scripts/release-report.mjs performance \
+            --version "${TAG#v}" --commit "$(git rev-parse HEAD)" \
+            --results "ezreader-${TAG#v}-perf-results.json" \
+            --out "ezreader-${TAG#v}-performance-report.pdf"
+
+      - name: Attach to the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          FILES=("ezreader-${TAG#v}-performance-report.pdf")
+          [ -f "ezreader-${TAG#v}-perf-results.json" ] && FILES+=("ezreader-${TAG#v}-perf-results.json")
+          gh release upload "$TAG" --clobber --repo "${{ github.repository }}" "${FILES[@]}"
