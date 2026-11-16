@@ -9,6 +9,10 @@ Security fixes go into the latest release. Please update to it before reporting 
 | Latest release (1.x) | Yes |
 | Older releases | No |
 
+**Support period.** Security updates are free, for every version, on every channel. A major version (1.x today) receives them for as long as it is the current one, and for at least 12 months after the next major version comes out. Every update within a major version is a drop-in replacement, so staying on the latest release keeps you supported. The end date of a major version's support is announced here and on the releases page at least 6 months in advance.
+
+**How updates reach you.** The Microsoft Store updates EzReader for you; Homebrew does with `brew upgrade --cask ezreader`. The GitHub build checks for a new version at start-up and installs it in one click, after checking the downloaded file against the SHA-256 digest GitHub publishes for it.
+
 ## Reporting a vulnerability
 
 Please do not open a public issue for a security problem.
@@ -25,7 +29,12 @@ Include what you can:
 
 - You get an answer within **7 days**, usually much sooner.
 - Once the problem is confirmed, a fix is released within **60 days**, and as soon as possible for a serious one.
-- A GitHub security advisory is published with the fixed release, crediting you unless you prefer otherwise.
+- A GitHub security advisory is published with the fixed release, with a CVE identifier when it applies, crediting you unless you prefer otherwise. It says what was affected, which version fixes it and what to do.
+- Details stay private until the fix is out, or until 90 days have passed, whichever comes first. If a problem lies in a dependency, it is also reported to that project.
+
+## Actively exploited vulnerabilities
+
+A vulnerability that is being exploited in the wild is handled first: the fix ships as soon as it is ready, and the advisory says so. EzReader is free, non-commercial open-source software and is currently outside the scope of the EU Cyber Resilience Act. If that changes, such vulnerabilities and severe incidents will also be reported to ENISA through its single reporting platform within the CRA's deadlines (24 hours for an early warning, 72 hours for a notification, 14 days after the fix for a final report). See [docs/cra](docs/cra/README.md).
 
 ## How EzReader is checked
 
@@ -37,7 +46,7 @@ Every push, every pull request and every week, GitHub Actions runs:
 
 Dependabot proposes dependency updates every week, and third-party actions are pinned to a commit.
 
-Each release carries a **security report** (PDF), a **performance report** and the **software bills of materials** (CycloneDX) of its dependencies, in its assets on the [releases page](https://github.com/alxbdn/EzReader/releases).
+A release is only published if all these scans pass. Each release carries a **security report** (PDF), a **performance report**, the **software bills of materials** (CycloneDX) of its dependencies and signed **build provenance** (SLSA, check it with `gh attestation verify <file> --repo alxbdn/EzReader`), in its assets on the [releases page](https://github.com/alxbdn/EzReader/releases).
 
 ## Design
 
