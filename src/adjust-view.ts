@@ -351,7 +351,7 @@ export class AdjustView {
         const ctx = canvas.getContext("2d", { willReadFrequently: true })!;
         ctx.fillStyle = "#fff";
         ctx.fillRect(0, 0, canvas.width, canvas.height);
-        await page.render({ canvasContext: ctx, viewport }).promise;
+        await page.render({ canvas: ctx.canvas, viewport }).promise;
         page.cleanup();
         return { canvas, widthPt: unit.width, heightPt: unit.height };
       })();
@@ -403,7 +403,7 @@ export class AdjustView {
         const c = document.createElement("canvas");
         c.width = Math.ceil(viewport.width);
         c.height = Math.ceil(viewport.height);
-        await page.render({ canvasContext: c.getContext("2d")!, viewport }).promise;
+        await page.render({ canvas: c, viewport }).promise;
         if (opened !== this.opened) return;
         pic.style.aspectRatio = `${c.width} / ${c.height}`;
         pic.append(c);
