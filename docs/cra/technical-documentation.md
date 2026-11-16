@@ -33,7 +33,7 @@ User information and instructions: [README](../../README.md), [SECURITY.md](../.
 | Network | Version check and update download from GitHub | HTTPS only; the downloaded installer must match the SHA-256 digest published by GitHub (`src-tauri/src/commands/update.rs`) |
 | Build and supply chain | Dependencies and CI actions | Lockfiles, Dependabot, `npm audit`, `cargo deny` (advisories, licences, sources), actions pinned to a commit, OpenSSF Scorecard |
 
-**Production.** Every release is built by GitHub Actions from a version tag (`.github/workflows/release.yml`), tested by installing it on a clean runner (`install-test.yml`), and published with its SBOMs and reports (`release-reports.yml`). Store packages are signed by Microsoft. macOS builds are only ad-hoc signed (not notarized), and the Windows installer on GitHub is not Authenticode-signed.
+**Production.** Every release is built by GitHub Actions (`.github/workflows/bump.yml`, or `release.yml` for a tag pushed by hand) only after the security scans pass (`security.yml`), tested by installing it on a clean runner (`install-test.yml`), attested with signed SLSA build provenance, and published with its SBOMs and reports (`release-reports.yml`). Store packages are signed by Microsoft. macOS builds are only ad-hoc signed (not notarized), and the Windows installer on GitHub is not Authenticode-signed.
 
 ## 3. Cybersecurity risk assessment
 
@@ -42,7 +42,7 @@ User information and instructions: [README](../../README.md), [SECURITY.md](../.
 | Malicious PDF exploits a parser bug (crash, memory corruption) | High | Medium | Memory-safe Rust, fuzzing, hostile-input tests, quick dependency updates |
 | Document script or embedded content runs code or reaches the network | High | Low | Scripts never run, strict CSP, no network from the viewer |
 | Webview compromise reaches arbitrary files | High | Low | Capability allow-list, per-file grants |
-| Tampered update | High | Low | HTTPS, SHA-256 digest check, Microsoft-signed Store packages. Residual: unsigned Windows installer and non-notarized macOS app on GitHub |
+| Tampered update | High | Low | HTTPS, SHA-256 digest check, signed SLSA build provenance, Microsoft-signed Store packages. Residual: unsigned Windows installer and non-notarized macOS app on GitHub |
 | Vulnerable dependency | Medium | Medium | SBOM, weekly audits, Dependabot security updates |
 | Leak of document content | High | Low | No telemetry, no upload; temporary copies deleted at exit |
 | Weak PDF password protection | Medium | Low | Standard PDF encryption through `lopdf`, no custom cryptography |

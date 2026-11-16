@@ -35,14 +35,14 @@ Status against Annex I. ✅ met, 🟡 partly met, ⬜ only needed if the CRA app
 | 4. Public disclosure of fixed vulnerabilities | ✅ | GitHub security advisories (with CVE through GitHub's CNA) published with the fix |
 | 5. Coordinated vulnerability disclosure policy | ✅ | [SECURITY.md](../../SECURITY.md) |
 | 6. Contact address for reports | ✅ | GitHub private vulnerability reporting, enabled |
-| 7. Secure distribution of updates | 🟡 | HTTPS only; the in-app updater checks the SHA-256 digest GitHub publishes for each asset; Store packages are signed by Microsoft. The Windows installer on GitHub is not Authenticode-signed and the macOS app is not notarized |
+| 7. Secure distribution of updates | 🟡 | HTTPS only; the in-app updater checks the SHA-256 digest GitHub publishes for each asset; every package has signed SLSA build provenance (`gh attestation verify`); Store packages are signed by Microsoft. The Windows installer on GitHub is not Authenticode-signed and the macOS app is not notarized |
 | 8. Free security updates, with advisories | ✅ | Every update is free; advisories explain the fix |
 
 ### Part I: product security
 
 | Requirement | Status | How |
 |---|---|---|
-| (a) No known exploitable vulnerability at release | 🟡 | Scans run on `main` before tagging, but the release workflow does not itself block on a failing scan |
+| (a) No known exploitable vulnerability at release | ✅ | The release workflows run `npm audit`, `cargo deny`, CodeQL and fuzzing first, and publish nothing if one fails |
 | (b) Secure by default | ✅ | No account, no open port, no telemetry; document scripts never run |
 | (c) Security updates, automatic by default | 🟡 | The app checks for updates at start-up and offers a one-click install; the Store updates automatically and Homebrew through `brew upgrade`. The GitHub build does not install on its own |
 | (d) Protection from unauthorized access | ✅ | Tauri capabilities limit the webview to window commands; file access only for files the user opens or picks |
@@ -71,11 +71,10 @@ Status against Annex I. ✅ met, 🟡 partly met, ⬜ only needed if the CRA app
 Useful now, whatever happens:
 
 1. **Sign the GitHub builds**: Authenticode for the Windows installer (for example SignPath's free plan for open-source projects), and Developer ID signing plus notarization for macOS.
-2. **Block releases on the security scans**: run `npm audit`, `cargo deny` and CodeQL as a required step of the release workflow.
 
 Only if EzReader is monetized:
 
-3. Commit to a support period of at least 5 years and show its end date on the Store listing and download page.
-4. Complete the technical documentation, sign the EU declaration of conformity, add the CE marking and the Annex II information.
-5. Register with the ENISA single reporting platform.
-6. Decide on automatic installation of security updates for the GitHub build (with an opt-out).
+2. Commit to a support period of at least 5 years and show its end date on the Store listing and download page.
+3. Complete the technical documentation, sign the EU declaration of conformity, add the CE marking and the Annex II information.
+4. Register with the ENISA single reporting platform.
+5. Decide on automatic installation of security updates for the GitHub build (with an opt-out).
