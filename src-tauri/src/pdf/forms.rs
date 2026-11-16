@@ -583,7 +583,7 @@ fn text_string(text: &str) -> Object {
 fn text_of(o: &Object) -> Option<String> {
     let Object::String(bytes, _) = o else { return None };
     if let Some(rest) = bytes.strip_prefix(&[0xFE, 0xFF]) {
-        let units: Vec<u16> = rest.chunks_exact(2).map(|c| u16::from_be_bytes([c[0], c[1]])).collect();
+        let units: Vec<u16> = rest.as_chunks::<2>().0.iter().map(|&c| u16::from_be_bytes(c)).collect();
         return String::from_utf16(&units).ok();
     }
     Some(String::from_utf8(bytes.clone()).unwrap_or_else(|_| bytes.iter().map(|&b| b as char).collect()))
