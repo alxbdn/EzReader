@@ -49,7 +49,8 @@ const FONT_NAME: &str = "EzText";
 const GLYPH_WIDTH: f64 = 500.0;
 
 /// Page entries that describe the old content and no longer apply.
-const STALE_PAGE_KEYS: [&[u8]; 7] = [b"Thumb", b"PieceInfo", b"CropBox", b"BleedBox", b"TrimBox", b"ArtBox", b"Metadata"];
+const STALE_PAGE_KEYS: [&[u8]; 7] =
+    [b"Thumb", b"PieceInfo", b"CropBox", b"BleedBox", b"TrimBox", b"ArtBox", b"Metadata"];
 
 pub fn straighten_pages(doc: &mut Document, pages: &[StraightenedPage]) -> Result<(), String> {
     if pages.is_empty() {
@@ -61,9 +62,7 @@ pub fn straighten_pages(doc: &mut Document, pages: &[StraightenedPage]) -> Resul
 
     for sp in pages {
         let rp = &sp.picture;
-        let page_id = *page_ids
-            .get(&rp.page)
-            .ok_or_else(|| format!("page {} not found in document", rp.page))?;
+        let page_id = *page_ids.get(&rp.page).ok_or_else(|| format!("page {} not found in document", rp.page))?;
 
         let (img_id, mut ops) = redact::add_picture(doc, rp)?;
         ops.push_str(&text_ops(&sp.text));
@@ -115,7 +114,12 @@ fn text_ops(runs: &[TextRun]) -> String {
         let f = redact::fmt;
         ops.push_str(&format!(
             "BT 3 Tr /{FONT_NAME} 1 Tf {} {} {} {} {} {} Tm {} Tz <{hex}> Tj ET\n",
-            f(cos * s), f(sin * s), f(-sin * s), f(cos * s), f(run.x0), f(run.y0),
+            f(cos * s),
+            f(sin * s),
+            f(-sin * s),
+            f(cos * s),
+            f(run.x0),
+            f(run.y0),
             f(100.0 * length / natural),
         ));
     }
@@ -243,12 +247,19 @@ mod tests {
             "Type" => "Annot", "Subtype" => "Widget", "FT" => "Tx", "T" => Object::string_literal("name"),
             "Rect" => vec![50.into(), 50.into(), 150.into(), 70.into()],
         });
-        let content = doc.add_object(Stream::new(dictionary! {}, b"BT /F1 12 Tf 72 720 Td (Secret original) Tj ET".to_vec()));
-        doc.objects.insert(page_id, Object::Dictionary(dictionary! {
-            "Type" => "Page", "Parent" => pages_id, "MediaBox" => vec![0.into(), 0.into(), 300.into(), 400.into()],
-            "Contents" => content, "Annots" => vec![link.into(), field.into()], "StructParents" => 0,
-        }));
-        doc.objects.insert(pages_id, Object::Dictionary(dictionary! { "Type" => "Pages", "Kids" => vec![page_id.into()], "Count" => 1 }));
+        let content =
+            doc.add_object(Stream::new(dictionary! {}, b"BT /F1 12 Tf 72 720 Td (Secret original) Tj ET".to_vec()));
+        doc.objects.insert(
+            page_id,
+            Object::Dictionary(dictionary! {
+                "Type" => "Page", "Parent" => pages_id, "MediaBox" => vec![0.into(), 0.into(), 300.into(), 400.into()],
+                "Contents" => content, "Annots" => vec![link.into(), field.into()], "StructParents" => 0,
+            }),
+        );
+        doc.objects.insert(
+            pages_id,
+            Object::Dictionary(dictionary! { "Type" => "Pages", "Kids" => vec![page_id.into()], "Count" => 1 }),
+        );
         let tree = doc.add_object(dictionary! { "Type" => "StructTreeRoot" });
         let catalog = doc.add_object(dictionary! {
             "Type" => "Catalog", "Pages" => pages_id, "StructTreeRoot" => tree,
@@ -279,7 +290,8 @@ mod tests {
         // The warp here doubles x and y.
         let map = [2.0, 0.0, 0.0, 0.0, 2.0, 0.0, 0.0, 0.0, 1.0];
         let text = vec![TextRun { text: "Hello world".into(), x0: 72.0, y0: 700.0, x1: 160.0, y1: 700.0, size: 12.0 }];
-        straighten_pages(&mut doc, &[StraightenedPage { picture: picture(1, [0.0, 0.0, 300.0, 400.0]), map, text }]).unwrap();
+        straighten_pages(&mut doc, &[StraightenedPage { picture: picture(1, [0.0, 0.0, 300.0, 400.0]), map, text }])
+            .unwrap();
         let mut bytes = Vec::new();
         doc.save_to(&mut bytes).unwrap();
         let doc = Document::load_mem(&bytes).unwrap();
@@ -292,9 +304,11 @@ mod tests {
         let annots = page.get(b"Annots").unwrap().as_array().unwrap();
         assert_eq!(annots.len(), 2, "link and field stay");
         let link = doc.get_dictionary(annots[0].as_reference().unwrap()).unwrap();
-        let rect: Vec<f32> = link.get(b"Rect").unwrap().as_array().unwrap().iter().map(|o| o.as_float().unwrap()).collect();
+        let rect: Vec<f32> =
+            link.get(b"Rect").unwrap().as_array().unwrap().iter().map(|o| o.as_float().unwrap()).collect();
         assert_eq!(rect, vec![200.0, 200.0, 400.0, 240.0]);
-        let quads: Vec<f32> = link.get(b"QuadPoints").unwrap().as_array().unwrap().iter().map(|o| o.as_float().unwrap()).collect();
+        let quads: Vec<f32> =
+            link.get(b"QuadPoints").unwrap().as_array().unwrap().iter().map(|o| o.as_float().unwrap()).collect();
         assert_eq!(quads[..2], [200.0, 240.0]);
 
         let catalog = doc.catalog().unwrap();

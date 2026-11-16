@@ -58,7 +58,11 @@ fn longest_page_side(doc: &Document) -> f64 {
             }
         }
     }
-    if longest > 0.0 { longest } else { 842.0 }
+    if longest > 0.0 {
+        longest
+    } else {
+        842.0
+    }
 }
 
 /// Images used as masks of other images: they stay as they are.
@@ -96,7 +100,11 @@ fn decode_picture(stream: &lopdf::Stream) -> Option<DynamicImage> {
     match single_filter(dict)?.as_slice() {
         b"DCTDecode" => {
             let img = image::load_from_memory_with_format(&stream.content, image::ImageFormat::Jpeg).ok()?;
-            Some(if channels == 1 { DynamicImage::ImageLuma8(img.to_luma8()) } else { DynamicImage::ImageRgb8(img.to_rgb8()) })
+            Some(if channels == 1 {
+                DynamicImage::ImageLuma8(img.to_luma8())
+            } else {
+                DynamicImage::ImageRgb8(img.to_rgb8())
+            })
         }
         b"FlateDecode" => {
             let raw = stream.decompressed_content().ok()?;
@@ -117,7 +125,9 @@ fn encode_jpeg(img: &DynamicImage, quality: u8) -> Option<Vec<u8>> {
     let mut out = std::io::Cursor::new(Vec::<u8>::new());
     let encoder = image::codecs::jpeg::JpegEncoder::new_with_quality(&mut out, quality);
     match img {
-        DynamicImage::ImageLuma8(g) => encoder.write_image(g.as_raw(), g.width(), g.height(), ExtendedColorType::L8).ok()?,
+        DynamicImage::ImageLuma8(g) => {
+            encoder.write_image(g.as_raw(), g.width(), g.height(), ExtendedColorType::L8).ok()?
+        }
         other => {
             let rgb = other.to_rgb8();
             encoder.write_image(rgb.as_raw(), rgb.width(), rgb.height(), ExtendedColorType::Rgb8).ok()?;
@@ -142,14 +152,12 @@ pub fn compress_images(
 ) -> Result<(u64, u64), Cancelled> {
     let max_side = ((longest_page_side(doc) / 72.0) * settings.dpi).ceil().max(16.0) as u32;
     let masks = mask_ids(doc);
-    let is_image = |o: &Object| matches!(o, Object::Stream(s)
-        if s.dict.get(b"Subtype").ok().and_then(|o| o.as_name().ok()) == Some(b"Image".as_slice()));
-    let ids: Vec<_> = doc
-        .objects
-        .iter()
-        .filter(|(id, o)| !masks.contains(id) && is_image(o))
-        .map(|(id, _)| *id)
-        .collect();
+    let is_image = |o: &Object| {
+        matches!(o, Object::Stream(s)
+        if s.dict.get(b"Subtype").ok().and_then(|o| o.as_name().ok()) == Some(b"Image".as_slice()))
+    };
+    let ids: Vec<_> =
+        doc.objects.iter().filter(|(id, o)| !masks.contains(id) && is_image(o)).map(|(id, _)| *id).collect();
 
     let mut original_total: u64 = 0;
     let mut compressed_total: u64 = 0;
@@ -242,4 +250,3 @@ pub fn prune_dead_objects(doc: &mut Document) {
     doc.prune_objects();
     doc.delete_zero_length_streams();
 }
-

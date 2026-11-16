@@ -7,17 +7,17 @@ use tauri_plugin_dialog::{DialogExt, FilePath};
 /// `format`: "docx", "xlsx", "rtf", "html", "txt" or "xml".
 #[tauri::command]
 pub async fn convert_text(doc: TextDoc, format: String, output: String) -> CmdResult<()> {
-    let format = Format::parse(&format)
-        .ok_or_else(|| PdfError::new(ErrorCode::Other, format!("unknown format: {format}")))?;
+    let format =
+        Format::parse(&format).ok_or_else(|| PdfError::new(ErrorCode::Other, format!("unknown format: {format}")))?;
     crate::grants::check(&output)?;
     // The file's type must match what is written in it: a .bat or .exe never
     // comes out of this, even with a name chosen elsewhere.
-    let ext = std::path::Path::new(&output)
-        .extension()
-        .and_then(|e| e.to_str())
-        .map(str::to_ascii_lowercase);
+    let ext = std::path::Path::new(&output).extension().and_then(|e| e.to_str()).map(str::to_ascii_lowercase);
     if ext.as_deref() != Some(format.extension()) {
-        return Err(PdfError::new(ErrorCode::InvalidName, format!("a {} file must end in .{}", format.extension(), format.extension())));
+        return Err(PdfError::new(
+            ErrorCode::InvalidName,
+            format!("a {} file must end in .{}", format.extension(), format.extension()),
+        ));
     }
     tauri::async_runtime::spawn_blocking(move || {
         let bytes = convert(&doc, format);
@@ -32,8 +32,8 @@ pub async fn convert_text(doc: TextDoc, format: String, output: String) -> CmdRe
 /// `format` sets the type filter. Returns the chosen path or null.
 #[tauri::command(async)]
 pub fn save_as_dialog(app: AppHandle, suggested: String, format: String) -> CmdResult<Option<String>> {
-    let format = Format::parse(&format)
-        .ok_or_else(|| PdfError::new(ErrorCode::Other, format!("unknown format: {format}")))?;
+    let format =
+        Format::parse(&format).ok_or_else(|| PdfError::new(ErrorCode::Other, format!("unknown format: {format}")))?;
     let label = match format {
         Format::Docx => "Word document",
         Format::Xlsx => "Excel workbook",
@@ -42,12 +42,8 @@ pub fn save_as_dialog(app: AppHandle, suggested: String, format: String) -> CmdR
         Format::Txt => "Text",
         Format::Xml => "XML",
     };
-    let result = app
-        .dialog()
-        .file()
-        .add_filter(label, &[format.extension()])
-        .set_file_name(&suggested)
-        .blocking_save_file();
+    let result =
+        app.dialog().file().add_filter(label, &[format.extension()]).set_file_name(&suggested).blocking_save_file();
     let picked = result.map(|p| match p {
         FilePath::Path(pb) => pb.to_string_lossy().into_owned(),
         FilePath::Url(u) => u.to_string(),

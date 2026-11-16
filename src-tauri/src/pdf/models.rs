@@ -9,9 +9,15 @@ pub struct RgbColor {
 
 impl RgbColor {
     /// Normalize channel to 0.0–1.0 for PDF operators.
-    pub fn r_f(&self) -> f64 { self.r as f64 / 255.0 }
-    pub fn g_f(&self) -> f64 { self.g as f64 / 255.0 }
-    pub fn b_f(&self) -> f64 { self.b as f64 / 255.0 }
+    pub fn r_f(&self) -> f64 {
+        self.r as f64 / 255.0
+    }
+    pub fn g_f(&self) -> f64 {
+        self.g as f64 / 255.0
+    }
+    pub fn b_f(&self) -> f64 {
+        self.b as f64 / 255.0
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]

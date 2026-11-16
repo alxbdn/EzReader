@@ -11,12 +11,14 @@ static NEXT_WINDOW: AtomicU32 = AtomicU32::new(1);
 
 /// Characters Windows does not accept in a file name.
 fn safe_file_name(name: &str) -> String {
-    let cleaned: String = name
-        .chars()
-        .map(|c| if "<>:\"/\\|?*".contains(c) || c.is_control() { '_' } else { c })
-        .collect();
+    let cleaned: String =
+        name.chars().map(|c| if "<>:\"/\\|?*".contains(c) || c.is_control() { '_' } else { c }).collect();
     let trimmed = cleaned.trim().trim_end_matches('.').trim();
-    if trimmed.is_empty() { "Pages.pdf".to_string() } else { trimmed.to_string() }
+    if trimmed.is_empty() {
+        "Pages.pdf".to_string()
+    } else {
+        trimmed.to_string()
+    }
 }
 
 /// Copies `pages` of `input_path` into a new temp file named `name` and opens
@@ -39,9 +41,7 @@ pub async fn open_pages_in_new_window(
     let out_str = out.to_string_lossy().to_string();
     let extract = {
         let out_str = out_str.clone();
-        tauri::async_runtime::spawn_blocking(move || {
-            super::pdf::extract_pdf_pages(input_path, out_str, pages)
-        })
+        tauri::async_runtime::spawn_blocking(move || super::pdf::extract_pdf_pages(input_path, out_str, pages))
     };
     extract.await.map_err(|e| e.to_string())??;
 
@@ -109,7 +109,9 @@ fn window_at(app: &AppHandle, own: &str, x: f64, y: f64) -> Option<String> {
             if label == own || !w.is_visible().unwrap_or(false) || w.is_minimized().unwrap_or(false) {
                 return false;
             }
-            let (Ok(sf), Ok(pos), Ok(size)) = (w.scale_factor(), w.outer_position(), w.outer_size()) else { return false };
+            let (Ok(sf), Ok(pos), Ok(size)) = (w.scale_factor(), w.outer_position(), w.outer_size()) else {
+                return false;
+            };
             let pos = pos.to_logical::<f64>(sf);
             let size = size.to_logical::<f64>(sf);
             contains((pos.x, pos.y, size.width, size.height), (x, y))

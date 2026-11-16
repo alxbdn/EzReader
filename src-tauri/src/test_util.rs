@@ -5,10 +5,7 @@ pub fn fixture(name: &str) -> String {
 }
 
 pub fn tmp(name: &str) -> String {
-    std::env::temp_dir()
-        .join(format!("ezreader-{}-{name}", std::process::id()))
-        .to_string_lossy()
-        .into_owned()
+    std::env::temp_dir().join(format!("ezreader-{}-{name}", std::process::id())).to_string_lossy().into_owned()
 }
 
 /// Scans the raw file: for every stream with a direct `/Length N`, the
@@ -28,15 +25,18 @@ pub fn assert_lengths_consistent(path: &str) {
             continue;
         }
         let mut data = at + 6;
-        if bytes.get(data) == Some(&b'\r') { data += 1; }
-        if bytes.get(data) != Some(&b'\n') { continue; }
+        if bytes.get(data) == Some(&b'\r') {
+            data += 1;
+        }
+        if bytes.get(data) != Some(&b'\n') {
+            continue;
+        }
         data += 1;
         // Nearest "/Length" before the keyword, inside the same object.
         let obj_start = bytes[..at].windows(3).rposition(|w| w == b"obj").unwrap_or(0);
         // `/Length` itself, not `/Length1` (embedded font programs).
-        let Some(len_at) = bytes[obj_start..at]
-            .windows(8)
-            .rposition(|w| &w[..7] == b"/Length" && !w[7].is_ascii_alphanumeric())
+        let Some(len_at) =
+            bytes[obj_start..at].windows(8).rposition(|w| &w[..7] == b"/Length" && !w[7].is_ascii_alphanumeric())
         else {
             continue;
         };
@@ -48,7 +48,9 @@ pub fn assert_lengths_consistent(path: &str) {
             continue; // indirect length
         }
         let mut end = data + n;
-        while matches!(bytes.get(end), Some(b'\r' | b'\n' | b' ')) { end += 1; }
+        while matches!(bytes.get(end), Some(b'\r' | b'\n' | b' ')) {
+            end += 1;
+        }
         assert!(
             bytes[end..].starts_with(b"endstream"),
             "stream at byte {at} has a /Length {n} that does not match its data"
@@ -57,4 +59,3 @@ pub fn assert_lengths_consistent(path: &str) {
     }
     assert!(checked > 0);
 }
-

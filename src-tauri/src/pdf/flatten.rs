@@ -24,11 +24,7 @@ pub fn flatten(doc: &mut Document) -> Result<(), String> {
     for page_id in pages {
         flatten_page(doc, page_id)?;
     }
-    let catalog_id = doc
-        .trailer
-        .get(b"Root")
-        .and_then(Object::as_reference)
-        .map_err(|e| format!("No catalog: {e}"))?;
+    let catalog_id = doc.trailer.get(b"Root").and_then(Object::as_reference).map_err(|e| format!("No catalog: {e}"))?;
     let catalog = doc.get_object_mut(catalog_id).and_then(Object::as_dict_mut).map_err(|e| e.to_string())?;
     catalog.remove(b"AcroForm");
     catalog.remove(b"CCAnnot");
@@ -62,10 +58,7 @@ fn flatten_page(doc: &mut Document, page_id: ObjectId) -> Result<(), String> {
         let (Some(rect), Some(form_id)) = (rect_of(doc, annot), appearance(doc, annot)) else { continue };
         let Some(matrix) = placement(doc, form_id, rect) else { continue };
         let name = format!("EzFlat{}", forms.len());
-        ops.push_str(&format!(
-            "q {} cm /{name} Do Q\n",
-            matrix.iter().map(|v| num(*v)).collect::<Vec<_>>().join(" ")
-        ));
+        ops.push_str(&format!("q {} cm /{name} Do Q\n", matrix.iter().map(|v| num(*v)).collect::<Vec<_>>().join(" ")));
         forms.push((name, form_id));
     }
 
@@ -224,7 +217,11 @@ fn content_entries(doc: &Document, page_id: ObjectId) -> Vec<Object> {
 fn num(v: f64) -> String {
     let s = format!("{v:.4}");
     let s = s.trim_end_matches('0').trim_end_matches('.');
-    if s == "-0" { "0".into() } else { s.into() }
+    if s == "-0" {
+        "0".into()
+    } else {
+        s.into()
+    }
 }
 
 #[cfg(test)]
@@ -262,10 +259,13 @@ mod tests {
             "Rect" => vec![0.into(), 0.into(), 10.into(), 10.into()], "AP" => dictionary! { "N" => highlight_ap },
         });
         let content = doc.add_object(Stream::new(dictionary! {}, b"BT /F1 12 Tf 50 750 Td (Name) Tj ET".to_vec()));
-        doc.objects.insert(page_id, Object::Dictionary(dictionary! {
-            "Type" => "Page", "Parent" => pages_id, "MediaBox" => vec![0.into(), 0.into(), 595.into(), 842.into()],
-            "Contents" => content, "Annots" => vec![field.into(), highlight.into(), link.into(), hidden.into()],
-        }));
+        doc.objects.insert(
+            page_id,
+            Object::Dictionary(dictionary! {
+                "Type" => "Page", "Parent" => pages_id, "MediaBox" => vec![0.into(), 0.into(), 595.into(), 842.into()],
+                "Contents" => content, "Annots" => vec![field.into(), highlight.into(), link.into(), hidden.into()],
+            }),
+        );
         doc.objects.insert(pages_id, Object::Dictionary(dictionary! {
             "Type" => "Pages", "Kids" => vec![page_id.into()], "Count" => 1,
             "Resources" => dictionary! { "Font" => dictionary! { "F1" => dictionary! { "Type" => "Font", "Subtype" => "Type1", "BaseFont" => "Helvetica" } } },

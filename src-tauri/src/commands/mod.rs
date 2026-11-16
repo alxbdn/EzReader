@@ -4,7 +4,7 @@ pub mod dialog;
 pub mod files;
 pub mod ocr;
 pub mod pdf;
-pub mod shell;
 pub mod security;
+pub mod shell;
 pub mod update;
 pub mod window;

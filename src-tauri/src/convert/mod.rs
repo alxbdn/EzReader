@@ -221,12 +221,7 @@ pub(crate) mod tests {
     use super::*;
 
     pub fn line(text: &str, size: f32, para_start: bool, heading: u8) -> TextLine {
-        TextLine {
-            cells: vec![TextCell { text: text.into(), col: 0 }],
-            size,
-            para_start,
-            heading,
-        }
+        TextLine { cells: vec![TextCell { text: text.into(), col: 0 }], size, para_start, heading }
     }
 
     pub fn row(cells: &[(&str, u32)]) -> TextLine {

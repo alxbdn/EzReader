@@ -1,23 +1,23 @@
 mod commands;
 mod convert;
+#[cfg(test)]
+mod corpus_tests;
 mod error;
 mod fsutil;
 #[cfg(feature = "fuzzing")]
 pub mod fuzzing;
 mod grants;
+#[cfg(test)]
+mod hostile_input_tests;
 #[cfg(target_os = "macos")]
 mod macos;
 mod ocr;
+mod pdf;
 #[cfg(not(any(windows, target_os = "macos")))]
 mod rapid_ocr;
-mod pdf;
 mod ratio_lock;
 mod resize_border;
 mod tempfiles;
-#[cfg(test)]
-mod corpus_tests;
-#[cfg(test)]
-mod hostile_input_tests;
 #[cfg(test)]
 mod test_util;
 
@@ -61,7 +61,8 @@ fn fit_to_screen(window: &tauri::WebviewWindow) -> tauri::Result<()> {
     let inner = window.inner_size()?;
     let k = fit_scale((outer.width, outer.height), (area.size.width, area.size.height));
     let (w, h) = if k < 1.0 {
-        let size = tauri::PhysicalSize::new((inner.width as f64 * k).round() as u32, (inner.height as f64 * k).round() as u32);
+        let size =
+            tauri::PhysicalSize::new((inner.width as f64 * k).round() as u32, (inner.height as f64 * k).round() as u32);
         window.set_size(size)?;
         ((outer.width as f64 * k).round() as i64, (outer.height as f64 * k).round() as i64)
     } else {
@@ -230,11 +231,8 @@ pub(crate) const TRAFFIC_LIGHTS: (f64, f64) = (14.0, 18.0);
 fn open_from_finder(app: &tauri::AppHandle, urls: &[url::Url]) {
     use tauri::Emitter;
 
-    let paths: Vec<String> = urls
-        .iter()
-        .filter_map(|u| u.to_file_path().ok())
-        .map(|p| p.to_string_lossy().into_owned())
-        .collect();
+    let paths: Vec<String> =
+        urls.iter().filter_map(|u| u.to_file_path().ok()).map(|p| p.to_string_lossy().into_owned()).collect();
     let Some((first, rest)) = paths.split_first() else { return };
     for p in &paths {
         allow_viewing(app, p);
@@ -274,7 +272,10 @@ mod icon_tests {
     fn the_window_icon_is_the_biggest_image_of_icon_ico() {
         let d = include_bytes!("../icons/icon.ico");
         let count = u16::from_le_bytes([d[4], d[5]]) as usize;
-        let side = |i: usize| match d[6 + 16 * i] { 0 => 256, w => u32::from(w) };
+        let side = |i: usize| match d[6 + 16 * i] {
+            0 => 256,
+            w => u32::from(w),
+        };
         assert!(count > 1);
         assert_eq!(side(0), (0..count).map(side).max().unwrap());
     }

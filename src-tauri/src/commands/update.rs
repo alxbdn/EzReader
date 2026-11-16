@@ -197,7 +197,7 @@ fn curl() -> Command {
 /// Common options: HTTPS only (redirects too), fail on HTTP errors.
 fn curl_get(version: &str, max_secs: u32) -> Command {
     let mut cmd = curl();
-    cmd.args(["-fsSL", "--proto", "=https", "--proto-redir", "=https", "--max-time"])
+    cmd.args(["-fsSL", "--proto", "=https", "--proto-redir", "=https", "--tlsv1.2", "--max-time"])
         .arg(max_secs.to_string())
         .arg("-A")
         .arg(format!("EzReader/{version}"));
@@ -306,10 +306,7 @@ fn run_update(channel: Channel, version: &str) -> CmdResult<UpdateOutcome> {
             download(asset, &dest, version)?;
             // Passive: a progress bar only; it closes EzReader if needed
             // and starts it again when done (/R).
-            quiet(&dest)
-                .args(["/P", "/R"])
-                .spawn()
-                .map_err(|e| format!("could not start the installer ({e})"))?;
+            quiet(&dest).args(["/P", "/R"]).spawn().map_err(|e| format!("could not start the installer ({e})"))?;
             Ok(UpdateOutcome::Restarting)
         }
         Channel::Deb => install_deb(asset, version),
@@ -370,10 +367,7 @@ fn install_deb(asset: &Asset, version: &str) -> CmdResult<UpdateOutcome> {
     let dest = std::env::temp_dir().join(&asset.name);
     download(asset, &dest, version)?;
     // pkexec asks for the password in a window of its own.
-    let status = Command::new("pkexec")
-        .args(["apt-get", "install", "-y"])
-        .arg(&dest)
-        .status();
+    let status = Command::new("pkexec").args(["apt-get", "install", "-y"]).arg(&dest).status();
     match status {
         Ok(s) if s.success() => {
             let exe = current_exe().ok_or("could not find EzReader's own file")?;
@@ -396,9 +390,7 @@ fn install_deb(_asset: &Asset, _version: &str) -> CmdResult<UpdateOutcome> {
 
 #[cfg(target_os = "macos")]
 fn brew_upgrade() -> CmdResult<UpdateOutcome> {
-    let brew = ["/opt/homebrew/bin/brew", "/usr/local/bin/brew"]
-        .into_iter()
-        .find(|p| Path::new(p).exists());
+    let brew = ["/opt/homebrew/bin/brew", "/usr/local/bin/brew"].into_iter().find(|p| Path::new(p).exists());
     let Some(brew) = brew else { return open_release_page() };
     let out = Command::new(brew)
         .args(["upgrade", "--cask", BREW_CASK])
@@ -406,7 +398,9 @@ fn brew_upgrade() -> CmdResult<UpdateOutcome> {
         .output()
         .map_err(|e| format!("could not run Homebrew ({e})"))?;
     if !out.status.success() {
-        return Err(format!("Homebrew could not update EzReader ({})", String::from_utf8_lossy(&out.stderr).trim()).into());
+        return Err(
+            format!("Homebrew could not update EzReader ({})", String::from_utf8_lossy(&out.stderr).trim()).into()
+        );
     }
     // …/EzReader.app/Contents/MacOS/<exe> → …/EzReader.app
     let bundle = current_exe()
@@ -436,7 +430,14 @@ fn shell_open(target: &str) -> CmdResult<()> {
         let (verb, target) = (wide("open"), wide(target));
         // SAFETY: both strings are NUL-terminated and outlive the call.
         let code = unsafe {
-            ShellExecuteW(std::ptr::null_mut(), verb.as_ptr(), target.as_ptr(), std::ptr::null(), std::ptr::null(), SW_SHOWNORMAL)
+            ShellExecuteW(
+                std::ptr::null_mut(),
+                verb.as_ptr(),
+                target.as_ptr(),
+                std::ptr::null(),
+                std::ptr::null(),
+                SW_SHOWNORMAL,
+            )
         } as isize;
         if code <= 32 {
             return Err(format!("could not open it (error {code})").into());
@@ -446,10 +447,7 @@ fn shell_open(target: &str) -> CmdResult<()> {
     #[cfg(not(target_os = "windows"))]
     {
         let opener = if cfg!(target_os = "macos") { "/usr/bin/open" } else { "xdg-open" };
-        Command::new(opener)
-            .arg(target)
-            .spawn()
-            .map_err(|e| format!("could not open it ({e})"))?;
+        Command::new(opener).arg(target).spawn().map_err(|e| format!("could not open it ({e})"))?;
         Ok(())
     }
 }
@@ -503,14 +501,20 @@ mod tests {
         let store = r"C:\Program Files\WindowsApps\AlexBoudon.EzReader_1.1.0.0_x64__8wekyb3d8bbwe\EzReader.exe";
         assert_eq!(classify(&facts("windows", store)), Channel::Store);
         let installed = r"C:\Users\a\AppData\Local\EzReader\EzReader.exe";
-        assert_eq!(classify(&InstallFacts { has_uninstaller: true, ..facts("windows", installed) }), Channel::Installer);
+        assert_eq!(
+            classify(&InstallFacts { has_uninstaller: true, ..facts("windows", installed) }),
+            Channel::Installer
+        );
         assert_eq!(classify(&facts("windows", r"C:\Users\a\Downloads\ezreader-portable.exe")), Channel::Portable);
         let app = "/Applications/EzReader.app/Contents/MacOS/ezreader-portable";
         assert_eq!(classify(&InstallFacts { in_caskroom: true, ..facts("macos", app) }), Channel::Homebrew);
         assert_eq!(classify(&facts("macos", app)), Channel::Dmg);
         assert_eq!(classify(&facts("linux", "/usr/bin/ezreader-portable")), Channel::Deb);
         assert_eq!(classify(&facts("linux", "/home/a/bin/ezreader")), Channel::Portable);
-        assert_eq!(classify(&InstallFacts { appimage: true, ..facts("linux", "/tmp/.mount_x/usr/bin/e") }), Channel::Other);
+        assert_eq!(
+            classify(&InstallFacts { appimage: true, ..facts("linux", "/tmp/.mount_x/usr/bin/e") }),
+            Channel::Other
+        );
     }
 
     #[test]

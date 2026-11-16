@@ -6,8 +6,7 @@ use lopdf::{dictionary, Document, Object, ObjectId, Stream};
 
 use super::models::{
     Annotation, CircleAnnotation, FontFamily, HighlightAnnotation, InkAnnotation, InkVector, NoteAnnotation,
-    RectAnnotation, RgbColor, SignatureAnnotation, StampAnnotation, StampMark, TextAlignment,
-    TextAnnotation,
+    RectAnnotation, RgbColor, SignatureAnnotation, StampAnnotation, StampMark, TextAlignment, TextAnnotation,
 };
 
 // ── Annotation metadata (JSON + stream-ID tracking) ──────────────────────────
@@ -36,8 +35,8 @@ fn catalog_id(doc: &Document) -> Result<ObjectId, String> {
 /// Returns a default (empty) meta if the entry is absent or unreadable.
 pub fn load_meta(doc: &Document) -> AnnotationMeta {
     let Ok(cat_id) = catalog_id(doc) else { return AnnotationMeta::default() };
-    let Ok(cat)    = doc.get_object(cat_id) else { return AnnotationMeta::default() };
-    let Ok(dict)   = cat.as_dict() else { return AnnotationMeta::default() };
+    let Ok(cat) = doc.get_object(cat_id) else { return AnnotationMeta::default() };
+    let Ok(dict) = cat.as_dict() else { return AnnotationMeta::default() };
 
     let Ok(Object::Reference(meta_ref)) = dict.get(b"CCAnnot") else {
         return AnnotationMeta::default();
@@ -52,11 +51,11 @@ pub fn load_meta(doc: &Document) -> AnnotationMeta {
 
 /// Serialize `meta` and store it in the PDF catalog under `CCAnnot`.
 pub fn save_meta(doc: &mut Document, meta: &AnnotationMeta) -> Result<(), String> {
-    let json      = serde_json::to_string(meta).map_err(|e| e.to_string())?;
-    let stream    = Stream::new(dictionary! {}, json.into_bytes());
+    let json = serde_json::to_string(meta).map_err(|e| e.to_string())?;
+    let stream = Stream::new(dictionary! {}, json.into_bytes());
     let stream_id = doc.add_object(Object::Stream(stream));
 
-    let cat_id  = catalog_id(doc)?;
+    let cat_id = catalog_id(doc)?;
     let catalog = doc.get_object_mut(cat_id).map_err(|e| e.to_string())?;
     if let Object::Dictionary(d) = catalog {
         d.set("CCAnnot", Object::Reference(stream_id));
@@ -86,7 +85,11 @@ fn alpha(opacity: Option<f64>, multiply: bool) -> Option<Alpha> {
     let o = opacity.unwrap_or(1.0);
     let o = if o.is_finite() { o.clamp(0.0, 1.0) } else { 1.0 };
     let pct = (o * 100.0).round() as u32;
-    if pct >= 100 && !multiply { None } else { Some(Alpha { pct, multiply }) }
+    if pct >= 100 && !multiply {
+        None
+    } else {
+        Some(Alpha { pct, multiply })
+    }
 }
 
 fn gs_op(a: Option<Alpha>) -> String {
@@ -104,9 +107,7 @@ fn rgb_stroke(c: &RgbColor) -> String {
 /// Fill colour operator and the path-painting operator for a shape:
 /// `B` fill + outline, `f` fill only, `S` outline only, `n` nothing.
 fn shape_paint(fill: Option<&RgbColor>, stroke_width: f64) -> (String, &'static str) {
-    let fill_op = fill
-        .map(|c| format!("{:.4} {:.4} {:.4} rg\n", c.r_f(), c.g_f(), c.b_f()))
-        .unwrap_or_default();
+    let fill_op = fill.map(|c| format!("{:.4} {:.4} {:.4} rg\n", c.r_f(), c.g_f(), c.b_f())).unwrap_or_default();
     let paint = match (fill.is_some(), stroke_width > 0.0) {
         (true, true) => "B",
         (true, false) => "f",
@@ -171,18 +172,41 @@ pub fn write_circle(buf: &mut Vec<u8>, ann: &CircleAnnotation) -> Option<Alpha> 
         ),
         gs_op(a),
         fill_op,
-        ann.color.r_f(), ann.color.g_f(), ann.color.b_f(),
+        ann.color.r_f(),
+        ann.color.g_f(),
+        ann.color.b_f(),
         ann.stroke_width,
         // Move to top
-        cx, cy + ry,
+        cx,
+        cy + ry,
         // Arc 1
-        cx + K * rx, cy + ry,   cx + rx, cy + K * ry,   cx + rx, cy,
+        cx + K * rx,
+        cy + ry,
+        cx + rx,
+        cy + K * ry,
+        cx + rx,
+        cy,
         // Arc 2
-        cx + rx, cy - K * ry,   cx + K * rx, cy - ry,   cx, cy - ry,
+        cx + rx,
+        cy - K * ry,
+        cx + K * rx,
+        cy - ry,
+        cx,
+        cy - ry,
         // Arc 3
-        cx - K * rx, cy - ry,   cx - rx, cy - K * ry,   cx - rx, cy,
+        cx - K * rx,
+        cy - ry,
+        cx - rx,
+        cy - K * ry,
+        cx - rx,
+        cy,
         // Arc 4
-        cx - rx, cy + K * ry,   cx - K * rx, cy + ry,   cx, cy + ry,
+        cx - rx,
+        cy + K * ry,
+        cx - K * rx,
+        cy + ry,
+        cx,
+        cy + ry,
         paint,
     );
     buf.extend_from_slice(ops.as_bytes());
@@ -202,12 +226,7 @@ pub fn write_ink(buf: &mut Vec<u8>, ann: &InkAnnotation) -> Option<Alpha> {
         return None;
     }
     let a = alpha(ann.opacity, false);
-    let mut ops = format!(
-        "q\n{}{}{:.4} w\n1 J\n1 j\n",
-        gs_op(a),
-        rgb_stroke(&ann.color),
-        ann.stroke_width,
-    );
+    let mut ops = format!("q\n{}{}{:.4} w\n1 J\n1 j\n", gs_op(a), rgb_stroke(&ann.color), ann.stroke_width,);
 
     // Arrowhead at the last point; the shaft stops at its base.
     let mut head = String::new();
@@ -224,9 +243,12 @@ pub fn write_ink(buf: &mut Vec<u8>, ann: &InkAnnotation) -> Option<Alpha> {
             head = format!(
                 "{}{:.4} {:.4} m\n{:.4} {:.4} l\n{:.4} {:.4} l\nh\nf\n",
                 rgb_fill(&ann.color),
-                tx, ty,
-                bx - uy * hw, by + ux * hw,
-                bx + uy * hw, by - ux * hw,
+                tx,
+                ty,
+                bx - uy * hw,
+                by + ux * hw,
+                bx + uy * hw,
+                by - ux * hw,
             );
             let last = pts.len() - 1;
             pts[last] = (tx - ux * l * 0.8, ty - uy * l * 0.8);
@@ -284,8 +306,14 @@ pub fn write_note(buf: &mut Vec<u8>, ann: &NoteAnnotation) -> (&'static str, &'s
         "q\n{}{}0.75 w\n{:.4} {:.4} {:.4} {:.4} re\nB\n{:.4} {:.4} {:.4} {:.4} re\nW\nn\n",
         rgb_fill(&ann.color),
         rgb_stroke(&border),
-        ann.x, ann.y, ann.width, ann.height,
-        ann.x, ann.y, ann.width, ann.height,
+        ann.x,
+        ann.y,
+        ann.width,
+        ann.height,
+        ann.x,
+        ann.y,
+        ann.width,
+        ann.height,
     );
     buf.extend_from_slice(ops.as_bytes());
     let text = TextAnnotation {
@@ -388,7 +416,10 @@ fn wrap_text(text: &str, max_width: f64, char_w: f64) -> Vec<String> {
                 line = word.to_string();
                 line_w = word_w;
             } else {
-                if !line.is_empty() { line.push(' '); line_w += char_w; }
+                if !line.is_empty() {
+                    line.push(' ');
+                    line_w += char_w;
+                }
                 line.push_str(word);
                 line_w += word_w;
             }
@@ -401,18 +432,15 @@ fn wrap_text(text: &str, max_width: f64, char_w: f64) -> Vec<String> {
 /// Append text operators to `buf`.
 /// Returns the resource key and base font name so the caller can register it.
 pub fn write_text(buf: &mut Vec<u8>, ann: &TextAnnotation) -> (&'static str, &'static str) {
-    let fkey  = font_key(ann.font_family, ann.bold, ann.italic);
+    let fkey = font_key(ann.font_family, ann.bold, ann.italic);
     let fname = font_name(ann.font_family, ann.bold, ann.italic);
-    let char_w  = ann.font_size * avg_char_width(ann.font_family);
-    let line_h  = ann.font_size * 1.2;
-    let lines   = wrap_text(&ann.content, ann.width, char_w);
+    let char_w = ann.font_size * avg_char_width(ann.font_family);
+    let line_h = ann.font_size * 1.2;
+    let lines = wrap_text(&ann.content, ann.width, char_w);
 
     let mut ops = String::from("q\n");
     if let Some(c) = &ann.cover {
-        ops.push_str(&format!(
-            "{}{:.4} {:.4} {:.4} {:.4} re\nf\n",
-            rgb_fill(&c.color), c.x, c.y, c.width, c.height,
-        ));
+        ops.push_str(&format!("{}{:.4} {:.4} {:.4} {:.4} re\nf\n", rgb_fill(&c.color), c.x, c.y, c.width, c.height,));
     }
     if let Some(bg) = &ann.background_color {
         // Box behind all lines, from the first line's ascent to the last one's descent.
@@ -422,13 +450,19 @@ pub fn write_text(buf: &mut Vec<u8>, ann: &TextAnnotation) -> (&'static str, &'s
         ops.push_str(&format!(
             "{}{:.4} {:.4} {:.4} {:.4} re\nf\n",
             rgb_fill(bg),
-            ann.x - 3.0, bottom, ann.width + 6.0, height,
+            ann.x - 3.0,
+            bottom,
+            ann.width + 6.0,
+            height,
         ));
     }
     ops.push_str(&format!(
         "{:.4} {:.4} {:.4} rg\nBT\n/{} {:.4} Tf\n",
-        ann.color.r_f(), ann.color.g_f(), ann.color.b_f(),
-        fkey, ann.font_size,
+        ann.color.r_f(),
+        ann.color.g_f(),
+        ann.color.b_f(),
+        fkey,
+        ann.font_size,
     ));
 
     // Collect underline segments to draw after ET (outside text object)
@@ -437,9 +471,9 @@ pub fn write_text(buf: &mut Vec<u8>, ann: &TextAnnotation) -> (&'static str, &'s
     for (i, line) in lines.iter().enumerate() {
         let line_w = line.len() as f64 * char_w;
         let x_off = match ann.alignment {
-            TextAlignment::Left   => 0.0,
+            TextAlignment::Left => 0.0,
             TextAlignment::Center => ((ann.width - line_w) / 2.0).max(0.0),
-            TextAlignment::Right  => (ann.width - line_w).max(0.0),
+            TextAlignment::Right => (ann.width - line_w).max(0.0),
         };
         let x = ann.x + x_off;
         let y = ann.y - i as f64 * line_h;
@@ -457,7 +491,9 @@ pub fn write_text(buf: &mut Vec<u8>, ann: &TextAnnotation) -> (&'static str, &'s
     if !underlines.is_empty() {
         ops.push_str(&format!(
             "{:.4} {:.4} {:.4} RG\n{:.4} w\n",
-            ann.color.r_f(), ann.color.g_f(), ann.color.b_f(),
+            ann.color.r_f(),
+            ann.color.g_f(),
+            ann.color.b_f(),
             ann.font_size * 0.05,
         ));
         for (x, ul_y, ul_len) in underlines {
@@ -481,13 +517,9 @@ pub fn write_image(
     doc: &mut Document,
 ) -> Result<(String, ObjectId, Option<ObjectId>), String> {
     // Decode base64 (strip data URI prefix if present)
-    let b64 = ann
-        .image_data
-        .split_once(',')
-        .map_or(ann.image_data.as_str(), |(_, data)| data);
-    let bytes = base64::engine::general_purpose::STANDARD
-        .decode(b64)
-        .map_err(|e| format!("base64 decode error: {e}"))?;
+    let b64 = ann.image_data.split_once(',').map_or(ann.image_data.as_str(), |(_, data)| data);
+    let bytes =
+        base64::engine::general_purpose::STANDARD.decode(b64).map_err(|e| format!("base64 decode error: {e}"))?;
 
     let (img_id, smask_id) = embed_image(doc, &bytes)?;
 
@@ -497,10 +529,8 @@ pub fn write_image(
     let xobj_name = format!("Sig{n}");
 
     // Build transformation matrix: scale to (width, height), translate to (x, y)
-    let ops = format!(
-        "q\n{:.4} 0 0 {:.4} {:.4} {:.4} cm\n/{} Do\nQ\n",
-        ann.width, ann.height, ann.x, ann.y, xobj_name,
-    );
+    let ops =
+        format!("q\n{:.4} 0 0 {:.4} {:.4} {:.4} cm\n/{} Do\nQ\n", ann.width, ann.height, ann.x, ann.y, xobj_name,);
     buf.extend_from_slice(ops.as_bytes());
 
     Ok((xobj_name, img_id, smask_id))
@@ -508,7 +538,10 @@ pub fn write_image(
 
 /// A vector that can be drawn: a non-empty box and whole, finite segments.
 fn write_vector_ok(v: &InkVector) -> bool {
-    v.w > 0.0 && v.h > 0.0 && !v.segs.is_empty() && v.segs.len().is_multiple_of(9)
+    v.w > 0.0
+        && v.h > 0.0
+        && !v.segs.is_empty()
+        && v.segs.len().is_multiple_of(9)
         && v.segs.iter().all(|n| n.is_finite())
 }
 
@@ -539,9 +572,7 @@ pub fn write_signature_vector(buf: &mut Vec<u8>, ann: &SignatureAnnotation) {
 
 /// Adds the picture in `bytes` to `doc` as an image XObject (and its SMask).
 pub fn embed_image(doc: &mut Document, bytes: &[u8]) -> Result<(ObjectId, Option<ObjectId>), String> {
-    let reader = ImageReader::new(std::io::Cursor::new(bytes))
-        .with_guessed_format()
-        .map_err(|e| e.to_string())?;
+    let reader = ImageReader::new(std::io::Cursor::new(bytes)).with_guessed_format().map_err(|e| e.to_string())?;
     if reader.format() == Some(image::ImageFormat::Jpeg) {
         // Photos stay as they are: no re-encoding, no loss, no growth.
         // CMYK and grey JPEGs are converted to RGB below; plain RGB passes through.
@@ -623,10 +654,9 @@ pub fn write_stamp(buf: &mut Vec<u8>, ann: &StampAnnotation) {
     let pt = |u: f64, v: f64| format!("{:.4} {:.4}", x + u * w, y + v * h);
     let path = match ann.mark {
         StampMark::Check => format!("{} m\n{} l\n{} l\nS\n", pt(0.12, 0.52), pt(0.4, 0.22), pt(0.9, 0.82)),
-        StampMark::Cross => format!(
-            "{} m\n{} l\nS\n{} m\n{} l\nS\n",
-            pt(0.15, 0.85), pt(0.85, 0.15), pt(0.85, 0.85), pt(0.15, 0.15),
-        ),
+        StampMark::Cross => {
+            format!("{} m\n{} l\nS\n{} m\n{} l\nS\n", pt(0.15, 0.85), pt(0.85, 0.15), pt(0.85, 0.85), pt(0.15, 0.15),)
+        }
     };
     let ops = format!("q\n{}{:.4} w\n1 J\n1 j\n{}Q\n", rgb_stroke(&ann.color), lw, path);
     buf.extend_from_slice(ops.as_bytes());
@@ -636,12 +666,7 @@ pub fn write_stamp(buf: &mut Vec<u8>, ann: &StampAnnotation) {
 
 /// Add a standard Type1 font resource to a page (or its Resources dict).
 /// `fkey` is the resource alias (e.g. "Helv"), `base_font` is the PDF font name.
-fn add_font_to_page(
-    doc: &mut Document,
-    page_id: ObjectId,
-    fkey: &str,
-    base_font: &str,
-) -> Result<(), String> {
+fn add_font_to_page(doc: &mut Document, page_id: ObjectId, fkey: &str, base_font: &str) -> Result<(), String> {
     // Build a minimal font dict object
     let font_obj = dictionary! {
         "Type" => Object::Name(b"Font".to_vec()),
@@ -651,9 +676,7 @@ fn add_font_to_page(
     let font_id = doc.add_object(Object::Dictionary(font_obj));
 
     // Mutably access the page dict
-    let page = doc
-        .get_object_mut(page_id)
-        .map_err(|e| e.to_string())?;
+    let page = doc.get_object_mut(page_id).map_err(|e| e.to_string())?;
     let page_dict = match page {
         Object::Dictionary(d) => d,
         _ => return Err("page is not a dictionary".into()),
@@ -665,9 +688,7 @@ fn add_font_to_page(
     }
 
     // Navigate into Resources.Font
-    let resources = page_dict
-        .get_mut(b"Resources")
-        .map_err(|e| e.to_string())?;
+    let resources = page_dict.get_mut(b"Resources").map_err(|e| e.to_string())?;
     let res_dict = match resources {
         Object::Dictionary(d) => d,
         _ => return Err("Resources is not an inline dict (inherited); cannot modify".into()),
@@ -677,9 +698,7 @@ fn add_font_to_page(
         res_dict.set("Font", Object::Dictionary(lopdf::Dictionary::new()));
     }
 
-    let font_dict = res_dict
-        .get_mut(b"Font")
-        .map_err(|e| e.to_string())?;
+    let font_dict = res_dict.get_mut(b"Font").map_err(|e| e.to_string())?;
     if let Object::Dictionary(d) = font_dict {
         d.set(fkey.as_bytes().to_vec(), Object::Reference(font_id));
     }
@@ -688,15 +707,8 @@ fn add_font_to_page(
 }
 
 /// Add an image XObject reference to the page's Resources.XObject dict.
-fn add_xobject_to_page(
-    doc: &mut Document,
-    page_id: ObjectId,
-    name: &str,
-    xobj_id: ObjectId,
-) -> Result<(), String> {
-    let page = doc
-        .get_object_mut(page_id)
-        .map_err(|e| e.to_string())?;
+fn add_xobject_to_page(doc: &mut Document, page_id: ObjectId, name: &str, xobj_id: ObjectId) -> Result<(), String> {
+    let page = doc.get_object_mut(page_id).map_err(|e| e.to_string())?;
     let page_dict = match page {
         Object::Dictionary(d) => d,
         _ => return Err("page is not a dictionary".into()),
@@ -706,9 +718,7 @@ fn add_xobject_to_page(
         page_dict.set("Resources", Object::Dictionary(lopdf::Dictionary::new()));
     }
 
-    let resources = page_dict
-        .get_mut(b"Resources")
-        .map_err(|e| e.to_string())?;
+    let resources = page_dict.get_mut(b"Resources").map_err(|e| e.to_string())?;
     let res_dict = match resources {
         Object::Dictionary(d) => d,
         _ => return Err("Resources is not an inline dict".into()),
@@ -718,9 +728,7 @@ fn add_xobject_to_page(
         res_dict.set("XObject", Object::Dictionary(lopdf::Dictionary::new()));
     }
 
-    let xobj_dict = res_dict
-        .get_mut(b"XObject")
-        .map_err(|e| e.to_string())?;
+    let xobj_dict = res_dict.get_mut(b"XObject").map_err(|e| e.to_string())?;
     if let Object::Dictionary(d) = xobj_dict {
         d.set(name.as_bytes().to_vec(), Object::Reference(xobj_id));
     }
@@ -764,11 +772,7 @@ fn add_extgstate_to_page(doc: &mut Document, page_id: ObjectId, a: Alpha) -> Res
 
 /// Append `new_ops` as an additional content stream to the page.
 /// Returns the `ObjectId` of the newly created stream.
-fn append_content_stream(
-    doc: &mut Document,
-    page_id: ObjectId,
-    new_ops: Vec<u8>,
-) -> Result<ObjectId, String> {
+fn append_content_stream(doc: &mut Document, page_id: ObjectId, new_ops: Vec<u8>) -> Result<ObjectId, String> {
     let new_stream = Stream::new(dictionary! {}, new_ops);
     let new_id = doc.add_object(Object::Stream(new_stream));
 
@@ -786,9 +790,7 @@ fn append_content_stream(
     let mut refs = existing;
     refs.push(Object::Reference(new_id));
 
-    let page = doc
-        .get_object_mut(page_id)
-        .map_err(|e| e.to_string())?;
+    let page = doc.get_object_mut(page_id).map_err(|e| e.to_string())?;
     if let Object::Dictionary(d) = page {
         d.set("Contents", Object::Array(refs));
     }
@@ -858,7 +860,9 @@ pub fn write_annotations_for_page(
         // If we had a previous stream, empty it so stale operators are gone
         if let Some(sid) = existing_stream_id {
             let obj = doc.get_object_mut(sid).map_err(|e| e.to_string())?;
-            if let Object::Stream(s) = obj { set_raw_content(s, vec![]); }
+            if let Object::Stream(s) = obj {
+                set_raw_content(s, vec![]);
+            }
             return Ok(Some(sid));
         }
         return Ok(None);
@@ -924,21 +928,34 @@ fn clear_annotation_streams(doc: &mut Document, meta: &AnnotationMeta) -> Result
 
 #[cfg(test)]
 mod tests {
-    use lopdf::StringFormat;
     use super::*;
     use crate::pdf::models::PdfRect;
     use crate::pdf::models::{RgbColor, TextAlignment};
+    use lopdf::StringFormat;
 
-    fn red() -> RgbColor { RgbColor { r: 255, g: 0, b: 0 } }
-    fn black() -> RgbColor { RgbColor { r: 0, g: 0, b: 0 } }
+    fn red() -> RgbColor {
+        RgbColor { r: 255, g: 0, b: 0 }
+    }
+    fn black() -> RgbColor {
+        RgbColor { r: 0, g: 0, b: 0 }
+    }
 
     fn text_ann(content: &str) -> TextAnnotation {
         TextAnnotation {
-            page: 1, x: 100.0, y: 500.0, width: 80.0,
-            content: content.into(), color: black(), font_size: 12.0,
-            bold: false, italic: false, underline: false,
-            alignment: TextAlignment::Left, font_family: FontFamily::Helvetica,
-            background_color: None, cover: None,
+            page: 1,
+            x: 100.0,
+            y: 500.0,
+            width: 80.0,
+            content: content.into(),
+            color: black(),
+            font_size: 12.0,
+            bold: false,
+            italic: false,
+            underline: false,
+            alignment: TextAlignment::Left,
+            font_family: FontFamily::Helvetica,
+            background_color: None,
+            cover: None,
         }
     }
 
@@ -946,7 +963,10 @@ mod tests {
     fn test_edited_text_paints_its_cover_first() {
         let mut ann = text_ann("New words");
         ann.cover = Some(crate::pdf::models::TextCover {
-            x: 99.0, y: 496.0, width: 120.0, height: 14.0,
+            x: 99.0,
+            y: 496.0,
+            width: 120.0,
+            height: 14.0,
             color: RgbColor { r: 250, g: 250, b: 245 },
         });
         let mut buf = Vec::new();
@@ -960,8 +980,13 @@ mod tests {
     #[test]
     fn test_stamps_are_round_strokes() {
         let mut ann = StampAnnotation {
-            page: 1, x: 10.0, y: 20.0, width: 20.0, height: 20.0,
-            mark: StampMark::Check, color: RgbColor { r: 30, g: 58, b: 138 },
+            page: 1,
+            x: 10.0,
+            y: 20.0,
+            width: 20.0,
+            height: 20.0,
+            mark: StampMark::Check,
+            color: RgbColor { r: 30, g: 58, b: 138 },
         };
         let mut buf = Vec::new();
         write_stamp(&mut buf, &ann);
@@ -1016,8 +1041,10 @@ mod tests {
     fn test_write_rect_contains_operators() {
         let ann = RectAnnotation {
             page: 1,
-            x: 100.0, y: 200.0,
-            width: 50.0, height: 30.0,
+            x: 100.0,
+            y: 200.0,
+            width: 50.0,
+            height: 30.0,
             color: red(),
             stroke_width: 1.5,
             fill_color: None,
@@ -1039,8 +1066,14 @@ mod tests {
     #[test]
     fn filled_shapes_fill_and_stroke_or_only_fill() {
         let mut ann = RectAnnotation {
-            page: 1, x: 0.0, y: 0.0, width: 10.0, height: 10.0,
-            color: red(), stroke_width: 2.0, fill_color: Some(black()),
+            page: 1,
+            x: 0.0,
+            y: 0.0,
+            width: 10.0,
+            height: 10.0,
+            color: red(),
+            stroke_width: 2.0,
+            fill_color: Some(black()),
             opacity: None,
         };
         let mut buf = Vec::new();
@@ -1055,8 +1088,14 @@ mod tests {
         assert!(String::from_utf8(buf).unwrap().contains("re\nf\n"));
 
         let circle = CircleAnnotation {
-            page: 1, x: 0.0, y: 0.0, width: 10.0, height: 10.0,
-            color: red(), stroke_width: 1.0, fill_color: Some(red()),
+            page: 1,
+            x: 0.0,
+            y: 0.0,
+            width: 10.0,
+            height: 10.0,
+            color: red(),
+            stroke_width: 1.0,
+            fill_color: Some(red()),
             opacity: None,
         };
         let mut buf = Vec::new();
@@ -1067,8 +1106,15 @@ mod tests {
     #[test]
     fn translucent_shapes_use_a_graphics_state() {
         let ann = RectAnnotation {
-            page: 1, x: 0.0, y: 0.0, width: 10.0, height: 10.0,
-            color: red(), stroke_width: 1.0, fill_color: None, opacity: Some(0.5),
+            page: 1,
+            x: 0.0,
+            y: 0.0,
+            width: 10.0,
+            height: 10.0,
+            color: red(),
+            stroke_width: 1.0,
+            fill_color: None,
+            opacity: Some(0.5),
         };
         let mut buf = Vec::new();
         let a = write_rect(&mut buf, &ann).expect("needs transparency");
@@ -1080,9 +1126,17 @@ mod tests {
     #[test]
     fn ink_draws_a_path_through_its_points() {
         let ann = InkAnnotation {
-            page: 1, x: 100.0, y: 100.0, width: 50.0, height: 20.0,
+            page: 1,
+            x: 100.0,
+            y: 100.0,
+            width: 50.0,
+            height: 20.0,
             points: vec![[0.0, 0.0], [0.5, 1.0], [1.0, 0.0]],
-            color: black(), stroke_width: 2.0, fill_color: None, opacity: None, arrow: false,
+            color: black(),
+            stroke_width: 2.0,
+            fill_color: None,
+            opacity: None,
+            arrow: false,
         };
         let mut buf = Vec::new();
         assert!(write_ink(&mut buf, &ann).is_none());
@@ -1095,9 +1149,17 @@ mod tests {
     #[test]
     fn arrow_ends_with_a_filled_head() {
         let ann = InkAnnotation {
-            page: 1, x: 0.0, y: 0.0, width: 100.0, height: 1.0,
+            page: 1,
+            x: 0.0,
+            y: 0.0,
+            width: 100.0,
+            height: 1.0,
             points: vec![[0.0, 0.5], [1.0, 0.5]],
-            color: red(), stroke_width: 2.0, fill_color: None, opacity: None, arrow: true,
+            color: red(),
+            stroke_width: 2.0,
+            fill_color: None,
+            opacity: None,
+            arrow: true,
         };
         let mut buf = Vec::new();
         write_ink(&mut buf, &ann);
@@ -1109,9 +1171,14 @@ mod tests {
     #[test]
     fn highlight_multiplies_its_rectangles() {
         let ann = HighlightAnnotation {
-            page: 1, x: 0.0, y: 0.0, width: 10.0, height: 10.0,
+            page: 1,
+            x: 0.0,
+            y: 0.0,
+            width: 10.0,
+            height: 10.0,
             rects: vec![PdfRect { x: 1.0, y: 2.0, width: 3.0, height: 4.0 }],
-            color: red(), opacity: 0.45,
+            color: red(),
+            opacity: 0.45,
         };
         let mut buf = Vec::new();
         let a = write_highlight(&mut buf, &ann).unwrap();
@@ -1122,8 +1189,13 @@ mod tests {
     #[test]
     fn note_fills_its_square_and_writes_its_text() {
         let ann = NoteAnnotation {
-            page: 1, x: 10.0, y: 10.0, width: 120.0, height: 80.0,
-            content: "Call back".into(), color: red(),
+            page: 1,
+            x: 10.0,
+            y: 10.0,
+            width: 120.0,
+            height: 80.0,
+            content: "Call back".into(),
+            color: red(),
         };
         let mut buf = Vec::new();
         let (fkey, _) = write_note(&mut buf, &ann);
@@ -1136,9 +1208,18 @@ mod tests {
     #[test]
     fn text_background_is_painted_behind_the_text() {
         let ann = TextAnnotation {
-            page: 1, x: 50.0, y: 300.0, width: 100.0, content: "Hi".into(),
-            color: black(), font_size: 12.0, bold: false, italic: false, underline: false,
-            alignment: TextAlignment::Left, font_family: FontFamily::Helvetica,
+            page: 1,
+            x: 50.0,
+            y: 300.0,
+            width: 100.0,
+            content: "Hi".into(),
+            color: black(),
+            font_size: 12.0,
+            bold: false,
+            italic: false,
+            underline: false,
+            alignment: TextAlignment::Left,
+            font_family: FontFamily::Helvetica,
             background_color: Some(red()),
             cover: None,
         };
@@ -1153,8 +1234,10 @@ mod tests {
     fn test_write_circle_contains_bezier() {
         let ann = CircleAnnotation {
             page: 1,
-            x: 100.0, y: 100.0,
-            width: 60.0, height: 60.0,
+            x: 100.0,
+            y: 100.0,
+            width: 60.0,
+            height: 60.0,
             color: black(),
             stroke_width: 1.0,
             fill_color: None,
@@ -1174,7 +1257,8 @@ mod tests {
     fn test_write_text_contains_text_operators() {
         let ann = TextAnnotation {
             page: 1,
-            x: 50.0, y: 300.0,
+            x: 50.0,
+            y: 300.0,
             width: 200.0,
             content: "Hello".to_string(),
             color: black(),
@@ -1204,7 +1288,8 @@ mod tests {
     fn test_write_text_bold_italic_selects_correct_font() {
         let ann = TextAnnotation {
             page: 1,
-            x: 0.0, y: 0.0,
+            x: 0.0,
+            y: 0.0,
             width: 100.0,
             content: "Bold".to_string(),
             color: black(),
@@ -1227,7 +1312,8 @@ mod tests {
     fn test_write_text_uses_chosen_font_family() {
         let ann = TextAnnotation {
             page: 1,
-            x: 0.0, y: 0.0,
+            x: 0.0,
+            y: 0.0,
             width: 100.0,
             content: "Serif".to_string(),
             color: black(),
@@ -1264,17 +1350,16 @@ mod tests {
         }
         let mut png_buf: Vec<u8> = Vec::new();
         DynamicImage::ImageRgba8(img)
-            .write_to(
-                &mut std::io::Cursor::new(&mut png_buf),
-                image::ImageFormat::Png,
-            )
+            .write_to(&mut std::io::Cursor::new(&mut png_buf), image::ImageFormat::Png)
             .unwrap();
         let b64 = base64::engine::general_purpose::STANDARD.encode(&png_buf);
 
         let ann = SignatureAnnotation {
             page: 1,
-            x: 10.0, y: 10.0,
-            width: 50.0, height: 20.0,
+            x: 10.0,
+            y: 10.0,
+            width: 50.0,
+            height: 20.0,
             image_data: b64,
             vector: None,
             color: None,
@@ -1294,8 +1379,10 @@ mod tests {
     fn a_drawn_signature_is_written_as_curves_not_a_picture() {
         let ann = SignatureAnnotation {
             page: 1,
-            x: 10.0, y: 20.0,
-            width: 100.0, height: 40.0,
+            x: 10.0,
+            y: 20.0,
+            width: 100.0,
+            height: 40.0,
             image_data: String::new(),
             vector: Some(InkVector { w: 50.0, h: 20.0, segs: vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 2.5] }),
             color: None,
@@ -1419,14 +1506,15 @@ mod tests {
         });
 
         if let Ok(Object::Dictionary(cat)) = doc.get_object_mut(cat_id) {
-            cat.set(b"AcroForm", dictionary! {
-                b"Fields" => vec![Object::Reference(text_field_id)],
-            });
+            cat.set(
+                b"AcroForm",
+                dictionary! {
+                    b"Fields" => vec![Object::Reference(text_field_id)],
+                },
+            );
         }
 
-        let fields = vec![
-            FormFieldValue { name: "Field1".into(), value: "Bob".into() },
-        ];
+        let fields = vec![FormFieldValue { name: "Field1".into(), value: "Bob".into() }];
         write_form_fields(&mut doc, &fields).unwrap();
 
         let tf = doc.get_object(text_field_id).unwrap().as_dict().unwrap();
@@ -1456,9 +1544,7 @@ mod tests {
             cat.set(b"AcroForm", Object::Reference(acroform_id));
         }
 
-        let fields = vec![
-            FormFieldValue { name: "Name1".into(), value: "Hello World".into() },
-        ];
+        let fields = vec![FormFieldValue { name: "Name1".into(), value: "Hello World".into() }];
         write_form_fields(&mut doc, &fields).unwrap();
 
         // Save to a byte buffer and reload
@@ -1503,9 +1589,7 @@ mod tests {
         }
 
         // Frontend sends the name as proper Unicode "État"
-        let fields = vec![
-            FormFieldValue { name: "\u{00C9}tat".into(), value: "test".into() },
-        ];
+        let fields = vec![FormFieldValue { name: "\u{00C9}tat".into(), value: "test".into() }];
         write_form_fields(&mut doc, &fields).unwrap();
 
         let tf = doc.get_object(text_field_id).unwrap().as_dict().unwrap();
@@ -1537,9 +1621,7 @@ mod tests {
             cat.set(b"AcroForm", Object::Reference(acroform_id));
         }
 
-        let fields = vec![
-            FormFieldValue { name: "\u{00C9}tat".into(), value: "test16".into() },
-        ];
+        let fields = vec![FormFieldValue { name: "\u{00C9}tat".into(), value: "test16".into() }];
         write_form_fields(&mut doc, &fields).unwrap();
 
         let tf = doc.get_object(text_field_id).unwrap().as_dict().unwrap();
@@ -1578,12 +1660,15 @@ mod tests {
         // 2. Burn a text annotation
         let ann = Annotation::Text(TextAnnotation {
             page: 1,
-            x: 50.0, y: 300.0,
+            x: 50.0,
+            y: 300.0,
             width: 200.0,
             content: "Hello".to_string(),
             color: black(),
             font_size: 12.0,
-            bold: false, italic: false, underline: false,
+            bold: false,
+            italic: false,
+            underline: false,
             alignment: TextAlignment::Left,
             font_family: FontFamily::Helvetica,
             background_color: None,
@@ -1652,9 +1737,17 @@ mod tests {
         }
 
         let ann = Annotation::Text(TextAnnotation {
-            page: 1, x: 50.0, y: 300.0, width: 200.0,
-            content: "Hello".to_string(), color: black(), font_size: 12.0,
-            bold: false, italic: false, underline: false, alignment: TextAlignment::Left,
+            page: 1,
+            x: 50.0,
+            y: 300.0,
+            width: 200.0,
+            content: "Hello".to_string(),
+            color: black(),
+            font_size: 12.0,
+            bold: false,
+            italic: false,
+            underline: false,
+            alignment: TextAlignment::Left,
             font_family: FontFamily::Helvetica,
             background_color: None,
             cover: None,
@@ -1663,8 +1756,7 @@ mod tests {
         // 2. First save (no existing meta)
         let mut meta = load_meta(&doc);
         let existing = meta.stream_ids.get(&1).map(|arr| (arr[0], arr[1] as u16));
-        let sid = write_annotations_for_page(&mut doc, page_id, std::slice::from_ref(&ann), existing)
-            .unwrap().unwrap();
+        let sid = write_annotations_for_page(&mut doc, page_id, std::slice::from_ref(&ann), existing).unwrap().unwrap();
         meta.annotations = vec![ann.clone()];
         meta.stream_ids.insert(1, [sid.0, sid.1 as u32]);
         save_meta(&mut doc, &meta).unwrap();
@@ -1678,12 +1770,10 @@ mod tests {
         let pages2 = doc2.get_pages();
         let page_id2 = *pages2.get(&1).unwrap();
         let existing2 = meta2.stream_ids.get(&1).map(|arr| (arr[0], arr[1] as u16));
-        let sid2 = write_annotations_for_page(&mut doc2, page_id2, std::slice::from_ref(&ann), existing2)
-            .unwrap().unwrap();
-        let new_meta = AnnotationMeta {
-            annotations: vec![ann],
-            stream_ids: HashMap::from([(1, [sid2.0, sid2.1 as u32])]),
-        };
+        let sid2 =
+            write_annotations_for_page(&mut doc2, page_id2, std::slice::from_ref(&ann), existing2).unwrap().unwrap();
+        let new_meta =
+            AnnotationMeta { annotations: vec![ann], stream_ids: HashMap::from([(1, [sid2.0, sid2.1 as u32])]) };
         save_meta(&mut doc2, &new_meta).unwrap();
         doc2.save(&tmp).unwrap();
 
@@ -1695,9 +1785,12 @@ mod tests {
         let contents = page_dict.get(b"Contents").unwrap();
         match contents {
             Object::Array(arr) => {
-                assert_eq!(arr.len(), 2,
+                assert_eq!(
+                    arr.len(),
+                    2,
                     "Contents should have exactly 2 entries (original + annotation), got {}",
-                    arr.len());
+                    arr.len()
+                );
             }
             _ => panic!("Contents should be an array after append"),
         }

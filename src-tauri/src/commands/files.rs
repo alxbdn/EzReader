@@ -62,10 +62,7 @@ mod tests {
         let d = std::env::temp_dir().join(format!(
             "ezreader-rename-{}-{}",
             std::process::id(),
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_nanos()
+            std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos()
         ));
         std::fs::create_dir_all(&d).unwrap();
         d
@@ -113,10 +110,7 @@ mod tests {
             let _ = std::fs::remove_dir_all(d);
             return;
         }
-        assert_eq!(
-            rename_no_clobber(&lower, &upper),
-            Err(PdfError::new(ErrorCode::Exists, "exists"))
-        );
+        assert_eq!(rename_no_clobber(&lower, &upper), Err(PdfError::new(ErrorCode::Exists, "exists")));
         assert_eq!(std::fs::read(&upper).unwrap(), b"upper");
         assert!(lower.exists());
         let _ = std::fs::remove_dir_all(d);
@@ -178,11 +172,7 @@ const MAX_IMAGE_BYTES: u64 = 64 * 1024 * 1024;
 /// The bytes of a picture file, checked by extension and size.
 pub fn read_image_bytes(path: &str) -> CmdResult<Vec<u8>> {
     let p = std::path::Path::new(path);
-    let ext = p
-        .extension()
-        .and_then(|e| e.to_str())
-        .map(str::to_ascii_lowercase)
-        .unwrap_or_default();
+    let ext = p.extension().and_then(|e| e.to_str()).map(str::to_ascii_lowercase).unwrap_or_default();
     if !crate::commands::dialog::IMAGE_EXTENSIONS.contains(&ext.as_str()) {
         return Err(PdfError::new(ErrorCode::NotAnImage, "not an image"));
     }
@@ -256,10 +246,7 @@ pub fn temp_tag() -> String {
 /// Only paths the export may write are looked at.
 #[tauri::command]
 pub fn existing_files(paths: Vec<String>) -> Vec<String> {
-    paths
-        .into_iter()
-        .filter(|p| crate::grants::check(p).is_ok() && std::path::Path::new(p).exists())
-        .collect()
+    paths.into_iter().filter(|p| crate::grants::check(p).is_ok() && std::path::Path::new(p).exists()).collect()
 }
 
 /// Writes base64 `data` (a page picture of an export) to `path`, atomically.
@@ -277,8 +264,8 @@ pub fn write_image_file(path: String, data: String) -> CmdResult<()> {
     }
     crate::grants::check(&path)?;
     let b64 = data.split_once(',').map_or(data.as_str(), |(_, d)| d);
-    let bytes = base64::engine::general_purpose::STANDARD
-        .decode(b64)
-        .map_err(|e| format!("invalid image data: {e}"))?;
-    crate::fsutil::write_atomic(&path, |tmp| std::fs::write(tmp, &bytes).map_err(|e| e.to_string())).map_err(PdfError::from)
+    let bytes =
+        base64::engine::general_purpose::STANDARD.decode(b64).map_err(|e| format!("invalid image data: {e}"))?;
+    crate::fsutil::write_atomic(&path, |tmp| std::fs::write(tmp, &bytes).map_err(|e| e.to_string()))
+        .map_err(PdfError::from)
 }

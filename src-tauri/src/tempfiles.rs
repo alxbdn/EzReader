@@ -23,10 +23,8 @@ const LEGACY_MAX_AGE: Duration = Duration::from_secs(24 * 60 * 60);
 /// `None` for a name of an older version (or not an EzReader name).
 fn owner(name: &str) -> Option<u32> {
     let rest = name.strip_prefix("ezreader-")?;
-    let digits = rest
-        .strip_prefix('p')
-        .or_else(|| rest.strip_prefix("window-new-"))
-        .or_else(|| rest.strip_prefix("window-"))?;
+    let digits =
+        rest.strip_prefix('p').or_else(|| rest.strip_prefix("window-new-")).or_else(|| rest.strip_prefix("window-"))?;
     let end = digits.find('-')?;
     digits[..end].parse().ok()
 }
@@ -61,9 +59,7 @@ pub fn sweep_leftovers() {
     let now = SystemTime::now();
     sweep_with(&std::env::temp_dir(), |name, modified| match owner(name) {
         Some(pid) => pid != me && !is_running(pid),
-        None => modified
-            .and_then(|m| now.duration_since(m).ok())
-            .is_some_and(|age| age > LEGACY_MAX_AGE),
+        None => modified.and_then(|m| now.duration_since(m).ok()).is_some_and(|age| age > LEGACY_MAX_AGE),
     });
 }
 
@@ -147,7 +143,8 @@ mod tests {
 
         sweep_with(&d, |name, _| owner(name) == Some(1));
 
-        let mut left: Vec<_> = std::fs::read_dir(&d).unwrap().map(|e| e.unwrap().file_name().into_string().unwrap()).collect();
+        let mut left: Vec<_> =
+            std::fs::read_dir(&d).unwrap().map(|e| e.unwrap().file_name().into_string().unwrap()).collect();
         left.sort();
         assert_eq!(left, ["ezreader-p2-b.pdf", "notes.txt"]);
         let _ = std::fs::remove_dir_all(d);

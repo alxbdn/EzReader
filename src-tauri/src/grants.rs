@@ -93,7 +93,8 @@ impl Grants {
             return true;
         }
         // A document dragged out to a new window: %TEMP%\ezreader-window-…\<name>.
-        let in_window_dir = parent.file_name().and_then(|n| n.to_str()).is_some_and(|n| n.starts_with("ezreader-window-"));
+        let in_window_dir =
+            parent.file_name().and_then(|n| n.to_str()).is_some_and(|n| n.starts_with("ezreader-window-"));
         in_window_dir && parent.parent().is_some_and(|p| same(p, temp))
     }
 
@@ -156,7 +157,11 @@ mod tests {
     use super::*;
 
     fn root() -> PathBuf {
-        if cfg!(windows) { PathBuf::from(r"C:\Users\me") } else { PathBuf::from("/home/me") }
+        if cfg!(windows) {
+            PathBuf::from(r"C:\Users\me")
+        } else {
+            PathBuf::from("/home/me")
+        }
     }
 
     fn temp() -> PathBuf {
@@ -176,7 +181,15 @@ mod tests {
         // Not the folder's sub-folders, nor a sibling of the picked file.
         assert!(!g.allows(&out.join("sub").join("x.png"), &temp()));
         assert!(!g.allows(&root().join("Docs").join("other.pdf"), &temp()));
-        let startup = root().join("AppData").join("Roaming").join("Microsoft").join("Windows").join("Start Menu").join("Programs").join("Startup").join("x.bat");
+        let startup = root()
+            .join("AppData")
+            .join("Roaming")
+            .join("Microsoft")
+            .join("Windows")
+            .join("Start Menu")
+            .join("Programs")
+            .join("Startup")
+            .join("x.bat");
         assert!(!g.allows(&startup, &temp()));
     }
 

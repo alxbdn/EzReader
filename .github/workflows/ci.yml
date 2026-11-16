@@ -28,7 +28,7 @@ jobs:
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@39008827e6b4319a349e9a42dfc90579dd25f1ca # stable
         with:
-          components: clippy
+          components: clippy, rustfmt
 
       - name: Cache Rust dependencies
         uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
@@ -44,8 +44,69 @@ jobs:
       - name: Frontend tests
         run: npm test
 
+      - name: Rust formatting
+        run: cargo fmt --manifest-path src-tauri/Cargo.toml --check
+
       - name: Rust tests
         run: cargo test --manifest-path src-tauri/Cargo.toml
 
       - name: Clippy
         run: cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
+
+  # Statement coverage of the unit tests, shown in the run summary.
+  # The goal is 80 % (CONTRIBUTING.md, test policy).
+  coverage:
+    name: Coverage
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Setup Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@39008827e6b4319a349e9a42dfc90579dd25f1ca # stable
+        with:
+          components: llvm-tools-preview
+
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          workspaces: src-tauri
+
+      - uses: taiki-e/install-action@ab49d3c64680143e184118bed66a46419fc15519 # v2.90.5
+        with:
+          tool: cargo-llvm-cov
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Frontend coverage
+        shell: bash
+        run: |
+          npx vitest run --coverage.enabled --coverage.provider=v8 --coverage.include='src/**/*.ts' \
+            --coverage.reporter=text-summary --coverage.reporter=json-summary --coverage.reportsDirectory=coverage-ts
+          node -e "const t=require('./coverage-ts/coverage-summary.json').total; console.log('| Frontend (TypeScript) | '+t.statements.pct+' % | '+t.lines.pct+' % | '+t.branches.pct+' % |')" > ts-row.txt
+
+      - name: Rust coverage
+        shell: bash
+        run: |
+          cargo llvm-cov --manifest-path src-tauri/Cargo.toml --lib --json --summary-only --output-path rust-cov.json
+          node -e "const t=require('./rust-cov.json').data[0].totals; const p=x=>x.percent.toFixed(2); console.log('| Back end (Rust) | '+p(t.regions)+' % (regions) | '+p(t.lines)+' % | '+(t.branches.count?p(t.branches):'n/a')+' |')" > rust-row.txt
+
+      - name: Summary
+        shell: bash
+        run: |
+          {
+            echo "## Test coverage"
+            echo
+            echo "| Part | Statements | Lines | Branches |"
+            echo "|------|-----------|-------|----------|"
+            cat ts-row.txt rust-row.txt
+          } >> "$GITHUB_STEP_SUMMARY"
+          cat ts-row.txt rust-row.txt

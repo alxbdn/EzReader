@@ -53,21 +53,11 @@ pub fn save_annotated_pdf(
 
     // Apply rotation to every page's Rotate entry before burning annotations.
     if rotation_delta != 0 {
-        let page_ids: Vec<ObjectId> = inc
-            .get_prev_documents()
-            .get_pages()
-            .values()
-            .copied()
-            .collect();
+        let page_ids: Vec<ObjectId> = inc.get_prev_documents().get_pages().values().copied().collect();
         for page_id in page_ids {
-            inc.opt_clone_object_to_new_document(page_id)
-                .map_err(|e| e.to_string())?;
+            inc.opt_clone_object_to_new_document(page_id).map_err(|e| e.to_string())?;
             if let Ok(Object::Dictionary(dict)) = inc.new_document.get_object_mut(page_id) {
-                let current = dict
-                    .get(b"Rotate")
-                    .ok()
-                    .and_then(|o| o.as_i64().ok())
-                    .unwrap_or(0);
+                let current = dict.get(b"Rotate").ok().and_then(|o| o.as_i64().ok()).unwrap_or(0);
                 let new_rotate = (current + rotation_delta).rem_euclid(360);
                 dict.set(b"Rotate", Object::Integer(new_rotate));
             }
@@ -89,24 +79,17 @@ pub fn save_annotated_pdf(
     // Page + existing stream must be cloned into new_document before the helper
     // mutates them, otherwise get_object_mut would miss them.
     for (&page_num, anns) in &by_page {
-        let page_id = pages
-            .get(&page_num)
-            .copied()
-            .ok_or_else(|| format!("page {page_num} not found in document"))?;
+        let page_id = pages.get(&page_num).copied().ok_or_else(|| format!("page {page_num} not found in document"))?;
 
         let existing = meta.stream_ids.get(&page_num).map(|arr| (arr[0], arr[1] as u16));
 
-        inc.opt_clone_object_to_new_document(page_id)
-            .map_err(|e| e.to_string())?;
+        inc.opt_clone_object_to_new_document(page_id).map_err(|e| e.to_string())?;
         inline_page_resources(&mut inc, page_id)?;
         if let Some(sid) = existing {
-            inc.opt_clone_object_to_new_document(sid)
-                .map_err(|e| e.to_string())?;
+            inc.opt_clone_object_to_new_document(sid).map_err(|e| e.to_string())?;
         }
 
-        if let Some(sid) =
-            writer::write_annotations_for_page(&mut inc.new_document, page_id, anns, existing)?
-        {
+        if let Some(sid) = writer::write_annotations_for_page(&mut inc.new_document, page_id, anns, existing)? {
             new_stream_ids.insert(page_num, [sid.0, sid.1 as u32]);
         }
     }
@@ -115,8 +98,7 @@ pub fn save_annotated_pdf(
     for (&page_num, arr) in &meta.stream_ids {
         if !by_page.contains_key(&page_num) {
             let sid = (arr[0], arr[1] as u16);
-            inc.opt_clone_object_to_new_document(sid)
-                .map_err(|e| e.to_string())?;
+            inc.opt_clone_object_to_new_document(sid).map_err(|e| e.to_string())?;
             if let Ok(Object::Stream(s)) = inc.new_document.get_object_mut(sid) {
                 writer::set_raw_content(s, vec![]);
             }
@@ -134,8 +116,7 @@ pub fn save_annotated_pdf(
         .get(b"Root")
         .and_then(Object::as_reference)
         .map_err(|e| format!("No catalog: {e}"))?;
-    inc.opt_clone_object_to_new_document(cat_id)
-        .map_err(|e| e.to_string())?;
+    inc.opt_clone_object_to_new_document(cat_id).map_err(|e| e.to_string())?;
     writer::save_meta(&mut inc.new_document, &meta)?;
 
     if !form_fields.is_empty() {
@@ -157,43 +138,24 @@ pub fn save_annotated_pdf(
 /// (page already cloned by the caller) by cloning their contents from
 /// `prev_documents`. The originals stay untouched, so any other page that
 /// shared them keeps working.
-fn inline_page_resources(
-    inc: &mut IncrementalDocument,
-    page_id: ObjectId,
-) -> Result<(), String> {
+fn inline_page_resources(inc: &mut IncrementalDocument, page_id: ObjectId) -> Result<(), String> {
     // Step 1: inline /Resources itself if it's a reference.
     let resources_ref: Option<ObjectId> = {
-        let dict = inc
-            .new_document
-            .get_object(page_id)
-            .and_then(Object::as_dict)
-            .map_err(|e| e.to_string())?;
+        let dict = inc.new_document.get_object(page_id).and_then(Object::as_dict).map_err(|e| e.to_string())?;
         match dict.get(b"Resources") {
             Ok(Object::Reference(id)) => Some(*id),
             _ => None,
         }
     };
     if let Some(res_id) = resources_ref {
-        let clone = inc
-            .get_prev_documents()
-            .get_object(res_id)
-            .map_err(|e| e.to_string())?
-            .clone();
-        let page = inc
-            .new_document
-            .get_object_mut(page_id)
-            .and_then(Object::as_dict_mut)
-            .map_err(|e| e.to_string())?;
+        let clone = inc.get_prev_documents().get_object(res_id).map_err(|e| e.to_string())?.clone();
+        let page = inc.new_document.get_object_mut(page_id).and_then(Object::as_dict_mut).map_err(|e| e.to_string())?;
         page.set(b"Resources", clone);
     }
 
     // Step 2: inline /Resources/Font and /Resources/XObject if either is a reference.
     let (font_ref, xobj_ref): (Option<ObjectId>, Option<ObjectId>) = {
-        let dict = inc
-            .new_document
-            .get_object(page_id)
-            .and_then(Object::as_dict)
-            .map_err(|e| e.to_string())?;
+        let dict = inc.new_document.get_object(page_id).and_then(Object::as_dict).map_err(|e| e.to_string())?;
         let res = match dict.get(b"Resources") {
             Ok(Object::Dictionary(d)) => d,
             _ => return Ok(()),
@@ -210,16 +172,8 @@ fn inline_page_resources(
     };
     for (key, maybe_ref) in [(&b"Font"[..], font_ref), (&b"XObject"[..], xobj_ref)] {
         let Some(sub_id) = maybe_ref else { continue };
-        let clone = inc
-            .get_prev_documents()
-            .get_object(sub_id)
-            .map_err(|e| e.to_string())?
-            .clone();
-        let page = inc
-            .new_document
-            .get_object_mut(page_id)
-            .and_then(Object::as_dict_mut)
-            .map_err(|e| e.to_string())?;
+        let clone = inc.get_prev_documents().get_object(sub_id).map_err(|e| e.to_string())?.clone();
+        let page = inc.new_document.get_object_mut(page_id).and_then(Object::as_dict_mut).map_err(|e| e.to_string())?;
         if let Ok(Object::Dictionary(res)) = page.get_mut(b"Resources") {
             res.set(key.to_vec(), clone);
         }
@@ -242,10 +196,7 @@ fn clone_acroform_tree(inc: &mut IncrementalDocument, cat_id: ObjectId) -> lopdf
     inc.opt_clone_object_to_new_document(acroform_id)?;
 
     let field_refs: Vec<ObjectId> = {
-        let dict = inc
-            .get_prev_documents()
-            .get_object(acroform_id)
-            .and_then(Object::as_dict)?;
+        let dict = inc.get_prev_documents().get_object(acroform_id).and_then(Object::as_dict)?;
         match dict.get(b"Fields") {
             Ok(Object::Array(arr)) => arr.iter().filter_map(|o| o.as_reference().ok()).collect(),
             _ => return Ok(()),
@@ -282,14 +233,9 @@ fn clone_acroform_tree(inc: &mut IncrementalDocument, cat_id: ObjectId) -> lopdf
 /// Used to produce a "display" PDF that pdf.js can render without showing
 /// burned annotation content — the overlay draws all annotations from memory.
 #[tauri::command(async)]
-pub fn strip_annotation_streams(
-    input_path: String,
-    output_path: String,
-) -> CmdResult<bool> {
+pub fn strip_annotation_streams(input_path: String, output_path: String) -> CmdResult<bool> {
     crate::grants::check_all([&input_path, &output_path])?;
-    let meta_empty = Document::load(&input_path)
-        .map(|d| writer::load_meta(&d).stream_ids.is_empty())
-        .unwrap_or(true);
+    let meta_empty = Document::load(&input_path).map(|d| writer::load_meta(&d).stream_ids.is_empty()).unwrap_or(true);
     if meta_empty {
         // No burn streams to clear; just copy bytes verbatim and avoid lopdf's
         // corruption-prone full rewrite.
@@ -301,8 +247,7 @@ pub fn strip_annotation_streams(
     let meta = writer::load_meta(inc.get_prev_documents());
     for arr in meta.stream_ids.values() {
         let sid = (arr[0], arr[1] as u16);
-        inc.opt_clone_object_to_new_document(sid)
-            .map_err(|e| e.to_string())?;
+        inc.opt_clone_object_to_new_document(sid).map_err(|e| e.to_string())?;
         if let Ok(Object::Stream(s)) = inc.new_document.get_object_mut(sid) {
             writer::set_raw_content(s, vec![]);
         }
@@ -315,11 +260,7 @@ pub fn strip_annotation_streams(
 /// redacted images. Always a full rewrite: an incremental update would keep
 /// the original page content in the file's earlier revision.
 #[tauri::command(async)]
-pub fn redact_pages(
-    input_path: String,
-    output_path: String,
-    pages: Vec<redact::RedactedPage>,
-) -> CmdResult<()> {
+pub fn redact_pages(input_path: String, output_path: String, pages: Vec<redact::RedactedPage>) -> CmdResult<()> {
     crate::grants::check_all([&input_path, &output_path])?;
     let mut doc = Document::load(&input_path).map_err(|e| e.to_string())?;
     let page_count = doc.get_pages().len();
@@ -384,9 +325,7 @@ pub fn adjust_pages(input_path: String, output_path: String, pages: Vec<PageAdju
     let meta = writer::load_meta(inc.get_prev_documents());
 
     for adj in &pages {
-        let &page_id = prev_pages
-            .get(&adj.page)
-            .ok_or_else(|| format!("Page {} does not exist", adj.page))?;
+        let &page_id = prev_pages.get(&adj.page).ok_or_else(|| format!("Page {} does not exist", adj.page))?;
         let inherited = inherited_attributes(inc.get_prev_documents(), page_id);
         let prev = inc.get_prev_documents();
         let media = page_box(prev, page_id, &inherited, b"MediaBox").unwrap_or([0.0, 0.0, 612.0, 792.0]);
@@ -396,10 +335,7 @@ pub fn adjust_pages(input_path: String, output_path: String, pages: Vec<PageAdju
             .filter(|b| b[2] > b[0] && b[3] > b[1])
             .unwrap_or(media);
         let contents = content_refs(prev, page_id);
-        let ann_stream = meta
-            .stream_ids
-            .get(&adj.page)
-            .map(|ids| (ids[0], ids[1] as u16));
+        let ann_stream = meta.stream_ids.get(&adj.page).map(|ids| (ids[0], ids[1] as u16));
 
         inc.opt_clone_object_to_new_document(page_id).map_err(|e| e.to_string())?;
         let mut new_contents = contents.clone();
@@ -455,11 +391,8 @@ pub fn adjust_pages(input_path: String, output_path: String, pages: Vec<PageAdju
 /// A page box (own or inherited), as [x0, y0, x1, y1] with x0 < x1, y0 < y1.
 fn page_box(doc: &Document, page_id: ObjectId, inherited: &[(&[u8], Object)], key: &[u8]) -> Option<[f64; 4]> {
     let page = doc.get_object(page_id).and_then(Object::as_dict).ok()?;
-    let obj = page
-        .get(key)
-        .ok()
-        .cloned()
-        .or_else(|| inherited.iter().find(|(k, _)| *k == key).map(|(_, v)| v.clone()))?;
+    let obj =
+        page.get(key).ok().cloned().or_else(|| inherited.iter().find(|(k, _)| *k == key).map(|(_, v)| v.clone()))?;
     let arr = match obj {
         Object::Reference(id) => doc.get_object(id).ok()?.as_array().ok()?.clone(),
         Object::Array(a) => a,
@@ -527,9 +460,8 @@ fn image_page_size(w: u32, h: u32) -> (f64, f64) {
 fn image_page(doc: &mut Document, data: &str) -> Result<ObjectId, String> {
     use base64::Engine;
     let b64 = data.split_once(',').map_or(data, |(_, d)| d);
-    let bytes = base64::engine::general_purpose::STANDARD
-        .decode(b64)
-        .map_err(|e| format!("invalid image data: {e}"))?;
+    let bytes =
+        base64::engine::general_purpose::STANDARD.decode(b64).map_err(|e| format!("invalid image data: {e}"))?;
     image_page_from_bytes(doc, &bytes)
 }
 
@@ -550,10 +482,7 @@ fn image_page_from_bytes(doc: &mut Document, bytes: &[u8]) -> Result<ObjectId, S
     resources.set("XObject", Object::Dictionary(xobjects));
     let mut dict = lopdf::Dictionary::new();
     dict.set("Type", Object::Name(b"Page".to_vec()));
-    dict.set(
-        "MediaBox",
-        Object::Array(vec![0.into(), 0.into(), Object::Real(pw as f32), Object::Real(ph as f32)]),
-    );
+    dict.set("MediaBox", Object::Array(vec![0.into(), 0.into(), Object::Real(pw as f32), Object::Real(ph as f32)]));
     dict.set("Resources", Object::Dictionary(resources));
     dict.set("Contents", Object::Reference(contents));
     Ok(doc.add_object(dict))
@@ -630,11 +559,7 @@ const INHERITABLE: [&[u8]; 4] = [b"Resources", b"MediaBox", b"CropBox", b"Rotate
 /// pages left out, and the objects only they used, are removed from the
 /// output file entirely.
 #[tauri::command(async)]
-pub fn rearrange_pages(
-    input_path: String,
-    output_path: String,
-    slots: Vec<PageSlot>,
-) -> CmdResult<()> {
+pub fn rearrange_pages(input_path: String, output_path: String, slots: Vec<PageSlot>) -> CmdResult<()> {
     crate::grants::check_all([&input_path, &output_path])?;
     for slot in &slots {
         if let PageSlot::Imported { path, .. } = slot {
@@ -703,15 +628,12 @@ fn rewrite_pages(inc: &mut IncrementalDocument, slots: &[PageSlot]) -> CmdResult
         let new_num = index as u32 + 1;
         let (page_id, rotation) = match slot {
             PageSlot::Original { page, rotation } => {
-                let &page_id = prev_pages
-                    .get(page)
-                    .ok_or_else(|| format!("Page {page} does not exist"))?;
+                let &page_id = prev_pages.get(page).ok_or_else(|| format!("Page {page} does not exist"))?;
                 if renumber.insert(*page, new_num).is_some() {
                     return Err(PdfError::new(ErrorCode::InvalidPages, format!("Page {page} is listed twice")));
                 }
                 let inherited = inherited_attributes(inc.get_prev_documents(), page_id);
-                inc.opt_clone_object_to_new_document(page_id)
-                    .map_err(|e| e.to_string())?;
+                inc.opt_clone_object_to_new_document(page_id).map_err(|e| e.to_string())?;
                 let dict = inc
                     .new_document
                     .get_object_mut(page_id)
@@ -723,9 +645,7 @@ fn rewrite_pages(inc: &mut IncrementalDocument, slots: &[PageSlot]) -> CmdResult
                 (page_id, *rotation)
             }
             PageSlot::Blank { width, height, rotation } => {
-                let contents = inc
-                    .new_document
-                    .add_object(lopdf::Stream::new(lopdf::Dictionary::new(), Vec::new()));
+                let contents = inc.new_document.add_object(lopdf::Stream::new(lopdf::Dictionary::new(), Vec::new()));
                 let mut dict = lopdf::Dictionary::new();
                 dict.set("Type", Object::Name(b"Page".to_vec()));
                 dict.set(
@@ -739,19 +659,12 @@ fn rewrite_pages(inc: &mut IncrementalDocument, slots: &[PageSlot]) -> CmdResult
             PageSlot::Image { data, rotation } => (image_page(&mut inc.new_document, data)?, *rotation),
             PageSlot::Imported { path, rotation, .. } => {
                 let page_id = imported_ids[index].expect("reserved above");
-                importers
-                    .get_mut(path)
-                    .expect("loaded above")
-                    .copy_page(page_id, &mut inc.new_document)?;
+                importers.get_mut(path).expect("loaded above").copy_page(page_id, &mut inc.new_document)?;
                 (page_id, *rotation)
             }
         };
 
-        let dict = inc
-            .new_document
-            .get_object_mut(page_id)
-            .and_then(Object::as_dict_mut)
-            .map_err(|e| e.to_string())?;
+        let dict = inc.new_document.get_object_mut(page_id).and_then(Object::as_dict_mut).map_err(|e| e.to_string())?;
         dict.set("Parent", Object::Reference(root_pages));
         if rotation != 0 {
             let current = dict.get(b"Rotate").and_then(Object::as_i64).unwrap_or(0);
@@ -762,13 +675,8 @@ fn rewrite_pages(inc: &mut IncrementalDocument, slots: &[PageSlot]) -> CmdResult
 
     // Every kept page now carries its inherited attributes itself; drop them
     // from the root so they don't leak onto blank or imported pages.
-    inc.opt_clone_object_to_new_document(root_pages)
-        .map_err(|e| e.to_string())?;
-    let root = inc
-        .new_document
-        .get_object_mut(root_pages)
-        .and_then(Object::as_dict_mut)
-        .map_err(|e| e.to_string())?;
+    inc.opt_clone_object_to_new_document(root_pages).map_err(|e| e.to_string())?;
+    let root = inc.new_document.get_object_mut(root_pages).and_then(Object::as_dict_mut).map_err(|e| e.to_string())?;
     for key in INHERITABLE {
         root.remove(key);
     }
@@ -788,8 +696,7 @@ fn rewrite_pages(inc: &mut IncrementalDocument, slots: &[PageSlot]) -> CmdResult
         .collect();
 
     // save_meta needs the catalog in new_document so it can set /CCAnnot on it.
-    inc.opt_clone_object_to_new_document(cat_id)
-        .map_err(|e| e.to_string())?;
+    inc.opt_clone_object_to_new_document(cat_id).map_err(|e| e.to_string())?;
     writer::save_meta(&mut inc.new_document, &meta)?;
     Ok(())
 }
@@ -797,10 +704,7 @@ fn rewrite_pages(inc: &mut IncrementalDocument, slots: &[PageSlot]) -> CmdResult
 /// The pages of `keep` (1-based) that exist in a `total`-page document, in
 /// document order, as slots for [`rewrite_pages`].
 fn kept_slots(keep: &HashSet<u32>, total: u32) -> Vec<PageSlot> {
-    (1..=total)
-        .filter(|p| keep.contains(p))
-        .map(|page| PageSlot::Original { page, rotation: 0 })
-        .collect()
+    (1..=total).filter(|p| keep.contains(p)).map(|page| PageSlot::Original { page, rotation: 0 }).collect()
 }
 
 /// The inheritable attributes `page_id` lacks itself, taken from its nearest
@@ -810,8 +714,7 @@ fn inherited_attributes(doc: &Document, page_id: ObjectId) -> Vec<(&'static [u8]
         return Vec::new();
     };
     let mut found = Vec::new();
-    let mut missing: Vec<&'static [u8]> =
-        INHERITABLE.iter().copied().filter(|k| !page.has(k)).collect();
+    let mut missing: Vec<&'static [u8]> = INHERITABLE.iter().copied().filter(|k| !page.has(k)).collect();
     let mut cursor = page.get(b"Parent").and_then(Object::as_reference).ok();
     let mut depth = 0;
     while let Some(id) = cursor {
@@ -856,10 +759,8 @@ impl Importer {
     /// Picks the id page `page` will have in `dst`. Importing the same page
     /// twice yields two independent copies.
     fn reserve_page(&mut self, page: u32, dst: &mut Document) -> Result<ObjectId, String> {
-        let &src_id = self
-            .pages
-            .get(&page)
-            .ok_or_else(|| format!("Page {page} does not exist in the inserted file"))?;
+        let &src_id =
+            self.pages.get(&page).ok_or_else(|| format!("Page {page} does not exist in the inserted file"))?;
         let new_id = dst.new_object_id();
         // Links to a page imported twice point at its first copy.
         self.map.entry(src_id).or_insert(new_id);
@@ -869,16 +770,8 @@ impl Importer {
 
     /// Writes the page reserved as `new_id` into `dst`.
     fn copy_page(&mut self, new_id: ObjectId, dst: &mut Document) -> Result<(), String> {
-        let src_id = *self
-            .reserved
-            .get(&new_id)
-            .ok_or_else(|| "internal error: page was not reserved".to_string())?;
-        let mut dict = self
-            .src
-            .get_object(src_id)
-            .and_then(Object::as_dict)
-            .map_err(|e| e.to_string())?
-            .clone();
+        let src_id = *self.reserved.get(&new_id).ok_or_else(|| "internal error: page was not reserved".to_string())?;
+        let mut dict = self.src.get_object(src_id).and_then(Object::as_dict).map_err(|e| e.to_string())?.clone();
         for (key, value) in inherited_attributes(&self.src, src_id) {
             dict.set(key, value);
         }
@@ -902,9 +795,7 @@ impl Importer {
     fn copy_value(&mut self, value: &Object, dst: &mut Document) -> Object {
         match value {
             Object::Reference(id) => self.copy_ref(*id, dst),
-            Object::Array(items) => {
-                Object::Array(items.iter().map(|o| self.copy_value(o, dst)).collect())
-            }
+            Object::Array(items) => Object::Array(items.iter().map(|o| self.copy_value(o, dst)).collect()),
             Object::Dictionary(d) => Object::Dictionary(self.copy_dict(d, dst)),
             Object::Stream(s) => {
                 let mut dict = self.copy_dict(&s.dict, dst);
@@ -925,10 +816,9 @@ impl Importer {
         // A link to a page that is not imported (an outline or link target)
         // would drag the whole source page tree along: cut it.
         let is_page_node = match obj {
-            Object::Dictionary(d) => d
-                .get(b"Type")
-                .and_then(Object::as_name)
-                .is_ok_and(|t| t == b"Page" || t == b"Pages"),
+            Object::Dictionary(d) => {
+                d.get(b"Type").and_then(Object::as_name).is_ok_and(|t| t == b"Page" || t == b"Pages")
+            }
             _ => false,
         };
         if is_page_node {
@@ -961,7 +851,15 @@ mod tests {
         let pages = doc.get_pages();
         assert_eq!(pages.len(), 2);
         let media = |n: u32| -> Vec<f32> {
-            doc.get_dictionary(pages[&n]).unwrap().get(b"MediaBox").unwrap().as_array().unwrap().iter().map(|o| o.as_float().unwrap()).collect()
+            doc.get_dictionary(pages[&n])
+                .unwrap()
+                .get(b"MediaBox")
+                .unwrap()
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|o| o.as_float().unwrap())
+                .collect()
         };
         assert!(media(1)[2] > media(1)[3], "landscape picture, landscape page");
         assert!(media(2)[2] < media(2)[3]);
@@ -1013,23 +911,34 @@ mod tests {
     fn adjust_crops_and_mirrors_without_touching_the_annotation_layer() {
         let annotated = tmp("adjust-in.pdf");
         let out = tmp("adjust-out.pdf");
-        save_annotated_pdf(fixture("objstm-indirect-length.pdf"), annotated.clone(), vec![rect(1, 200.0)], 0, vec![]).unwrap();
+        save_annotated_pdf(fixture("objstm-indirect-length.pdf"), annotated.clone(), vec![rect(1, 200.0)], 0, vec![])
+            .unwrap();
         let layer = writer::load_meta(&Document::load(&annotated).unwrap()).stream_ids[&1];
 
-        adjust_pages(annotated.clone(), out.clone(), vec![PageAdjust {
-            page: 1, crop: Some([50.0, 60.0, 300.0, 400.0]), flip_h: true, flip_v: false,
-        }]).unwrap();
+        adjust_pages(
+            annotated.clone(),
+            out.clone(),
+            vec![PageAdjust { page: 1, crop: Some([50.0, 60.0, 300.0, 400.0]), flip_h: true, flip_v: false }],
+        )
+        .unwrap();
         crate::test_util::assert_lengths_consistent(&out);
 
         let doc = Document::load(&out).unwrap();
         let page = doc.get_pages()[&1];
         let dict = doc.get_dictionary(page).unwrap();
-        let crop: Vec<f32> = dict.get(b"CropBox").unwrap().as_array().unwrap().iter().map(|o| o.as_float().unwrap()).collect();
+        let crop: Vec<f32> =
+            dict.get(b"CropBox").unwrap().as_array().unwrap().iter().map(|o| o.as_float().unwrap()).collect();
         assert_eq!(crop, vec![50.0, 60.0, 300.0, 400.0]);
 
         let contents = dict.get(b"Contents").unwrap().as_array().unwrap();
         let first = contents[0].as_reference().unwrap();
-        let pre = doc.get_object(first).unwrap().as_stream().unwrap().decompressed_content().unwrap_or_else(|_| doc.get_object(first).unwrap().as_stream().unwrap().content.clone());
+        let pre = doc
+            .get_object(first)
+            .unwrap()
+            .as_stream()
+            .unwrap()
+            .decompressed_content()
+            .unwrap_or_else(|_| doc.get_object(first).unwrap().as_stream().unwrap().content.clone());
         assert!(String::from_utf8_lossy(&pre).starts_with("q -1 0 0 1 "), "mirror comes first");
         let last = contents.last().unwrap().as_reference().unwrap();
         assert_eq!(last, (layer[0], layer[1] as u16), "the annotation layer stays outside the mirror");
@@ -1050,7 +959,8 @@ mod tests {
         let stripped = tmp("stripped.pdf");
         let one_page = tmp("one.pdf");
 
-        save_annotated_pdf(fixture("objstm-indirect-length.pdf"), first.clone(), vec![rect(1, 200.0)], 0, vec![]).unwrap();
+        save_annotated_pdf(fixture("objstm-indirect-length.pdf"), first.clone(), vec![rect(1, 200.0)], 0, vec![])
+            .unwrap();
         assert_eq!(read_annotations(first.clone()).unwrap().len(), 1);
 
         // Re-saving rewrites the existing burn stream in place; its /Length
@@ -1062,7 +972,8 @@ mod tests {
         assert!(strip_annotation_streams(second.clone(), stripped.clone()).unwrap());
         crate::test_util::assert_lengths_consistent(&stripped);
 
-        modify_pages(second.clone(), one_page.clone(), vec![PageOperation { page: 2, rotation: 0, delete: true }]).unwrap();
+        modify_pages(second.clone(), one_page.clone(), vec![PageOperation { page: 2, rotation: 0, delete: true }])
+            .unwrap();
         let doc = Document::load(&one_page).unwrap();
         assert_eq!(doc.get_pages().len(), 1);
         assert!(doc.extract_text(&[1]).unwrap().contains("Page 1"));
@@ -1119,11 +1030,7 @@ mod tests {
             intermediate_ids.push(mid_id);
         }
 
-        let root_kids: Vec<Object> = intermediate_ids
-            .iter()
-            .copied()
-            .map(Object::Reference)
-            .collect();
+        let root_kids: Vec<Object> = intermediate_ids.iter().copied().map(Object::Reference).collect();
         let total = (pages_per_group * groups) as i64;
         if let Ok(Object::Dictionary(d)) = doc.get_object_mut(root_id) {
             d.set(b"Kids".to_vec(), Object::Array(root_kids));
@@ -1161,29 +1068,18 @@ mod tests {
         .unwrap();
 
         let saved = Document::load(&output).unwrap();
-        assert_eq!(
-            saved.get_pages().len(),
-            79,
-            "saved file should have 79 pages after deleting page 1"
-        );
+        assert_eq!(saved.get_pages().len(), 79, "saved file should have 79 pages after deleting page 1");
 
         // No /Pages node should still reference 80 entries, and the catalog's
         // root /Pages must report Count=79.
-        let cat_id = saved
-            .trailer
-            .get(b"Root")
-            .and_then(|o| o.as_reference())
-            .unwrap();
+        let cat_id = saved.trailer.get(b"Root").and_then(|o| o.as_reference()).unwrap();
         let root_pages_id = saved
             .get_object(cat_id)
             .and_then(Object::as_dict)
             .and_then(|d| d.get(b"Pages"))
             .and_then(Object::as_reference)
             .unwrap();
-        let root = saved
-            .get_object(root_pages_id)
-            .and_then(Object::as_dict)
-            .unwrap();
+        let root = saved.get_object(root_pages_id).and_then(Object::as_dict).unwrap();
         let root_count = root.get(b"Count").and_then(Object::as_i64).unwrap();
         assert_eq!(root_count, 79, "root /Pages Count must be 79");
 
@@ -1193,10 +1089,7 @@ mod tests {
 
     fn page_order(path: &str) -> Vec<String> {
         let doc = Document::load(path).unwrap();
-        doc.get_pages()
-            .keys()
-            .map(|&n| doc.extract_text(&[n]).unwrap_or_default().trim().to_string())
-            .collect()
+        doc.get_pages().keys().map(|&n| doc.extract_text(&[n]).unwrap_or_default().trim().to_string()).collect()
     }
 
     /// Reordering a multi-level tree (and the iLovePDF-style fixture) keeps
@@ -1205,17 +1098,15 @@ mod tests {
     fn rearrange_reorders_pages_and_annotations() {
         let annotated = tmp("rearrange-annotated.pdf");
         let out = tmp("rearrange-out.pdf");
-        save_annotated_pdf(fixture("objstm-indirect-length.pdf"), annotated.clone(), vec![rect(1, 50.0)], 0, vec![]).unwrap();
+        save_annotated_pdf(fixture("objstm-indirect-length.pdf"), annotated.clone(), vec![rect(1, 50.0)], 0, vec![])
+            .unwrap();
         let before = page_order(&annotated);
         assert!(before.len() >= 2);
 
         rearrange_pages(
             annotated.clone(),
             out.clone(),
-            vec![
-                PageSlot::Original { page: 2, rotation: 90 },
-                PageSlot::Original { page: 1, rotation: 0 },
-            ],
+            vec![PageSlot::Original { page: 2, rotation: 90 }, PageSlot::Original { page: 1, rotation: 0 }],
         )
         .unwrap();
         crate::test_util::assert_lengths_consistent(&out);
@@ -1246,10 +1137,11 @@ mod tests {
         for &leaf in &leaves[..2] {
             doc.get_object_mut(leaf).unwrap().as_dict_mut().unwrap().remove(b"MediaBox");
         }
-        doc.get_object_mut(mid).unwrap().as_dict_mut().unwrap().set(
-            "MediaBox",
-            Object::Array(vec![0.into(), 0.into(), 300.into(), 400.into()]),
-        );
+        doc.get_object_mut(mid)
+            .unwrap()
+            .as_dict_mut()
+            .unwrap()
+            .set("MediaBox", Object::Array(vec![0.into(), 0.into(), 300.into(), 400.into()]));
         let input = tmp("rearrange-blank-in.pdf");
         let out = tmp("rearrange-blank-out.pdf");
         doc.save(&input).unwrap();
@@ -1325,10 +1217,7 @@ mod tests {
         let out = tmp("rearrange-bad-out.pdf");
         doc.save(&input).unwrap();
         assert!(rearrange_pages(input.clone(), out.clone(), vec![]).is_err());
-        let dup = vec![
-            PageSlot::Original { page: 1, rotation: 0 },
-            PageSlot::Original { page: 1, rotation: 0 },
-        ];
+        let dup = vec![PageSlot::Original { page: 1, rotation: 0 }, PageSlot::Original { page: 1, rotation: 0 }];
         assert!(rearrange_pages(input.clone(), out.clone(), dup).unwrap_err().code == ErrorCode::InvalidPages);
         std::fs::remove_file(input).ok();
     }
@@ -1338,19 +1227,13 @@ mod tests {
     #[test]
     fn split_pdf_produces_one_file_per_range() {
         let (mut doc, _) = build_nested_pdf(5, 2); // 10 pages
-        let dir = std::env::temp_dir().join(format!(
-            "ezreader-split-test-{}",
-            std::process::id()
-        ));
+        let dir = std::env::temp_dir().join(format!("ezreader-split-test-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         let input = dir.join("in.pdf");
         doc.save(&input).unwrap();
 
-        let ranges = vec![
-            SplitRange { start: 1, end: 3 },
-            SplitRange { start: 4, end: 4 },
-            SplitRange { start: 5, end: 10 },
-        ];
+        let ranges =
+            vec![SplitRange { start: 1, end: 3 }, SplitRange { start: 4, end: 4 }, SplitRange { start: 5, end: 10 }];
         let created = split_pdf(
             input.to_string_lossy().into_owned(),
             dir.to_string_lossy().into_owned(),
@@ -1364,10 +1247,7 @@ mod tests {
         assert!(created[1].ends_with("doc-page-4.pdf"));
         assert!(created[2].ends_with("doc-pages-5-10.pdf"));
 
-        let counts: Vec<usize> = created
-            .iter()
-            .map(|p| Document::load(p).unwrap().get_pages().len())
-            .collect();
+        let counts: Vec<usize> = created.iter().map(|p| Document::load(p).unwrap().get_pages().len()).collect();
         assert_eq!(counts, vec![3, 1, 6]);
 
         // Re-running the same split should append `-2` suffixes to avoid collision.
@@ -1386,10 +1266,7 @@ mod tests {
     #[test]
     fn split_pdf_rejects_out_of_range() {
         let (mut doc, _) = build_nested_pdf(3, 1); // 3 pages
-        let dir = std::env::temp_dir().join(format!(
-            "ezreader-split-oob-test-{}",
-            std::process::id()
-        ));
+        let dir = std::env::temp_dir().join(format!("ezreader-split-oob-test-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         let input = dir.join("in.pdf");
         doc.save(&input).unwrap();
@@ -1418,20 +1295,10 @@ mod tests {
         let output = std::env::temp_dir().join("ezreader-test-cross-out.pdf");
         doc.save(&input).unwrap();
 
-        let ops: Vec<PageOperation> = (1..=20)
-            .map(|p| PageOperation {
-                page: p,
-                rotation: 0,
-                delete: matches!(p, 5..=7),
-            })
-            .collect();
+        let ops: Vec<PageOperation> =
+            (1..=20).map(|p| PageOperation { page: p, rotation: 0, delete: matches!(p, 5..=7) }).collect();
 
-        modify_pages(
-            input.to_string_lossy().into_owned(),
-            output.to_string_lossy().into_owned(),
-            ops,
-        )
-        .unwrap();
+        modify_pages(input.to_string_lossy().into_owned(), output.to_string_lossy().into_owned(), ops).unwrap();
 
         let saved = Document::load(&output).unwrap();
         assert_eq!(saved.get_pages().len(), 17);
@@ -1466,9 +1333,12 @@ mod tests {
                 "Annots" => vec![Object::Reference(annot)],
             })));
         }
-        doc.objects.insert(pages_id, Object::Dictionary(dictionary! {
-            "Type" => "Pages", "Kids" => kids, "Count" => 3,
-        }));
+        doc.objects.insert(
+            pages_id,
+            Object::Dictionary(dictionary! {
+                "Type" => "Pages", "Kids" => kids, "Count" => 3,
+            }),
+        );
         let cat = doc.add_object(dictionary! { "Type" => "Catalog", "Pages" => pages_id });
         doc.trailer.set("Root", cat);
         let mut file = std::fs::File::create(path).unwrap();
@@ -1598,7 +1468,8 @@ mod tests {
     fn flattened_export_keeps_the_drawing_but_nothing_editable() {
         let annotated = tmp("flat-in.pdf");
         let out = tmp("flat-out.pdf");
-        save_annotated_pdf(fixture("objstm-indirect-length.pdf"), annotated.clone(), vec![rect(1, 200.0)], 0, vec![]).unwrap();
+        save_annotated_pdf(fixture("objstm-indirect-length.pdf"), annotated.clone(), vec![rect(1, 200.0)], 0, vec![])
+            .unwrap();
         assert_eq!(read_annotations(annotated.clone()).unwrap().len(), 1);
 
         export_flattened_pages(annotated.clone(), out.clone(), vec![1]).unwrap();
@@ -1650,11 +1521,7 @@ mod tests {
 /// Acrobat / iLovePDF / Word output) survive the rewrite; see
 /// `extracting_from_an_object_stream_pdf_keeps_text_and_drops_the_rest`.
 #[tauri::command(async)]
-pub fn extract_pdf_pages(
-    input_path: String,
-    output_path: String,
-    pages: Vec<u32>,
-) -> CmdResult<()> {
+pub fn extract_pdf_pages(input_path: String, output_path: String, pages: Vec<u32>) -> CmdResult<()> {
     crate::grants::check_all([&input_path, &output_path])?;
     let keep: HashSet<u32> = pages.into_iter().collect();
     extract_pages(&input_path, &output_path, &keep)
@@ -1664,11 +1531,7 @@ pub fn extract_pdf_pages(
 /// and form fields show is drawn into the pages; nothing in the copy is
 /// interactive or editable any more (links excepted).
 #[tauri::command(async)]
-pub fn export_flattened_pages(
-    input_path: String,
-    output_path: String,
-    pages: Vec<u32>,
-) -> CmdResult<()> {
+pub fn export_flattened_pages(input_path: String, output_path: String, pages: Vec<u32>) -> CmdResult<()> {
     crate::grants::check_all([&input_path, &output_path])?;
     let keep: HashSet<u32> = pages.into_iter().collect();
     let mut inc = fsutil::load_incremental(&input_path)?;
@@ -1684,17 +1547,11 @@ pub fn export_flattened_pages(
 }
 
 /// Keeps only the pages in `keep` (1-based) and writes a compacted file.
-fn extract_pages(
-    input_path: &str,
-    output_path: &str,
-    keep: &HashSet<u32>,
-) -> CmdResult<()> {
+fn extract_pages(input_path: &str, output_path: &str, keep: &HashSet<u32>) -> CmdResult<()> {
     let mut inc = fsutil::load_incremental(input_path)?;
     let total = inc.get_prev_documents().get_pages().len() as u32;
 
-    let keeping_all = total > 0
-        && keep.len() as u32 >= total
-        && (1..=total).all(|p| keep.contains(&p));
+    let keeping_all = total > 0 && keep.len() as u32 >= total && (1..=total).all(|p| keep.contains(&p));
     if keeping_all {
         // Byte-perfect copy — no incremental update needed.
         fsutil::copy_atomic(input_path, output_path)?;
@@ -1734,10 +1591,7 @@ pub fn split_pdf(
         return Err(PdfError::new(ErrorCode::InvalidPages, "No ranges to split"));
     }
 
-    let total = Document::load(&input_path)
-        .map_err(|e| e.to_string())?
-        .get_pages()
-        .len() as u32;
+    let total = Document::load(&input_path).map_err(|e| e.to_string())?.get_pages().len() as u32;
 
     let out_dir = std::path::PathBuf::from(&output_dir);
     if !out_dir.is_dir() {
@@ -1749,11 +1603,15 @@ pub fn split_pdf(
 
     for range in &ranges {
         if range.start == 0 || range.end < range.start || range.end > total {
-            return Err(PdfError::new(ErrorCode::InvalidPages, format!("Invalid range {}-{} (document has {total} page{})",
-                range.start,
-                range.end,
-                if total == 1 { "" } else { "s" },
-            )));
+            return Err(PdfError::new(
+                ErrorCode::InvalidPages,
+                format!(
+                    "Invalid range {}-{} (document has {total} page{})",
+                    range.start,
+                    range.end,
+                    if total == 1 { "" } else { "s" },
+                ),
+            ));
         }
 
         let stem = if range.start == range.end {
@@ -1764,11 +1622,7 @@ pub fn split_pdf(
         let target = unique_path(&out_dir, &stem, "pdf");
 
         let keep: HashSet<u32> = (range.start..=range.end).collect();
-        extract_pages(
-            &input_path,
-            target.to_string_lossy().as_ref(),
-            &keep,
-        )?;
+        extract_pages(&input_path, target.to_string_lossy().as_ref(), &keep)?;
         created.push(target.to_string_lossy().into_owned());
     }
 

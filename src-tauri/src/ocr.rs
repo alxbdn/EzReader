@@ -137,10 +137,7 @@ mod engine {
         let buffer = writer.DetachBuffer().map_err(|e| e.message())?;
         let bitmap = SoftwareBitmap::CreateCopyFromBuffer(&buffer, BitmapPixelFormat::Bgra8, w as i32, h as i32)
             .map_err(|e| e.message())?;
-        let result = engine
-            .RecognizeAsync(&bitmap)
-            .and_then(|op| op.join())
-            .map_err(|e| e.message())?;
+        let result = engine.RecognizeAsync(&bitmap).and_then(|op| op.join()).map_err(|e| e.message())?;
 
         let (fw, fh) = (w as f32, h as f32);
         let mut lines = Vec::new();
@@ -158,11 +155,8 @@ mod engine {
             }
             lines.push(OcrLine { text: line.Text().map(|s| s.to_string()).unwrap_or_default(), words });
         }
-        let language = engine
-            .RecognizerLanguage()
-            .and_then(|l| l.LanguageTag())
-            .map(|s| s.to_string())
-            .unwrap_or_default();
+        let language =
+            engine.RecognizerLanguage().and_then(|l| l.LanguageTag()).map(|s| s.to_string()).unwrap_or_default();
         Ok(OcrResult { text: join_lines(&lines), lines, language })
     }
 }
@@ -192,7 +186,8 @@ mod engine {
     /// Language tags Vision reads (en-US, fr-FR, …).
     fn supported() -> Result<Vec<String>, String> {
         // SAFETY: a plain query on a fresh request.
-        let tags = unsafe { accurate_request().supportedRecognitionLanguagesAndReturnError() }.map_err(|e| message(&e))?;
+        let tags =
+            unsafe { accurate_request().supportedRecognitionLanguagesAndReturnError() }.map_err(|e| message(&e))?;
         Ok(tags.iter().map(|t| t.to_string()).collect())
     }
 
@@ -201,9 +196,7 @@ mod engine {
         Ok(supported()?
             .into_iter()
             .map(|tag| {
-                let name = locale
-                    .localizedStringForLocaleIdentifier(&NSString::from_str(&tag))
-                    .to_string();
+                let name = locale.localizedStringForLocaleIdentifier(&NSString::from_str(&tag)).to_string();
                 OcrLanguage { tag, name }
             })
             .collect())
@@ -267,9 +260,7 @@ mod engine {
             &NSDictionary::new(),
         );
         let as_request: &VNRequest = &request;
-        handler
-            .performRequests_error(&NSArray::from_slice(&[as_request]))
-            .map_err(|e| message(&e))?;
+        handler.performRequests_error(&NSArray::from_slice(&[as_request])).map_err(|e| message(&e))?;
 
         let mut lines = Vec::new();
         for obs in request.results().iter().flat_map(|r| r.iter()) {
@@ -315,7 +306,10 @@ mod engine {
     #[cfg(test)]
     #[test]
     fn lines_are_cut_into_words_and_spaces() {
-        assert_eq!(chunks("Bonjour  le monde"), vec![(false, "Bonjour"), (true, "  "), (false, "le"), (true, " "), (false, "monde")]);
+        assert_eq!(
+            chunks("Bonjour  le monde"),
+            vec![(false, "Bonjour"), (true, "  "), (false, "le"), (true, " "), (false, "monde")]
+        );
         assert_eq!(chunks(""), vec![]);
     }
 }
