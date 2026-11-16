@@ -24,10 +24,9 @@ on:
         required: true
         type: string
 
+# Read-only by default: each job asks for the write access it needs.
 permissions:
-  contents: write
-  security-events: read
-  actions: read
+  contents: read
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
@@ -37,19 +36,24 @@ jobs:
   security:
     name: Security report and SBOMs
     runs-on: ubuntu-latest
+    # Reads the CodeQL alerts and the Security workflow's runs, uploads to the release.
+    permissions:
+      contents: write
+      security-events: read
+      actions: read
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ inputs.tag }}
 
       # The report tools (report script, load test, Playwright) come from the
       # workflow's own commit, so that the reports of a release made before
       # they existed can be added too. For a new release it is the same commit.
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           path: .report-tools
 
-      - uses: actions/setup-node@v7
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: '22'
           cache: 'npm'
@@ -138,20 +142,22 @@ jobs:
   performance:
     name: Performance report
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     timeout-minutes: 45
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ inputs.tag }}
 
       # The report tools (report script, load test, Playwright) come from the
       # workflow's own commit, so that the reports of a release made before
       # they existed can be added too. For a new release it is the same commit.
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           path: .report-tools
 
-      - uses: actions/setup-node@v7
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: '22'
           cache: 'npm'
