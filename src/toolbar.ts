@@ -13,9 +13,7 @@ import { isMac } from "./platform";
 import { MacMenu } from "./mac-menu";
 import {
   ICON_INFO,
-  ICON_FULLSCREEN,
   ICON_PRESENT,
-  ICON_FULLSCREEN_EXIT,
   ICON_EYE,
   ICON_PEN,
   ICON_EDIT_TEXT,
@@ -365,17 +363,6 @@ export class Toolbar {
     void this.saveBtn.offsetWidth; // restart the animation
     this.saveBtn.classList.add(cls);
     window.setTimeout(() => this.saveBtn.classList.remove(cls), 1200);
-  }
-
-  private fullscreenBtn!: HTMLButtonElement;
-
-  /** Shows whether the window is full screen (the button then exits it). */
-  setFullscreen(on: boolean): void {
-    this.fullscreenBtn.innerHTML = on ? ICON_FULLSCREEN_EXIT : ICON_FULLSCREEN;
-    this.fullscreenBtn.classList.toggle("active", on);
-    this.fullscreenBtn.setAttribute("aria-pressed", String(on));
-    this._i18nTitle.set(this.fullscreenBtn, on ? "ttFullscreenExit" : "ttFullscreen");
-    this.fullscreenBtn.title = this._lastT?.[on ? "ttFullscreenExit" : "ttFullscreen"] ?? (on ? "Exit full screen (F11 or Esc)" : "Full screen (F11)");
   }
 
   setActiveSignature(id: string | null): void { this.tools.setActiveSignature(id); }
@@ -741,12 +728,7 @@ export class Toolbar {
     this.sidebarBtn.addEventListener("click", () => this.emit({ type: "toggle-sidebar" }));
 
     // Save, then undo / redo
-    this.saveBtn = this.btn(ICON_SAVE, "Save (Ctrl+S)", "btn tb-save");
-    const saveLabel = document.createElement("span");
-    saveLabel.textContent = "Save";
-    saveLabel.className = "tb-save-label";
-    this.saveBtn.append(saveLabel);
-    this.reg(saveLabel, "btnSave");
+    this.saveBtn = this.btn(ICON_SAVE, "Save (Ctrl+S)", "icon-btn tb-square tb-save");
     this.reg(this.saveBtn, undefined, "ttSave");
     this.saveBtn.addEventListener("click", () => this.emit({ type: "save" }));
 
@@ -857,12 +839,9 @@ export class Toolbar {
     const presentBtn = this.btn(ICON_PRESENT, "Present (F5)", "icon-btn tb-square");
     this.reg(presentBtn, undefined, "ttPresent");
     presentBtn.addEventListener("click", () => this.emit({ type: "present" }));
-    this.fullscreenBtn = this.btn(ICON_FULLSCREEN, "Full screen (F11)", "icon-btn tb-square");
-    this.reg(this.fullscreenBtn, undefined, "ttFullscreen");
-    this.fullscreenBtn.addEventListener("click", () => this.emit({ type: "fullscreen" }));
     const right = document.createElement("div");
     right.className = "toolbar-group tb-right";
-    right.append(exportBtn, compressBtn, this.lockBtn, this.infoBtn, presentBtn, this.fullscreenBtn, this.sep(), this.search.el);
+    right.append(exportBtn, compressBtn, this.lockBtn, this.infoBtn, presentBtn, this.sep(), this.search.el);
 
     // Left group, Read / Annotate / Edit in the middle of the bar, right group.
     const left = document.createElement("div");

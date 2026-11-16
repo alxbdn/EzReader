@@ -779,7 +779,7 @@ body.tab-dragging, body.tab-dragging * { cursor: grabbing !important; }
 .tb-compact .mode-icon { display: inline-flex; }
 .tb-compact .mode-label { display: none; }
 .tb-compact-2 { gap: 5px; }
-.tb-compact-2 .tb-save-label, .tb-compact-2 .tb-left > .toolbar-sep { display: none; }
+.tb-compact-2 .tb-left > .toolbar-sep { display: none; }
 .tb-compact-2 .toolbar-group.tb-left { gap: 5px; }
 .tb-compact-3 .tb-columns { display: none; }
 .mode-btn.active { background: var(--primary); color: var(--primary-foreground); }
@@ -1437,7 +1437,7 @@ input[type="color"].color-picker.is-off::-webkit-color-swatch {
 
 .sb-pill.on .sb-check {
   border-color: var(--sidebar-select);
-  background: var(--sidebar-select) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M2.5 6.2 5 8.5l4.5-5' fill='none' stroke='white' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center / 100% no-repeat;
+  background: transparent url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M2.5 6.2 5 8.5l4.5-5' fill='none' stroke='%23E53935' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center / 100% no-repeat;
 }
 
 .sb-delete:not(:disabled) { color: var(--destructive); }
@@ -1577,7 +1577,7 @@ input[type="color"].color-picker.is-off::-webkit-color-swatch {
 .page-sidebar-thumb.selected .page-sidebar-check {
   opacity: 1;
   border-color: var(--sidebar-select);
-  background: var(--sidebar-select) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M3.5 8.2 6.5 11l6-6.5' fill='none' stroke='white' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center / 100% no-repeat;
+  background: #fff url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M3.5 8.2 6.5 11l6-6.5' fill='none' stroke='%23E53935' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center / 100% no-repeat;
 }
 
 /* Page number (goes to the page) and rotate-left under each thumbnail */
