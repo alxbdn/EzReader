@@ -152,7 +152,9 @@ export class Toolbar {
   /** Page brightness: a button that opens a slider. */
   readonly brightness = new BrightnessButton();
   private zoomInput!: HTMLInputElement;
-  private columnBtns: HTMLButtonElement[] = [];
+  /** One page / two pages per row: one button that shows the current layout. */
+  private pagesBtn!: HTMLButtonElement;
+  private shownColumns = 1;
   private infoBtn!: HTMLButtonElement;
   private sidebarBtn!: HTMLButtonElement;
   private saveBtn!: HTMLButtonElement;
@@ -274,11 +276,18 @@ export class Toolbar {
   /** Fit modes are menu-only now; kept so callers need not care. */
   updateFitMode(_mode: "none" | "fit-width" | "fit-height" | "fit-page"): void {}
 
-  /** Highlights the one-page / two-page buttons. */
-  updateLayout(columns: number | null, mode: "vertical" | "horizontal"): void {
-    this.columnBtns.forEach(b => {
-      b.classList.toggle("active", mode === "vertical" && Number(b.dataset["cols"]) === columns);
-    });
+  /**
+   * Shows the layout on the pages button: `columns` is the forced count (null:
+   * as many as fit), `shown` the number of pages per row on screen.
+   */
+  updateLayout(columns: number | null, mode: "vertical" | "horizontal", shown: number = columns ?? 1): void {
+    this.shownColumns = mode === "vertical" && shown >= 2 ? 2 : 1;
+    const two = this.shownColumns === 2;
+    this.pagesBtn.innerHTML = two ? ICON_PAGES_2 : ICON_PAGES_1;
+    this.pagesBtn.dataset["cols"] = String(this.shownColumns);
+    // The tooltip says what a click does.
+    this._i18nTitle.set(this.pagesBtn, two ? "ttPages1" : "ttPages2");
+    this.pagesBtn.title = this._lastT?.[two ? "ttPages1" : "ttPages2"] ?? (two ? "One page per row" : "Two pages per row");
     for (const n of [1, 2, 3]) this.setMark(`cols-${n}`, mode === "vertical" && columns === n);
     this.setMark("scroll-vertical", mode === "vertical");
     this.setMark("scroll-horizontal", mode === "horizontal");
@@ -786,15 +795,11 @@ export class Toolbar {
     const brightnessSeg = this.segment(this.brightness.el);
     brightnessSeg.classList.add("tb-brightness");
 
-    // One page / two pages per row; clicking the active one goes back to "as many as fit".
-    const colDefs: [number, string, keyof Translations][] = [[1, ICON_PAGES_1, "ttPages1"], [2, ICON_PAGES_2, "ttPages2"]];
-    this.columnBtns = colDefs.map(([n, icon, tt]) => {
-      const b = this.btn(icon, `${n}`, "icon-btn");
-      b.dataset["cols"] = String(n);
-      this.reg(b, undefined, tt);
-      b.addEventListener("click", () => this.emit({ type: "columns", n: b.classList.contains("active") ? null : n }));
-      return b;
-    });
+    // One button for one page / two pages per row: it shows the current
+    // layout, and a click switches to the other one.
+    this.pagesBtn = this.btn(ICON_PAGES_1, "Two pages per row", "icon-btn tb-pages");
+    this.reg(this.pagesBtn, undefined, "ttPages2");
+    this.pagesBtn.addEventListener("click", () => this.emit({ type: "columns", n: this.shownColumns === 2 ? 1 : 2 }));
 
     // Read / Annotate / Edit
     // On a narrow window the names give way to icons (see fitMainRow).
@@ -820,7 +825,7 @@ export class Toolbar {
       return b;
     });
     const modeSeg = this.segment(...this.modeBtns);
-    const columnsSeg = this.segment(...this.columnBtns);
+    const columnsSeg = this.segment(this.pagesBtn);
     columnsSeg.classList.add("tb-columns");
     modeSeg.classList.add("mode-segment");
 
