@@ -18,6 +18,7 @@ Everything runs on your computer: no account, no subscription, no AI, no telemet
 [![CI](https://img.shields.io/github/actions/workflow/status/alxbdn/EzReader/ci.yml?branch=main&style=flat-square&label=CI)](https://github.com/alxbdn/EzReader/actions/workflows/ci.yml)
 [![Security](https://img.shields.io/github/actions/workflow/status/alxbdn/EzReader/security.yml?branch=main&style=flat-square&label=security%20scans)](https://github.com/alxbdn/EzReader/actions/workflows/security.yml)
 [![Performance](https://img.shields.io/github/actions/workflow/status/alxbdn/EzReader/perf.yml?branch=main&style=flat-square&label=load%20test)](https://github.com/alxbdn/EzReader/actions/workflows/perf.yml)
+[![OpenSSF Best Practices](https://img.shields.io/cii/level/16825?style=flat-square&label=openssf%20best%20practices)](https://www.bestpractices.dev/projects/16825)
 [![OpenSSF Scorecard](https://img.shields.io/ossf-scorecard/github.com/alxbdn/EzReader?style=flat-square&label=openssf%20scorecard)](https://scorecard.dev/viewer/?uri=github.com/alxbdn/EzReader)
 
 [Install](#installation) · [Features](#features) · [Security](#security-and-privacy) · [Build](#build-from-source) · [Contributing](CONTRIBUTING.md)
