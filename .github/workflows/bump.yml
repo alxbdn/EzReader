@@ -167,6 +167,25 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+      # SignPath Foundation asks every download page to name it and link the
+      # code signing policy. Prepended once, whichever workflow (Windows,
+      # macOS, Linux) created the release first.
+      - name: Add code signing notice to the release notes
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ steps.version.outputs.tag }}
+        run: |
+          notice='EzReader is a fast, private PDF reader and editor for Windows, macOS and Linux: read, annotate, sign, fill forms, edit and reorganize pages, and recognize text, all on your computer.
+
+          **Code signing policy:** Free code signing provided by [SignPath.io](https://about.signpath.io), certificate by [SignPath Foundation](https://signpath.org). See the [code signing policy](https://github.com/alxbdn/EzReader/blob/main/CODE_SIGNING.md).'
+          body="$(gh release view "$TAG" --json body --jq .body)"
+          if ! grep -q 'SignPath Foundation' <<<"$body"; then
+            printf '%s\n\n%s\n' "$notice" "$body" > notes.md
+            gh release edit "$TAG" --notes-file notes.md
+          fi
+
   # A tag pushed and a release created with GITHUB_TOKEN start no other
   # workflow, so the macOS and Linux packages and the Store submission are
   # dispatched here, on the new tag.
