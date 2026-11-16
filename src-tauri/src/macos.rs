@@ -16,7 +16,13 @@ const PREVIEW: &str = "com.apple.Preview";
 
 #[link(name = "CoreFoundation", kind = "framework")]
 extern "C" {
-    fn CFStringCreateWithBytes(alloc: *const c_void, bytes: *const u8, len: isize, encoding: u32, external: u8) -> CFStringRef;
+    fn CFStringCreateWithBytes(
+        alloc: *const c_void,
+        bytes: *const u8,
+        len: isize,
+        encoding: u32,
+        external: u8,
+    ) -> CFStringRef;
     fn CFStringGetCString(s: CFStringRef, buf: *mut c_char, size: isize, encoding: u32) -> u8;
     fn CFRelease(cf: *const c_void);
     fn CFBundleGetMainBundle() -> CFBundleRef;

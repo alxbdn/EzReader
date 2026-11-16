@@ -11,14 +11,9 @@ use std::path::{Path, PathBuf};
 use lopdf::{Document, IncrementalDocument};
 
 fn temp_path_for(target: &Path) -> PathBuf {
-    let name = target
-        .file_name()
-        .map(|n| n.to_string_lossy().into_owned())
-        .unwrap_or_else(|| "output.pdf".to_string());
-    let nanos = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.subsec_nanos())
-        .unwrap_or(0);
+    let name = target.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_else(|| "output.pdf".to_string());
+    let nanos =
+        std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.subsec_nanos()).unwrap_or(0);
     target.with_file_name(format!(".{name}.{}-{nanos}.tmp", std::process::id()))
 }
 
@@ -61,9 +56,7 @@ pub fn load_incremental(path: impl AsRef<Path>) -> Result<IncrementalDocument, S
 /// Byte-for-byte copy of `src` to `dst`, atomically.
 pub fn copy_atomic(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> Result<(), String> {
     let src = src.as_ref();
-    write_atomic(dst, |tmp| {
-        std::fs::copy(src, tmp).map(|_| ()).map_err(|e| e.to_string())
-    })
+    write_atomic(dst, |tmp| std::fs::copy(src, tmp).map(|_| ()).map_err(|e| e.to_string()))
 }
 
 /// Saves a full document rewrite to `dst`, atomically.
@@ -108,8 +101,7 @@ mod tests {
         let target = dir.join("doc.pdf");
         std::fs::write(&target, b"old").unwrap();
 
-        write_atomic(&target, |tmp| std::fs::write(tmp, b"new").map_err(|e| e.to_string()))
-            .unwrap();
+        write_atomic(&target, |tmp| std::fs::write(tmp, b"new").map_err(|e| e.to_string())).unwrap();
 
         assert_eq!(std::fs::read(&target).unwrap(), b"new");
         assert_eq!(std::fs::read_dir(&dir).unwrap().count(), 1);

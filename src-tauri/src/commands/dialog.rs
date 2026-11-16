@@ -14,11 +14,7 @@ fn filepath_to_string(p: FilePath) -> String {
 /// Returns the selected absolute path, or null if cancelled.
 #[tauri::command(async)]
 pub fn open_pdf_dialog(app: AppHandle) -> CmdResult<Option<String>> {
-    let result = app
-        .dialog()
-        .file()
-        .add_filter("PDF Files", &["pdf"])
-        .blocking_pick_file();
+    let result = app.dialog().file().add_filter("PDF Files", &["pdf"]).blocking_pick_file();
 
     let picked = result.map(filepath_to_string);
     if let Some(path) = &picked {
@@ -55,11 +51,7 @@ pub const IMAGE_EXTENSIONS: [&str; 6] = ["png", "jpg", "jpeg", "webp", "gif", "b
 /// Returns the selected absolute path, or null if cancelled.
 #[tauri::command(async)]
 pub fn open_image_dialog(app: AppHandle) -> CmdResult<Option<String>> {
-    let result = app
-        .dialog()
-        .file()
-        .add_filter("Images", &IMAGE_EXTENSIONS)
-        .blocking_pick_file();
+    let result = app.dialog().file().add_filter("Images", &IMAGE_EXTENSIONS).blocking_pick_file();
     let picked = result.map(filepath_to_string);
     if let Some(path) = &picked {
         crate::grants::allow_file(path);
@@ -71,11 +63,7 @@ pub fn open_image_dialog(app: AppHandle) -> CmdResult<Option<String>> {
 /// Returns the selected paths (empty if cancelled).
 #[tauri::command(async)]
 pub fn open_images_dialog(app: AppHandle) -> CmdResult<Vec<String>> {
-    let result = app
-        .dialog()
-        .file()
-        .add_filter("Images", &IMAGE_EXTENSIONS)
-        .blocking_pick_files();
+    let result = app.dialog().file().add_filter("Images", &IMAGE_EXTENSIONS).blocking_pick_files();
     let picked: Vec<String> = result.unwrap_or_default().into_iter().map(filepath_to_string).collect();
     for path in &picked {
         crate::grants::allow_file(path);
@@ -87,22 +75,12 @@ pub fn open_images_dialog(app: AppHandle) -> CmdResult<Vec<String>> {
 /// Pre-fills the filename from `current_path` basename.
 /// Returns the chosen absolute path, or null if cancelled.
 #[tauri::command(async)]
-pub fn save_pdf_dialog(
-    app: AppHandle,
-    current_path: String,
-) -> CmdResult<Option<String>> {
-    let default_name = Path::new(&current_path)
-        .file_name()
-        .and_then(|n| n.to_str())
-        .unwrap_or("output.pdf")
-        .to_string();
+pub fn save_pdf_dialog(app: AppHandle, current_path: String) -> CmdResult<Option<String>> {
+    let default_name =
+        Path::new(&current_path).file_name().and_then(|n| n.to_str()).unwrap_or("output.pdf").to_string();
 
-    let result = app
-        .dialog()
-        .file()
-        .add_filter("PDF Files", &["pdf"])
-        .set_file_name(&default_name)
-        .blocking_save_file();
+    let result =
+        app.dialog().file().add_filter("PDF Files", &["pdf"]).set_file_name(&default_name).blocking_save_file();
 
     let picked = result.map(filepath_to_string);
     if let Some(path) = &picked {

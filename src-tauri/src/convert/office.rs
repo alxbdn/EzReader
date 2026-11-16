@@ -251,7 +251,8 @@ pub fn xlsx(doc: &TextDoc) -> Vec<u8> {
         "{XML_HEAD}<workbook xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\" \
          xmlns:r=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships\"><sheets>"
     );
-    let mut wb_rels = format!("{XML_HEAD}<Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\">");
+    let mut wb_rels =
+        format!("{XML_HEAD}<Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\">");
     let mut overrides = vec![(
         "/xl/workbook.xml".to_string(),
         "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml",
@@ -297,7 +298,8 @@ mod tests {
     use super::*;
 
     fn part(z: &[(String, Vec<u8>)], name: &str) -> String {
-        String::from_utf8(z.iter().find(|(n, _)| n == name).unwrap_or_else(|| panic!("{name} missing")).1.clone()).unwrap()
+        String::from_utf8(z.iter().find(|(n, _)| n == name).unwrap_or_else(|| panic!("{name} missing")).1.clone())
+            .unwrap()
     }
 
     #[test]
@@ -319,7 +321,9 @@ mod tests {
     fn writes_an_excel_package() {
         let z = unzip(&xlsx(&sample()));
         let wb = part(&z, "xl/workbook.xml");
-        assert!(wb.contains("<sheet name=\"Page 1\" sheetId=\"1\" r:id=\"rId1\"/><sheet name=\"Page 2\" sheetId=\"2\" r:id=\"rId2\"/>"));
+        assert!(wb.contains(
+            "<sheet name=\"Page 1\" sheetId=\"1\" r:id=\"rId1\"/><sheet name=\"Page 2\" sheetId=\"2\" r:id=\"rId2\"/>"
+        ));
         let s1 = part(&z, "xl/worksheets/sheet1.xml");
         assert!(s1.contains("<row r=\"5\"><c r=\"A5\" t=\"inlineStr\"><is><t xml:space=\"preserve\">Name</t></is></c><c r=\"C5\" t=\"inlineStr\">"));
         assert!(s1.contains("<c r=\"B6\"><v>12</v></c><c r=\"C6\"><v>42.5</v></c>"));

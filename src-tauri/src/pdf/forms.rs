@@ -86,10 +86,7 @@ pub fn write_form_fields(doc: &mut Document, fields: &[FormFieldValue]) -> Resul
     let mut font: Option<ObjectId> = None;
     let mut needs_redraw = false;
     for field in &terminals {
-        let value = values
-            .get(field.full_name.as_str())
-            .or_else(|| values.get(field.partial_name.as_str()))
-            .copied();
+        let value = values.get(field.full_name.as_str()).or_else(|| values.get(field.partial_name.as_str())).copied();
         let Some(value) = value else { continue };
         match field.ft.as_str() {
             "Btn" => set_button(doc, field, value)?,
@@ -108,11 +105,7 @@ pub fn write_form_fields(doc: &mut Document, fields: &[FormFieldValue]) -> Resul
 
 /// The AcroForm's object id, promoting an inline AcroForm to an object of its own.
 fn acroform_id(doc: &mut Document) -> Result<Option<ObjectId>, String> {
-    let cat_id = doc
-        .trailer
-        .get(b"Root")
-        .and_then(Object::as_reference)
-        .map_err(|_| "No catalog".to_string())?;
+    let cat_id = doc.trailer.get(b"Root").and_then(Object::as_reference).map_err(|_| "No catalog".to_string())?;
     let inline = {
         let dict = doc.get_object(cat_id).and_then(Object::as_dict).map_err(|e| e.to_string())?;
         match dict.get(b"AcroForm") {
@@ -357,13 +350,27 @@ fn parse_da(da: &str) -> (f64, String) {
     let mut color = String::from("0 g\n");
     for (i, t) in toks.iter().enumerate() {
         let back = |n: usize| -> Option<Vec<f64>> {
-            (i >= n).then(|| toks[i - n..i].iter().filter_map(|s| s.parse().ok()).collect::<Vec<f64>>()).filter(|v| v.len() == n)
+            (i >= n)
+                .then(|| toks[i - n..i].iter().filter_map(|s| s.parse().ok()).collect::<Vec<f64>>())
+                .filter(|v| v.len() == n)
         };
         match *t {
             "Tf" => size = back(1).map(|v| v[0]).unwrap_or(0.0),
-            "g" => if let Some(v) = back(1) { color = format!("{:.3} g\n", v[0]) },
-            "rg" => if let Some(v) = back(3) { color = format!("{:.3} {:.3} {:.3} rg\n", v[0], v[1], v[2]) },
-            "k" => if let Some(v) = back(4) { color = format!("{:.3} {:.3} {:.3} {:.3} k\n", v[0], v[1], v[2], v[3]) },
+            "g" => {
+                if let Some(v) = back(1) {
+                    color = format!("{:.3} g\n", v[0])
+                }
+            }
+            "rg" => {
+                if let Some(v) = back(3) {
+                    color = format!("{:.3} {:.3} {:.3} rg\n", v[0], v[1], v[2])
+                }
+            }
+            "k" => {
+                if let Some(v) = back(4) {
+                    color = format!("{:.3} {:.3} {:.3} {:.3} k\n", v[0], v[1], v[2], v[3])
+                }
+            }
             _ => {}
         }
     }
@@ -451,7 +458,11 @@ fn text_appearance(doc: &Document, widget: ObjectId, field: &Field, text: &[u8])
         } else {
             let by_height = ((h - 2.0 * pad) * 0.7).clamp(4.0, 14.0);
             let tw = width_of(text, 1.0);
-            if tw > 0.0 { by_height.min(inner_w / tw).max(4.0) } else { by_height }
+            if tw > 0.0 {
+                by_height.min(inner_w / tw).max(4.0)
+            } else {
+                by_height
+            }
         };
         let x = align_x(q, pad, inner_w, width_of(text, size));
         let y = baseline(h, size);
@@ -511,13 +522,13 @@ const HELV: [u16; 95] = [
 fn glyph_width(b: u8) -> u16 {
     match b {
         32..=126 => HELV[(b - 32) as usize],
-        0x8C => 1000,                     // Œ
-        0x9C => 944,                      // œ
+        0x8C => 1000,                            // Œ
+        0x9C => 944,                             // œ
         0xC0..=0xC5 | 0xC8..=0xCB | 0xDD => 667, // À…Å È…Ë Ý
-        0xC7 | 0xD1 | 0xD9..=0xDC => 722, // Ç Ñ Ù…Ü
-        0xCC..=0xCF | 0xEC..=0xEF => 278, // Ì…Ï ì…ï
-        0xD2..=0xD6 | 0xD8 => 778,        // Ò…Ö Ø
-        0xE7 | 0xFD | 0xFF => 500,        // ç ý ÿ
+        0xC7 | 0xD1 | 0xD9..=0xDC => 722,        // Ç Ñ Ù…Ü
+        0xCC..=0xCF | 0xEC..=0xEF => 278,        // Ì…Ï ì…ï
+        0xD2..=0xD6 | 0xD8 => 778,               // Ò…Ö Ø
+        0xE7 | 0xFD | 0xFF => 500,               // ç ý ÿ
         _ => 556,
     }
 }
@@ -550,11 +561,33 @@ fn win_ansi(text: &str) -> Option<Vec<u8>> {
                 0x0A | 0x0D | 0x20..=0x7E | 0xA0..=0xFF => Some(u as u8),
                 0x09 => Some(b' '),
                 _ => Some(match c {
-                    '€' => 0x80, '‚' => 0x82, 'ƒ' => 0x83, '„' => 0x84, '…' => 0x85, '†' => 0x86,
-                    '‡' => 0x87, 'ˆ' => 0x88, '‰' => 0x89, 'Š' => 0x8A, '‹' => 0x8B, 'Œ' => 0x8C,
-                    'Ž' => 0x8E, '‘' => 0x91, '’' => 0x92, '“' => 0x93, '”' => 0x94, '•' => 0x95,
-                    '–' => 0x96, '—' => 0x97, '˜' => 0x98, '™' => 0x99, 'š' => 0x9A, '›' => 0x9B,
-                    'œ' => 0x9C, 'ž' => 0x9E, 'Ÿ' => 0x9F,
+                    '€' => 0x80,
+                    '‚' => 0x82,
+                    'ƒ' => 0x83,
+                    '„' => 0x84,
+                    '…' => 0x85,
+                    '†' => 0x86,
+                    '‡' => 0x87,
+                    'ˆ' => 0x88,
+                    '‰' => 0x89,
+                    'Š' => 0x8A,
+                    '‹' => 0x8B,
+                    'Œ' => 0x8C,
+                    'Ž' => 0x8E,
+                    '‘' => 0x91,
+                    '’' => 0x92,
+                    '“' => 0x93,
+                    '”' => 0x94,
+                    '•' => 0x95,
+                    '–' => 0x96,
+                    '—' => 0x97,
+                    '˜' => 0x98,
+                    '™' => 0x99,
+                    'š' => 0x9A,
+                    '›' => 0x9B,
+                    'œ' => 0x9C,
+                    'ž' => 0x9E,
+                    'Ÿ' => 0x9F,
                     _ => return None,
                 }),
             }
@@ -627,10 +660,13 @@ mod tests {
             "Type" => "Annot", "Subtype" => "Widget", "Parent" => radio,
             "Rect" => rect(130, 600, 12, 12), "AS" => "Off", "AP" => on_off("mme"),
         });
-        doc.objects.insert(radio, Object::Dictionary(dictionary! {
-            "FT" => "Btn", "T" => s("civilite"), "Ff" => 1 << 15, "V" => "m",
-            "Kids" => vec![r1.into(), r2.into()],
-        }));
+        doc.objects.insert(
+            radio,
+            Object::Dictionary(dictionary! {
+                "FT" => "Btn", "T" => s("civilite"), "Ff" => 1 << 15, "V" => "m",
+                "Kids" => vec![r1.into(), r2.into()],
+            }),
+        );
         let combo = doc.add_object(dictionary! {
             "FT" => "Ch", "T" => s("pays"), "Ff" => FF_COMBO, "Type" => "Annot", "Subtype" => "Widget",
             "Rect" => rect(100, 550, 150, 20), "DA" => s("/Helv 10 Tf 0 0 1 rg"),
@@ -644,7 +680,10 @@ mod tests {
             "Type" => "Page", "Parent" => pages_id, "MediaBox" => vec![0.into(), 0.into(), 595.into(), 842.into()],
             "Annots" => vec![text.into(), check.into(), r1.into(), r2.into(), combo.into(), comb.into()],
         });
-        doc.objects.insert(pages_id, Object::Dictionary(dictionary! { "Type" => "Pages", "Kids" => vec![page.into()], "Count" => 1 }));
+        doc.objects.insert(
+            pages_id,
+            Object::Dictionary(dictionary! { "Type" => "Pages", "Kids" => vec![page.into()], "Count" => 1 }),
+        );
         let cat = doc.add_object(dictionary! {
             "Type" => "Catalog", "Pages" => pages_id,
             "AcroForm" => dictionary! { "Fields" => vec![text.into(), check.into(), radio.into(), combo.into(), comb.into()] },
@@ -713,7 +752,10 @@ mod tests {
         fill(&mut doc, &[("pays", "BE")]);
         assert_eq!(text_of(get(&doc, combo).get(b"V").unwrap()).unwrap(), "BE");
         let ap = appearance(&doc, combo);
-        assert!(ap.contains("(Belgique) Tj") && ap.contains("0.000 0.000 1.000 rg") && ap.contains("/Helv 10.00 Tf"), "{ap}");
+        assert!(
+            ap.contains("(Belgique) Tj") && ap.contains("0.000 0.000 1.000 rg") && ap.contains("/Helv 10.00 Tf"),
+            "{ap}"
+        );
     }
 
     #[test]

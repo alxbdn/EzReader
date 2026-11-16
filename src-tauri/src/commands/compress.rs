@@ -60,7 +60,12 @@ impl Job<'_> {
 /// The document compressed in memory: streams recompressed and unused
 /// objects dropped; with `images`, pictures re-encoded. Form fields and
 /// annotations are kept as they are. Reports progress within `span`.
-pub(crate) fn compress_to_bytes(doc: &Document, images: Option<ImageSettings>, job: &Job, span: (f64, f64)) -> CmdResult<Vec<u8>> {
+pub(crate) fn compress_to_bytes(
+    doc: &Document,
+    images: Option<ImageSettings>,
+    job: &Job,
+    span: (f64, f64),
+) -> CmdResult<Vec<u8>> {
     if job.cancelled() {
         return Err(cancelled());
     }
@@ -86,7 +91,10 @@ pub(crate) fn compress_to_bytes(doc: &Document, images: Option<ImageSettings>, j
     // broken file.
     let pages_after = doc.get_pages().len();
     if page_count == 0 || pages_after != page_count {
-        return Err(PdfError::new(ErrorCode::PageCountChanged, format!("Compression aborted: page count changed ({page_count} → {pages_after})")));
+        return Err(PdfError::new(
+            ErrorCode::PageCountChanged,
+            format!("Compression aborted: page count changed ({page_count} → {pages_after})"),
+        ));
     }
     let mut out = Vec::new();
     doc.save_to(&mut out).map_err(|e| e.to_string())?;
@@ -216,9 +224,7 @@ pub fn cancel_compression(cancel: tauri::State<'_, CompressCancel>) {
 #[tauri::command]
 pub async fn estimate_compression(input_path: String) -> CmdResult<CompressEstimate> {
     crate::grants::check(&input_path)?;
-    tauri::async_runtime::spawn_blocking(move || estimate_file(&input_path))
-        .await
-        .map_err(|e| e.to_string())?
+    tauri::async_runtime::spawn_blocking(move || estimate_file(&input_path)).await.map_err(|e| e.to_string())?
 }
 
 #[cfg(test)]
@@ -258,10 +264,13 @@ mod tests {
                 px.extend_from_slice(&[(x % 256) as u8, (y % 256) as u8, ((x * y) % 251) as u8]);
             }
         }
-        let mut img = Stream::new(dictionary! {
-            "Type" => "XObject", "Subtype" => "Image", "Width" => w as i64, "Height" => h as i64,
-            "ColorSpace" => "DeviceRGB", "BitsPerComponent" => 8,
-        }, px);
+        let mut img = Stream::new(
+            dictionary! {
+                "Type" => "XObject", "Subtype" => "Image", "Width" => w as i64, "Height" => h as i64,
+                "ColorSpace" => "DeviceRGB", "BitsPerComponent" => 8,
+            },
+            px,
+        );
         img.compress().unwrap();
         let img_id = doc.add_object(img);
         let content = doc.add_object(Stream::new(dictionary! {}, b"q 595 0 0 842 0 0 cm /Im0 Do Q".to_vec()));
@@ -270,22 +279,39 @@ mod tests {
             "Type" => "Page", "Parent" => pages_id, "MediaBox" => vec![0.into(), 0.into(), 595.into(), 842.into()],
             "Contents" => content, "Resources" => dictionary! { "XObject" => dictionary! { "Im0" => img_id } },
         });
-        doc.objects.insert(pages_id, Object::Dictionary(dictionary! { "Type" => "Pages", "Kids" => vec![page.into()], "Count" => 1 }));
+        doc.objects.insert(
+            pages_id,
+            Object::Dictionary(dictionary! { "Type" => "Pages", "Kids" => vec![page.into()], "Count" => 1 }),
+        );
         let catalog = doc.add_object(dictionary! { "Type" => "Catalog", "Pages" => pages_id });
         doc.trailer.set("Root", catalog);
         let input = tmp("big-picture.pdf");
         doc.save(&input).unwrap();
 
         let est = estimate_file(&input).unwrap();
-        assert!(est.maximum_bytes < est.balanced_bytes && est.balanced_bytes < est.lossless_bytes, "{} {} {}", est.lossless_bytes, est.balanced_bytes, est.maximum_bytes);
+        assert!(
+            est.maximum_bytes < est.balanced_bytes && est.balanced_bytes < est.lossless_bytes,
+            "{} {} {}",
+            est.lossless_bytes,
+            est.balanced_bytes,
+            est.maximum_bytes
+        );
 
         let out = tmp("big-picture-max.pdf");
         compress_file(&input, &out, "maximum", None, &Job::silent()).unwrap();
         let small = Document::load(&out).unwrap();
-        let pic = small.objects.values().find_map(|o| match o {
-            Object::Stream(s) if s.dict.get(b"Subtype").ok().and_then(|n| n.as_name().ok()) == Some(b"Image".as_slice()) => Some(s.clone()),
-            _ => None,
-        }).unwrap();
+        let pic = small
+            .objects
+            .values()
+            .find_map(|o| match o {
+                Object::Stream(s)
+                    if s.dict.get(b"Subtype").ok().and_then(|n| n.as_name().ok()) == Some(b"Image".as_slice()) =>
+                {
+                    Some(s.clone())
+                }
+                _ => None,
+            })
+            .unwrap();
         // 96 dpi over an 11.7 in page: at most 1123 px.
         assert_eq!(pic.dict.get(b"Height").unwrap().as_i64().unwrap(), 1123);
         assert_eq!(pic.dict.get(b"Filter").unwrap().as_name().unwrap(), b"DCTDecode");
@@ -306,7 +332,8 @@ mod tests {
 
         flag.store(true, Ordering::Relaxed);
         let stopped = tmp("big-picture-cancelled.pdf");
-        let err = compress_file(&input, &stopped, "target", Some(1), &Job { cancel: &flag, progress: &|_| {} }).unwrap_err();
+        let err =
+            compress_file(&input, &stopped, "target", Some(1), &Job { cancel: &flag, progress: &|_| {} }).unwrap_err();
         assert_eq!(err.code, ErrorCode::Cancelled);
         assert!(!std::path::Path::new(&stopped).exists());
 
@@ -329,11 +356,17 @@ mod tests {
             "AP" => dictionary! { "N" => ap },
         });
         let content = doc.add_object(Stream::new(dictionary! {}, b"BT /F1 12 Tf 50 750 Td (Name) Tj ET".to_vec()));
-        doc.objects.insert(page_id, Object::Dictionary(dictionary! {
-            "Type" => "Page", "Parent" => pages_id, "MediaBox" => vec![0.into(), 0.into(), 595.into(), 842.into()],
-            "Contents" => content, "Annots" => vec![field.into()],
-        }));
-        doc.objects.insert(pages_id, Object::Dictionary(dictionary! { "Type" => "Pages", "Kids" => vec![page_id.into()], "Count" => 1 }));
+        doc.objects.insert(
+            page_id,
+            Object::Dictionary(dictionary! {
+                "Type" => "Page", "Parent" => pages_id, "MediaBox" => vec![0.into(), 0.into(), 595.into(), 842.into()],
+                "Contents" => content, "Annots" => vec![field.into()],
+            }),
+        );
+        doc.objects.insert(
+            pages_id,
+            Object::Dictionary(dictionary! { "Type" => "Pages", "Kids" => vec![page_id.into()], "Count" => 1 }),
+        );
         let catalog = doc.add_object(dictionary! { "Type" => "Catalog", "Pages" => pages_id, "AcroForm" => dictionary! { "Fields" => vec![field.into()] } });
         doc.trailer.set("Root", catalog);
         let input = tmp("form.pdf");
@@ -344,10 +377,24 @@ mod tests {
             compress_file(&input, &out, level, None, &Job::silent()).unwrap();
             let doc = Document::load(&out).unwrap();
             let catalog = doc.catalog().unwrap();
-            let fields = catalog.get(b"AcroForm").and_then(|a| doc.dereference(a)).unwrap().1.as_dict().unwrap().get(b"Fields").unwrap().as_array().unwrap();
+            let fields = catalog
+                .get(b"AcroForm")
+                .and_then(|a| doc.dereference(a))
+                .unwrap()
+                .1
+                .as_dict()
+                .unwrap()
+                .get(b"Fields")
+                .unwrap()
+                .as_array()
+                .unwrap();
             assert_eq!(fields.len(), 1, "{level}: the field is still listed");
             let page = doc.get_dictionary(doc.get_pages()[&1]).unwrap();
-            assert_eq!(page.get(b"Annots").unwrap().as_array().unwrap().len(), 1, "{level}: the widget is still on the page");
+            assert_eq!(
+                page.get(b"Annots").unwrap().as_array().unwrap().len(),
+                1,
+                "{level}: the widget is still on the page"
+            );
             std::fs::remove_file(out).ok();
         }
         std::fs::remove_file(input).ok();

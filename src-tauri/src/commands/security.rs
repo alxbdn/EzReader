@@ -84,7 +84,9 @@ mod tests {
 
         let raw = Document::load(&locked);
         assert!(raw.is_err() || raw.unwrap().is_encrypted(), "the file needs its password");
-        assert!(decrypt_pdf(locked.clone(), open.clone(), random_password()).unwrap_err().code == ErrorCode::WrongPassword);
+        assert!(
+            decrypt_pdf(locked.clone(), open.clone(), random_password()).unwrap_err().code == ErrorCode::WrongPassword
+        );
 
         decrypt_pdf(locked.clone(), open.clone(), pw).unwrap();
         let doc = Document::load(&open).unwrap();

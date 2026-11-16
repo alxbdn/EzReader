@@ -109,10 +109,18 @@ pub(crate) fn regions(map: &[f32], w: usize, h: usize) -> Vec<Region> {
                     stack.push(j);
                 }
             };
-            if x > 0 { push(i - 1); }
-            if x + 1 < w { push(i + 1); }
-            if y > 0 { push(i - w); }
-            if y + 1 < h { push(i + w); }
+            if x > 0 {
+                push(i - 1);
+            }
+            if x + 1 < w {
+                push(i + 1);
+            }
+            if y > 0 {
+                push(i - w);
+            }
+            if y + 1 < h {
+                push(i + w);
+            }
         }
         let (bw, bh) = ((x1 - x0 + 1) as f32, (y1 - y0 + 1) as f32);
         if bw.min(bh) < 3.0 || sum / (n as f32) < BOX_THRESH {
@@ -134,7 +142,11 @@ pub(crate) fn regions(map: &[f32], w: usize, h: usize) -> Vec<Region> {
     // Reading order: top to bottom, then left to right on the same row.
     out.sort_by(|a, b| {
         let same_row = a.y0.abs_diff(b.y0) < (a.y1 - a.y0).min(b.y1 - b.y0) / 2;
-        if same_row { a.x0.cmp(&b.x0) } else { a.y0.cmp(&b.y0) }
+        if same_row {
+            a.x0.cmp(&b.x0)
+        } else {
+            a.y0.cmp(&b.y0)
+        }
     });
     out
 }
@@ -154,10 +166,8 @@ pub(crate) fn ctc_decode(probs: &[f32], steps: usize, classes: usize, dict: &[St
     let mut prev = 0usize;
     for t in 0..steps {
         let row = &probs[t * classes..(t + 1) * classes];
-        let (best, p) = row
-            .iter()
-            .enumerate()
-            .fold((0usize, f32::MIN), |acc, (i, &v)| if v > acc.1 { (i, v) } else { acc });
+        let (best, p) =
+            row.iter().enumerate().fold((0usize, f32::MIN), |acc, (i, &v)| if v > acc.1 { (i, v) } else { acc });
         if best != 0 && best != prev {
             if let Some(c) = dict.get(best) {
                 chars.push((c.clone(), t));
@@ -267,7 +277,9 @@ pub fn read(img: &RgbImage) -> Result<Vec<OcrLine>, String> {
             x1: (((r.x1 + 1) as f32 * sx) as u32).min(pw) - 1,
             y1: (((r.y1 + 1) as f32 * sy) as u32).min(ph) - 1,
         };
-        let crop = image::imageops::crop_imm(img, region.x0, region.y0, region.x1 - region.x0 + 1, region.y1 - region.y0 + 1).to_image();
+        let crop =
+            image::imageops::crop_imm(img, region.x0, region.y0, region.x1 - region.x0 + 1, region.y1 - region.y0 + 1)
+                .to_image();
         let (data, w) = rec_input(&crop);
         let (shape, probs) = run(&mut engine.rec, [1, 3, REC_HEIGHT as usize, w as usize], data)?;
         let (steps, classes) = (shape[1], shape[2]);
@@ -308,7 +320,11 @@ mod tests {
         let (w, h) = (40, 20);
         let mut map = vec![0f32; w * h];
         let mut fill = |x0: usize, y0: usize, x1: usize, y1: usize| {
-            for y in y0..=y1 { for x in x0..=x1 { map[y * w + x] = 0.9; } }
+            for y in y0..=y1 {
+                for x in x0..=x1 {
+                    map[y * w + x] = 0.9;
+                }
+            }
         };
         fill(22, 4, 35, 7); // right, same row
         fill(2, 4, 15, 7); // left
@@ -325,7 +341,14 @@ mod tests {
     fn decodes_ctc_and_places_words() {
         let dict = dictionary("a\nb");
         // classes: blank, a, b, space
-        let rows = [[0., 1., 0., 0.], [0., 1., 0., 0.], [1., 0., 0., 0.], [0., 1., 0., 0.], [0., 0., 0., 1.], [0., 0., 1., 0_f32]];
+        let rows = [
+            [0., 1., 0., 0.],
+            [0., 1., 0., 0.],
+            [1., 0., 0., 0.],
+            [0., 1., 0., 0.],
+            [0., 0., 0., 1.],
+            [0., 0., 1., 0_f32],
+        ];
         let probs: Vec<f32> = rows.iter().flatten().copied().collect();
         let d = ctc_decode(&probs, 6, 4, &dict);
         let text: String = d.chars.iter().map(|(c, _)| c.as_str()).collect();

@@ -107,7 +107,11 @@ fn round_trip(name: &str, src: &Path, pages: u32, out: &Path) {
     let input = working_copy(src, out, name);
 
     // Open: what loadPdf asks the backend.
-    assert_eq!(get_page_count(s(&input)).unwrap_or_else(|e| panic!("{name}: cannot open: {e:?}")), pages, "{name}: page count");
+    assert_eq!(
+        get_page_count(s(&input)).unwrap_or_else(|e| panic!("{name}: cannot open: {e:?}")),
+        pages,
+        "{name}: page count"
+    );
     assert!(read_annotations(s(&input)).unwrap().is_empty(), "{name}: no EzReader annotations yet");
     let display = out.join(format!("{stem}.display.pdf"));
     strip_annotation_streams(s(&input), s(&display)).unwrap();
@@ -188,14 +192,21 @@ fn every_corpus_file_opens_and_saves_without_damage() {
     for (name, pages) in CORPUS {
         let result = std::panic::catch_unwind(|| round_trip(name, &dir.join(name), *pages, &out));
         if let Err(e) = result {
-            let why = e.downcast_ref::<String>().cloned()
+            let why = e
+                .downcast_ref::<String>()
+                .cloned()
                 .or_else(|| e.downcast_ref::<&str>().map(|s| s.to_string()))
                 .unwrap_or_default();
             failures.push(format!("{name}: {why}"));
         }
     }
     // Plus the app's older fixture written by an online tool.
-    round_trip("objstm-indirect-length.pdf", Path::new(&crate::test_util::fixture("objstm-indirect-length.pdf")), 2, &out);
+    round_trip(
+        "objstm-indirect-length.pdf",
+        Path::new(&crate::test_util::fixture("objstm-indirect-length.pdf")),
+        2,
+        &out,
+    );
     assert!(failures.is_empty(), "{} corpus file(s) failed:\n{}", failures.len(), failures.join("\n"));
     if std::env::var_os("EZREADER_CORPUS_OUT").is_none() {
         std::fs::remove_dir_all(&out).ok();
@@ -210,10 +221,13 @@ fn huge_document(path: &Path) {
     let w = 600u32;
     let h = 800u32;
     let pixels: Vec<u8> = (0..w * h).map(|i| ((i % w) ^ (i / w)) as u8).collect();
-    let mut image = Stream::new(dictionary! {
-        "Type" => "XObject", "Subtype" => "Image", "Width" => w as i64, "Height" => h as i64,
-        "ColorSpace" => "DeviceGray", "BitsPerComponent" => 8,
-    }, pixels);
+    let mut image = Stream::new(
+        dictionary! {
+            "Type" => "XObject", "Subtype" => "Image", "Width" => w as i64, "Height" => h as i64,
+            "ColorSpace" => "DeviceGray", "BitsPerComponent" => 8,
+        },
+        pixels,
+    );
     image.compress().unwrap();
     let image = doc.add_object(image);
     let resources = doc.add_object(dictionary! {
@@ -230,9 +244,12 @@ fn huge_document(path: &Path) {
             "Contents" => content, "Resources" => resources,
         })));
     }
-    doc.objects.insert(pages_id, Object::Dictionary(dictionary! {
-        "Type" => "Pages", "Kids" => kids, "Count" => HUGE_PAGES as i64,
-    }));
+    doc.objects.insert(
+        pages_id,
+        Object::Dictionary(dictionary! {
+            "Type" => "Pages", "Kids" => kids, "Count" => HUGE_PAGES as i64,
+        }),
+    );
     let catalog = doc.add_object(dictionary! { "Type" => "Catalog", "Pages" => pages_id });
     doc.trailer.set("Root", catalog);
     doc.save(path).unwrap();
@@ -276,7 +293,10 @@ fn filled_form_reads_back_with_its_appearances() {
     let mut seen = 0;
     for f in form.get(b"Fields").unwrap().as_array().unwrap() {
         let field = doc.dereference(f).unwrap().1.as_dict().unwrap();
-        let name = match field.get(b"T").unwrap() { Object::String(b, _) => String::from_utf8_lossy(b).into_owned(), _ => continue };
+        let name = match field.get(b"T").unwrap() {
+            Object::String(b, _) => String::from_utf8_lossy(b).into_owned(),
+            _ => continue,
+        };
         let widgets: Vec<&lopdf::Dictionary> = match field.get(b"Kids") {
             Ok(Object::Array(k)) => k.iter().map(|k| doc.dereference(k).unwrap().1.as_dict().unwrap()).collect(),
             _ => vec![field],

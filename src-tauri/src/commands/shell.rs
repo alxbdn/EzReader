@@ -68,8 +68,7 @@ pub fn check_pdf_association() -> bool {
         use winreg::enums::HKEY_CURRENT_USER;
         use winreg::RegKey;
         let hkcu = RegKey::predef(HKEY_CURRENT_USER);
-        hkcu.open_subkey(r"Software\Classes\com.ezreader.app\shell\open\command")
-            .is_ok()
+        hkcu.open_subkey(r"Software\Classes\com.ezreader.app\shell\open\command").is_ok()
     }
     #[cfg(target_os = "macos")]
     {
@@ -80,19 +79,13 @@ pub fn check_pdf_association() -> bool {
         if !desktop_entry_exists() {
             return false;
         }
-        let Ok(out) = Command::new("xdg-mime")
-            .args(["query", "default", "application/pdf"])
-            .output()
-        else {
+        let Ok(out) = Command::new("xdg-mime").args(["query", "default", "application/pdf"]).output() else {
             return false;
         };
         if !out.status.success() {
             return false;
         }
-        String::from_utf8_lossy(&out.stdout)
-            .trim()
-            .to_ascii_lowercase()
-            .contains("ezreader")
+        String::from_utf8_lossy(&out.stdout).trim().to_ascii_lowercase().contains("ezreader")
     }
 }
 
@@ -123,10 +116,7 @@ fn prog_id_is_ours(prog_id: &str, exe_name: &str, app_user_model_id: Option<&str
         return true;
     }
     match (app_user_model_id, family) {
-        (Some(aumid), Some(family)) => aumid
-            .split('!')
-            .next()
-            .is_some_and(|f| f.eq_ignore_ascii_case(family)),
+        (Some(aumid), Some(family)) => aumid.split('!').next().is_some_and(|f| f.eq_ignore_ascii_case(family)),
         _ => false,
     }
 }
@@ -150,19 +140,14 @@ pub fn is_default_pdf_reader() -> bool {
                 .ok()
                 .filter(|v| !v.is_empty())
         };
-        let Some(prog_id) = read("UserChoiceLatest")
-            .or_else(|| read(r"UserChoiceLatest\ProgId"))
-            .or_else(|| read("UserChoice"))
+        let Some(prog_id) =
+            read("UserChoiceLatest").or_else(|| read(r"UserChoiceLatest\ProgId")).or_else(|| read("UserChoice"))
         else {
             return false;
         };
-        let exe = std::env::current_exe()
-            .map(|p| p.to_string_lossy().to_string())
-            .unwrap_or_default();
-        let exe_name = std::path::Path::new(&exe)
-            .file_name()
-            .map(|n| n.to_string_lossy().to_string())
-            .unwrap_or_default();
+        let exe = std::env::current_exe().map(|p| p.to_string_lossy().to_string()).unwrap_or_default();
+        let exe_name =
+            std::path::Path::new(&exe).file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
         let aumid = RegKey::predef(HKEY_CLASSES_ROOT)
             .open_subkey(format!(r"{prog_id}\Application"))
             .and_then(|k| k.get_value::<String, _>("AppUserModelID"))
@@ -183,7 +168,10 @@ mod default_reader_tests {
     #[test]
     fn family_comes_from_the_windowsapps_folder() {
         assert_eq!(
-            package_family_from_exe(r"C:\Program Files\WindowsApps\AlexBoudon.EzReader_1.0.0.0_x64__8wekyb3d8bbwe\ezreader.exe").as_deref(),
+            package_family_from_exe(
+                r"C:\Program Files\WindowsApps\AlexBoudon.EzReader_1.0.0.0_x64__8wekyb3d8bbwe\ezreader.exe"
+            )
+            .as_deref(),
             Some("AlexBoudon.EzReader_8wekyb3d8bbwe")
         );
         assert_eq!(package_family_from_exe(r"C:\Users\a\Downloads\ezreader-portable.exe"), None);
@@ -225,58 +213,31 @@ pub fn register_pdf_handler() -> CmdResult<()> {
         use winreg::enums::{HKEY_CURRENT_USER, KEY_SET_VALUE};
         use winreg::RegKey;
 
-        let exe = std::env::current_exe()
-            .map_err(|e| e.to_string())?
-            .to_string_lossy()
-            .to_string();
+        let exe = std::env::current_exe().map_err(|e| e.to_string())?.to_string_lossy().to_string();
 
         let hkcu = RegKey::predef(HKEY_CURRENT_USER);
-        let classes = hkcu
-            .open_subkey_with_flags(r"Software\Classes", KEY_SET_VALUE)
-            .map_err(|e| e.to_string())?;
+        let classes = hkcu.open_subkey_with_flags(r"Software\Classes", KEY_SET_VALUE).map_err(|e| e.to_string())?;
 
         // ProgID root
-        let (progid, _) = classes
-            .create_subkey("com.ezreader.app")
-            .map_err(|e| e.to_string())?;
-        progid
-            .set_value("", &"EzReader Document")
-            .map_err(|e| e.to_string())?;
-        progid
-            .set_value("FriendlyTypeName", &"EzReader Document")
-            .map_err(|e| e.to_string())?;
+        let (progid, _) = classes.create_subkey("com.ezreader.app").map_err(|e| e.to_string())?;
+        progid.set_value("", &"EzReader Document").map_err(|e| e.to_string())?;
+        progid.set_value("FriendlyTypeName", &"EzReader Document").map_err(|e| e.to_string())?;
 
         // DefaultIcon
-        let (icon_key, _) = progid
-            .create_subkey("DefaultIcon")
-            .map_err(|e| e.to_string())?;
-        icon_key
-            .set_value("", &format!("\"{exe}\",0"))
-            .map_err(|e| e.to_string())?;
+        let (icon_key, _) = progid.create_subkey("DefaultIcon").map_err(|e| e.to_string())?;
+        icon_key.set_value("", &format!("\"{exe}\",0")).map_err(|e| e.to_string())?;
 
         // shell\open\command
-        let (open_cmd, _) = progid
-            .create_subkey(r"shell\open\command")
-            .map_err(|e| e.to_string())?;
-        open_cmd
-            .set_value("", &format!("\"{exe}\" \"%1\""))
-            .map_err(|e| e.to_string())?;
+        let (open_cmd, _) = progid.create_subkey(r"shell\open\command").map_err(|e| e.to_string())?;
+        open_cmd.set_value("", &format!("\"{exe}\" \"%1\"")).map_err(|e| e.to_string())?;
 
         // shell\print\command
-        let (print_cmd, _) = progid
-            .create_subkey(r"shell\print\command")
-            .map_err(|e| e.to_string())?;
-        print_cmd
-            .set_value("", &format!("\"{exe}\" --print \"%1\""))
-            .map_err(|e| e.to_string())?;
+        let (print_cmd, _) = progid.create_subkey(r"shell\print\command").map_err(|e| e.to_string())?;
+        print_cmd.set_value("", &format!("\"{exe}\" --print \"%1\"")).map_err(|e| e.to_string())?;
 
         // .pdf → com.ezreader.app
-        let (pdf_ext, _) = classes
-            .create_subkey(".pdf")
-            .map_err(|e| e.to_string())?;
-        pdf_ext
-            .set_value("", &"com.ezreader.app")
-            .map_err(|e| e.to_string())?;
+        let (pdf_ext, _) = classes.create_subkey(".pdf").map_err(|e| e.to_string())?;
+        pdf_ext.set_value("", &"com.ezreader.app").map_err(|e| e.to_string())?;
 
         // Also register print verb under Applications\ezreader.exe (used when
         // Windows sets the default via Settings → Default Apps, which ignores our
@@ -286,19 +247,11 @@ pub fn register_pdf_handler() -> CmdResult<()> {
             .map(|n| n.to_string_lossy().to_string())
             .unwrap_or_else(|| "ezreader.exe".to_string());
         let app_key_path = format!(r"Software\Classes\Applications\{exe_name}");
-        let (app_key, _) = hkcu
-            .create_subkey(&app_key_path)
-            .map_err(|e| e.to_string())?;
+        let (app_key, _) = hkcu.create_subkey(&app_key_path).map_err(|e| e.to_string())?;
         // Hide from "Open with" — this key is only needed for the print verb
-        app_key
-            .set_value("NoOpenWith", &"")
-            .map_err(|e| e.to_string())?;
-        let (app_print_cmd, _) = app_key
-            .create_subkey(r"shell\print\command")
-            .map_err(|e| e.to_string())?;
-        app_print_cmd
-            .set_value("", &format!("\"{exe}\" --print \"%1\""))
-            .map_err(|e| e.to_string())?;
+        app_key.set_value("NoOpenWith", &"").map_err(|e| e.to_string())?;
+        let (app_print_cmd, _) = app_key.create_subkey(r"shell\print\command").map_err(|e| e.to_string())?;
+        app_print_cmd.set_value("", &format!("\"{exe}\" --print \"%1\"")).map_err(|e| e.to_string())?;
 
         Ok(())
     }
@@ -308,8 +261,8 @@ pub fn register_pdf_handler() -> CmdResult<()> {
     }
     #[cfg(not(any(target_os = "windows", target_os = "macos")))]
     {
-        let desktop_path = desktop_file_path()
-            .ok_or_else(|| PdfError::from("Could not locate applications directory"))?;
+        let desktop_path =
+            desktop_file_path().ok_or_else(|| PdfError::from("Could not locate applications directory"))?;
         if let Some(parent) = desktop_path.parent() {
             std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
         }
@@ -369,10 +322,7 @@ fn parse_lpstat_printers(stdout: &str) -> Vec<String> {
 fn parse_lpstat_default(stdout: &str) -> Option<String> {
     stdout
         .lines()
-        .find_map(|line| {
-            line.split_once("system default destination:")
-                .map(|(_, rest)| rest.trim())
-        })
+        .find_map(|line| line.split_once("system default destination:").map(|(_, rest)| rest.trim()))
         .filter(|s| !s.is_empty())
         .map(str::to_string)
 }
@@ -380,16 +330,10 @@ fn parse_lpstat_default(stdout: &str) -> Option<String> {
 #[cfg(not(target_os = "windows"))]
 fn list_printers_linux() -> Result<PrinterList, String> {
     let Ok(out) = Command::new("lpstat").env("LC_ALL", "C").arg("-a").output() else {
-        return Ok(PrinterList {
-            printers: vec![],
-            default_printer: String::new(),
-        });
+        return Ok(PrinterList { printers: vec![], default_printer: String::new() });
     };
     if !out.status.success() {
-        return Ok(PrinterList {
-            printers: vec![],
-            default_printer: String::new(),
-        });
+        return Ok(PrinterList { printers: vec![], default_printer: String::new() });
     }
     let printers = parse_lpstat_printers(&String::from_utf8_lossy(&out.stdout));
     let default_printer = Command::new("lpstat")
@@ -403,10 +347,7 @@ fn list_printers_linux() -> Result<PrinterList, String> {
         .or_else(|| printers.first().cloned())
         .unwrap_or_default();
 
-    Ok(PrinterList {
-        printers,
-        default_printer,
-    })
+    Ok(PrinterList { printers, default_printer })
 }
 
 #[cfg(target_os = "windows")]
@@ -456,15 +397,7 @@ fn list_printers_impl() -> Result<PrinterList, String> {
     // must be 8-byte aligned, which a byte buffer does not guarantee.
     let mut buf = vec![0u64; (needed as usize).div_ceil(8)];
     let ok = unsafe {
-        EnumPrintersW(
-            flags,
-            ptr::null_mut(),
-            2,
-            buf.as_mut_ptr().cast::<u8>(),
-            needed,
-            &mut needed,
-            &mut returned,
-        )
+        EnumPrintersW(flags, ptr::null_mut(), 2, buf.as_mut_ptr().cast::<u8>(), needed, &mut needed, &mut returned)
     };
     if ok == 0 {
         let default = get_default_printer_name().unwrap_or_default();
@@ -505,7 +438,9 @@ fn list_printers_impl() -> Result<PrinterList, String> {
         if !info.pPrinterName.is_null() {
             let name_len = unsafe {
                 let mut len = 0;
-                while *info.pPrinterName.add(len) != 0 { len += 1; }
+                while *info.pPrinterName.add(len) != 0 {
+                    len += 1;
+                }
                 len
             };
             let name_slice = unsafe { std::slice::from_raw_parts(info.pPrinterName, name_len) };
@@ -554,9 +489,7 @@ fn print_pages_linux(
     let mut decoded_pages = Vec::with_capacity(pages_b64.len());
     for page_b64 in &pages_b64 {
         let trimmed = page_b64.split_once(',').map_or(page_b64.as_str(), |(_, d)| d).trim();
-        let bytes = base64::engine::general_purpose::STANDARD
-            .decode(trimmed)
-            .map_err(|e| format!("base64: {e}"))?;
+        let bytes = base64::engine::general_purpose::STANDARD.decode(trimmed).map_err(|e| format!("base64: {e}"))?;
         decoded_pages.push((format!("page {}", decoded_pages.len() + 1), bytes));
     }
 
@@ -567,25 +500,15 @@ fn print_pages_linux(
         }
     }
 
-    let nanos = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_nanos();
-    let temp_path = std::env::temp_dir().join(format!(
-        "ezreader-{}-print-{nanos}.pdf",
-        crate::tempfiles::tag()
-    ));
+    let nanos = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_nanos();
+    let temp_path = std::env::temp_dir().join(format!("ezreader-{}-print-{nanos}.pdf", crate::tempfiles::tag()));
     let _cleanup = TempCleanup(temp_path.clone());
     let temp_path_str = temp_path.to_string_lossy().into_owned();
 
     crate::commands::pdf::image_bytes_to_pdf(&decoded_pages, &temp_path_str)?;
 
     let mut args: Vec<String> = Vec::new();
-    if let Some(name) = printer_name
-        .as_deref()
-        .map(str::trim)
-        .filter(|n| !n.is_empty())
-    {
+    if let Some(name) = printer_name.as_deref().map(str::trim).filter(|n| !n.is_empty()) {
         args.push("-d".to_string());
         args.push(name.to_string());
     }
@@ -607,19 +530,12 @@ fn print_pages_linux(
 
     args.push(temp_path_str);
 
-    let out = Command::new("lp")
-        .args(&args)
-        .output()
-        .map_err(|e| format!("failed to run lp: {e}"))?;
+    let out = Command::new("lp").args(&args).output().map_err(|e| format!("failed to run lp: {e}"))?;
     drop(_cleanup);
 
     if !out.status.success() {
         let stderr = String::from_utf8_lossy(&out.stderr).trim().to_string();
-        return Err(if stderr.is_empty() {
-            "lp failed".to_string()
-        } else {
-            stderr
-        });
+        return Err(if stderr.is_empty() { "lp failed".to_string() } else { stderr });
     }
 
     Ok(())
@@ -637,9 +553,8 @@ fn print_pages_impl(
     use std::ptr;
     use winapi::shared::windef::HDC;
     use winapi::um::wingdi::{
-        CreateDCW, DeleteDC, GetDeviceCaps, StretchDIBits, BITMAPINFO,
-        BITMAPINFOHEADER, DIB_RGB_COLORS, DOCINFOW, HORZRES, LOGPIXELSX,
-        LOGPIXELSY, SRCCOPY, VERTRES,
+        CreateDCW, DeleteDC, GetDeviceCaps, StretchDIBits, BITMAPINFO, BITMAPINFOHEADER, DIB_RGB_COLORS, DOCINFOW,
+        HORZRES, LOGPIXELSX, LOGPIXELSY, SRCCOPY, VERTRES,
     };
 
     // Resolve printer name
@@ -660,21 +575,10 @@ fn print_pages_impl(
     // Ask the driver for its full DEVMODE (public part + driver-private data)
     // and set the orientation on it. A hand-built, zeroed DEVMODE is rejected
     // by some drivers, so fall back to the driver defaults if this fails.
-    let devmode_buf = orientation
-        .as_deref()
-        .and_then(|o| printer_devmode(&printer_wide, o == "landscape"));
-    let devmode_ptr = devmode_buf
-        .as_ref()
-        .map_or(ptr::null(), |b| b.as_ptr() as *const winapi::um::wingdi::DEVMODEW);
+    let devmode_buf = orientation.as_deref().and_then(|o| printer_devmode(&printer_wide, o == "landscape"));
+    let devmode_ptr = devmode_buf.as_ref().map_or(ptr::null(), |b| b.as_ptr() as *const winapi::um::wingdi::DEVMODEW);
 
-    let hdc: HDC = unsafe {
-        CreateDCW(
-            ptr::null(),
-            printer_wide.as_ptr(),
-            ptr::null(),
-            devmode_ptr,
-        )
-    };
+    let hdc: HDC = unsafe { CreateDCW(ptr::null(), printer_wide.as_ptr(), ptr::null(), devmode_ptr) };
 
     if hdc.is_null() {
         return Err("Failed to create printer DC".to_string());
@@ -709,9 +613,7 @@ fn print_pages_impl(
                 .decode(page_b64.trim())
                 .map_err(|e| format!("base64: {e}"))?;
 
-            let img = image::load_from_memory(&jpeg_bytes)
-                .map_err(|e| format!("image decode: {e}"))?
-                .into_rgb8();
+            let img = image::load_from_memory(&jpeg_bytes).map_err(|e| format!("image decode: {e}"))?.into_rgb8();
             let (img_w, img_h) = img.dimensions();
             let rgb = img.as_raw();
 
@@ -742,12 +644,7 @@ fn print_pages_impl(
                     biClrUsed: 0,
                     biClrImportant: 0,
                 },
-                bmiColors: [winapi::um::wingdi::RGBQUAD {
-                    rgbBlue: 0,
-                    rgbGreen: 0,
-                    rgbRed: 0,
-                    rgbReserved: 0,
-                }],
+                bmiColors: [winapi::um::wingdi::RGBQUAD { rgbBlue: 0, rgbGreen: 0, rgbRed: 0, rgbReserved: 0 }],
             };
 
             // Compute destination rectangle
@@ -768,8 +665,14 @@ fn print_pages_impl(
             unsafe {
                 StretchDIBits(
                     hdc,
-                    dest_x, dest_y, dest_w, dest_h,
-                    0, 0, img_w as i32, img_h as i32,
+                    dest_x,
+                    dest_y,
+                    dest_w,
+                    dest_h,
+                    0,
+                    0,
+                    img_w as i32,
+                    img_h as i32,
                     dib.as_ptr() as *const _,
                     &bmi,
                     DIB_RGB_COLORS,
@@ -835,8 +738,7 @@ fn printer_devmode(printer_wide: &[u16], landscape: bool) -> Option<Vec<u8>> {
         unsafe {
             let dm = &mut *dm;
             dm.dmFields |= DM_ORIENTATION;
-            dm.u1.s1_mut().dmOrientation =
-                if landscape { DMORIENT_LANDSCAPE } else { DMORIENT_PORTRAIT } as i16;
+            dm.u1.s1_mut().dmOrientation = if landscape { DMORIENT_LANDSCAPE } else { DMORIENT_PORTRAIT } as i16;
         }
         // Let the driver validate and merge the change
         let ok = unsafe {
@@ -879,10 +781,7 @@ mod tests {
             "HP_LaserJet accepting requests since Mon Nov 10 10:00:00 2026\n",
             "CUPS-PDF accepting requests since Tue Nov 11 08:00:00 2026\n",
         );
-        assert_eq!(
-            super::parse_lpstat_printers(lpstat_a),
-            vec!["HP_LaserJet".to_string(), "CUPS-PDF".to_string()]
-        );
+        assert_eq!(super::parse_lpstat_printers(lpstat_a), vec!["HP_LaserJet".to_string(), "CUPS-PDF".to_string()]);
         assert_eq!(
             super::parse_lpstat_default("system default destination: HP_LaserJet\n").as_deref(),
             Some("HP_LaserJet")
@@ -955,23 +854,18 @@ pub fn unregister_pdf_handler() -> CmdResult<()> {
         let hkcu = RegKey::predef(HKEY_CURRENT_USER);
 
         // Remove ProgID
-        hkcu.delete_subkey_all(r"Software\Classes\com.ezreader.app")
-            .ok();
+        hkcu.delete_subkey_all(r"Software\Classes\com.ezreader.app").ok();
 
         // Remove .pdf extension mapping
         hkcu.delete_subkey_all(r"Software\Classes\.pdf").ok();
 
         // Remove Applications\ezreader.exe
-        let exe = std::env::current_exe()
-            .map_err(|e| e.to_string())?
-            .to_string_lossy()
-            .to_string();
+        let exe = std::env::current_exe().map_err(|e| e.to_string())?.to_string_lossy().to_string();
         let exe_name = std::path::Path::new(&exe)
             .file_name()
             .map(|n| n.to_string_lossy().to_string())
             .unwrap_or_else(|| "ezreader.exe".to_string());
-        hkcu.delete_subkey_all(format!(r"Software\Classes\Applications\{exe_name}"))
-            .ok();
+        hkcu.delete_subkey_all(format!(r"Software\Classes\Applications\{exe_name}")).ok();
 
         // Remove from FileExts OpenWithProgids
         if let Ok(key) = hkcu.open_subkey_with_flags(
@@ -1018,10 +912,7 @@ pub fn register_print_verb() -> CmdResult<()> {
         use winreg::enums::HKEY_CURRENT_USER;
         use winreg::RegKey;
 
-        let exe = std::env::current_exe()
-            .map_err(|e| e.to_string())?
-            .to_string_lossy()
-            .to_string();
+        let exe = std::env::current_exe().map_err(|e| e.to_string())?.to_string_lossy().to_string();
 
         let exe_name = std::path::Path::new(&exe)
             .file_name()
@@ -1031,27 +922,17 @@ pub fn register_print_verb() -> CmdResult<()> {
         let hkcu = RegKey::predef(HKEY_CURRENT_USER);
 
         // Under our ProgID
-        let (progid_print, _) = hkcu
-            .create_subkey(r"Software\Classes\com.ezreader.app\shell\print\command")
-            .map_err(|e| e.to_string())?;
-        progid_print
-            .set_value("", &format!("\"{exe}\" --print \"%1\""))
-            .map_err(|e| e.to_string())?;
+        let (progid_print, _) =
+            hkcu.create_subkey(r"Software\Classes\com.ezreader.app\shell\print\command").map_err(|e| e.to_string())?;
+        progid_print.set_value("", &format!("\"{exe}\" --print \"%1\"")).map_err(|e| e.to_string())?;
 
         // Under Applications\<exe> (used when default set via Windows Settings).
         // NoOpenWith prevents this key from appearing in "Open with" — it only needs the print verb.
-        let (app_key, _) = hkcu
-            .create_subkey(format!(r"Software\Classes\Applications\{exe_name}"))
-            .map_err(|e| e.to_string())?;
-        app_key
-            .set_value("NoOpenWith", &"")
-            .map_err(|e| e.to_string())?;
-        let (app_print, _) = app_key
-            .create_subkey(r"shell\print\command")
-            .map_err(|e| e.to_string())?;
-        app_print
-            .set_value("", &format!("\"{exe}\" --print \"%1\""))
-            .map_err(|e| e.to_string())?;
+        let (app_key, _) =
+            hkcu.create_subkey(format!(r"Software\Classes\Applications\{exe_name}")).map_err(|e| e.to_string())?;
+        app_key.set_value("NoOpenWith", &"").map_err(|e| e.to_string())?;
+        let (app_print, _) = app_key.create_subkey(r"shell\print\command").map_err(|e| e.to_string())?;
+        app_print.set_value("", &format!("\"{exe}\" --print \"%1\"")).map_err(|e| e.to_string())?;
 
         Ok(())
     }
@@ -1098,7 +979,14 @@ pub fn open_url(url: String) -> CmdResult<()> {
         // browser): no command line to parse, unlike explorer.exe or cmd.
         // SAFETY: both strings are NUL-terminated and outlive the call.
         let code = unsafe {
-            ShellExecuteW(std::ptr::null_mut(), verb.as_ptr(), target.as_ptr(), std::ptr::null(), std::ptr::null(), SW_SHOWNORMAL)
+            ShellExecuteW(
+                std::ptr::null_mut(),
+                verb.as_ptr(),
+                target.as_ptr(),
+                std::ptr::null(),
+                std::ptr::null(),
+                SW_SHOWNORMAL,
+            )
         } as isize;
         if code <= 32 {
             return Err(format!("could not open the link (error {code})").into());
@@ -1109,10 +997,7 @@ pub fn open_url(url: String) -> CmdResult<()> {
     {
         // `open` on macOS, the desktop's handler elsewhere.
         let opener = if cfg!(target_os = "macos") { "open" } else { "xdg-open" };
-        Command::new(opener)
-            .arg(&url)
-            .spawn()
-            .map_err(|e| format!("could not open the link ({e})"))?;
+        Command::new(opener).arg(&url).spawn().map_err(|e| format!("could not open the link ({e})"))?;
         Ok(())
     }
 }
@@ -1146,10 +1031,7 @@ mod url_tests {
 pub fn open_default_apps_settings() -> CmdResult<()> {
     #[cfg(target_os = "windows")]
     {
-        Command::new("cmd")
-            .args(["/C", "start", "", "ms-settings:defaultapps"])
-            .spawn()
-            .map_err(|e| e.to_string())?;
+        Command::new("cmd").args(["/C", "start", "", "ms-settings:defaultapps"]).spawn().map_err(|e| e.to_string())?;
     }
     Ok(())
 }

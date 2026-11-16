@@ -82,12 +82,7 @@ pub fn html(doc: &TextDoc) -> String {
 /// The text with its structure: pages, headings, paragraphs and tables.
 pub fn xml(doc: &TextDoc) -> String {
     let mut out = String::from("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n");
-    let _ = writeln!(
-        out,
-        "<document title=\"{}\" pages=\"{}\">",
-        xml_escape(&doc.title),
-        doc.pages.len()
-    );
+    let _ = writeln!(out, "<document title=\"{}\" pages=\"{}\">", xml_escape(&doc.title), doc.pages.len());
     for page in &doc.pages {
         let _ = writeln!(
             out,
@@ -156,9 +151,7 @@ pub(super) fn half_points(size: f32, heading: u8) -> u32 {
 
 /// Rich text: opens in WordPad, Word and LibreOffice.
 pub fn rtf(doc: &TextDoc) -> String {
-    let mut out = String::from(
-        "{\\rtf1\\ansi\\ansicpg1252\\deff0\\uc1{\\fonttbl{\\f0\\fswiss Calibri;}}\\viewkind4\n",
-    );
+    let mut out = String::from("{\\rtf1\\ansi\\ansicpg1252\\deff0\\uc1{\\fonttbl{\\f0\\fswiss Calibri;}}\\viewkind4\n");
     if !doc.title.is_empty() {
         let _ = writeln!(out, "{{\\info{{\\title {}}}}}", rtf_escape(&doc.title));
     }
@@ -236,7 +229,9 @@ mod tests {
     #[test]
     fn writes_xml() {
         let x = xml(&sample());
-        assert!(x.starts_with("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<document title=\"Report &lt;1&gt;\" pages=\"2\">"));
+        assert!(x.starts_with(
+            "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<document title=\"Report &lt;1&gt;\" pages=\"2\">"
+        ));
         assert!(x.contains("<page number=\"1\" width=\"595\" height=\"842\">"));
         assert!(x.contains("<heading level=\"1\">Annual report</heading>"));
         assert!(x.contains("<row><cell>Name</cell><cell></cell><cell>Total</cell></row>"));
