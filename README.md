@@ -189,7 +189,7 @@ Every push, every pull request and every week, GitHub Actions checks the code:
 | Load test | A 1,500-page PDF opened, scrolled and zoomed while memory and CPU are measured |
 | Supply chain | Dependabot updates, third-party actions pinned to a commit, [OpenSSF Scorecard](https://scorecard.dev/viewer/?uri=github.com/alxbdn/EzReader) |
 
-The results of each release are attached to it as PDF reports. To report a vulnerability privately, see [SECURITY.md](SECURITY.md).
+The results of each release are attached to it as PDF reports. To report a vulnerability privately, see [SECURITY.md](SECURITY.md). How EzReader stands against the EU Cyber Resilience Act: [docs/cra](docs/cra/README.md).
 
 ---
 
