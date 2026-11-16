@@ -1,19 +1,17 @@
 name: macOS Disk Image
 
 # A universal .dmg (Intel and Apple Silicon), attached to the GitHub Release
-# of each version tag. It is signed ad hoc only (no Apple Developer account):
-# the Homebrew cask (alxbdn/homebrew-ezreader) lifts the quarantine on install.
+# of each version tag. It is signed ad hoc only (no
+# Apple Developer account): the Homebrew cask (alxbdn/homebrew-ezreader) lifts the quarantine on install.
 
 # macOS runners are scarce on GitHub: jobs often wait in the queue and get
 # dropped ("job was not acquired by Runner"). So this build never runs on pull
-# requests, where a dropped job left every PR looking red. It runs on version
-# tags, on demand, and after a merge to main that touches the native side or
-# the dependencies. The cross-platform tests already run in CI on each PR.
+# requests, where a dropped job left every PR looking red. It runs for version
+# tags (after the security scans), on demand, and after a merge to main
+# that touches the native side or the dependencies. The cross-platform tests already run in CI on each PR.
 on:
   push:
     branches: [main]
-    tags:
-      - 'v*.*.*'
     paths:
       - 'src-tauri/**'
       - 'package.json'
@@ -28,6 +26,19 @@ on:
         type: boolean
       release_tag:
         description: 'Tag de la release (ex: v1.0.1, vide = version de tauri.conf.json)'
+        required: false
+        default: ''
+        type: string
+  # Version tags are built only once the security scans have passed:
+  # Bump & Release dispatches this workflow on its new tag, and the release
+  # workflow (tag pushed by hand) calls it.
+  workflow_call:
+    inputs:
+      publish_release:
+        required: false
+        default: false
+        type: boolean
+      release_tag:
         required: false
         default: ''
         type: string
@@ -47,6 +58,11 @@ env:
 jobs:
   build-dmg:
     runs-on: macos-latest
+    # id-token and attestations: signed SLSA build provenance for the release.
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
     timeout-minutes: 45
 
     steps:
@@ -152,6 +168,24 @@ jobs:
           path: dist-artifacts/${{ steps.stage.outputs.dmg }}
           if-no-files-found: error
 
+      # SLSA build provenance, signed with Sigstore and recorded in the
+      # repository's attestations. Check a download with:
+      #   gh attestation verify <file> --repo alxbdn/EzReader
+      - name: Attest build provenance
+        id: attest
+        if: startsWith(github.ref, 'refs/tags/v') || inputs.publish_release == true
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: |
+            dist-artifacts/${{ steps.stage.outputs.dmg }}
+
+      - name: Stage provenance
+        if: startsWith(github.ref, 'refs/tags/v') || inputs.publish_release == true
+        shell: bash
+        run: |
+          cp "${{ steps.attest.outputs.bundle-path }}" \
+             "dist-artifacts/ezreader-${{ steps.version.outputs.version }}-macos.intoto.jsonl"
+
       - name: Publish to GitHub Release
         if: startsWith(github.ref, 'refs/tags/v') || inputs.publish_release == true
         uses: softprops/action-gh-release@8a0cd651e5b2365bd640854a3fa5dfc70e4875f3 # v3.0.4
@@ -162,5 +196,6 @@ jobs:
           prerelease: ${{ steps.version.outputs.is_prerelease == 'true' }}
           files: |
             dist-artifacts/${{ steps.stage.outputs.dmg }}
+            dist-artifacts/ezreader-${{ steps.version.outputs.version }}-macos.intoto.jsonl
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
