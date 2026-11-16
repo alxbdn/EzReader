@@ -42,15 +42,26 @@ jobs:
         with:
           ref: ${{ inputs.tag }}
 
+      # The report tools (report script, load test, Playwright) come from the
+      # workflow's own commit, so that the reports of a release made before
+      # they existed can be added too. For a new release it is the same commit.
+      - uses: actions/checkout@v7
+        with:
+          path: .report-tools
+
       - uses: actions/setup-node@v7
         with:
           node-version: '22'
           cache: 'npm'
+          cache-dependency-path: |
+            package-lock.json
+            .report-tools/package-lock.json
 
       - name: Install dependencies and Chromium
         run: |
           npm ci
-          npx playwright install --with-deps chromium
+          npm ci --prefix .report-tools
+          (cd .report-tools && npx playwright install --with-deps chromium)
 
       - name: Version and commit
         id: meta
@@ -103,7 +114,7 @@ jobs:
 
       - name: Security report
         run: |
-          node scripts/release-report.mjs security \
+          node .report-tools/scripts/release-report.mjs security \
             --version "${{ steps.meta.outputs.version }}" --commit "${{ steps.meta.outputs.sha }}" \
             --repo "${{ github.repository }}" \
             --npm npm-audit.json --deny cargo-deny.jsonl --codeql codeql-alerts.json --runs security-jobs.json \
@@ -127,15 +138,26 @@ jobs:
         with:
           ref: ${{ inputs.tag }}
 
+      # The report tools (report script, load test, Playwright) come from the
+      # workflow's own commit, so that the reports of a release made before
+      # they existed can be added too. For a new release it is the same commit.
+      - uses: actions/checkout@v7
+        with:
+          path: .report-tools
+
       - uses: actions/setup-node@v7
         with:
           node-version: '22'
           cache: 'npm'
+          cache-dependency-path: |
+            package-lock.json
+            .report-tools/package-lock.json
 
       - name: Install dependencies and Chromium
         run: |
           npm ci
-          npx playwright install --with-deps chromium
+          npm ci --prefix .report-tools
+          (cd .report-tools && npx playwright install --with-deps chromium)
 
       - name: Build the front end
         run: npm run build
@@ -145,12 +167,14 @@ jobs:
       - name: Load test
         continue-on-error: true
         run: |
-          node perf/make-big-pdf.mjs "$RUNNER_TEMP/big.pdf" 1500
-          node perf/stress.mjs "$RUNNER_TEMP/big.pdf" --rounds 3 --out "ezreader-${TAG#v}-perf-results.json"
+          # The release's front end, driven by the load test of the tools.
+          rm -rf .report-tools/dist && cp -r dist .report-tools/dist
+          node .report-tools/perf/make-big-pdf.mjs "$RUNNER_TEMP/big.pdf" 1500
+          node .report-tools/perf/stress.mjs "$RUNNER_TEMP/big.pdf" --rounds 3 --out "$PWD/ezreader-${TAG#v}-perf-results.json"
 
       - name: Performance report
         run: |
-          node scripts/release-report.mjs performance \
+          node .report-tools/scripts/release-report.mjs performance \
             --version "${TAG#v}" --commit "$(git rev-parse HEAD)" \
             --results "ezreader-${TAG#v}-perf-results.json" \
             --out "ezreader-${TAG#v}-performance-report.pdf"
