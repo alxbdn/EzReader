@@ -4,13 +4,22 @@ name: macOS Disk Image
 # of each version tag. It is signed ad hoc only (no Apple Developer account):
 # the Homebrew cask (alxbdn/homebrew-ezreader) lifts the quarantine on install.
 
+# macOS runners are scarce on GitHub: jobs often wait in the queue and get
+# dropped ("job was not acquired by Runner"). So this build no longer runs on
+# every push to main: only on version tags, on demand, and on pull requests
+# that touch the native side or the dependencies. The cross-platform tests
+# already run in the CI workflow.
 on:
   push:
-    branches: [main]
     tags:
       - 'v*.*.*'
   pull_request:
     branches: [main]
+    paths:
+      - 'src-tauri/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - '.github/workflows/macos-dmg.yml'
   workflow_dispatch:
     inputs:
       publish_release:
@@ -27,12 +36,19 @@ on:
 permissions:
   contents: write
 
+# A newer push to the same pull request replaces the run still waiting for a
+# Mac. Tag builds are never cancelled.
+concurrency:
+  group: macos-dmg-${{ github.ref }}
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
+
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
   build-dmg:
     runs-on: macos-latest
+    timeout-minutes: 45
 
     steps:
       - name: Checkout
