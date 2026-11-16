@@ -90,7 +90,11 @@ Prefer to download? **[Get the latest release](https://github.com/alxbdn/EzReade
 
 The macOS app is not notarized by Apple: installed with Homebrew it opens straight away; from the disk image, right-click EzReader in Applications and choose **Open** the first time.
 
-Each release also carries its **[security report](https://github.com/alxbdn/EzReader/releases/latest/download/ezreader-security-report.pdf)**, its **[performance report](https://github.com/alxbdn/EzReader/releases/latest/download/ezreader-performance-report.pdf)** and the **software bills of materials** (CycloneDX) of its dependencies.
+Each release also carries its **[security report](https://github.com/alxbdn/EzReader/releases/latest/download/ezreader-security-report.pdf)**, its **[performance report](https://github.com/alxbdn/EzReader/releases/latest/download/ezreader-performance-report.pdf)**, the **software bills of materials** (CycloneDX) of its dependencies and its signed **build provenance** ([SLSA](https://slsa.dev), `.intoto.jsonl`). To check that a download was built by this repository's release workflow, with the [GitHub CLI](https://cli.github.com):
+
+```bash
+gh attestation verify <downloaded file> --repo alxbdn/EzReader
+```
 
 ---
 
