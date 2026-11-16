@@ -29,6 +29,11 @@ env:
 jobs:
   build-deb:
     runs-on: ubuntu-latest
+    # id-token and attestations: signed SLSA build provenance for the release.
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
 
     steps:
       - name: Checkout
@@ -134,6 +139,25 @@ jobs:
             dist-artifacts/ezreader-portable-${{ steps.version.outputs.version }}-linux-x64
           if-no-files-found: error
 
+      # SLSA build provenance, signed with Sigstore and recorded in the
+      # repository's attestations. Check a download with:
+      #   gh attestation verify <file> --repo alxbdn/EzReader
+      - name: Attest build provenance
+        id: attest
+        if: startsWith(github.ref, 'refs/tags/v') || inputs.publish_release == true
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: |
+            dist-artifacts/ezreader_${{ steps.version.outputs.version }}_amd64.deb
+            dist-artifacts/ezreader-portable-${{ steps.version.outputs.version }}-linux-x64
+
+      - name: Stage provenance
+        if: startsWith(github.ref, 'refs/tags/v') || inputs.publish_release == true
+        shell: bash
+        run: |
+          cp "${{ steps.attest.outputs.bundle-path }}" \
+             "dist-artifacts/ezreader-${{ steps.version.outputs.version }}-linux.intoto.jsonl"
+
       - name: Publish to GitHub Release
         if: startsWith(github.ref, 'refs/tags/v') || inputs.publish_release == true
         uses: softprops/action-gh-release@8a0cd651e5b2365bd640854a3fa5dfc70e4875f3 # v3.0.4
@@ -145,5 +169,6 @@ jobs:
           files: |
             dist-artifacts/ezreader_${{ steps.version.outputs.version }}_amd64.deb
             dist-artifacts/ezreader-portable-${{ steps.version.outputs.version }}-linux-x64
+            dist-artifacts/ezreader-${{ steps.version.outputs.version }}-linux.intoto.jsonl
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
