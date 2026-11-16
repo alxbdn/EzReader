@@ -1,0 +1,60 @@
+# Architecture
+
+EzReader is a [Tauri 2](https://tauri.app) desktop app: a TypeScript interface running in the system webview, and a Rust back end that does all file and PDF work. The two halves talk only through Tauri commands.
+
+```mermaid
+flowchart LR
+  user([User]) --> ui
+  subgraph webview["Webview (untrusted zone for document content)"]
+    ui["Interface<br/>src/*.ts"] --> pdfjs["PDF.js<br/>rendering, text layer"]
+  end
+  ui -- "Tauri commands (IPC)" --> cmds
+  subgraph rust["Rust back end (src-tauri/src)"]
+    cmds["commands/*<br/>one module per area"] --> grants["grants.rs<br/>path allowlist"]
+    grants --> engines["pdf/*, convert/*, ocr<br/>lopdf, image"]
+    engines --> fs[(Files the user<br/>opened or picked)]
+    cmds --> os["OS integration<br/>print, file association, update"]
+  end
+  os -- "HTTPS, version check only" --> gh[(api.github.com)]
+```
+
+## Front end (`src/`)
+
+- Plain TypeScript (strict mode), no framework, bundled by Vite.
+- `pdf-viewer.ts` drives [PDF.js](https://mozilla.github.io/pdf.js/) to render pages, the text layer and form fields. PDF.js runs with document scripts off (`pdf-options.ts`).
+- Sessions hold the state of an open document: `document-session.ts` (file, unsaved changes), `annotation-session.ts` (annotations, undo and redo, redaction), `page-history.ts` (page edits).
+- Tools and panels are one module each: `toolbar.ts`, `studio-panel.ts`, `page-sidebar.ts`, `doc-tabs.ts`, the `*-modal.ts` dialogs.
+- `backend.ts` defines the interface to the back end; `tauri-backend.ts` implements it with Tauri commands, so the interface can be tested without Tauri.
+- `i18n.ts` holds every interface string in 20 languages.
+
+## Back end (`src-tauri/src/`)
+
+- `commands/` exposes the Tauri commands, grouped by area: `pdf.rs` (save annotations, rearrange, extract, split, straighten, redact, adjust), `security.rs` (password protection), `compress.rs`, `convert.rs` (Word, Excel, RTF, HTML, text, XML), `ocr.rs`, `files.rs`, `dialog.rs`, `shell.rs` (printing, links, default PDF app), `update.rs`, `window.rs`.
+- `grants.rs` is the security gate: every command that touches a file checks the path against the files and folders the user opened or picked.
+- `pdf/` holds the PDF engines on top of [lopdf](https://github.com/J-F-Liu/lopdf): writing annotations, flattening, forms, redaction, compression, straightening.
+- `convert/` exports text and tables to office formats; `ocr.rs` and `rapid_ocr.rs` recognize text in scans (Windows and macOS system OCR, built-in models on Linux).
+- `tempfiles.rs` manages temporary working copies and removes them at exit or after a crash.
+- `error.rs` returns coded errors (`ErrorCode`) that the interface translates.
+
+## Data flow
+
+1. The user opens a file (dialog, drag and drop, command line). The back end records it in the grants and returns its bytes; PDF.js renders it.
+2. Edits (annotations, page changes, form values) live in the interface sessions until the user saves.
+3. On save, the interface sends the edits to a command; the Rust engine writes a new PDF with lopdf and replaces the file.
+
+## Build and release
+
+- `npm run tauri build` produces the app for the current platform; GitHub Actions builds Windows (installer, portable, MSIX), macOS (universal `.dmg`) and Linux (`.deb`, portable).
+- Releases come only from the *Bump & Release* and *Release* workflows. See [SECURITY.md](../SECURITY.md#how-ezreader-is-checked) and [GOVERNANCE.md](../GOVERNANCE.md#releases).
+
+## Tests
+
+| Layer | Where | Run with |
+|-------|-------|----------|
+| Interface unit tests | `src/__tests__/` | `npm test` (Vitest) |
+| Rust unit tests | `#[cfg(test)]` modules next to the code | `cargo test` |
+| Hostile input and PDF corpus | `src-tauri/src/hostile_input_tests.rs`, `corpus_tests.rs` | `cargo test` |
+| End-to-end on the real app | `e2e/` | `npm run test:e2e` |
+| Visual regression | `visual/` | `npm run test:visual` |
+| Load test | `perf/` | `npm run test:perf` |
+| Fuzzing | `src-tauri/fuzz/` | `cargo fuzz run <target>` |

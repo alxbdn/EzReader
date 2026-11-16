@@ -50,4 +50,6 @@ A release is only published if all these scans pass. Each release carries a **se
 
 ## Design
 
+The [security assurance case](docs/security/assurance-case.md) sets out the threat model, the trust boundaries and why the design holds. In short:
+
 EzReader has no server, no account and no telemetry: it never sends your documents anywhere. PDFs open in a locked-down viewer where document scripts never run and the page cannot reach the network. The app only reads and writes the files you open or pick in a dialog. Password protection uses the encryption defined by the PDF standard, through the `lopdf` library: EzReader does not implement its own cryptography.

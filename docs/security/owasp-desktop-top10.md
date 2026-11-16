@@ -57,7 +57,7 @@ EzReader has no account, no login, no server and no session. Opening a password-
 - Secure by default: nothing to configure, no open port, no plugin system, no remote content.
 - CI actions from third parties are pinned to a commit, and the workflows have no dangerous patterns (OpenSSF Scorecard).
 - **Residual**: the Windows installer on GitHub is not Authenticode-signed and the macOS app is only signed ad hoc (not notarized). The Store package is signed by Microsoft. Build provenance (SLSA) lets anyone check where a download comes from.
-- **Residual**: some workflows still grant `contents: write` at the top level instead of per job (Scorecard "Token-Permissions").
+- Workflow tokens are read-only at the top level; only the jobs that publish a release ask for write access (Scorecard "Token-Permissions" 10/10).
 
 ## DA7. Insecure communication
 
