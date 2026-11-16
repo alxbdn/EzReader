@@ -1550,6 +1550,9 @@ input[type="color"].color-picker.is-off::-webkit-color-swatch {
   box-shadow: 0 0 0 1px var(--border), var(--shadow-md);
 }
 
+/* The page on screen: a thin red line around its thumbnail. */
+.page-sidebar-thumb.current .page-sidebar-frame canvas { box-shadow: 0 0 0 1.5px var(--sidebar-select), var(--shadow-md); }
+
 .page-sidebar-thumb:hover .page-sidebar-frame { outline-color: var(--ring); }
 .page-sidebar-thumb.selected .page-sidebar-frame { outline-color: var(--sidebar-select); }
 
