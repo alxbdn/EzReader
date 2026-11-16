@@ -480,6 +480,7 @@ function wirePageOverlay(pv: PdfPageView): void {
 
 const wiredOverlays = new WeakSet<object>();
 viewer.onLayoutChanged((pageViews) => {
+  toolbar.updateLayout(viewer.forcedColumns, viewer.scrollMode, viewer.columnCount);
   for (const pv of pageViews) {
     if (!wiredOverlays.has(pv.overlay)) {
       wirePageOverlay(pv);
@@ -1781,12 +1782,12 @@ toolbar.on(async (e) => {
     case "columns":
       viewer.setColumns(e.n);
       if (e.n != null && viewer.scrollMode === "horizontal") viewer.setScrollMode("vertical");
-      toolbar.updateLayout(viewer.forcedColumns, viewer.scrollMode);
+      toolbar.updateLayout(viewer.forcedColumns, viewer.scrollMode, viewer.columnCount);
       break;
 
     case "scroll-mode":
       viewer.setScrollMode(e.mode);
-      toolbar.updateLayout(viewer.forcedColumns, viewer.scrollMode);
+      toolbar.updateLayout(viewer.forcedColumns, viewer.scrollMode, viewer.columnCount);
       break;
 
     case "info":
