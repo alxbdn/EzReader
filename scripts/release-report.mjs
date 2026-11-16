@@ -98,6 +98,18 @@ function denySection() {
       severity: reason !== undefined ? `Accepted: ${reason}` : d.fields.severity,
     };
   });
+  // License, ban and source findings (no advisory attached).
+  for (const d of diags) {
+    const f = d.fields;
+    if (f.advisory || !["error", "warning"].includes(f.severity)) continue;
+    const krate = f.graphs?.[0]?.Krate ?? {};
+    details.push({
+      id: f.code ?? "",
+      component: [krate.name, krate.version].filter(Boolean).join(" "),
+      description: f.message ?? "",
+      severity: f.severity,
+    });
+  }
   const accepted = details.filter((d) => d.severity.startsWith("Accepted")).length;
   const parts = [errors ? plural(errors, "error") : "No blocking finding"];
   if (warnings) parts.push(plural(warnings, "warning"));
@@ -206,9 +218,7 @@ function fmt(value, unit) {
 
 function performanceHtml() {
   const data = readJson(opt("--results"));
-  if (!data?.results) {
-    return page("Performance report", ["Not available", "The load test did not produce results for this release."], WARN, "");
-  }
+  if (!data?.results) return performanceFailedHtml();
   const { results, thresholds = {} } = data;
   const rows = PERF_ROWS.filter(([key]) => typeof results[key] === "number").map(([key, label, unit]) => {
     const max = thresholds[key];
@@ -230,6 +240,28 @@ function performanceHtml() {
     </table>
     <h2>Method</h2>
     <p>The test builds the front end, generates the PDF, and drives the viewer in Chromium through Playwright while it measures memory (all processes, JavaScript heap, canvases), CPU, DOM size and response times. The thresholds live in <span class="mono">perf/thresholds.json</span>; the full measurements are in the <span class="mono">perf-results.json</span> file attached to this release.</p>
+  `);
+}
+
+// The load test stopped before the end (a crash, a timeout): the report shows
+// how far it went and the last lines it printed, rather than nothing.
+function performanceFailedHtml() {
+  const logPath = opt("--log");
+  const log = logPath && existsSync(logPath) ? readFileSync(logPath, "utf8") : "";
+  if (!log.trim()) {
+    return page("Performance report", ["Not available", "The load test did not produce results for this release."], WARN, "");
+  }
+  const lines = log.trim().split("\n");
+  const mbs = [...log.matchAll(/\]\s+(\d+)\s+MB/g)].map((m) => Number(m[1]));
+  const peak = mbs.length ? Math.max(...mbs) : null;
+  const crashed = /Target crashed|out of memory|OOM/i.test(log);
+  const headline = crashed ? "The viewer crashed during the load test" : "The load test did not finish";
+  const sub = peak ? `Memory reached ${fmt(peak, "MB")} before it stopped.` : "See the end of its log below.";
+  return page("Performance report", [headline, sub], FAIL, `
+    <h2>End of the load test log</h2>
+    <pre class="log">${esc(lines.slice(-18).join("\n"))}</pre>
+    <h2>Method</h2>
+    <p>The test opens a PDF of 1,500 pages, part of them scanned, and scrolls, jumps through and zooms it in a loop in Chromium through Playwright, while it measures memory, CPU and response times. The thresholds live in <span class="mono">perf/thresholds.json</span>.</p>
   `);
 }
 
@@ -261,6 +293,7 @@ function page(title, [headline, sub], status, body) {
   .num { text-align: right; white-space: nowrap; }
   .mono { font-family: "Cascadia Mono", Consolas, "SFMono-Regular", monospace; font-size: 8pt; }
   .muted { color: #656d76; }
+  .log { font: 7.5pt/1.4 "Cascadia Mono", Consolas, monospace; background: #f6f8fa; border-radius: 8px; padding: 10px 12px; white-space: pre-wrap; word-break: break-all; margin: 0; }
   .st { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; }
   .st i { width: 7px; height: 7px; border-radius: 50%; display: inline-block; }
   .st-ok i { background: #1a7f37; } .st-warn i { background: #bf8700; } .st-fail i { background: #d1242f; } .st-na i { background: #8c959f; }

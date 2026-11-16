@@ -78,14 +78,17 @@ jobs:
 
       - name: SCA - cargo deny
         run: |
+          # A release older than src-tauri/deny.toml is checked with today's policy.
+          CONFIG=src-tauri/deny.toml
+          [ -f "$CONFIG" ] || CONFIG=.report-tools/src-tauri/deny.toml
           cargo deny -L info --manifest-path src-tauri/Cargo.toml --format json \
-            check advisories licenses bans sources 2> cargo-deny.jsonl || true
+            check --config "$CONFIG" advisories licenses bans sources 2> cargo-deny.jsonl || true
 
       - name: SAST - open CodeQL alerts
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh api "repos/${{ github.repository }}/code-scanning/alerts?state=open&per_page=100" \
+          gh api "repos/${{ github.repository }}/code-scanning/alerts?state=open&tool_name=CodeQL&per_page=100" \
             > codeql-alerts.json || echo null > codeql-alerts.json
 
       - name: Dynamic - fuzzing jobs of the Security workflow
@@ -170,13 +173,14 @@ jobs:
           # The release's front end, driven by the load test of the tools.
           rm -rf .report-tools/dist && cp -r dist .report-tools/dist
           node .report-tools/perf/make-big-pdf.mjs "$RUNNER_TEMP/big.pdf" 1500
-          node .report-tools/perf/stress.mjs "$RUNNER_TEMP/big.pdf" --rounds 3 --out "$PWD/ezreader-${TAG#v}-perf-results.json"
+          set -o pipefail
+          node .report-tools/perf/stress.mjs "$RUNNER_TEMP/big.pdf" --rounds 3 --out "$PWD/ezreader-${TAG#v}-perf-results.json" 2>&1 | tee perf-log.txt
 
       - name: Performance report
         run: |
           node .report-tools/scripts/release-report.mjs performance \
             --version "${TAG#v}" --commit "$(git rev-parse HEAD)" \
-            --results "ezreader-${TAG#v}-perf-results.json" \
+            --results "ezreader-${TAG#v}-perf-results.json" --log perf-log.txt \
             --out "ezreader-${TAG#v}-performance-report.pdf"
 
       - name: Attach to the release
