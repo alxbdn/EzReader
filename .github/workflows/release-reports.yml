@@ -127,8 +127,11 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          # Also under a fixed name, so releases/latest/download/... in the
+          # README always opens the newest report.
+          cp "ezreader-${TAG#v}-security-report.pdf" ezreader-security-report.pdf
           gh release upload "$TAG" --clobber --repo "${{ github.repository }}" \
-            "ezreader-${TAG#v}-security-report.pdf" \
+            "ezreader-${TAG#v}-security-report.pdf" ezreader-security-report.pdf \
             "ezreader-${TAG#v}-sbom-npm.cdx.json" \
             "ezreader-${TAG#v}-sbom-cargo.cdx.json"
 
@@ -187,6 +190,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          FILES=("ezreader-${TAG#v}-performance-report.pdf")
+          cp "ezreader-${TAG#v}-performance-report.pdf" ezreader-performance-report.pdf
+          FILES=("ezreader-${TAG#v}-performance-report.pdf" ezreader-performance-report.pdf)
           [ -f "ezreader-${TAG#v}-perf-results.json" ] && FILES+=("ezreader-${TAG#v}-perf-results.json")
           gh release upload "$TAG" --clobber --repo "${{ github.repository }}" "${FILES[@]}"

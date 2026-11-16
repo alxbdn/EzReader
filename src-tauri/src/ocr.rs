@@ -139,7 +139,7 @@ mod engine {
             .map_err(|e| e.message())?;
         let result = engine
             .RecognizeAsync(&bitmap)
-            .and_then(|op| op.get())
+            .and_then(|op| op.join())
             .map_err(|e| e.message())?;
 
         let (fw, fh) = (w as f32, h as f32);
