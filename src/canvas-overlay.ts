@@ -801,7 +801,7 @@ export class CanvasOverlay implements SelectionOwner {
       this.ctx.translate(x, y);
       if (rotRad !== 0) this.ctx.rotate(rotRad);
       this.ctx.scale((ann.width * this.scale) / v.w, (ann.height * this.scale) / v.h);
-      drawVector(this.ctx, v);
+      drawVector(this.ctx, v, ann.color);
       this.ctx.restore();
       return;
     }
@@ -1978,7 +1978,7 @@ export class CanvasOverlay implements SelectionOwner {
       kind: "signature", page: this.currentPage,
       x: pdfX - widthPt / 2, y: pdfY - heightPt / 2,
       width: widthPt, height: heightPt, imageData,
-      ...(vector ? { vector } : {}),
+      ...(vector ? { vector, color: { ...this.style.signatureColor } } : {}),
     };
     this.addInside(ann);
     this.selected = ann;

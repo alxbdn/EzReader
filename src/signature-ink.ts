@@ -145,8 +145,8 @@ export function fitVector(segs: number[]): InkVector | null {
 }
 
 /** Draws `v` in the context's current transform, its box at (0, 0). */
-export function drawVector(ctx: CanvasRenderingContext2D, v: InkVector): void {
-  const { r, g, b } = SIGNATURE_INK;
+export function drawVector(ctx: CanvasRenderingContext2D, v: InkVector, ink: { r: number; g: number; b: number } = SIGNATURE_INK): void {
+  const { r, g, b } = ink;
   ctx.save();
   ctx.strokeStyle = `rgb(${r}, ${g}, ${b})`;
   ctx.lineCap = "round";

@@ -67,6 +67,29 @@ const COLOR_KEYS: Record<string, Key> = {
   White: "colWhite", Pink: "colPink", Orange: "colOrange", "Ink blue": "colInkBlue",
 };
 const FONT_SIZES = [8, 9, 10, 11, 12, 14, 16, 18, 20, 24, 28, 32, 36, 48, 60, 72];
+/** Classic pen inks for drawn signatures. */
+const SIGNATURE_INKS: [string, string][] = [
+  ["#18181b", "Black"], ["#1d4ed8", "Blue"], ["#dc2626", "Red"], ["#15803d", "Green"],
+];
+
+/** Pencil brushes: each one is a thickness and an opacity, saved as such in the PDF. */
+export const BRUSHES: { id: string; key: Key; fb: string; width: number; opacity: number }[] = [
+  { id: "ballpoint", key: "brushBallpoint", fb: "Ballpoint pen", width: 1, opacity: 1 },
+  { id: "fineliner", key: "brushFineliner", fb: "Fineliner", width: 2, opacity: 1 },
+  { id: "fountain", key: "brushFountain", fb: "Fountain pen", width: 3, opacity: 1 },
+  { id: "brush", key: "brushBrush", fb: "Brush", width: 6, opacity: 1 },
+  { id: "calligraphy", key: "brushCalligraphy", fb: "Calligraphy", width: 4, opacity: 0.9 },
+  { id: "marker", key: "brushMarker", fb: "Marker", width: 10, opacity: 0.7 },
+  { id: "pencil", key: "brushPencil", fb: "Pencil", width: 1, opacity: 0.6 },
+  { id: "charcoal", key: "brushCharcoal", fb: "Charcoal", width: 5, opacity: 0.55 },
+  { id: "airbrush", key: "brushAirbrush", fb: "Airbrush", width: 12, opacity: 0.25 },
+  { id: "watercolor", key: "brushWatercolor", fb: "Watercolor", width: 8, opacity: 0.4 },
+];
+
+/** The brush with this thickness and opacity, if one has them. */
+export function brushOf(width: number, opacity: number): string | null {
+  return BRUSHES.find((b) => b.width === width && Math.abs(b.opacity - opacity) < 0.005)?.id ?? null;
+}
 
 export interface SignatureChip { id: string; dataUrl: string }
 
@@ -130,7 +153,12 @@ export class ToolRow {
   private sigList!: HTMLElement;
   private sigNew!: HTMLButtonElement;
   private sigCount!: HTMLElement;
+  private sigInk!: ColorRow;
   private signatures: SignatureChip[] = [];
+  private brushBtns = new Map<string, HTMLButtonElement>();
+  private brushWrap!: HTMLElement;
+  /** Told after every sync: the title of the options on show, or null when none are. */
+  onSync: ((title: string | null, mode: AppMode) => void) | null = null;
 
   constructor(private emit: (e: ToolbarEvent) => void, private canSwitch: () => boolean) {
     this.row = document.createElement("div");
@@ -271,6 +299,16 @@ export class ToolRow {
     this.hideSelectionPanel("pencil");
     this.hideSelectionPanel("shapes");
   }
+
+  /** Ink of the selected drawn signature. */
+  showSignatureStyles(color: RgbColor): void {
+    this.state.signatureColor = { ...color };
+    this.selectionPanel = "sign";
+    this.panel = "sign";
+    this.syncAll();
+  }
+
+  hideSignatureStyles(): void { this.hideSelectionPanel("sign"); }
 
   /** Number of pages selected in the side panel (Crop and Straighten need some). */
   setPageSelection(count: number): void {
@@ -430,7 +468,10 @@ export class ToolRow {
     this.textBgWrap = document.createElement("div");
     this.textBgWrap.className = "opt-group";
     this.textBgWrap.append(this.divider(), this.textBg.el);
-    p.append(this.fontSelect, this.sizeSelect, biuSeg, this.divider(), this.textColor.el, this.textBgWrap);
+    const line = document.createElement("div");
+    line.className = "opt-line";
+    line.append(this.sizeSelect, biuSeg);
+    p.append(this.fontSelect, line, this.divider(), this.textColor.el, this.textBgWrap);
   }
 
   /** Pencil and shapes: drawing style, outline, background, thickness, opacity. */
@@ -466,13 +507,58 @@ export class ToolRow {
     fillWrap.append(this.divider(), fill.el);
     if (group === "pencil") this.pencilFillWrap = fillWrap; else this.shapeFillWrap = fillWrap;
 
-    const thick = this.slider(1, 12, " px", "optThickness", "Thickness", (v) => { this.state.strokeWidth = v; this.changed(); });
-    const op = this.slider(10, 100, " %", "optOpacity", "Opacity", (v) => { this.state.opacity = v / 100; this.changed(); });
+    const thick = this.slider(1, 12, " px", "optThickness", "Thickness", (v) => {
+      this.state.strokeWidth = v;
+      this.changed();
+    });
+    const op = this.slider(10, 100, " %", "optOpacity", "Opacity", (v) => {
+      this.state.opacity = v / 100;
+      this.changed();
+    });
     this.outline.push(outline);
     this.fill.push(fill);
     this.thickness.push(thick);
     this.opacity.push(op);
-    p.append(seg, this.divider(), outline.el, fillWrap, this.divider(), thick.el, op.el);
+    if (group === "pencil") {
+      p.append(seg, this.buildBrushes(), this.divider(), outline.el, fillWrap, this.divider(), thick.el, op.el);
+    } else {
+      p.append(seg, this.divider(), outline.el, fillWrap, this.divider(), thick.el, op.el);
+    }
+  }
+
+  /** The brush list of the pencil: a name and a sample stroke each. */
+  private buildBrushes(): HTMLElement {
+    this.brushWrap = document.createElement("div");
+    this.brushWrap.className = "opt-brushes";
+    const label = document.createElement("span");
+    label.className = "opt-label";
+    this.text(label, "optBrush", "Brush");
+    const list = document.createElement("div");
+    list.className = "brush-list";
+    list.setAttribute("role", "listbox");
+    for (const b of BRUSHES) {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "brush-item";
+      btn.dataset["brush"] = b.id;
+      btn.setAttribute("role", "option");
+      const name = document.createElement("span");
+      name.className = "brush-name";
+      this.text(name, b.key, b.fb);
+      const sw = Math.min(10, 0.6 + b.width * 0.85);
+      btn.insertAdjacentHTML("beforeend",
+        `<svg class="brush-sample" viewBox="0 0 120 20" preserveAspectRatio="none" aria-hidden="true"><path d="M4 12 C 30 4, 52 16, 78 9 S 108 6, 116 9" fill="none" stroke="currentColor" stroke-linecap="round" stroke-width="${sw}" opacity="${b.opacity}"/></svg>`);
+      btn.prepend(name);
+      btn.addEventListener("click", () => {
+        this.state.strokeWidth = b.width;
+        this.state.opacity = b.opacity;
+        this.changed();
+      });
+      this.brushBtns.set(b.id, btn);
+      list.append(btn);
+    }
+    this.brushWrap.append(label, list);
+    return this.brushWrap;
   }
 
   private buildNotePanel(): void {
@@ -505,7 +591,11 @@ export class ToolRow {
     this.sigNew.addEventListener("click", () => this.emit({ type: "signature" }));
     this.sigCount = document.createElement("span");
     this.sigCount.className = "opt-note";
-    p.append(this.sigList, this.sigNew, this.sigCount);
+    this.sigInk = this.colorRow(ICON_OPT_COLOR, "optInk", SIGNATURE_INKS, null, (c) => {
+      if (c) this.state.signatureColor = c;
+      this.changed();
+    });
+    p.append(this.sigList, this.sigNew, this.sigCount, this.divider(), this.sigInk.el);
   }
 
   private buildImagePanel(): void {
@@ -631,11 +721,25 @@ export class ToolRow {
       b.classList.toggle("active", style === current);
     }
     this.stampColor.set(st.stampColor);
+    this.sigInk.set(st.signatureColor);
+    const brush = brushOf(st.strokeWidth, st.opacity);
+    for (const [id, b] of this.brushBtns) {
+      const on = id === brush;
+      b.classList.toggle("active", on);
+      b.setAttribute("aria-selected", String(on));
+    }
     // Straight lines and arrows have no inside to fill.
     this.pencilFillWrap.hidden = this.pencilStyle !== "ink" && this.selectionPanel !== "pencil";
     this.shapeFillWrap.hidden = this.shapeStyle === "arrow" && this.selectionPanel !== "shapes";
+    // Brushes are for free drawing.
+    this.brushWrap.hidden = this.pencilStyle !== "ink" && this.selectionPanel !== "pencil";
     this.syncHint();
+    const title = show && shown ? shown.querySelector(".opt-title")?.textContent ?? null : null;
+    this.onSync?.(title, this.mode);
   }
+
+  /** The tool hint of the moment (shown when no options are). */
+  get hintText(): string { return this.hint.textContent ?? ""; }
 
   private syncHint(): void {
     const hints: Record<ToolGroup, [Key, string]> = {

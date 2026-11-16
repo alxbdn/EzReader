@@ -42,7 +42,10 @@ import {
   type RgbColor,
   CSS_UNITS,
   type InkVector,
+  type SignatureAnnotation,
 } from "./models";
+import { StudioPanel } from "./studio-panel";
+import { SIGNATURE_INK } from "./signature-ink";
 import type { PageTextItem, ShapeAnnotation } from "./canvas-overlay";
 import { fitWithin, isImagePath, openKind, picturesDocument, type Picture } from "./pictures";
 import {
@@ -130,6 +133,8 @@ let pendingSignature: string | null = null;
 let pendingSignatureVector: InkVector | undefined;
 let editingTextAnn:  TextAnnotation | null = null;
 let editingShapeAnn: ShapeAnnotation | null = null;
+/** The selected drawn signature, whose ink the Sign options change. */
+let editingSignatureAnn: SignatureAnnotation | null = null;
 
 // ── Instances ─────────────────────────────────────────────────────────────────
 
@@ -205,6 +210,59 @@ const adjustView         = new AdjustView(appEl, applyAdjust, () => {
   toolbar.setBlocker(null);
 });
 document.getElementById("viewer-area")!.after(adjustView.el);
+
+// ── Studio panel: tool options and the list of annotations ──────────────────
+
+const studio = new StudioPanel(toolbar.toolOptions, {
+  list: () => annotations.all(),
+  selected: () => tools.selected,
+  pick: (ann) => pickAnnotation(ann),
+  remove: (ann) => removeAnnotation(ann),
+});
+document.getElementById("viewer-area")!.append(studio.el);
+toolbar.onToolOptions((title, mode) => {
+  studio.setOptions(title);
+  studio.setShown(mode !== "read");
+});
+annotations.onContentChange(() => studio.refresh());
+tools.onSelect((ann) => {
+  studio.setSelected(ann);
+  if (ann?.kind === "signature" && ann.vector) {
+    editingSignatureAnn = ann;
+    toolbar.showSignatureStyles(ann.color ?? SIGNATURE_INK);
+  } else if (editingSignatureAnn) {
+    editingSignatureAnn = null;
+    toolbar.hideSignatureStyles();
+  }
+});
+
+/** Shows the page of `ann` and selects it, ready to move or restyle. */
+function pickAnnotation(ann: Annotation): void {
+  if (!annotations.has(ann)) return;
+  if (toolState.tool !== "select") toolbar.clearActiveTool();
+  if (ann.page !== viewer.currentPage) viewer.goToPage(ann.page, "instant");
+  // The page may still be drawing: try again for a second at most.
+  let tries = 60;
+  const attempt = (): void => {
+    const pv = viewer.pageViews.find((p) => p.pageNum === ann.page);
+    if (pv?.rendered) {
+      pv.overlay.select(ann);
+      if (tools.selected === ann) return;
+    }
+    if (--tries > 0) requestAnimationFrame(attempt);
+  };
+  attempt();
+}
+
+/** The trash of a row in the studio panel. */
+function removeAnnotation(ann: Annotation): void {
+  if (!annotations.has(ann)) return;
+  if (tools.selected === ann) tools.select(null);
+  if (editingTextAnn === ann) { editingTextAnn = null; toolbar.hideTextStyles(); }
+  if (editingShapeAnn === ann) { editingShapeAnn = null; toolbar.hideShapeStyles(); }
+  annotations.remove(ann);
+  viewer.pageViews.find((p) => p.pageNum === ann.page)?.overlay.redrawCommitted();
+}
 
 let tempPrefix: Promise<[string, string]> | null = null;
 
@@ -529,6 +587,7 @@ mountWindowControls(document.getElementById("menubar-row")!, () => {
 {
   const t = getTranslations(settingsModal.getSettings().language);
   toolbar.applyTranslations(t);
+  studio.applyTranslations(t);
   compressModal.applyTranslations(t);
   exportModal.applyTranslations(t);
   ocrModal.applyTranslations(t);
@@ -549,6 +608,7 @@ settingsModal.onChange(s => {
   toolbar.brightness.value = s.pageBrightness;
   const t = getTranslations(s.language);
   toolbar.applyTranslations(t);
+  studio.applyTranslations(t);
   compressModal.applyTranslations(t);
   exportModal.applyTranslations(t);
   ocrModal.applyTranslations(t);
@@ -1862,6 +1922,15 @@ toolbar.on(async (e) => {
         const pv = viewer.pageViews.find(p => p.pageNum === editingShapeAnn!.page);
         pv?.overlay.applyShapeAnnotationStyle(editingShapeAnn, e.style.shapeColor, e.style.strokeWidth, e.style.fillColor, e.style.opacity);
         setDirty(true);
+      } else if (editingSignatureAnn && annotations.has(editingSignatureAnn)) {
+        const ann = editingSignatureAnn;
+        const c = e.style.signatureColor;
+        if (!ann.color || ann.color.r !== c.r || ann.color.g !== c.g || ann.color.b !== c.b) {
+          annotations.beginEdit();
+          ann.color = { ...c };
+          viewer.pageViews.find(p => p.pageNum === ann.page)?.overlay.redrawCommitted();
+          annotations.edited();
+        }
       }
       break;
 

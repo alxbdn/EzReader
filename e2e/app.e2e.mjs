@@ -177,11 +177,30 @@ async function toast() {
 async function drawRectangle() {
   await click("[data-mode=annotate]");
   await click("[data-group=shapes]");
+  // The studio panel opens on the right in Annotate: the pages refit to the
+  // narrower viewer first, so the drag must wait for them to stand still.
+  await waitForStillPage();
   const page = await driver.findElement(By.css("#viewer-scroll .page-wrapper"));
   await driver.actions({ async: true })
-    .move({ origin: page, x: -150, y: -50 }).press()
-    .move({ origin: page, x: -40, y: 30, duration: 250 })
+    // Inside the page even in a small window, next to the studio panel.
+    .move({ origin: page, x: -100, y: -50 }).press()
+    .move({ origin: page, x: -20, y: 30, duration: 250 })
     .release().perform();
+}
+
+/** Waits until the first page keeps the same place and size for half a second. */
+async function waitForStillPage() {
+  const rect = () => driver.executeScript(() => {
+    const r = document.querySelector("#viewer-scroll .page-wrapper").getBoundingClientRect();
+    return [r.x, r.y, r.width, r.height].map(Math.round).join(",");
+  });
+  let last = await rect();
+  for (let i = 0; i < 50; i++) {
+    await sleep(500);
+    const now = await rect();
+    if (now === last) return;
+    last = now;
+  }
 }
 
 async function pdfInfo(path) {
