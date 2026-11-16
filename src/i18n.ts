@@ -281,6 +281,8 @@ export interface Translations {
   sbMovingOne?: string;
   sbMovingMany?: string;
   sbDragOut?: string;
+  tabClose?: string;
+  tabDragMerge?: string;
   nwPageOne?: string;
   nwPageMany?: string;
   msgNewWindowFailed?: string;
@@ -828,6 +830,8 @@ const EN: Translations = {
   sbMovingOne: "Page {p}",
   sbMovingMany: "{n} pages",
   sbDragOut: "Release to open in a new window",
+  tabClose: "Close tab (Ctrl+W)",
+  tabDragMerge: "Release to move it to that window",
   nwPageOne: "{name} (page {pages})",
   nwPageMany: "{name} (pages {pages})",
   msgNewWindowFailed: "Couldn't open a new window: {err}",
@@ -1368,6 +1372,8 @@ const FR: Translations = {
   sbMovingOne: "Page {p}",
   sbMovingMany: "{n} pages",
   sbDragOut: "Relâchez pour ouvrir dans une nouvelle fenêtre",
+  tabClose: "Fermer l'onglet (Ctrl+W)",
+  tabDragMerge: "Relâchez pour le déplacer dans cette fenêtre",
   nwPageOne: "{name} (page {pages})",
   nwPageMany: "{name} (pages {pages})",
   msgNewWindowFailed: "Impossible d'ouvrir une nouvelle fenêtre : {err}",

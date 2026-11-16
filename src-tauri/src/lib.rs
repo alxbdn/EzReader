@@ -26,7 +26,7 @@ use std::sync::Mutex;
 
 use tauri::{DragDropEvent, Manager, WindowEvent};
 
-#[derive(Debug, Default, Clone, serde::Serialize)]
+#[derive(Debug, Default, Clone, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct StartupArgs {
     pub file_path: Option<String>,
@@ -34,6 +34,19 @@ pub struct StartupArgs {
     /// The file is a temp copy that was never saved (pages dragged out to a
     /// new window): Save asks where to write it.
     pub unsaved: bool,
+    /// A tab dragged out of another window: the file is a temp copy holding
+    /// its edits, and Save writes back to this path, its real file.
+    #[serde(default)]
+    pub save_path: Option<String>,
+    /// That tab had unsaved changes.
+    #[serde(default)]
+    pub dirty: bool,
+    /// The password of a protected document moved from another window.
+    #[serde(default)]
+    pub password: Option<String>,
+    /// The page the tab showed (1-based; 0: the first).
+    #[serde(default)]
+    pub page: u32,
 }
 
 /**
@@ -184,6 +197,9 @@ pub fn run() {
             commands::window::open_pages_in_new_window,
             commands::window::open_file_in_new_window,
             commands::window::pictures_to_new_pdf,
+            commands::window::tab_drag_hover,
+            commands::window::tab_drag_end,
+            commands::window::move_tab,
             ratio_lock::set_launcher_ratio_lock,
             resize_border::set_resize_border,
         ])
@@ -243,7 +259,7 @@ fn open_from_finder(app: &tauri::AppHandle, urls: &[url::Url]) {
         let _ = app.emit_to("main", "open-files", to_page);
     } else {
         for p in to_page {
-            let args = StartupArgs { file_path: Some(p), should_print: false, unsaved: false };
+            let args = StartupArgs { file_path: Some(p), ..Default::default() };
             let _ = commands::window::open_window(app, args, None);
         }
     }

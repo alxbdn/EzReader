@@ -920,8 +920,9 @@ export class PdfViewer {
 
   // ── Load ────────────────────────────────────────────────────────────────────
 
-  async load(filePath: string): Promise<void> {
-    await this._openDoc(convertFileSrc(filePath) + `?t=${Date.now()}`);
+  /** Opens `filePath`, its pages turned by `rotation` (a tab brought back). */
+  async load(filePath: string, rotation = 0): Promise<void> {
+    await this._openDoc(convertFileSrc(filePath) + `?t=${Date.now()}`, undefined, rotation);
   }
 
   async loadWithPassword(filePath: string, password: string): Promise<void> {
@@ -946,6 +947,9 @@ export class PdfViewer {
   }
 
   private async _openDoc(url: string, password?: string, rotation = 0): Promise<void> {
+    // The pages still drawing stop first: destroying their document under
+    // them would fail their renders (another tab, another file).
+    for (const view of this.pageViews) view.clear();
     if (this.pdfDoc) {
       await this.pdfDoc.destroy();
       this.pdfDoc = null;

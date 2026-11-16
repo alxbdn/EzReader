@@ -52,6 +52,20 @@ export interface SessionIO {
   encrypt(input: string, output: string, password: string): Promise<void>;
 }
 
+/** A parked `DocumentSession` (see `snapshot()`). */
+export interface SessionSnapshot {
+  sourcePath: string | null;
+  saveTarget: string | null;
+  basePath: string | null;
+  baseRotation: number;
+  dirty: boolean;
+  lock: string | null;
+  pending: string | null;
+  pendingName: string | null;
+  unsavedCopy: boolean;
+  suggestedPath: string | null;
+}
+
 export class DocumentSession {
   private _sourcePath: string | null = null;
   private _saveTarget: string | null = null;
@@ -75,6 +89,47 @@ export class DocumentSession {
   private _suggestedPath: string | null = null;
 
   constructor(private readonly edits: PendingEdits, private readonly io: SessionIO) {}
+
+  // ── Tabs ───────────────────────────────────────────────────────────────────
+
+  /**
+   * Everything this session knows, to park it while another tab shows its
+   * document. `restore()` brings it back as it was.
+   */
+  snapshot(): SessionSnapshot {
+    return {
+      sourcePath: this._sourcePath, saveTarget: this._saveTarget, basePath: this._basePath,
+      baseRotation: this._baseRotation, dirty: this._dirty, lock: this._lock, pending: this._pending,
+      pendingName: this._pendingName, unsavedCopy: this._unsavedCopy, suggestedPath: this._suggestedPath,
+    };
+  }
+
+  /** Comes back to a parked state (`snapshot()`); `null`: no document. */
+  restore(s: SessionSnapshot | null): void {
+    this._sourcePath = s?.sourcePath ?? null;
+    this._saveTarget = s?.saveTarget ?? null;
+    this._basePath = s?.basePath ?? null;
+    this._baseRotation = s?.baseRotation ?? 0;
+    this._dirty = s?.dirty ?? false;
+    this._lock = s?.lock ?? null;
+    this._pending = s?.pending ?? null;
+    this._pendingName = s?.pendingName ?? null;
+    this._unsavedCopy = s?.unsavedCopy ?? false;
+    this._suggestedPath = s?.suggestedPath ?? null;
+  }
+
+  /**
+   * The document came from another window as a temp copy holding its
+   * edits: a plain Save writes back to `savePath`, its real file, whose name
+   * it shows.
+   */
+  adoptSavePath(savePath: string): void {
+    this._sourcePath = savePath;
+    this._saveTarget = null;
+  }
+
+  /** The document is a copy never saved (see `markUnsavedCopy`). */
+  get isUnsavedCopy(): boolean { return this._unsavedCopy; }
 
   get isOpen(): boolean { return this._sourcePath !== null; }
   get sourcePath(): string | null { return this._sourcePath; }

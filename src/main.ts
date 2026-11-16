@@ -58,7 +58,6 @@ import {
   ocrLanguages,
   readAnnotations,
   getStartupArgs,
-  openFileInNewWindow,
   printPages,
   extractPdfPages,
   openPagesInNewWindow,
@@ -83,7 +82,17 @@ import {
   registerPrintVerb,
   unregisterPdfHandler,
   openDefaultAppsSettings,
+  tabDragHover,
+  tabDragEnd,
+  moveTab,
+  type StartupArgs,
 } from "./tauri-bridge";
+import { DocTabs, type DocTab } from "./doc-tabs";
+import { isMac, macShortcuts } from "./platform";
+import { TabStrip } from "./tab-strip";
+import type { SessionSnapshot } from "./document-session";
+import type { AnnotationSnapshot } from "./annotation-session";
+import type { DocState } from "./page-history";
 import { currentMonitor, getCurrentWindow } from "@tauri-apps/api/window";
 import { LogicalSize, PhysicalPosition, PhysicalSize } from "@tauri-apps/api/dpi";
 import { keepCentred, pageFitScale, planWindowFit, VIEWER_PADDING } from "./window-fit";
@@ -132,6 +141,22 @@ viewer.liveText.setRecognizer((data) => ocrImage(data, ocrLanguage()));
 const tools = new ToolSelection();
 const toolState = tools.state;
 const toolbar   = new Toolbar();
+/** The documents open in this window. Only the active one is loaded. */
+const docTabs = new DocTabs<ParkedDoc>();
+/** The file the viewer shows for the active tab. */
+let shownPath: string | null = null;
+/** A tab is being parked or brought back. */
+let tabSwitch: Promise<void> | null = null;
+
+const tabStrip = new TabStrip(document.getElementById("menubar-row")!, toolbar.titleElement, {
+  activate: (id) => void switchTab(id),
+  close: (id) => void closeTab(id),
+  move: (id, index) => { docTabs.move(id, index); renderTabs(); },
+  hover: (x, y) => tabDragHover(x, y),
+  hoverEnd: () => void tabDragEnd().catch(() => {}),
+  detach: (id, x, y) => void detachTab(id, x, y),
+});
+
 /** Annotations, undo / redo and the ✓ / ✕ gate for redactions. */
 const annotations: AnnotationSession = new AnnotationSession({
   gateEnabled: () => toolbar.currentMode !== "read",
@@ -330,7 +355,8 @@ async function fitWindowToDocument(): Promise<boolean> {
   try {
     await setLauncherRatioLock(false);
     if (!autoFitWindow) return true;
-    if (fullscreen || await appWindow.isMaximized()) return preferredZoomShowsPage(pref);
+    // Another tab's document already gave the window its size: it stays.
+    if (fullscreen || docTabs.count > 1 || await appWindow.isMaximized()) return preferredZoomShowsPage(pref);
     const monitor = await currentMonitor();
     if (!monitor) return preferredZoomShowsPage(pref);
     const sf = monitor.scaleFactor || 1;
@@ -510,6 +536,7 @@ mountWindowControls(document.getElementById("menubar-row")!, () => {
   printModal.applyTranslations(t);
   splitModal.applyTranslations(t);
   adjustView.applyTranslations(t);
+  tabStrip.applyTranslations({ close: tabCloseLabel(t), dragNew: t.sbDragOut, dragMerge: t.tabDragMerge });
   applyTranslationsToDOM(t);
 }
 // Page brightness button in the toolbar, kept in step with Settings.
@@ -529,6 +556,7 @@ settingsModal.onChange(s => {
   printModal.applyTranslations(t);
   splitModal.applyTranslations(t);
   adjustView.applyTranslations(t);
+  tabStrip.applyTranslations({ close: tabCloseLabel(t), dragNew: t.sbDragOut, dragMerge: t.tabDragMerge });
   applyTranslationsToDOM(t);
 });
 
@@ -540,9 +568,7 @@ settingsModal.onChange(s => {
     // one replaces the launcher, the others (or all, when a document is
     // already open) get windows of their own.
     await appWindow.listen<string[]>("open-files", async ({ payload }) => {
-      const paths = [...payload];
-      if (!viewer.isLoaded() && !session.isDirty && paths.length > 0) await openPath(paths.shift()!);
-      for (const p of paths) await openFileInNewWindow(p).catch(() => {});
+      for (const p of payload) await openPath(p);
     });
   } catch {
     // Not running in Tauri (browser preview)
@@ -561,12 +587,8 @@ settingsModal.onChange(s => {
       } else if (openKind(startup.filePath) === "pictures") {
         await openPictures([startup.filePath]);
       } else {
-        await loadPdf(startup.filePath);
-        if (startup.unsaved && session.isOpen) {
-          // Pages dragged out of another window: a new document, never saved.
-          session.markUnsavedCopy();
-          setDirty(true);
-        }
+        // Pages or a tab dragged out of another window, or a file to open.
+        await openTransferred(startup);
       }
     }
   } catch {
@@ -586,8 +608,11 @@ function showToast(msg: string, isError = false): void {
 function setDirty(val: boolean): void {
   session.markDirty(val);
   toolbar.setDocTitle(session.displayName, val);
-  if (val) { void registerCloseGuard(); }
-  else      { unregisterCloseGuard(); }
+  // The first document opened in the window gets its tab here.
+  if (session.isOpen && !docTabs.active) docTabs.add();
+  syncActiveTab();
+  if (docTabs.anyDirty) { void registerCloseGuard(); }
+  else                  { unregisterCloseGuard(); }
 }
 
 // ── Changes waiting for ✓ / ✕ ───────────────────────────────────────────────
@@ -651,7 +676,7 @@ async function registerCloseGuard(): Promise<void> {
   guardRegistering = true;
   try {
     unlistenClose = await appWindow.onCloseRequested(async (event) => {
-      if (!session.isDirty) { return; }
+      if (!docTabs.anyDirty) { return; }
       // Saving before closing: wait for it.
       if (savingBeforeLeaving) { event.preventDefault(); return; }
       // If the dialog is already open (e.g. user clicked close twice), force-close.
@@ -663,7 +688,7 @@ async function registerCloseGuard(): Promise<void> {
       event.preventDefault();
       closeGuardBusy = true;
       try {
-        const ok = await settleUnsaved("msgSaveBeforeClose");
+        const ok = await settleAllTabs();
         if (ok) {
           setDirty(false);
           await appWindow.destroy();
@@ -693,10 +718,6 @@ function syncAllPageOverlays(): void {
       pv.viewport
     );
   }
-}
-
-async function confirmUnsaved(): Promise<boolean> {
-  return settleUnsaved("msgSaveBeforeOpen");
 }
 
 /**
@@ -872,6 +893,7 @@ async function showInViewer(path: string, reload = false): Promise<string | null
 
   if (reload) await viewer.reload(workingCopy ?? path);
   else await viewer.load(workingCopy ?? path);
+  shownPath = workingCopy ?? path;
   showThumbnails(reload);
 
   setWelcomeVisible(false);
@@ -910,17 +932,27 @@ async function openFile(): Promise<void> {
   await openPath(path);
 }
 
-/** Opens `path`: a PDF as it is, a picture as a new one-page PDF. */
+/**
+ * Opens `path` in a new tab: a PDF as it is, a picture as a new one-page
+ * PDF. A PDF already open in a tab is shown there instead.
+ */
 async function openPath(path: string): Promise<void> {
-  if (openKind(path) === "pictures") await openPictures([path]);
-  else await loadPdf(path);
+  if (openKind(path) === "pictures") { await openPictures([path]); return; }
+  const open = tabShowing(path);
+  if (open) { await switchTab(open.id); return; }
+  await inNewTab(() => loadPdf(path));
+}
+
+/** Opens the pictures in a new tab, as a new PDF (see `picturesToTab`). */
+async function openPictures(paths: string[]): Promise<void> {
+  await inNewTab(() => picturesToTab(paths));
 }
 
 /**
  * Opens the pictures as a new PDF, one page each. It was never saved: the
  * first Save asks where to put it, suggesting the pictures' folder.
  */
-async function openPictures(paths: string[]): Promise<void> {
+async function picturesToTab(paths: string[]): Promise<void> {
   const { name, suggested } = picturesDocument(paths);
   let pdf: string;
   try {
@@ -935,6 +967,317 @@ async function openPictures(paths: string[]): Promise<void> {
     setDirty(true);
   }
 }
+
+// ── Tabs ──────────────────────────────────────────────────────────────────────
+
+/** What a tab in the background needs to come back as it was left. */
+interface ParkedDoc {
+  session: SessionSnapshot;
+  annotations: AnnotationSnapshot;
+  history: { undo: DocState[]; redo: DocState[] };
+  forms: [string, string][];
+  /** The file the viewer showed (a working copy, or the file itself). */
+  shownPath: string;
+  rotation: number;
+  scale: number;
+  fitMode: "none" | "fit-width" | "fit-height" | "fit-page";
+  page: number;
+  scrollTop: number;
+  scrollLeft: number;
+}
+
+/** "Close tab (Ctrl+W)", with the macOS shortcut there. */
+function tabCloseLabel(t: { tabClose?: string }): string | undefined {
+  return t.tabClose && (isMac ? macShortcuts(t.tabClose) : t.tabClose);
+}
+
+function renderTabs(): void {
+  tabStrip.render(docTabs.tabs, docTabs.active?.id ?? null);
+}
+
+/** The active tab shows the open document's name and dirty flag. */
+function syncActiveTab(): void {
+  const tab = docTabs.active;
+  if (tab && session.isOpen) {
+    tab.title = session.displayName ?? "";
+    tab.dirty = session.isDirty;
+  }
+  renderTabs();
+}
+
+/** The tab showing the file at `path`, if one does. */
+function tabShowing(path: string): DocTab<ParkedDoc> | null {
+  const same = (p: string | null | undefined) => !!p && samePath(p, path);
+  return docTabs.tabs.find((t) => t.parked
+    ? same(t.parked.session.sourcePath) && !t.parked.session.unsavedCopy
+    : same(session.sourcePath) && !session.isUnsavedCopy) ?? null;
+}
+
+function samePath(a: string, b: string): boolean {
+  const norm = (p: string) => p.replace(/\\/g, "/");
+  return isMac || navigator.userAgent.includes("Windows")
+    ? norm(a).toLowerCase() === norm(b).toLowerCase()
+    : norm(a) === norm(b);
+}
+
+/** Waits for a tab switch in progress. */
+async function tabsSettled(): Promise<void> {
+  while (tabSwitch) await tabSwitch;
+}
+
+/**
+ * Puts the active document in the background: its state goes into its tab
+ * and the viewer is free for another one. Changes waiting for ✓ / ✕ are
+ * applied, as when another file was opened.
+ */
+function parkActive(): void {
+  const tab = docTabs.active;
+  if (!tab || !session.isOpen || !shownPath || !viewer.isLoaded()) return;
+  annotations.apply();
+  dropStaleSelection();
+  cancelSignaturePlacement();
+  tab.title = session.displayName ?? tab.title;
+  tab.dirty = session.isDirty;
+  tab.parked = {
+    session: session.snapshot(),
+    annotations: annotations.snapshot(),
+    history: pageHistory.snapshot(),
+    forms: [...formValues.entries()],
+    shownPath,
+    rotation: viewer.rotation,
+    scale: viewer.scale,
+    fitMode,
+    page: viewer.currentPage,
+    scrollTop: viewerScroll.scrollTop,
+    scrollLeft: viewerScroll.scrollLeft,
+  };
+}
+
+/** Brings a parked tab back into the viewer, as it was left. */
+async function showTab(tab: DocTab<ParkedDoc>): Promise<void> {
+  const p = tab.parked;
+  docTabs.activate(tab.id);
+  if (!p) return;
+  tab.parked = null;
+  session.restore(p.session);
+  annotations.restoreParked(p.annotations);
+  pageHistory.restore(p.history);
+  formValues.clear();
+  for (const [name, value] of p.forms) formValues.set(name, value);
+  dropStaleSelection();
+  shownPath = p.shownPath;
+  try {
+    await viewer.load(p.shownPath, p.rotation);
+  } catch (err) {
+    // The file went away meanwhile (a temp folder cleaned up): the tab goes too.
+    showToast(msg("msgOpenFailed", { err: String(err) }), true);
+    const next = docTabs.remove(tab.id);
+    if (next) await showTab(next);
+    else await closeDocument();
+    return;
+  }
+  showThumbnails();
+  setWelcomeVisible(false);
+  toolbar.setLoaded(true);
+  fitMode = p.fitMode;
+  toolbar.updateFitMode(fitMode);
+  if (fitMode !== "none") await applyFitMode();
+  else await viewer.setScale(p.scale);
+  toolbar.updateZoom(viewer.scale);
+  viewerScroll.scrollTop = p.scrollTop;
+  viewerScroll.scrollLeft = p.scrollLeft;
+  syncProtection();
+  setDirty(session.isDirty);
+  if (infoPanel.isOpen) await showInfo();
+}
+
+/** Shows tab `id`, parking the active one. */
+async function switchTab(id: number): Promise<void> {
+  await tabsSettled();
+  const tab = docTabs.get(id);
+  if (!tab || tab === docTabs.active || pageEditBusy || !toolbar.allowed()) { renderTabs(); return; }
+  const run = (async () => {
+    parkActive();
+    await showTab(tab);
+  })();
+  tabSwitch = run;
+  try { await run; } finally { tabSwitch = null; renderTabs(); }
+}
+
+/**
+ * Opens a document in a new tab: `open` loads it into the viewer, the
+ * active document parked first. When nothing opens (an error, a password
+ * not given), the tab goes away and the one before comes back.
+ */
+async function inNewTab(open: () => Promise<void>): Promise<void> {
+  await tabsSettled();
+  if (!toolbar.allowed()) return;
+  const before = session.isOpen ? docTabs.active : null;
+  if (before) parkActive();
+  const tab = docTabs.add();
+  session.restore(null);
+  renderTabs();
+  try {
+    await open();
+  } finally {
+    if (!session.isOpen) {
+      docTabs.remove(tab.id);
+      if (before) await showTab(before);
+      else renderTabs();
+    }
+  }
+}
+
+/** Closes tab `id`, asking first when it has unsaved changes. */
+async function closeTab(id: number): Promise<void> {
+  await tabsSettled();
+  const tab = docTabs.get(id);
+  if (!tab) return;
+  if (tab !== docTabs.active) {
+    if (!tab.dirty) { docTabs.remove(id); renderTabs(); setDirty(session.isDirty); return; }
+    // Shown first, so the question is about what the user sees.
+    await switchTab(id);
+    if (docTabs.active !== tab) return;
+  }
+  if (!await settleUnsaved("msgSaveBeforeClose")) return;
+  await dropActiveTab();
+}
+
+/** The active tab goes away: the next one shows, or the launcher. */
+async function dropActiveTab(): Promise<void> {
+  const tab = docTabs.active;
+  if (!tab) return;
+  const next = docTabs.remove(tab.id);
+  if (next) await showTab(next);
+  else await closeDocument();
+}
+
+/** No document left: back to the launcher, the viewer emptied. */
+async function closeDocument(): Promise<void> {
+  annotations.clear();
+  pageHistory.clear();
+  formValues.clear();
+  session.restore(null);
+  shownPath = null;
+  dropStaleSelection();
+  cancelSignaturePlacement();
+  if (infoPanel.isOpen) { infoPanel.close(); toolbar.setInfoOpen(false); }
+  searchMatches = [];
+  searchIndex = -1;
+  docSearch.reset(null);
+  pageSidebar.clear();
+  await viewer.close();
+  toolbar.setLoaded(false);
+  setWelcomeVisible(true);
+  syncProtection();
+  setDirty(false);
+}
+
+/**
+ * Closing the window: each tab with unsaved changes is shown in turn and
+ * asked about. False when the user cancelled.
+ */
+async function settleAllTabs(): Promise<boolean> {
+  await tabsSettled();
+  for (const tab of [...docTabs.tabs]) {
+    if (!tab.dirty) continue;
+    if (tab !== docTabs.active) {
+      await switchTab(tab.id);
+      if (docTabs.active !== tab) return false;
+    }
+    if (!await settleUnsaved("msgSaveBeforeClose")) return false;
+    // "Don't save": nothing to ask about this one any more.
+    tab.dirty = false;
+  }
+  return true;
+}
+
+/**
+ * Tab `id` was dropped outside the title bar at the screen point (`x`,
+ * `y`): it moves to the EzReader window there, or to a new window. Its
+ * unsaved changes go with it, in a temp copy that saves back to its file.
+ */
+async function detachTab(id: number, x: number, y: number): Promise<void> {
+  await tabsSettled();
+  const tab = docTabs.get(id);
+  if (!tab || tab !== docTabs.active || !session.isOpen || pageEditBusy || !toolbar.allowed()) {
+    void tabDragEnd().catch(() => {});
+    return;
+  }
+  let result: "merged" | "window" | "stayed";
+  try {
+    const { args, name } = await transferOfActive();
+    result = await moveTab(x, y, args, name, docTabs.count > 1);
+  } catch (err) {
+    void tabDragEnd().catch(() => {});
+    showToast(msg("msgOpenFailed", { err: errText(err) }), true);
+    return;
+  }
+  if (result === "stayed") return;
+  // The document lives in the other window now: forgotten here, no question.
+  session.markDirty(false);
+  tab.dirty = false;
+  if (docTabs.count > 1) {
+    await dropActiveTab();
+  } else {
+    unregisterCloseGuard();
+    await appWindow.destroy();
+  }
+}
+
+/** The active document, as another window opens it (see `openTransferred`). */
+async function transferOfActive(): Promise<{ args: StartupArgs; name: string | null }> {
+  const page = viewer.currentPage;
+  annotations.apply();
+  const base = { shouldPrint: false, page };
+  if (session.isProtected) {
+    // Read-only, so nothing pending: the file itself, and its password.
+    return { args: { ...base, filePath: session.sourcePath, password: session.filePassword }, name: null };
+  }
+  const unsaved = session.isUnsavedCopy;
+  if (!session.isDirty && !unsaved) {
+    return { args: { ...base, filePath: session.sourcePath }, name: null };
+  }
+  const file = await session.materialize();
+  return {
+    args: { ...base, filePath: file, unsaved, dirty: session.isDirty, savePath: unsaved ? null : session.saveTarget },
+    // A temp copy: the other window shows it under its own name.
+    name: unsaved ? session.displayName : null,
+  };
+}
+
+/**
+ * Opens what another window handed over in a new tab: a file, pages
+ * dragged out (a copy never saved), or a tab with its pending edits.
+ */
+async function openTransferred(t: StartupArgs): Promise<void> {
+  const file = t.filePath;
+  if (!file) return;
+  if (!t.unsaved && !t.dirty && !t.savePath) {
+    const open = tabShowing(file);
+    if (open) { await switchTab(open.id); return; }
+  }
+  await inNewTab(async () => {
+    await loadPdf(file, t.password ?? null);
+    if (!session.isOpen) return;
+    if (t.unsaved) session.markUnsavedCopy();
+    else if (t.savePath) session.adoptSavePath(t.savePath);
+    setDirty(!!(t.dirty || t.unsaved));
+    if (t.page && t.page > 1) viewer.goToPage(Math.min(t.page, viewer.pageCount), "instant");
+  });
+}
+
+void (async () => {
+  try {
+    await appWindow.listen<StartupArgs>("tab-received", ({ payload }) => {
+      tabStrip.setDropTarget(false);
+      void openTransferred(payload);
+    });
+    await appWindow.listen<boolean>("tab-drag-hover", ({ payload }) => tabStrip.setDropTarget(payload));
+  } catch {
+    // Not running in Tauri (browser preview)
+  }
+})();
 
 async function saveFile(forceDialog: boolean): Promise<void> {
   const current = session.saveTarget;
@@ -1350,7 +1693,7 @@ document.getElementById("welcome-open-btn")?.addEventListener("click", async () 
 toolbar.on(async (e) => {
   switch (e.type) {
     case "open":
-      if (await confirmUnsaved()) await openFile();
+      await openFile();
       break;
 
     case "save":
@@ -1754,7 +2097,20 @@ document.addEventListener("keydown", async (e) => {
   if (ctrl && !shift && e.key === "o") {
     e.preventDefault();
     if (!toolbar.allowed()) return;
-    if (await confirmUnsaved()) await openFile();
+    await openFile();
+    return;
+  }
+  if (ctrl && !shift && e.key.toLowerCase() === "w") {
+    e.preventDefault();
+    const tab = docTabs.active;
+    if (tab && toolbar.allowed()) await closeTab(tab.id);
+    return;
+  }
+  if (ctrl && (e.key === "Tab" || e.key === "PageDown" || e.key === "PageUp")) {
+    e.preventDefault();
+    const back = e.key === "PageUp" || (e.key === "Tab" && shift);
+    const next = docTabs.neighbour(back ? -1 : 1);
+    if (next) await switchTab(next.id);
     return;
   }
   if (ctrl && shift && e.key === "S") {
@@ -2232,7 +2588,7 @@ async function handleDrop(paths: string[], at: { x: number; y: number } | null, 
     }
   }
   if (pdfs.length > 0) {
-    if (await confirmUnsaved()) void loadPdf(pdfs[0]);
+    for (const pdf of pdfs) await openPath(pdf);
   } else if (!viewer.isLoaded()) {
     // On the launcher: the pictures become a new document.
     await openPictures(images);
