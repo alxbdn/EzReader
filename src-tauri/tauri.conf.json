@@ -52,7 +52,7 @@
     },
     "linux": {
       "deb": {
-        "depends": ["cups-client", "xdg-utils"]
+        "depends": ["cups-client", "xdg-utils", "curl"]
       }
     },
     "fileAssociations": [

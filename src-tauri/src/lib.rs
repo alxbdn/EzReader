@@ -109,6 +109,8 @@ pub fn run() {
             // Temp files left by an EzReader that crashed: removed in the
             // background, so a big leftover never delays the window.
             std::thread::spawn(tempfiles::sweep_leftovers);
+            // The previous exe a portable update renamed out of the way.
+            std::thread::spawn(commands::update::remove_leftover);
             if let Some(path) = &startup_file {
                 allow_viewing(app, path);
             }
@@ -177,6 +179,8 @@ pub fn run() {
             commands::shell::register_print_verb,
             commands::shell::open_default_apps_settings,
             commands::shell::open_url,
+            commands::update::check_for_update,
+            commands::update::install_update,
             commands::window::open_pages_in_new_window,
             commands::window::open_file_in_new_window,
             commands::window::pictures_to_new_pdf,

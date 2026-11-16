@@ -6,4 +6,5 @@ pub mod ocr;
 pub mod pdf;
 pub mod shell;
 pub mod security;
+pub mod update;
 pub mod window;

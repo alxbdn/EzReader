@@ -21,6 +21,7 @@
   --input: #e4e4e7;
   --ring: #a1a1aa;
   --destructive: #dc2626;
+  --success: #16a34a;
   --destructive-muted: rgba(220, 38, 38, 0.1);
   --viewer: #f4f4f5;
   --viewer-dot: rgba(0, 0, 0, 0.13);
@@ -52,6 +53,7 @@
   --input: #3f3f46;
   --ring: #71717a;
   --destructive: #f87171;
+  --success: #4ade80;
   --destructive-muted: rgba(248, 113, 113, 0.12);
   --viewer: #18181b;
   --viewer-dot: rgba(255, 255, 255, 0.09);
@@ -81,6 +83,7 @@
     --input: #3f3f46;
     --ring: #71717a;
     --destructive: #f87171;
+    --success: #4ade80;
     --destructive-muted: rgba(248, 113, 113, 0.12);
     --viewer: #18181b;
   --viewer-dot: rgba(255, 255, 255, 0.09);
@@ -1865,6 +1868,40 @@ kbd,
 .welcome-default-box svg { width: 12px; height: 12px; visibility: hidden; }
 .welcome-default.on .welcome-default-box { background: var(--primary); border-color: var(--primary); }
 .welcome-default.on .welcome-default-box svg { visibility: visible; }
+
+/* Up to date? Left of the language picker: a quiet version number with a
+   green check, or a red cross and "Update to …" that installs it. */
+.update-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 32px;
+  margin-left: auto;
+  padding: 0 10px 0 8px;
+  border: none;
+  border-radius: var(--radius-md);
+  background: transparent;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted-foreground);
+  cursor: pointer;
+  transition: background-color 120ms ease, color 120ms ease;
+}
+.update-badge[hidden] { display: none; }
+.update-badge:hover { background: var(--accent); color: var(--foreground); }
+.update-badge:disabled { pointer-events: none; }
+.update-badge-icon { display: flex; }
+.update-badge[data-state="current"] .update-badge-icon { color: var(--success); }
+.update-badge[data-state="outdated"] { color: var(--foreground); }
+.update-badge[data-state="outdated"] .update-badge-icon { color: var(--destructive); }
+.update-badge[data-state="installing"] .update-badge-icon svg { animation: update-spin 0.9s linear infinite; }
+.update-badge:not([hidden]) + .lang-picker { margin-left: 0; }
+@keyframes update-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) {
+  .update-badge[data-state="installing"] .update-badge-icon svg { animation: none; }
+}
 
 .lang-picker { position: relative; margin-left: auto; }
 

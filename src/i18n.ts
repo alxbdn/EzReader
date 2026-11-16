@@ -154,6 +154,14 @@ export interface Translations {
   welcomeDropHint?: string;
   welcomeDefaultReader?: string;
   welcomeDefaultReaderHint?: string;
+  updateUpToDateHint?: string;
+  updateAvailable?: string;
+  updateAvailableHint?: string;
+  updateStoreHint?: string;
+  updateInstalling?: string;
+  updateOpened?: string;
+  updateOtherWindows?: string;
+  updateFailed?: string;
   welcomeFeatHeading?: string;
   welcomeFeatAnnotate?: string;
   welcomeFeatSign?: string;
@@ -696,6 +704,14 @@ const EN: Translations = {
   welcomeDropHint:          "Drop a file to begin",
   welcomeDefaultReader:     "Default PDF reader",
   welcomeDefaultReaderHint: "Open PDF files with EzReader",
+  updateUpToDateHint:  "Up to date: {v} is the latest version",
+  updateAvailable:     "Update to {v}",
+  updateAvailableHint: "Version {v} is out (you have {cur}). Click to install it.",
+  updateStoreHint:     "Version {v} is out (you have {cur}). Click to open the Microsoft Store.",
+  updateInstalling:    "Updating\u2026",
+  updateOpened:        "Finish the update in the window that just opened",
+  updateOtherWindows:  "Close your other EzReader windows first, then update",
+  updateFailed:        "Couldn't update: {err}",
   welcomeFeatHeading:       "What you can do with EzReader",
   welcomeFeatAnnotate:      "Annotate Files",
   welcomeFeatSign:          "Sign Documents",
@@ -1228,6 +1244,14 @@ const FR: Translations = {
   welcomeDropHint:          "D\u00e9posez un fichier pour commencer",
   welcomeDefaultReader:     "Lecteur PDF par d\u00e9faut",
   welcomeDefaultReaderHint: "Ouvrir les fichiers PDF avec EzReader",
+  updateUpToDateHint:  "\u00c0 jour : {v} est la derni\u00e8re version",
+  updateAvailable:     "Mettre \u00e0 jour vers {v}",
+  updateAvailableHint: "La version {v} est sortie (vous avez {cur}). Cliquez pour l'installer.",
+  updateStoreHint:     "La version {v} est sortie (vous avez {cur}). Cliquez pour ouvrir le Microsoft Store.",
+  updateInstalling:    "Mise \u00e0 jour\u2026",
+  updateOpened:        "Terminez la mise \u00e0 jour dans la fen\u00eatre qui vient de s'ouvrir",
+  updateOtherWindows:  "Fermez d'abord vos autres fen\u00eatres EzReader, puis mettez \u00e0 jour",
+  updateFailed:        "Impossible de mettre \u00e0 jour : {err}",
   welcomeFeatHeading:       "Ce que vous pouvez faire avec EzReader",
   welcomeFeatAnnotate:      "Annoter des fichiers",
   welcomeFeatSign:          "Signer des documents",
