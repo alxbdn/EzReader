@@ -84,7 +84,6 @@ Prefer to download? **[Get the latest release](https://github.com/alxbdn/EzReade
 |--------|------|------------|
 | **Windows** | `ezreader-<version>-win-x64-setup.exe` | Installer |
 | | `ezreader-portable-<version>-win-x64.exe` | Portable app: a single file you can run from anywhere |
-| | `ezreader-<version>-win-x64.msix` | Package, also on the [Microsoft Store](https://apps.microsoft.com/detail/9P9PVN4DRVS8) |
 | **macOS** | `ezreader-<version>-macos-universal.dmg` | Disk image |
 | **Linux** | `ezreader_<version>_amd64.deb` | Package for Debian, Ubuntu and derivatives |
 | | `ezreader-portable-<version>-linux-x64` | Portable app: make it executable (`chmod +x`) and run it |
@@ -96,6 +95,10 @@ Each release also carries its **[security report](https://github.com/alxbdn/EzRe
 ```bash
 gh attestation verify <downloaded file> --repo alxbdn/EzReader
 ```
+
+### Code signing policy
+
+Free code signing provided by [SignPath.io](https://about.signpath.io), certificate by [SignPath Foundation](https://signpath.org). Only the Windows files built by this repository's release workflow are signed; who approves each signing, and how, is set out in the [code signing policy](CODE_SIGNING.md).
 
 ---
 

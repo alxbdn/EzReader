@@ -87,7 +87,7 @@ jobs:
           VERSION="${{ steps.version.outputs.version }}"
           mkdir -p packages
           cp "src-tauri/target/release/bundle/nsis/EzReader_${VERSION}_x64-setup.exe" "packages/ezreader-${VERSION}-win-x64-setup.exe"
-          cp "msix-output/EzReader_${VERSION}.0_x64.msix" "packages/ezreader-${VERSION}-win-x64.msix"
+          cp "store/EzReader_${VERSION}.0_x64.msix" "packages/ezreader-${VERSION}-win-x64.msix"
 
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:

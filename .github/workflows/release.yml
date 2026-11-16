@@ -94,7 +94,7 @@ jobs:
              "ezreader-portable-${VERSION}-win-x64.exe"
           cp "src-tauri/target/release/bundle/nsis/EzReader_${VERSION}_x64-setup.exe" \
              "ezreader-${VERSION}-win-x64-setup.exe"
-          cp "msix-output/EzReader_${VERSION}.0_x64.msix" \
+          cp "store/EzReader_${VERSION}.0_x64.msix" \
              "ezreader-${VERSION}-win-x64.msix"
 
       # SLSA build provenance, signed with Sigstore and recorded in the
@@ -120,6 +120,17 @@ jobs:
         with:
           name: release-provenance
           path: ezreader-${{ steps.version.outputs.version }}-windows.intoto.jsonl
+          if-no-files-found: error
+
+      # The .msix is only for the Microsoft Store (which signs it), so it is not
+      # attached to the GitHub release. store-publish.yml and
+      # scripts/get-store-msix.ps1 fetch it from this artifact.
+      - name: Upload Store package
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: store-msix-${{ steps.version.outputs.version }}
+          path: ezreader-${{ steps.version.outputs.version }}-win-x64.msix
+          retention-days: 90
           if-no-files-found: error
 
       - name: Check pre-release
@@ -175,10 +186,28 @@ jobs:
           files: |
             ezreader-portable-${{ needs.build.outputs.version }}-win-x64.exe
             ezreader-${{ needs.build.outputs.version }}-win-x64-setup.exe
-            ezreader-${{ needs.build.outputs.version }}-win-x64.msix
             ezreader-${{ needs.build.outputs.version }}-windows.intoto.jsonl
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # SignPath Foundation asks every download page to name it and link the
+      # code signing policy. Prepended once, whichever workflow (Windows,
+      # macOS, Linux) created the release first.
+      - name: Add code signing notice to the release notes
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          notice='EzReader is a fast, private PDF reader and editor for Windows, macOS and Linux: read, annotate, sign, fill forms, edit and reorganize pages, and recognize text, all on your computer.
+
+          **Code signing policy:** Free code signing provided by [SignPath.io](https://about.signpath.io), certificate by [SignPath Foundation](https://signpath.org). See the [code signing policy](https://github.com/alxbdn/EzReader/blob/main/CODE_SIGNING.md).'
+          body="$(gh release view "$TAG" --json body --jq .body)"
+          if ! grep -q 'SignPath Foundation' <<<"$body"; then
+            printf '%s\n\n%s\n' "$notice" "$body" > notes.md
+            gh release edit "$TAG" --notes-file notes.md
+          fi
 
   # Security and performance reports, plus the SBOMs, attached to the release.
   reports:

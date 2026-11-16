@@ -14,8 +14,10 @@ $AppName = "ezreader"
 $ExeName = "ezreader-portable"
 # Name of the executable inside the package (the Store install is not the portable app)
 $PackagedExeName = "EzReader"
-$OutputDir = ".\msix-output"
-$PackageDir = "$OutputDir\package"
+# The .msix lands in store\ (git-ignored): it is only uploaded to the Microsoft
+# Store, never published on GitHub.
+$OutputDir = ".\store"
+$PackageDir = ".\target\msix-package"
 
 # Get version from tauri.conf.json if not provided
 if (-not $Version) {
@@ -63,9 +65,10 @@ if (-not $SkipBuild) {
 # Step 2: Create package directory structure
 Write-Host "`n=== Creating MSIX package structure ===" -ForegroundColor Green
 
-if (Test-Path $OutputDir) {
-    Remove-Item $OutputDir -Recurse -Force
+if (Test-Path $PackageDir) {
+    Remove-Item $PackageDir -Recurse -Force
 }
+New-Item -ItemType Directory -Path $OutputDir -Force | Out-Null
 New-Item -ItemType Directory -Path $PackageDir -Force | Out-Null
 New-Item -ItemType Directory -Path "$PackageDir\icons" -Force | Out-Null
 
