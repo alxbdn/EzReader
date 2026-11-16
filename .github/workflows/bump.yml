@@ -22,6 +22,13 @@ env:
 jobs:
   release:
     runs-on: windows-latest
+    # id-token and attestations: signed SLSA build provenance for the packages.
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+    outputs:
+      tag: ${{ steps.version.outputs.tag }}
 
     steps:
       - name: Checkout
@@ -98,6 +105,24 @@ jobs:
           cp "msix-output/EzReader_${VERSION}.0_x64.msix" \
              "ezreader-${VERSION}-win-x64.msix"
 
+      # SLSA build provenance, signed with Sigstore and recorded in the
+      # repository's attestations. Check a download with:
+      #   gh attestation verify <file> --repo alxbdn/EzReader
+      - name: Attest build provenance
+        id: attest
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: |
+            ezreader-portable-${{ steps.version.outputs.version }}-win-x64.exe
+            ezreader-${{ steps.version.outputs.version }}-win-x64-setup.exe
+            ezreader-${{ steps.version.outputs.version }}-win-x64.msix
+
+      - name: Stage provenance
+        shell: bash
+        run: |
+          cp "${{ steps.attest.outputs.bundle-path }}" \
+             "ezreader-${{ steps.version.outputs.version }}-windows.intoto.jsonl"
+
       - name: Check pre-release
         id: prerelease
         shell: bash
@@ -128,49 +153,35 @@ jobs:
             ezreader-portable-${{ steps.version.outputs.version }}-win-x64.exe
             ezreader-${{ steps.version.outputs.version }}-win-x64-setup.exe
             ezreader-${{ steps.version.outputs.version }}-win-x64.msix
+            ezreader-${{ steps.version.outputs.version }}-windows.intoto.jsonl
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Install Microsoft Store Developer CLI
-        if: vars.MICROSOFT_STORE_APP_ID != ''
-        shell: pwsh
-        run: |
-          $release = Invoke-RestMethod "https://api.github.com/repos/microsoft/msstore-cli/releases/latest"
-          $asset = $release.assets | Where-Object { $_.name -match "win-x64\.zip$" } | Select-Object -First 1
-          Invoke-WebRequest $asset.browser_download_url -OutFile msstore.zip
-          Expand-Archive msstore.zip -DestinationPath "$env:LOCALAPPDATA\msstore-cli"
-          echo "$env:LOCALAPPDATA\msstore-cli" >> $env:GITHUB_PATH
-
-      - name: Configure and submit to Microsoft Store
-        if: vars.MICROSOFT_STORE_APP_ID != ''
-        continue-on-error: true
-        shell: pwsh
+  # A tag pushed and a release created with GITHUB_TOKEN start no other
+  # workflow, so the macOS and Linux packages and the Store submission are
+  # dispatched here, on the new tag.
+  packages:
+    needs: release
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+    steps:
+      - name: Build macOS, Linux and submit to the Store
         env:
-          MICROSOFT_STORE_TENANT_ID: ${{ secrets.MICROSOFT_STORE_TENANT_ID }}
-          MICROSOFT_STORE_CLIENT_ID: ${{ secrets.MICROSOFT_STORE_CLIENT_ID }}
-          MICROSOFT_STORE_CLIENT_SECRET: ${{ secrets.MICROSOFT_STORE_CLIENT_SECRET }}
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.release.outputs.tag }}
         run: |
-          # Write config.json (no ClientSecret - it goes to Credential Manager)
-          $configDir = "$env:LOCALAPPDATA\Microsoft\MSStore.CLI"
-          New-Item -ItemType Directory -Path $configDir -Force | Out-Null
-          $config = @{
-            TenantId = $env:MICROSOFT_STORE_TENANT_ID
-            SellerId = ${{ vars.MICROSOFT_STORE_SELLER_ID }}
-            ClientId = $env:MICROSOFT_STORE_CLIENT_ID
-          } | ConvertTo-Json
-          $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
-          $configPath = Join-Path $configDir "settings.json"
-          [System.IO.File]::WriteAllText($configPath, $config, $utf8NoBom)
+          gh workflow run macos-dmg.yml --repo "$GITHUB_REPOSITORY" --ref "$TAG"
+          gh workflow run linux-deb.yml --repo "$GITHUB_REPOSITORY" --ref "$TAG"
+          gh workflow run store-publish.yml --repo "$GITHUB_REPOSITORY" --ref main -f tag="$TAG"
 
-          # Store ClientSecret in Windows Credential Manager
-          # msstore CLI uses target name "MicrosoftStoreCli:user={clientId}"
-          $clientId = $env:MICROSOFT_STORE_CLIENT_ID
-          $secret = $env:MICROSOFT_STORE_CLIENT_SECRET
-          $target = "MicrosoftStoreCli:user=$clientId"
-          cmdkey /generic:$target /user:$clientId /pass:$secret
-
-          # Submit
-          $version = "${{ steps.version.outputs.version }}"
-          $msixFile = "ezreader-${version}-win-x64.msix"
-          Write-Host "Submitting $msixFile to Microsoft Store..."
-          msstore publish $msixFile --appId ${{ vars.MICROSOFT_STORE_APP_ID }}
+  # Security and performance reports, plus the SBOMs, attached to the release.
+  reports:
+    needs: release
+    permissions:
+      contents: write
+      security-events: read
+      actions: read
+    uses: ./.github/workflows/release-reports.yml
+    with:
+      tag: ${{ needs.release.outputs.tag }}
