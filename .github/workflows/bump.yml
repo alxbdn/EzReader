@@ -20,7 +20,16 @@ env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
+  # SCA, SAST and fuzzing on the commit being released. Nothing is built,
+  # tagged or published if one of them fails.
+  security:
+    permissions:
+      contents: read
+      security-events: write
+    uses: ./.github/workflows/security.yml
+
   release:
+    needs: security
     runs-on: windows-latest
     # id-token and attestations: signed SLSA build provenance for the packages.
     permissions:
