@@ -62,7 +62,7 @@ EzReader has no account, no login, no server and no session. Opening a password-
 ## DA7. Insecure communication
 
 - One connection on its own: the version check to `api.github.com`.
-- `curl` runs with `--proto =https --proto-redir =https`: no plain HTTP, even after a redirect.
+- `curl` runs with `--proto =https --proto-redir =https --tlsv1.2`: no plain HTTP, even after a redirect, and TLS 1.2 or later. Certificates are always verified against the system store.
 - The downloaded installer must match the SHA-256 digest GitHub publishes for it, or it is deleted and not run.
 - Documents cannot reach the network (CSP, no remote `connect-src`).
 

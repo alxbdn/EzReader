@@ -197,7 +197,7 @@ fn curl() -> Command {
 /// Common options: HTTPS only (redirects too), fail on HTTP errors.
 fn curl_get(version: &str, max_secs: u32) -> Command {
     let mut cmd = curl();
-    cmd.args(["-fsSL", "--proto", "=https", "--proto-redir", "=https", "--max-time"])
+    cmd.args(["-fsSL", "--proto", "=https", "--proto-redir", "=https", "--tlsv1.2", "--max-time"])
         .arg(max_secs.to_string())
         .arg("-A")
         .arg(format!("EzReader/{version}"));
