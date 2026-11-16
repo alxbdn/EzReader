@@ -1,5 +1,17 @@
-import { describe, it, expect } from "vitest";
-import { calculateColumnCount, buildRows, focusedPageAt } from "../pdf-viewer";
+// @vitest-environment jsdom
+import { describe, it, expect, vi, afterEach } from "vitest";
+import type { PDFDocumentProxy, PDFPageProxy, PageViewport } from "pdfjs-dist";
+import {
+  calculateColumnCount,
+  buildRows,
+  focusedPageAt,
+  resolveDestination,
+  PdfPageView,
+  type DestinationDoc,
+  type LinkNavigationHandler,
+} from "../pdf-viewer";
+import { ToolSelection } from "../tool-selection";
+import { AnnotationSession } from "../annotation-session";
 
 describe("calculateColumnCount", () => {
   it("returns 1 when only one page fits (800px container, 600px page)", () => {
@@ -72,5 +84,149 @@ describe("focusedPageAt", () => {
   });
   it("stays on page 1 when nothing scrolls", () => {
     expect(focusedPageAt(0, 1000, 0, pages)).toBe(1);
+  });
+});
+
+describe("resolveDestination", () => {
+  it("resolves a named string destination via getDestination and getPageIndex", async () => {
+    const ref3 = { num: 12, gen: 0 };
+    const doc: DestinationDoc = {
+      numPages: 10,
+      getDestination: vi.fn(async (id) => (id === "chap2" ? [ref3, { name: "XYZ" }, 72, 640, null] : null)),
+      getPageIndex: vi.fn(async (ref) => (ref === ref3 ? 4 : -1)),
+    };
+
+    const res = await resolveDestination(doc, "chap2");
+    expect(res).toEqual({ page: 5, point: [72, 640] });
+    expect(doc.getDestination).toHaveBeenCalledWith("chap2");
+    expect(doc.getPageIndex).toHaveBeenCalledWith(ref3);
+  });
+
+  it("resolves explicit arrays with integer indices and FitH / FitR / Fit modes", async () => {
+    const ref2 = { num: 8, gen: 0 };
+    const doc: DestinationDoc = {
+      numPages: 8,
+      getDestination: vi.fn(async () => null),
+      getPageIndex: vi.fn(async (ref) => (ref === ref2 ? 1 : 0)),
+    };
+
+    expect(await resolveDestination(doc, [ref2, { name: "FitH" }, 510])).toEqual({
+      page: 2,
+      point: [0, 510],
+    });
+    expect(await resolveDestination(doc, [3, { name: "FitR" }, 50, 100, 400, 700])).toEqual({
+      page: 4,
+      point: [50, 700],
+    });
+    expect(await resolveDestination(doc, [ref2, { name: "Fit" }])).toEqual({
+      page: 2,
+      point: null,
+    });
+  });
+
+  it("returns null for unknown, invalid, or out-of-bounds destinations", async () => {
+    const doc: DestinationDoc = {
+      numPages: 5,
+      getDestination: vi.fn(async () => null),
+      getPageIndex: vi.fn(async () => { throw new Error("missing ref"); }),
+    };
+
+    expect(await resolveDestination(doc, "missing")).toBeNull();
+    expect(await resolveDestination(doc, [{ num: 99, gen: 0 }, { name: "Fit" }])).toBeNull();
+    expect(await resolveDestination(doc, [5, { name: "Fit" }])).toBeNull();
+    expect(await resolveDestination(doc, [-1, { name: "Fit" }])).toBeNull();
+    expect(await resolveDestination(doc, null)).toBeNull();
+  });
+});
+
+describe("PdfPageView internal link layer", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    document.body.innerHTML = "";
+  });
+
+  function stubCanvas2d() {
+    vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockImplementation(() => ({
+      setTransform: () => {},
+      clearRect: () => {},
+      drawImage: () => {},
+      measureText: (t: string) => ({ width: t.length * 8 }),
+      font: "",
+    }) as unknown as CanvasRenderingContext2D);
+  }
+
+  it("renders clickable anchors for internal TOC dests, named actions, hash URLs and quadPoints", async () => {
+    stubCanvas2d();
+
+    const annotations = [
+      { subtype: "Link", dest: "section-1", rect: [50, 700, 300, 720] },
+      { subtype: "Link", dest: [{ num: 7, gen: 0 }, { name: "XYZ" }, 0, 500, null], rect: [50, 670, 300, 690] },
+      { subtype: "Link", action: "LastPage", rect: [50, 640, 150, 660] },
+      { subtype: "Link", unsafeUrl: "#page=4", rect: [50, 610, 150, 630] },
+      {
+        subtype: "Link",
+        dest: "multiline",
+        rect: [50, 500, 400, 540],
+        quadPoints: new Float32Array([
+          50, 540, 250, 540, 50, 525, 250, 525,
+          50, 520, 180, 520, 50, 505, 180, 505,
+        ]),
+      },
+    ];
+
+    const fakeViewport = {
+      width: 600,
+      height: 800,
+      rotation: 0,
+      scale: 1,
+      convertToViewportRectangle: ([x1, y1, x2, y2]: number[]) => [x1, 800 - y2, x2, 800 - y1],
+      convertToViewportPoint: (x: number, y: number) => [x, 800 - y],
+      convertToPdfPoint: (x: number, y: number) => [x, 800 - y],
+    } as unknown as PageViewport;
+
+    const fakePage = {
+      rotate: 0,
+      getViewport: () => fakeViewport,
+      render: () => ({ promise: Promise.resolve(), cancel: () => {} }),
+      getTextContent: async () => ({ items: [], styles: {} }),
+      getAnnotations: async () => annotations,
+    } as unknown as PDFPageProxy;
+
+    const fakeDoc = {
+      getPage: async () => fakePage,
+    } as unknown as PDFDocumentProxy;
+
+    const handler: LinkNavigationHandler = {
+      goToDestination: vi.fn(),
+      executeNamedAction: vi.fn(),
+      goToPage: vi.fn(),
+    };
+
+    const view = new PdfPageView(1, new ToolSelection(), new AnnotationSession());
+    await view.render(fakeDoc, 1, 0, new Map(), () => {}, handler);
+
+    const links = Array.from(view.wrapper.querySelectorAll<HTMLAnchorElement>(".page-link-layer a"));
+    // 3 single-rect links + 1 hash link + 2 quadPoints rects = 6 anchors
+    expect(links).toHaveLength(6);
+    expect(links.every((a) => a.dataset.internalLink === "true")).toBe(true);
+
+    // Multi-line quadPoints rendered as two separate line rectangles
+    expect(links[4].style.width).toBe("200px");
+    expect(links[5].style.width).toBe("130px");
+
+    links[0].click();
+    expect(handler.goToDestination).toHaveBeenCalledWith("section-1");
+
+    links[1].click();
+    expect(handler.goToDestination).toHaveBeenCalledWith([{ num: 7, gen: 0 }, { name: "XYZ" }, 0, 500, null]);
+
+    links[2].click();
+    expect(handler.executeNamedAction).toHaveBeenCalledWith("LastPage");
+
+    links[3].click();
+    expect(handler.goToPage).toHaveBeenCalledWith(4);
+
+    links[5].click();
+    expect(handler.goToDestination).toHaveBeenCalledWith("multiline");
   });
 });
