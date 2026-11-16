@@ -33,6 +33,6 @@ export async function extractText(filePath: string, pages: number[], title: stri
     normalizeHeadings(laid);
     return { title, pages: laid };
   } finally {
-    await doc.destroy();
+    await doc.loadingTask.destroy();
   }
 }

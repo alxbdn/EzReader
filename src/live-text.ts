@@ -196,7 +196,7 @@ export class LiveText {
     const ctx = canvas.getContext("2d")!;
     ctx.fillStyle = "#fff";
     ctx.fillRect(0, 0, canvas.width, canvas.height);
-    await page.render({ canvasContext: ctx, viewport }).promise;
+    await page.render({ canvas: ctx.canvas, viewport }).promise;
     const data = canvas.toDataURL("image/jpeg", 0.92);
     canvas.width = canvas.height = 0;
     return this.recognize ? this.recognize(data, this.language()) : null;

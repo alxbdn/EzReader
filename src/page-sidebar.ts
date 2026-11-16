@@ -567,7 +567,7 @@ export class PageSidebar {
       canvas.height = Math.round(viewport.height);
       const ctx = canvas.getContext("2d");
       if (!ctx) return;
-      const task = page.render({ canvasContext: ctx, viewport });
+      const task = page.render({ canvas: ctx.canvas, viewport });
       thumb.task = task;
       await task.promise;
       thumb.task = null;

@@ -16,6 +16,20 @@ import { LiveText, hasRealText, layoutOcr, renderOcrLayer } from "./live-text";
 
 pdfjs.GlobalWorkerOptions.workerSrc = workerUrl;
 
+/**
+ * Maps a PDF-space rectangle to viewport coordinates, corner by corner.
+ * Stand-in for `PageViewport.convertToViewportRectangle`, gone since pdf.js 6.
+ * Like the original, the result is not normalised (x1 may exceed x2).
+ */
+export function toViewportRect(
+  viewport: Pick<PageViewport, "convertToViewportPoint">,
+  [x1, y1, x2, y2]: readonly number[] | Float32Array,
+): [number, number, number, number] {
+  const [a, b] = viewport.convertToViewportPoint(x1, y1);
+  const [c, d] = viewport.convertToViewportPoint(x2, y2);
+  return [a, b, c, d];
+}
+
 // ── Pure layout functions (exported for unit tests) ───────────────────────────
 
 const MAX_COLUMNS = 3;
@@ -278,7 +292,7 @@ export class PdfPageView {
       const sx = pxW / viewport.width;
       const sy = pxH / viewport.height;
       const transform = sx !== 1 || sy !== 1 ? [sx, 0, 0, sy, 0, 0] : undefined;
-      this._renderTask = page.render({ canvasContext: bufCtx, viewport, transform, annotationMode: AnnotationMode.ENABLE_FORMS });
+      this._renderTask = page.render({ canvas: bufCtx.canvas, viewport, transform, annotationMode: AnnotationMode.ENABLE_FORMS });
       try {
         await this._renderTask.promise;
       } catch (err) {
@@ -621,14 +635,14 @@ export class PdfPageView {
         for (let i = 0; i < qp.length; i += 8) {
           const xs = [qp[i], qp[i + 2], qp[i + 4], qp[i + 6]];
           const ys = [qp[i + 1], qp[i + 3], qp[i + 5], qp[i + 7]];
-          const r = normalizeViewportRect(viewport.convertToViewportRectangle([
+          const r = normalizeViewportRect(toViewportRect(viewport, [
             Math.min(...xs), Math.min(...ys), Math.max(...xs), Math.max(...ys),
           ]));
           if (r) rects.push(r);
         }
       }
       if (rects.length === 0 && ann.rect) {
-        const r = normalizeViewportRect(viewport.convertToViewportRectangle(ann.rect));
+        const r = normalizeViewportRect(toViewportRect(viewport, ann.rect));
         if (r) rects.push(r);
       }
       return rects;
@@ -705,7 +719,7 @@ export class PdfPageView {
 
     for (const a of annotations) {
       if (a.subtype !== "Widget" || !a.fieldName) continue;
-      const [x1, y1, x2, y2] = viewport.convertToViewportRectangle(a.rect);
+      const [x1, y1, x2, y2] = toViewportRect(viewport, a.rect);
       const box = {
         left: Math.min(x1, x2), top: Math.min(y1, y2),
         width: Math.abs(x2 - x1), height: Math.abs(y2 - y1),
@@ -887,7 +901,7 @@ export class PdfViewer {
     // them would fail their renders (another tab, another file).
     for (const view of this.pageViews) view.clear();
     if (this.pdfDoc) {
-      await this.pdfDoc.destroy();
+      await this.pdfDoc.loadingTask.destroy();
       this.pdfDoc = null;
     }
     this.observer?.disconnect();
@@ -1360,7 +1374,7 @@ export class PdfViewer {
     const ctx = canvas.getContext("2d")!;
     ctx.fillStyle = "#fff";
     ctx.fillRect(0, 0, canvas.width, canvas.height);
-    await page.render({ canvasContext: ctx, viewport }).promise;
+    await page.render({ canvas: ctx.canvas, viewport }).promise;
     return canvas;
   }
 
@@ -1379,7 +1393,7 @@ export class PdfViewer {
     try {
       return await renderDocPages(doc, pageNumbers, dpi, 0);
     } finally {
-      await doc.destroy();
+      await doc.loadingTask.destroy();
     }
   }
 
@@ -1409,14 +1423,14 @@ export class PdfViewer {
         const ctx = canvas.getContext("2d")!;
         ctx.fillStyle = "#fff";
         ctx.fillRect(0, 0, canvas.width, canvas.height);
-        await page.render({ canvasContext: ctx, viewport }).promise;
+        await page.render({ canvas: ctx.canvas, viewport }).promise;
         const data = canvas.toDataURL(type, 0.9);
         canvas.width = canvas.height = 0;
         page.cleanup();
         await onPage(data, n);
       }
     } finally {
-      await doc.destroy();
+      await doc.loadingTask.destroy();
     }
   }
 
@@ -1433,7 +1447,7 @@ export class PdfViewer {
     this.scrollEl.innerHTML = "";
     this.pageViews = [];
     if (this.pdfDoc) {
-      await this.pdfDoc.destroy();
+      await this.pdfDoc.loadingTask.destroy();
       this.pdfDoc = null;
     }
     this._pageCount   = 0;
@@ -1479,7 +1493,7 @@ async function renderDocPages(
     canvas.width   = viewport.width;
     canvas.height  = viewport.height;
     const ctx = canvas.getContext("2d")!;
-    await page.render({ canvasContext: ctx, viewport }).promise;
+    await page.render({ canvas: ctx.canvas, viewport }).promise;
     results.push(canvas.toDataURL("image/jpeg", 0.92).split(",")[1]);
     // Free the bitmap right away; long documents otherwise pile up canvases.
     canvas.width = canvas.height = 0;
@@ -1517,7 +1531,7 @@ export async function renderRedactedPages(
       const ctx = canvas.getContext("2d")!;
       ctx.fillStyle = "#fff";
       ctx.fillRect(0, 0, canvas.width, canvas.height);
-      await page.render({ canvasContext: ctx, viewport }).promise;
+      await page.render({ canvas: ctx.canvas, viewport }).promise;
 
       ctx.fillStyle = "#000";
       ctx.strokeStyle = "#000";
@@ -1561,7 +1575,7 @@ export async function renderRedactedPages(
     }
     return out;
   } finally {
-    await doc.destroy();
+    await doc.loadingTask.destroy();
   }
 }
 
@@ -1594,7 +1608,7 @@ export async function renderStraightenedPages(
       const sctx = src.getContext("2d", { willReadFrequently: true })!;
       sctx.fillStyle = "#fff";
       sctx.fillRect(0, 0, src.width, src.height);
-      await page.render({ canvasContext: sctx, viewport: shown }).promise;
+      await page.render({ canvas: sctx.canvas, viewport: shown }).promise;
       const pixels = sctx.getImageData(0, 0, src.width, src.height);
       const px = quad.map(([x, y]) => [x * src.width, y * src.height] as Point) as [Point, Point, Point, Point];
       const warped = warpToRect(pixels, px, src.width, src.height);
@@ -1629,6 +1643,6 @@ export async function renderStraightenedPages(
     }
     return out;
   } finally {
-    await doc.destroy();
+    await doc.loadingTask.destroy();
   }
 }
