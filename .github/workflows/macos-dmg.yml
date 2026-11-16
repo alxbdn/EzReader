@@ -1,19 +1,17 @@
 name: macOS Disk Image
 
 # A universal .dmg (Intel and Apple Silicon), attached to the GitHub Release
-# of each version tag. It is signed ad hoc only (no Apple Developer account):
-# the Homebrew cask (alxbdn/homebrew-ezreader) lifts the quarantine on install.
+# of each version tag by the release workflow. It is signed ad hoc only (no
+# Apple Developer account): the Homebrew cask (alxbdn/homebrew-ezreader) lifts the quarantine on install.
 
 # macOS runners are scarce on GitHub: jobs often wait in the queue and get
 # dropped ("job was not acquired by Runner"). So this build never runs on pull
-# requests, where a dropped job left every PR looking red. It runs on version
-# tags, on demand, and after a merge to main that touches the native side or
-# the dependencies. The cross-platform tests already run in CI on each PR.
+# requests, where a dropped job left every PR looking red. It runs for version
+# tags (called by the release workflow), on demand, and after a merge to main
+# that touches the native side or the dependencies. The cross-platform tests already run in CI on each PR.
 on:
   push:
     branches: [main]
-    tags:
-      - 'v*.*.*'
     paths:
       - 'src-tauri/**'
       - 'package.json'
@@ -28,6 +26,18 @@ on:
         type: boolean
       release_tag:
         description: 'Tag de la release (ex: v1.0.1, vide = version de tauri.conf.json)'
+        required: false
+        default: ''
+        type: string
+  # Version tags go through the release workflow, which calls this one
+  # only once the security scans have passed.
+  workflow_call:
+    inputs:
+      publish_release:
+        required: false
+        default: false
+        type: boolean
+      release_tag:
         required: false
         default: ''
         type: string

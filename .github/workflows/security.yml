@@ -15,6 +15,8 @@ on:
     # Mondays: new advisories land on unchanged code, and the fuzzers run longer.
     - cron: '17 4 * * 1'
   workflow_dispatch:
+  # Called by the release workflow: nothing is published if a scan fails.
+  workflow_call:
 
 permissions:
   contents: read

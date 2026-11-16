@@ -12,7 +12,16 @@ env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
+  # SCA, SAST and fuzzing on the tagged commit. Nothing is built or published
+  # if one of them fails.
+  security:
+    permissions:
+      contents: read
+      security-events: write
+    uses: ./.github/workflows/security.yml
+
   build:
+    needs: security
     runs-on: windows-latest
     # id-token and attestations: signed SLSA build provenance for the packages.
     permissions:
@@ -178,3 +187,27 @@ jobs:
     uses: ./.github/workflows/release-reports.yml
     with:
       tag: ${{ github.ref_name }}
+
+  # The macOS and Linux packages, built and attached to the same release once
+  # the scans have passed.
+  macos:
+    needs: security
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+    uses: ./.github/workflows/macos-dmg.yml
+    with:
+      publish_release: true
+      release_tag: ${{ github.ref_name }}
+
+  linux:
+    needs: security
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+    uses: ./.github/workflows/linux-deb.yml
+    with:
+      publish_release: true
+      release_tag: ${{ github.ref_name }}
