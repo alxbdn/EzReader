@@ -173,6 +173,9 @@ pub struct SignatureAnnotation {
     /// The pen strokes of a drawn signature, written instead of the picture.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub vector: Option<InkVector>,
+    /// Ink of the drawn strokes; the default dark ink when absent.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub color: Option<RgbColor>,
 }
 
 /// A drawn signature as round-capped Bézier segments in a `w` × `h` box (y down).

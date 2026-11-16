@@ -363,6 +363,41 @@ export interface Translations {
   optColor?: string;
   optCustomColor?: string;
   optThickness?: string;
+  annText?: string;
+  annEditedText?: string;
+  annNote?: string;
+  annArrow?: string;
+  annLine?: string;
+  annInk?: string;
+  annRect?: string;
+  annCircle?: string;
+  annHighlight?: string;
+  annSignature?: string;
+  annImage?: string;
+  annCross?: string;
+  annCheck?: string;
+  annRedact?: string;
+  ttStudioHide?: string;
+  ttStudioShow?: string;
+  studioPanel?: string;
+  studioEmpty?: string;
+  studioAnnotations?: string;
+  studioNoAnnotations?: string;
+  studioTitle?: string;
+  studioPageAbbr?: string;
+  ttDeleteAnnotation?: string;
+  optBrush?: string;
+  optInk?: string;
+  brushBallpoint?: string;
+  brushFineliner?: string;
+  brushFountain?: string;
+  brushBrush?: string;
+  brushCalligraphy?: string;
+  brushMarker?: string;
+  brushPencil?: string;
+  brushCharcoal?: string;
+  brushAirbrush?: string;
+  brushWatercolor?: string;
   optOpacity?: string;
   colBlack?: string;
   colRed?: string;
@@ -908,6 +943,41 @@ const EN: Translations = {
   optColor: "Color",
   optCustomColor: "Custom color",
   optThickness: "Thickness",
+  annText: "Text",
+  annEditedText: "Edited text",
+  annNote: "Sticky note",
+  annArrow: "Arrow",
+  annLine: "Line",
+  annInk: "Freehand",
+  annRect: "Rectangle",
+  annCircle: "Ellipse",
+  annHighlight: "Highlight",
+  annSignature: "Signature",
+  annImage: "Picture",
+  annCross: "Cross",
+  annCheck: "Check mark",
+  annRedact: "Redaction",
+  ttStudioHide: "Hide the panel",
+  ttStudioShow: "Show the panel",
+  studioPanel: "Tool options and annotations",
+  studioEmpty: "Pick a tool, or click an annotation to change it.",
+  studioAnnotations: "Annotations",
+  studioNoAnnotations: "No annotations yet.",
+  studioTitle: "Options",
+  studioPageAbbr: "p. {n}",
+  ttDeleteAnnotation: "Delete this annotation",
+  optBrush: "Brush",
+  optInk: "Ink",
+  brushBallpoint: "Ballpoint pen",
+  brushFineliner: "Fineliner",
+  brushFountain: "Fountain pen",
+  brushBrush: "Brush",
+  brushCalligraphy: "Calligraphy",
+  brushMarker: "Marker",
+  brushPencil: "Pencil",
+  brushCharcoal: "Charcoal",
+  brushAirbrush: "Airbrush",
+  brushWatercolor: "Watercolor",
   optOpacity: "Opacity",
   colBlack: "Black",
   colRed: "Red",
@@ -1450,6 +1520,41 @@ const FR: Translations = {
   optColor: "Couleur",
   optCustomColor: "Couleur personnalisée",
   optThickness: "Épaisseur",
+  annText: "Texte",
+  annEditedText: "Texte modifié",
+  annNote: "Post-it",
+  annArrow: "Flèche",
+  annLine: "Trait",
+  annInk: "Tracé libre",
+  annRect: "Rectangle",
+  annCircle: "Ellipse",
+  annHighlight: "Surlignage",
+  annSignature: "Signature",
+  annImage: "Image",
+  annCross: "Croix",
+  annCheck: "Coche",
+  annRedact: "Caviardage",
+  ttStudioHide: "Masquer le panneau",
+  ttStudioShow: "Afficher le panneau",
+  studioPanel: "Réglages de l'outil et annotations",
+  studioEmpty: "Choisissez un outil, ou cliquez sur une annotation pour la modifier.",
+  studioAnnotations: "Annotations",
+  studioNoAnnotations: "Aucune annotation pour l'instant.",
+  studioTitle: "Réglages",
+  studioPageAbbr: "p. {n}",
+  ttDeleteAnnotation: "Supprimer cette annotation",
+  optBrush: "Pinceau",
+  optInk: "Encre",
+  brushBallpoint: "Stylo bille",
+  brushFineliner: "Feutre fin",
+  brushFountain: "Stylo plume",
+  brushBrush: "Pinceau",
+  brushCalligraphy: "Calligraphie",
+  brushMarker: "Marqueur",
+  brushPencil: "Crayon à papier",
+  brushCharcoal: "Fusain",
+  brushAirbrush: "Aérographe",
+  brushWatercolor: "Aquarelle",
   optOpacity: "Opacité",
   colBlack: "Noir",
   colRed: "Rouge",

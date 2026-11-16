@@ -163,6 +163,8 @@ export interface SignatureAnnotation extends BaseAnnotation {
   imageData: string;
   /** The pen strokes of a drawn signature; drawn instead of `imageData`. */
   vector?: InkVector;
+  /** Ink of the pen strokes; the default dark ink when absent. */
+  color?: RgbColor;
 }
 
 /** A picture placed on the page; same fields as a signature. */
@@ -268,6 +270,8 @@ export interface ActiveToolState {
   redactShape: RedactShape;
   stampMark: StampMark;
   stampColor: RgbColor;
+  /** Ink of drawn signatures being placed. */
+  signatureColor: RgbColor;
 }
 
 export function defaultToolState(): ActiveToolState {
@@ -292,6 +296,7 @@ export function defaultToolState(): ActiveToolState {
     redactShape: "rect",
     stampMark: "check",
     stampColor: { r: 0, g: 0, b: 0 },
+    signatureColor: { r: 24, g: 24, b: 27 },
   };
 }
 

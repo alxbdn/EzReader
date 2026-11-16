@@ -15,6 +15,10 @@ export class ToolSelection {
   readonly state: ActiveToolState = defaultToolState();
   private _selected: Annotation | null = null;
   private owner: SelectionOwner | null = null;
+  private selectHandlers: ((ann: Annotation | null) => void)[] = [];
+
+  /** Called whenever the selected annotation changes. */
+  onSelect(h: (ann: Annotation | null) => void): void { this.selectHandlers.push(h); }
 
   get tool(): ToolKind { return this.state.tool; }
 
@@ -40,6 +44,7 @@ export class ToolSelection {
     this._selected = ann;
     this.owner = next;
     if (prev && prev !== next) prev.selectionLost();
+    this.selectHandlers.forEach((h) => h(ann));
   }
 
   /** Clears the selection when it is on 1-based `page`. */

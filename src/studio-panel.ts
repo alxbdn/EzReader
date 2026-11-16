@@ -1,0 +1,255 @@
+import type { Annotation } from "./models";
+import type { Translations } from "./i18n";
+import {
+  ICON_TOOL_TEXT,
+  ICON_TOOL_PENCIL,
+  ICON_TOOL_SHAPES,
+  ICON_TOOL_NOTE,
+  ICON_TOOL_HIGHLIGHT,
+  ICON_TOOL_SIGN,
+  ICON_SHAPE_ELLIPSE,
+  ICON_SHAPE_ARROW,
+  ICON_STYLE_STRAIGHT,
+  ICON_REDACT_AREA,
+  ICON_STAMP_CHECK,
+  ICON_STAMP_CROSS,
+  ICON_EDIT_TEXT,
+  ICON_IMAGE_SMALL,
+  ICON_TRASH,
+  ICON_PANEL_RIGHT,
+} from "./icons";
+
+type Key = keyof Translations;
+
+const COLLAPSED_KEY = "ezreader-studio-collapsed";
+
+/** What a row of the list says about an annotation: icon, name, and quoted words if any. */
+export function describeAnnotation(ann: Annotation): { icon: string; key: Key; fb: string; quote?: string } {
+  switch (ann.kind) {
+    case "text":
+      return ann.cover
+        ? { icon: ICON_EDIT_TEXT, key: "annEditedText", fb: "Edited text", quote: ann.content }
+        : { icon: ICON_TOOL_TEXT, key: "annText", fb: "Text", quote: ann.content };
+    case "note": return { icon: ICON_TOOL_NOTE, key: "annNote", fb: "Sticky note", quote: ann.content };
+    case "ink":
+      if (ann.arrow) return { icon: ICON_SHAPE_ARROW, key: "annArrow", fb: "Arrow" };
+      if (ann.points.length === 2) return { icon: ICON_STYLE_STRAIGHT, key: "annLine", fb: "Line" };
+      return { icon: ICON_TOOL_PENCIL, key: "annInk", fb: "Freehand" };
+    case "rect": return { icon: ICON_TOOL_SHAPES, key: "annRect", fb: "Rectangle" };
+    case "circle": return { icon: ICON_SHAPE_ELLIPSE, key: "annCircle", fb: "Ellipse" };
+    case "highlight": return { icon: ICON_TOOL_HIGHLIGHT, key: "annHighlight", fb: "Highlight" };
+    case "signature": return { icon: ICON_TOOL_SIGN, key: "annSignature", fb: "Signature" };
+    case "image": return { icon: ICON_IMAGE_SMALL, key: "annImage", fb: "Picture" };
+    case "stamp":
+      return ann.mark === "cross"
+        ? { icon: ICON_STAMP_CROSS, key: "annCross", fb: "Cross" }
+        : { icon: ICON_STAMP_CHECK, key: "annCheck", fb: "Check mark" };
+    case "redact": return { icon: ICON_REDACT_AREA, key: "annRedact", fb: "Redaction" };
+  }
+}
+
+export interface StudioPanelHooks {
+  /** Every annotation of the document. */
+  list(): Annotation[];
+  /** The selected annotation, if any. */
+  selected(): Annotation | null;
+  /** A row was clicked: show and select its annotation. */
+  pick(ann: Annotation): void;
+  /** The trash of a row was clicked. */
+  remove(ann: Annotation): void;
+}
+
+/**
+ * The right-hand panel of the Annotate and Edit modes: the options of the
+ * chosen tool or of the selected annotation, then every annotation of the
+ * document, page by page. A row selects its annotation; its trash removes it.
+ */
+export class StudioPanel {
+  readonly el: HTMLElement;
+  private titleEl: HTMLElement;
+  private collapseBtn: HTMLButtonElement;
+  private expandBtn: HTMLButtonElement;
+  private optionsHost: HTMLElement;
+  private emptyEl: HTMLElement;
+  private countEl: HTMLElement;
+  private listEl: HTMLElement;
+  private listLabel: HTMLElement;
+  private noneEl: HTMLElement;
+
+  private t: Translations = {} as Translations;
+  private shown = false;
+  private collapsed = false;
+  private hasOptions = false;
+  private title: string | null = null;
+  private renderQueued = false;
+  private rows = new Map<Annotation, HTMLElement>();
+
+  constructor(options: HTMLElement, private hooks: StudioPanelHooks) {
+    this.el = document.createElement("aside");
+    this.el.className = "studio-panel";
+    this.el.hidden = true;
+
+    const head = document.createElement("div");
+    head.className = "studio-head";
+    this.titleEl = document.createElement("span");
+    this.titleEl.className = "studio-title";
+    this.collapseBtn = this.iconBtn("studio-collapse");
+    this.collapseBtn.addEventListener("click", () => this.setCollapsed(true));
+    head.append(this.titleEl, this.collapseBtn);
+
+    // Shown alone while the panel is folded away.
+    this.expandBtn = this.iconBtn("studio-expand");
+    this.expandBtn.addEventListener("click", () => this.setCollapsed(false));
+
+    const body = document.createElement("div");
+    body.className = "studio-options";
+    this.optionsHost = body;
+    options.classList.remove("tb-row");
+    body.append(options);
+    this.emptyEl = document.createElement("p");
+    this.emptyEl.className = "studio-empty";
+    body.append(this.emptyEl);
+
+    const listHead = document.createElement("div");
+    listHead.className = "studio-list-head";
+    this.listLabel = document.createElement("span");
+    this.countEl = document.createElement("span");
+    this.countEl.className = "studio-count";
+    listHead.append(this.listLabel, this.countEl);
+    this.listEl = document.createElement("div");
+    this.listEl.className = "studio-list";
+    this.listEl.setAttribute("role", "list");
+    this.noneEl = document.createElement("p");
+    this.noneEl.className = "studio-empty";
+
+    const listWrap = document.createElement("div");
+    listWrap.className = "studio-list-wrap";
+    listWrap.append(listHead, this.listEl, this.noneEl);
+
+    this.el.append(head, body, listWrap, this.expandBtn);
+
+    try { this.collapsed = localStorage.getItem(COLLAPSED_KEY) === "1"; } catch { /* not kept */ }
+    this.sync();
+  }
+
+  /** On show in Annotate and Edit (with a document open). */
+  setShown(shown: boolean): void {
+    if (this.shown === shown) return;
+    this.shown = shown;
+    this.sync();
+    if (shown) this.refresh();
+  }
+
+  /** The options on show (their title), or none. */
+  setOptions(title: string | null): void {
+    this.hasOptions = title !== null;
+    this.title = title;
+    this.sync();
+  }
+
+  applyTranslations(t: Translations): void {
+    this.t = t;
+    this.collapseBtn.title = this.tr("ttStudioHide", "Hide the panel");
+    this.collapseBtn.setAttribute("aria-label", this.collapseBtn.title);
+    this.expandBtn.title = this.tr("ttStudioShow", "Show the panel");
+    this.expandBtn.setAttribute("aria-label", this.expandBtn.title);
+    this.el.setAttribute("aria-label", this.tr("studioPanel", "Tool options and annotations"));
+    this.emptyEl.textContent = this.tr("studioEmpty", "Pick a tool, or click an annotation to change it.");
+    this.listLabel.textContent = this.tr("studioAnnotations", "Annotations");
+    this.noneEl.textContent = this.tr("studioNoAnnotations", "No annotations yet.");
+    this.sync();
+    this.render();
+  }
+
+  /** The annotations changed: the list is redrawn (once per frame). */
+  refresh(): void {
+    if (!this.shown || this.renderQueued) return;
+    this.renderQueued = true;
+    requestAnimationFrame(() => {
+      this.renderQueued = false;
+      this.render();
+    });
+  }
+
+  /** Marks the row of the selected annotation. */
+  setSelected(ann: Annotation | null): void {
+    for (const [a, row] of this.rows) {
+      const on = a === ann;
+      row.classList.toggle("on", on);
+      row.setAttribute("aria-current", String(on));
+      if (on) row.scrollIntoView?.({ block: "nearest" });
+    }
+  }
+
+  private setCollapsed(c: boolean): void {
+    this.collapsed = c;
+    try { localStorage.setItem(COLLAPSED_KEY, c ? "1" : "0"); } catch { /* not kept */ }
+    this.sync();
+  }
+
+  private sync(): void {
+    this.el.hidden = !this.shown;
+    this.el.classList.toggle("collapsed", this.collapsed);
+    this.titleEl.textContent = this.title ?? this.tr("studioTitle", "Options");
+    this.emptyEl.hidden = this.hasOptions;
+    this.optionsHost.classList.toggle("has-options", this.hasOptions);
+  }
+
+  private render(): void {
+    if (!this.shown) return;
+    const anns = [...this.hooks.list()].sort((a, b) => a.page - b.page);
+    const selected = this.hooks.selected();
+    this.countEl.textContent = anns.length ? String(anns.length) : "";
+    this.noneEl.hidden = anns.length > 0;
+    this.rows.clear();
+    const pageAbbr = this.tr("studioPageAbbr", "p. {n}");
+    const rows = anns.map((ann) => {
+      const d = describeAnnotation(ann);
+      const name = this.tr(d.key, d.fb);
+      const quote = d.quote?.replace(/\s+/g, " ").trim();
+      const row = document.createElement("div");
+      row.className = "studio-ann";
+      row.setAttribute("role", "listitem");
+      row.tabIndex = 0;
+      row.classList.toggle("on", ann === selected);
+      const label = document.createElement("span");
+      label.className = "studio-ann-label";
+      label.textContent = quote ? `${name} « ${quote} »` : name;
+      label.title = label.textContent;
+      const page = document.createElement("span");
+      page.className = "studio-ann-page";
+      page.textContent = pageAbbr.replace("{n}", String(ann.page));
+      const del = document.createElement("button");
+      del.type = "button";
+      del.className = "studio-ann-del";
+      del.innerHTML = ICON_TRASH;
+      del.title = this.tr("ttDeleteAnnotation", "Delete this annotation");
+      del.setAttribute("aria-label", del.title);
+      del.addEventListener("click", (e) => { e.stopPropagation(); this.hooks.remove(ann); });
+      row.insertAdjacentHTML("afterbegin", d.icon);
+      row.append(label, page, del);
+      row.addEventListener("click", () => this.hooks.pick(ann));
+      row.addEventListener("keydown", (e) => {
+        if (e.target !== row) return;
+        if (e.key === "Enter" || e.key === " ") { e.preventDefault(); this.hooks.pick(ann); }
+        if (e.key === "Delete" || e.key === "Backspace") { e.preventDefault(); e.stopPropagation(); this.hooks.remove(ann); }
+      });
+      this.rows.set(ann, row);
+      return row;
+    });
+    this.listEl.replaceChildren(...rows);
+  }
+
+  private iconBtn(cls: string): HTMLButtonElement {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = `icon-btn ${cls}`;
+    b.innerHTML = ICON_PANEL_RIGHT;
+    return b;
+  }
+
+  private tr(key: Key, fb: string): string {
+    const v = this.t[key];
+    return typeof v === "string" ? v : fb;
+  }
+}

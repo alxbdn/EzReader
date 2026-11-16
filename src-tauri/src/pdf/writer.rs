@@ -516,8 +516,12 @@ fn write_vector_ok(v: &InkVector) -> bool {
 /// round caps, the box mapped onto the annotation (y flipped), like the canvas.
 pub fn write_signature_vector(buf: &mut Vec<u8>, ann: &SignatureAnnotation) {
     let Some(v) = ann.vector.as_ref() else { return };
+    let ink = match &ann.color {
+        Some(c) => format!("{:.4} {:.4} {:.4} RG", c.r_f(), c.g_f(), c.b_f()),
+        None => "0.0588 0.0588 0.1373 RG".to_string(),
+    };
     let mut ops = format!(
-        "q\n0.0588 0.0588 0.1373 RG\n1 J\n1 j\n{:.6} 0 0 {:.6} {:.4} {:.4} cm\n",
+        "q\n{ink}\n1 J\n1 j\n{:.6} 0 0 {:.6} {:.4} {:.4} cm\n",
         ann.width / v.w,
         -ann.height / v.h,
         ann.x,
@@ -1273,6 +1277,7 @@ mod tests {
             width: 50.0, height: 20.0,
             image_data: b64,
             vector: None,
+            color: None,
         };
 
         let mut doc = Document::new();
@@ -1293,6 +1298,7 @@ mod tests {
             width: 100.0, height: 40.0,
             image_data: String::new(),
             vector: Some(InkVector { w: 50.0, h: 20.0, segs: vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 2.5] }),
+            color: None,
         };
         assert!(write_vector_ok(ann.vector.as_ref().unwrap()));
         let mut buf = Vec::new();

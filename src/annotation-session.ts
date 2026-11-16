@@ -55,6 +55,7 @@ export class AnnotationSession {
 
   private changeHandlers: (() => void)[] = [];
   private pendingHandlers: ((pending: boolean) => void)[] = [];
+  private contentHandlers: (() => void)[] = [];
 
   constructor(private readonly opts: AnnotationSessionOptions = {}) {}
 
@@ -90,6 +91,8 @@ export class AnnotationSession {
 
   onChange(h: () => void): void { this.changeHandlers.push(h); }
   onPendingChange(h: (pending: boolean) => void): void { this.pendingHandlers.push(h); }
+  /** Any change of the list, restores (undo, redo, load, tabs) included: for views of it. */
+  onContentChange(h: () => void): void { this.contentHandlers.push(h); }
 
   // ── Changes (one undo step each) ───────────────────────────────────────────
 
@@ -239,6 +242,7 @@ export class AnnotationSession {
   /** Back to a parked state, without notifying `onChange`. */
   restoreParked(s: AnnotationSnapshot): void {
     this.pages = new Map([...s.pages].map(([n, list]) => [n, [...list]]));
+    this.emitContent();
     this.undoStack = [...s.undo];
     this.redoStack = [...s.redo];
     this.candidate = null;
@@ -301,8 +305,10 @@ export class AnnotationSession {
       if (!list) this.pages.set(ann.page, (list = []));
       list.push(ann);
     }
+    this.emitContent();
   }
 
-  private emitChange(): void { this.changeHandlers.forEach((h) => h()); }
+  private emitChange(): void { this.changeHandlers.forEach((h) => h()); this.emitContent(); }
+  private emitContent(): void { this.contentHandlers.forEach((h) => h()); }
   private emitPending(p: boolean): void { this.pendingHandlers.forEach((h) => h(p)); }
 }

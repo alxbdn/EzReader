@@ -360,6 +360,15 @@ export class Toolbar {
 
   hideShapeStyles(): void { this.tools.hideShapeStyles(); }
 
+  showSignatureStyles(color: RgbColor): void { this.tools.showSignatureStyles(color); }
+  hideSignatureStyles(): void { this.tools.hideSignatureStyles(); }
+
+  /** The options of the chosen tool (or selected annotation), for the studio panel. */
+  get toolOptions(): HTMLElement { return this.tools.options; }
+
+  /** Told when the options on show change: their title (null: none), and the mode. */
+  onToolOptions(h: (title: string | null, mode: AppMode) => void): void { this.tools.onSync = h; }
+
   /** While a save runs: the Save button pulses. */
   setSaving(on: boolean): void {
     this.saveBtn.classList.toggle("saving", on);
@@ -729,7 +738,8 @@ export class Toolbar {
   private buildContextToolbar(): void {
     const main = document.createElement("div");
     main.className = "tb-row tb-main";
-    this.contextEl.append(main, this.tools.row, this.tools.options);
+    // The options of the tools live in the studio panel (see StudioPanel).
+    this.contextEl.append(main, this.tools.row);
 
     // Page thumbnails sidebar toggle
     this.sidebarBtn = this.btn(ICON_SIDEBAR, "Show or hide the page thumbnails", "icon-btn");
