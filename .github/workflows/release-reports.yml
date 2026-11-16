@@ -10,8 +10,10 @@ name: Release reports
 # name on every release, so releases/latest/download/ezreader-reports.zip in
 # the README always gives the newest one.
 #
-# Called by the Release workflow once the release is published. Run it by
-# hand to add or refresh the reports of an existing release.
+# Called by the Release workflow on the draft release, before it is
+# published: a published release is immutable, so nothing can be added to it.
+# Run by hand on a published release, it still makes the zip, as an artifact
+# of the run, but leaves the release alone.
 
 on:
   workflow_call:
@@ -223,10 +225,7 @@ jobs:
           path: reports
           merge-multiple: true
 
-      - name: Zip and attach to the release
-        env:
-          GH_TOKEN: ${{ github.token }}
-          GH_REPO: ${{ github.repository }}
+      - name: Zip the reports
         run: |
           shopt -s nullglob
           files=(reports/*)
@@ -235,6 +234,26 @@ jobs:
             exit 1
           fi
           (cd reports && zip -9 ../ezreader-reports.zip *)
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ezreader-reports
+          path: ezreader-reports.zip
+          if-no-files-found: error
+
+      # On a draft, attach the zip. On a published release, only if it is
+      # still mutable (published before immutability was turned on): then the
+      # separate report files it used to carry are removed too.
+      - name: Attach to the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          if [ "$(gh release view "$TAG" --json isDraft --jq .isDraft)" != "true" ] &&
+             [ "$(gh api "repos/$GH_REPO/releases/tags/$TAG" --jq '.immutable // false')" = "true" ]; then
+            echo "::warning title=Release is immutable::$TAG is published and immutable: the zip is only kept as this run's artifact."
+            exit 0
+          fi
           gh release upload "$TAG" --clobber ezreader-reports.zip
 
           V="${TAG#v}"

@@ -1,5 +1,9 @@
 name: Bump & Release
 
+# Picks the next version, tags main with it and starts the Release workflow on
+# that tag, which scans, builds, tests and publishes everything. A tag pushed
+# with GITHUB_TOKEN starts no workflow by itself, hence the explicit dispatch.
+
 on:
   workflow_dispatch:
     inputs:
@@ -21,25 +25,11 @@ env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
-  # SCA, SAST and fuzzing on the commit being released. Nothing is built,
-  # tagged or published if one of them fails.
-  security:
-    permissions:
-      contents: read
-      security-events: write
-    uses: ./.github/workflows/security.yml
-
-  release:
-    needs: security
-    runs-on: windows-latest
-    # id-token and attestations: signed SLSA build provenance for the packages.
+  tag:
+    runs-on: ubuntu-latest
     permissions:
       contents: write
-      id-token: write
-      attestations: write
-    outputs:
-      tag: ${{ steps.version.outputs.tag }}
-
+      actions: write
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -62,191 +52,18 @@ jobs:
             patch) PATCH=$((PATCH+1)) ;;
           esac
           NEXT="${MAJOR}.${MINOR}.${PATCH}"
-          echo "version=$NEXT" >> $GITHUB_OUTPUT
           echo "tag=v${NEXT}" >> $GITHUB_OUTPUT
           echo "Next: v${NEXT}"
 
-      - name: Setup Node.js
-        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
-        with:
-          node-version: '22'
-          cache: 'npm'
-
-      - name: Setup Rust
-        uses: dtolnay/rust-toolchain@39008827e6b4319a349e9a42dfc90579dd25f1ca # stable
-
-      - name: Cache Rust dependencies
-        uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
-        with:
-          workspaces: src-tauri
-
-      - name: Update version in tauri.conf.json
-        shell: pwsh
-        run: |
-          (Get-Content src-tauri/tauri.conf.json) `
-            -replace '"version": "[^"]*"', '"version": "${{ steps.version.outputs.version }}"' |
-            Set-Content src-tauri/tauri.conf.json
-
-      - name: Install frontend dependencies
-        run: npm ci
-
-      - name: Run tests
+      - name: Push tag and start the release
         shell: bash
-        run: |
-          npm test
-          cargo test --manifest-path src-tauri/Cargo.toml
-
-      - name: Build Tauri app
-        run: npm run tauri build
-
-      - name: Build MSIX package
-        shell: pwsh
-        run: |
-          .\build-msix.ps1 -SkipBuild -Version "${{ steps.version.outputs.version }}"
-
-      - name: Stage artifacts
-        shell: bash
-        run: |
-          VERSION="${{ steps.version.outputs.version }}"
-          cp "src-tauri/target/release/ezreader-portable.exe" \
-             "ezreader-portable-${VERSION}-win-x64.exe"
-          cp "src-tauri/target/release/bundle/nsis/EzReader_${VERSION}_x64-setup.exe" \
-             "ezreader-${VERSION}-win-x64-setup.exe"
-          cp "store/EzReader_${VERSION}.0_x64.msix" \
-             "ezreader-${VERSION}-win-x64.msix"
-
-      # SLSA build provenance, signed with Sigstore and recorded in the
-      # repository's attestations. Check a download with:
-      #   gh attestation verify <file> --repo alxbdn/EzReader
-      - name: Attest build provenance
-        id: attest
-        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
-        with:
-          subject-path: |
-            ezreader-portable-${{ steps.version.outputs.version }}-win-x64.exe
-            ezreader-${{ steps.version.outputs.version }}-win-x64-setup.exe
-            ezreader-${{ steps.version.outputs.version }}-win-x64.msix
-
-      - name: Stage provenance
-        shell: bash
-        run: |
-          cp "${{ steps.attest.outputs.bundle-path }}" \
-             "ezreader-${{ steps.version.outputs.version }}-windows.intoto.jsonl"
-
-      # The .msix is only for the Microsoft Store (which signs it), so it is not
-      # attached to the GitHub release. store-publish.yml and
-      # scripts/get-store-msix.ps1 fetch it from this artifact.
-      - name: Upload Store package
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          name: store-msix-${{ steps.version.outputs.version }}
-          path: ezreader-${{ steps.version.outputs.version }}-win-x64.msix
-          retention-days: 90
-          if-no-files-found: error
-
-      - name: Check pre-release
-        id: prerelease
-        shell: bash
-        run: |
-          VERSION="${{ steps.version.outputs.version }}"
-          if [[ "$VERSION" == *"-alpha"* ]] || [[ "$VERSION" == *"-beta"* ]] || [[ "$VERSION" == *"-rc"* ]]; then
-            echo "is_prerelease=true" >> $GITHUB_OUTPUT
-          else
-            echo "is_prerelease=false" >> $GITHUB_OUTPUT
-          fi
-
-      - name: Push tag
-        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.version.outputs.tag }}
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git tag ${{ steps.version.outputs.tag }}
-          git push origin ${{ steps.version.outputs.tag }}
-
-      - name: Create GitHub Release (draft until all assets are attached)
-        uses: softprops/action-gh-release@8a0cd651e5b2365bd640854a3fa5dfc70e4875f3 # v3.0.4
-        with:
-          tag_name: ${{ steps.version.outputs.tag }}
-          name: ${{ steps.version.outputs.tag }}
-          draft: true
-          generate_release_notes: true
-          prerelease: ${{ steps.prerelease.outputs.is_prerelease == 'true' }}
-          files: |
-            ezreader-portable-${{ steps.version.outputs.version }}-win-x64.exe
-            ezreader-${{ steps.version.outputs.version }}-win-x64-setup.exe
-            ezreader-${{ steps.version.outputs.version }}-windows.intoto.jsonl
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      # SignPath Foundation asks every download page to name it and link the
-      # code signing policy. Prepended once, whichever workflow (Windows,
-      # macOS, Linux) created the release first.
-      - name: Add code signing notice to the release notes
-        shell: bash
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GH_REPO: ${{ github.repository }}
-          TAG: ${{ steps.version.outputs.tag }}
-        run: |
-          notice='EzReader is a fast, private PDF reader and editor for Windows, macOS and Linux: read, annotate, sign, fill forms, edit and reorganize pages, and recognize text, all on your computer.
-
-          **Code signing policy:** Free code signing provided by [SignPath.io](https://about.signpath.io), certificate by [SignPath Foundation](https://signpath.org). See the [code signing policy](https://github.com/alxbdn/EzReader/blob/main/CODE_SIGNING.md).'
-          body="$(gh release view "$TAG" --json body --jq .body)"
-          if ! grep -q 'SignPath Foundation' <<<"$body"; then
-            printf '%s\n\n%s\n' "$notice" "$body" > notes.md
-            gh release edit "$TAG" --notes-file notes.md
-          fi
-
-  # The macOS and Linux packages, plus the security and performance reports,
-  # are attached while the release is still a draft (GitHub immutable releases
-  # reject asset uploads once a release is published).
-  macos:
-    needs: release
-    permissions:
-      contents: write
-      id-token: write
-      attestations: write
-    uses: ./.github/workflows/macos-dmg.yml
-    with:
-      publish_release: true
-      release_tag: ${{ needs.release.outputs.tag }}
-
-  linux:
-    needs: release
-    permissions:
-      contents: write
-      id-token: write
-      attestations: write
-    uses: ./.github/workflows/linux-deb.yml
-    with:
-      publish_release: true
-      release_tag: ${{ needs.release.outputs.tag }}
-
-  reports:
-    needs: release
-    permissions:
-      contents: write
-      security-events: read
-      actions: read
-    uses: ./.github/workflows/release-reports.yml
-    with:
-      tag: ${{ needs.release.outputs.tag }}
-
-  # Publishes the draft release (locking it as immutable) once every package
-  # and report is attached, then dispatches the Microsoft Store submission.
-  finalize:
-    needs: [release, macos, linux, reports]
-    if: ${{ !cancelled() && needs.release.result == 'success' }}
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-      actions: write
-    steps:
-      - name: Publish release and submit to the Store
-        env:
-          GH_TOKEN: ${{ github.token }}
-          GH_REPO: ${{ github.repository }}
-          TAG: ${{ needs.release.outputs.tag }}
-        run: |
-          gh release edit "$TAG" --draft=false
-          gh workflow run store-publish.yml --repo "$GH_REPO" --ref main -f tag="$TAG"
+          git tag "$TAG"
+          git push origin "$TAG"
+          gh workflow run release.yml --repo "$GITHUB_REPOSITORY" --ref "$TAG"
+          echo "Release workflow started on $TAG" >> "$GITHUB_STEP_SUMMARY"
