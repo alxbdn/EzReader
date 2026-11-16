@@ -1586,37 +1586,63 @@ input[type="color"].color-picker.is-off::-webkit-color-swatch {
   pointer-events: none;
 }
 
-.page-form-layer input,
-.page-form-layer textarea,
-.page-form-layer select {
-  background: rgba(173, 214, 255, 0.18);
+/* Fillable fields (src/form-fields.ts). The page stays paper-white in both
+   themes, so these colors are fixed: the usual soft blue of fillable PDF
+   fields, a darker edge on hover, the focus ring while typing. */
+.page-form-layer .form-field {
+  position: absolute;
+  margin: 0;
+  background: rgba(59, 130, 246, 0.1);
   border: none;
-  border-radius: 1px;
+  border-radius: 2px;
+  box-shadow: inset 0 0 0 1px rgba(59, 130, 246, 0.18);
   pointer-events: auto;
   box-sizing: border-box;
   outline: none;
-  font-family: sans-serif;
+  font-family: Helvetica, Arial, sans-serif;
+  line-height: 1.15;
   color: #111;
   padding: 1px 3px;
+  user-select: text;
+  /* Native parts (check marks, list arrows) drawn for paper, in both themes. */
+  color-scheme: light;
+  transition: background-color 120ms ease-out, box-shadow 120ms ease-out;
+}
+.page-form-layer textarea.form-field { resize: none; overflow: auto; padding-top: 2px; }
+.page-form-layer .form-field.comb { font-family: "Courier New", Courier, monospace; }
+.page-form-layer select.form-field { padding: 0 2px; cursor: pointer; }
+.page-form-layer select.form-field[size] option { padding: 0 1px; }
+.page-form-layer select.form-field[size] option:checked {
+  background: rgba(59, 130, 246, 0.28);
+  color: #111;
 }
 
-.page-form-layer input:focus,
-.page-form-layer textarea:focus,
-.page-form-layer select:focus {
-  background: transparent;
-  box-shadow: none;
+.page-form-layer .form-field:hover {
+  box-shadow: inset 0 0 0 1px rgba(59, 130, 246, 0.45);
+}
+.page-form-layer .form-field:focus,
+.page-form-layer .form-field:focus-visible {
+  background: rgba(255, 255, 255, 0.85);
+  box-shadow: inset 0 0 0 1px rgba(59, 130, 246, 0.7), 0 0 0 2px rgba(59, 130, 246, 0.25);
+  outline: none;
 }
 
-.page-form-layer input[type="checkbox"],
-.page-form-layer input[type="radio"] {
+.page-form-layer input.form-field[type="checkbox"],
+.page-form-layer input.form-field[type="radio"] {
   padding: 0;
   cursor: pointer;
+  background: transparent;
+  box-shadow: none;
+  accent-color: #18181b;
 }
 
-.page-form-layer input[type="checkbox"]:focus,
-.page-form-layer input[type="radio"]:focus {
-  box-shadow: 0 0 0 2px rgba(100, 170, 255, 0.7);
-  outline: none;
+@media (prefers-reduced-motion: reduce) {
+  .page-form-layer .form-field { transition: none; }
+}
+
+/* Printing or exporting a picture of the page: no field tint. */
+@media print {
+  .page-form-layer .form-field { background: transparent; box-shadow: none; }
 }
 
 .page-annotation-canvas {

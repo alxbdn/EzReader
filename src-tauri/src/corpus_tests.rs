@@ -252,3 +252,64 @@ fn a_huge_document_opens_and_saves_in_reasonable_time() {
         std::fs::remove_dir_all(&out).ok();
     }
 }
+
+/// A filled form reads back as typed, in every reader: values in the fields
+/// (accents included), each radio and check box widget in its state, and an
+/// appearance drawn for the text fields and the combo box.
+#[test]
+fn filled_form_reads_back_with_its_appearances() {
+    let out = out_dir("filled-form");
+    let input = corpus_dir().join("form-acroform.pdf");
+    let saved = out.join("form-acroform.filled.pdf");
+    let fields = vec![
+        FormFieldValue { name: "nom".into(), value: "Lefèvre (Élodie)".into() },
+        FormFieldValue { name: "accepte".into(), value: "true".into() },
+        FormFieldValue { name: "civilite".into(), value: "mme".into() },
+        FormFieldValue { name: "pays".into(), value: "Belgique".into() },
+    ];
+    save_annotated_pdf(s(&input), s(&saved), vec![], 0, fields).unwrap();
+    assert_lengths_consistent(&s(&saved));
+
+    let doc = Document::load(&saved).unwrap();
+    let cat = doc.catalog().unwrap();
+    let form = doc.dereference(cat.get(b"AcroForm").unwrap()).unwrap().1.as_dict().unwrap();
+    let mut seen = 0;
+    for f in form.get(b"Fields").unwrap().as_array().unwrap() {
+        let field = doc.dereference(f).unwrap().1.as_dict().unwrap();
+        let name = match field.get(b"T").unwrap() { Object::String(b, _) => String::from_utf8_lossy(b).into_owned(), _ => continue };
+        let widgets: Vec<&lopdf::Dictionary> = match field.get(b"Kids") {
+            Ok(Object::Array(k)) => k.iter().map(|k| doc.dereference(k).unwrap().1.as_dict().unwrap()).collect(),
+            _ => vec![field],
+        };
+        let ap_text = |w: &lopdf::Dictionary| {
+            let n = w.get(b"AP").unwrap().as_dict().unwrap().get(b"N").unwrap();
+            let mut stream = doc.dereference(n).unwrap().1.as_stream().unwrap().clone();
+            stream.decompress().ok();
+            String::from_utf8_lossy(&stream.content).into_owned()
+        };
+        match name.as_str() {
+            "nom" => {
+                let Object::String(v, _) = field.get(b"V").unwrap() else { panic!() };
+                assert_eq!(&v[..2], &[0xFE, 0xFF], "accented value stored as UTF-16");
+                assert!(ap_text(widgets[0]).contains("Lef\\350vre \\(\\311lodie\\)"));
+                seen += 1;
+            }
+            "accepte" => {
+                assert_ne!(widgets[0].get(b"AS").unwrap().as_name().unwrap(), b"Off");
+                seen += 1;
+            }
+            "civilite" => {
+                assert_eq!(field.get(b"V").unwrap().as_name().unwrap(), b"mme");
+                let states: Vec<&[u8]> = widgets.iter().map(|w| w.get(b"AS").unwrap().as_name().unwrap()).collect();
+                assert_eq!(states, vec![&b"Off"[..], &b"mme"[..]]);
+                seen += 1;
+            }
+            "pays" => {
+                assert!(ap_text(widgets[0]).contains("(Belgique) Tj"));
+                seen += 1;
+            }
+            _ => {}
+        }
+    }
+    assert_eq!(seen, 4, "every filled field found");
+}
