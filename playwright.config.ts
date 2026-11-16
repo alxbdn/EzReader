@@ -10,7 +10,7 @@ import { defineConfig } from "@playwright/test";
  * change to the look of the app:
  *
  *   npm run build
- *   docker run --rm -v "$PWD":/work -w /work mcr.microsoft.com/playwright:v1.63.0-noble \
+ *   docker run --rm -v "$PWD":/work -w /work mcr.microsoft.com/playwright:v1.65.0-noble \
  *     npx playwright test --update-snapshots
  *
  * or run the "Visual baselines" workflow on the branch (Actions tab).
