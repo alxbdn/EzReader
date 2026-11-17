@@ -163,11 +163,12 @@ jobs:
           git tag ${{ steps.version.outputs.tag }}
           git push origin ${{ steps.version.outputs.tag }}
 
-      - name: Create GitHub Release
+      - name: Create GitHub Release (draft until all assets are attached)
         uses: softprops/action-gh-release@8a0cd651e5b2365bd640854a3fa5dfc70e4875f3 # v3.0.4
         with:
           tag_name: ${{ steps.version.outputs.tag }}
           name: ${{ steps.version.outputs.tag }}
+          draft: true
           generate_release_notes: true
           prerelease: ${{ steps.prerelease.outputs.is_prerelease == 'true' }}
           files: |
@@ -196,25 +197,31 @@ jobs:
             gh release edit "$TAG" --notes-file notes.md
           fi
 
-  # A tag pushed and a release created with GITHUB_TOKEN start no other
-  # workflow, so the macOS and Linux packages and the Store submission are
-  # dispatched here, on the new tag.
-  packages:
+  # The macOS and Linux packages, plus the security and performance reports,
+  # are attached while the release is still a draft (GitHub immutable releases
+  # reject asset uploads once a release is published).
+  macos:
     needs: release
-    runs-on: ubuntu-latest
     permissions:
-      actions: write
-    steps:
-      - name: Build macOS, Linux and submit to the Store
-        env:
-          GH_TOKEN: ${{ github.token }}
-          TAG: ${{ needs.release.outputs.tag }}
-        run: |
-          gh workflow run macos-dmg.yml --repo "$GITHUB_REPOSITORY" --ref "$TAG"
-          gh workflow run linux-deb.yml --repo "$GITHUB_REPOSITORY" --ref "$TAG"
-          gh workflow run store-publish.yml --repo "$GITHUB_REPOSITORY" --ref main -f tag="$TAG"
+      contents: write
+      id-token: write
+      attestations: write
+    uses: ./.github/workflows/macos-dmg.yml
+    with:
+      publish_release: true
+      release_tag: ${{ needs.release.outputs.tag }}
 
-  # Security and performance reports, plus the SBOMs, attached to the release.
+  linux:
+    needs: release
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+    uses: ./.github/workflows/linux-deb.yml
+    with:
+      publish_release: true
+      release_tag: ${{ needs.release.outputs.tag }}
+
   reports:
     needs: release
     permissions:
@@ -224,3 +231,22 @@ jobs:
     uses: ./.github/workflows/release-reports.yml
     with:
       tag: ${{ needs.release.outputs.tag }}
+
+  # Publishes the draft release (locking it as immutable) once every package
+  # and report is attached, then dispatches the Microsoft Store submission.
+  finalize:
+    needs: [release, macos, linux, reports]
+    if: ${{ !cancelled() && needs.release.result == 'success' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      actions: write
+    steps:
+      - name: Publish release and submit to the Store
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ needs.release.outputs.tag }}
+        run: |
+          gh release edit "$TAG" --draft=false
+          gh workflow run store-publish.yml --repo "$GH_REPO" --ref main -f tag="$TAG"
