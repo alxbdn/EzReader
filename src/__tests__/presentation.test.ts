@@ -97,4 +97,22 @@ describe("Presentation", () => {
     (document.querySelector(".pres-exit") as HTMLButtonElement).click();
     expect(onExit).toHaveBeenCalledWith(1);
   });
+
+  it("a mouse move without movement does not wake the controls", () => {
+    vi.useFakeTimers();
+    try {
+      const { p } = setup();
+      const move = (x: number, y: number) =>
+        p.el.dispatchEvent(new MouseEvent("mousemove", { screenX: x, screenY: y, bubbles: true }));
+      move(100, 100);
+      vi.advanceTimersByTime(2500);
+      expect(p.el.classList.contains("idle")).toBe(true);
+      move(100, 100);
+      expect(p.el.classList.contains("idle")).toBe(true);
+      move(101, 100);
+      expect(p.el.classList.contains("idle")).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });
