@@ -29,12 +29,18 @@ on:
         required: false
         default: ''
         type: string
-  # Version tags are built only once the security scans have passed:
-  # Bump & Release dispatches this workflow on its new tag, and the release
-  # workflow (tag pushed by hand) calls it.
+  # Version tags are built only once the security scans have passed: the
+  # Release workflow calls this one (for_release) and attaches the files.
   workflow_call:
     inputs:
       publish_release:
+        required: false
+        default: false
+        type: boolean
+      # Used by the Release workflow: attest and hand the files over as the
+      # release-macos artifact, without touching the GitHub release (it attaches
+      # everything to a draft itself, since published releases are immutable).
+      for_release:
         required: false
         default: false
         type: boolean
@@ -174,21 +180,31 @@ jobs:
       #   gh attestation verify <file> --repo alxbdn/EzReader
       - name: Attest build provenance
         id: attest
-        if: startsWith(github.ref, 'refs/tags/v') || inputs.publish_release == true
+        if: startsWith(github.ref, 'refs/tags/v') || inputs.publish_release == true || inputs.for_release == true
         uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
         with:
           subject-path: |
             dist-artifacts/${{ steps.stage.outputs.dmg }}
 
       - name: Stage provenance
-        if: startsWith(github.ref, 'refs/tags/v') || inputs.publish_release == true
+        if: startsWith(github.ref, 'refs/tags/v') || inputs.publish_release == true || inputs.for_release == true
         shell: bash
         run: |
           cp "${{ steps.attest.outputs.bundle-path }}" \
              "dist-artifacts/ezreader-${{ steps.version.outputs.version }}-macos.intoto.jsonl"
 
+      - name: Hand the files to the Release workflow
+        if: inputs.for_release == true
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: release-macos
+          path: |
+            dist-artifacts/${{ steps.stage.outputs.dmg }}
+            dist-artifacts/ezreader-${{ steps.version.outputs.version }}-macos.intoto.jsonl
+          if-no-files-found: error
+
       - name: Publish to GitHub Release
-        if: startsWith(github.ref, 'refs/tags/v') || inputs.publish_release == true
+        if: inputs.for_release != true && (startsWith(github.ref, 'refs/tags/v') || inputs.publish_release == true)
         uses: softprops/action-gh-release@8a0cd651e5b2365bd640854a3fa5dfc70e4875f3 # v3.0.4
         with:
           tag_name: ${{ steps.version.outputs.tag }}

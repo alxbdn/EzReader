@@ -33,7 +33,7 @@ User information and instructions: [README](../../README.md), [SECURITY.md](../.
 | Network | Version check and update download from GitHub | HTTPS only; the downloaded installer must match the SHA-256 digest published by GitHub (`src-tauri/src/commands/update.rs`) |
 | Build and supply chain | Dependencies and CI actions | Lockfiles, Dependabot, `npm audit`, `cargo deny` (advisories, licences, sources), actions pinned to a commit, OpenSSF Scorecard |
 
-**Production.** Every release is built by GitHub Actions (`.github/workflows/bump.yml`, or `release.yml` for a tag pushed by hand) only after the security scans pass (`security.yml`), tested by installing it on a clean runner (`install-test.yml`), attested with signed SLSA build provenance, and published with its SBOMs and reports (`release-reports.yml`). Store packages are signed by Microsoft. macOS builds are only ad-hoc signed (not notarized), and the Windows installer on GitHub is not Authenticode-signed.
+**Production.** Every release is built by GitHub Actions (`.github/workflows/release.yml`, started by `bump.yml` or by a tag pushed by hand) only after the security scans pass (`security.yml`), tested by installing it on a clean runner (`install-test.yml`), attested with signed SLSA build provenance, and attached with its SBOMs and reports (`release-reports.yml`) to a draft that is published last. Releases are immutable once published: their files and tag cannot change. Store packages are signed by Microsoft. macOS builds are only ad-hoc signed (not notarized), and the Windows installer on GitHub is not Authenticode-signed.
 
 ## 3. Cybersecurity risk assessment
 
