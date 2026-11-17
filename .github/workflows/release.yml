@@ -177,10 +177,11 @@ jobs:
         with:
           name: release-provenance
 
-      - name: Create GitHub Release
+      - name: Create GitHub Release (draft until all assets are attached)
         uses: softprops/action-gh-release@8a0cd651e5b2365bd640854a3fa5dfc70e4875f3 # v3.0.4
         with:
           name: ${{ github.ref_name }}
+          draft: true
           generate_release_notes: true
           prerelease: ${{ needs.build.outputs.is_prerelease == 'true' }}
           files: |
@@ -220,8 +221,8 @@ jobs:
     with:
       tag: ${{ github.ref_name }}
 
-  # The macOS and Linux packages, built and attached to the same release once
-  # the scans have passed.
+  # The macOS and Linux packages, built and attached to the same draft release
+  # once the scans have passed.
   macos:
     needs: security
     permissions:
@@ -243,3 +244,17 @@ jobs:
     with:
       publish_release: true
       release_tag: ${{ github.ref_name }}
+
+  finalize:
+    needs: [publish, macos, linux, reports]
+    if: ${{ !cancelled() && needs.publish.result == 'success' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ github.ref_name }}
+        run: gh release edit "$TAG" --draft=false
