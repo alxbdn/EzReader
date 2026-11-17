@@ -108,7 +108,7 @@ export class Presentation {
 
     this.el.addEventListener("mousedown", this.onMouseDown);
     this.el.addEventListener("contextmenu", (e) => e.preventDefault());
-    this.el.addEventListener("mousemove", this.wake);
+    this.el.addEventListener("mousemove", this.onMouseMove);
     this.el.addEventListener("wheel", this.onWheel, { passive: false });
     window.addEventListener("keydown", this.onKey, true);
     window.addEventListener("resize", this.onResize);
@@ -176,6 +176,23 @@ export class Presentation {
     if (n < count) void this.renderCached(n + 1, w, h);
     if (n > 1) void this.renderCached(n - 1, w, h);
   }
+
+  /** Where the pointer was at the last mouse move, in screen pixels. */
+  private lastPointer: { x: number; y: number } | null = null;
+
+  /**
+   * Only a pointer that really moved wakes the controls. On Windows the
+   * page also gets mouse moves without any movement, for instance when
+   * what lies under the pointer changes (the pill fading out, a tooltip
+   * closing): each one woke the controls, so the pill and the cursor kept
+   * coming back and going away with the mouse standing still.
+   */
+  private onMouseMove = (e: MouseEvent): void => {
+    const last = this.lastPointer;
+    this.lastPointer = { x: e.screenX, y: e.screenY };
+    if (last && last.x === e.screenX && last.y === e.screenY) return;
+    this.wake();
+  };
 
   /** Shows the controls and the cursor, then hides them after a pause. */
   private wake = (): void => {
