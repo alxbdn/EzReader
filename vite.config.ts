@@ -12,7 +12,7 @@ export default defineConfig({
     emptyOutDir: true,
     target: "esnext",
     rollupOptions: {
-      input: resolve(__dirname, "index.html"),
+      input: resolve(import.meta.dirname, "index.html"),
     },
   },
   server: {

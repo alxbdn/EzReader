@@ -1,0 +1,49 @@
+name: Bug report
+description: Something in EzReader does not work as it should.
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you did, what you expected, and what happened instead.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Open a PDF…
+        2. Click…
+  - type: input
+    id: version
+    attributes:
+      label: EzReader version
+      description: Shown on the welcome screen.
+      placeholder: 1.1.5
+    validations:
+      required: true
+  - type: dropdown
+    id: install
+    attributes:
+      label: How you installed it
+      options:
+        - Microsoft Store
+        - Windows installer (setup .exe)
+        - Windows portable app
+        - macOS (Homebrew or disk image)
+        - Linux (.deb)
+        - Linux portable app
+    validations:
+      required: true
+  - type: input
+    id: os
+    attributes:
+      label: Operating system
+      placeholder: Windows 11 24H2, macOS 15, Ubuntu 24.04…
+  - type: textarea
+    id: files
+    attributes:
+      label: Sample file or screenshot
+      description: A PDF that shows the problem helps a lot. Do not attach anything confidential.
