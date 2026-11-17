@@ -1,0 +1,13 @@
+# Advisories that OSV-based scanners (OpenSSF Scorecard's Vulnerabilities
+# check, osv-scanner) should not report for this lockfile. Both crates come
+# only from Tauri 2's GTK 3 stack on Linux (gtk-rs 0.18) and have no fixed
+# version that Tauri 2 can use. Review them when Tauri updates; keep in sync
+# with deny.toml and fuzz/osv-scanner.toml.
+
+[[IgnoredVulns]]
+id = "RUSTSEC-2024-0429"
+reason = "glib 0.18 VariantStrIter unsoundness: fixed only in glib 0.20, which Tauri 2 (gtk-rs 0.18) cannot use. EzReader never uses VariantStrIter."
+
+[[IgnoredVulns]]
+id = "RUSTSEC-2024-0370"
+reason = "proc-macro-error is unmaintained, not vulnerable: a build-time macro of gtk-rs 0.18, used by Tauri on Linux."
