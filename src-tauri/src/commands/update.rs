@@ -222,12 +222,7 @@ pub async fn check_for_update(app: tauri::AppHandle) -> CmdResult<UpdateStatus> 
         let channel = detect_channel();
         let latest = fetch_latest(channel, &current)?;
         let latest_v = latest.tag_name.trim_start_matches(['v', 'V']).to_string();
-        Ok(UpdateStatus {
-            up_to_date: !is_newer(&latest_v, &current),
-            latest: latest_v,
-            current,
-            channel,
-        })
+        Ok(UpdateStatus { up_to_date: !is_newer(&latest_v, &current), latest: latest_v, current, channel })
     })
     .await
     .map_err(|e| e.to_string())?
