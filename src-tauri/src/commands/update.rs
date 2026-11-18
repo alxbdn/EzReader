@@ -480,4 +480,38 @@ mod tests {
         assert_eq!(r.tag_name, "v1.1.0");
         assert_eq!(r.assets[0].digest.as_deref(), Some("sha256:00"));
     }
+
+    #[test]
+    fn curl_only_speaks_https() {
+        let cmd = curl_get("1.2.3", 15);
+        let args: Vec<String> = cmd.get_args().map(|a| a.to_string_lossy().into_owned()).collect();
+        for pair in [["--proto", "=https"], ["--proto-redir", "=https"], ["--max-time", "15"], ["-A", "EzReader/1.2.3"]]
+        {
+            assert!(args.windows(2).any(|w| w == pair), "{pair:?} missing from {args:?}");
+        }
+        assert!(args.contains(&"--tlsv1.2".to_string()));
+    }
+
+    #[test]
+    fn a_failed_download_leaves_no_file() {
+        let dest = std::env::temp_dir().join(format!("ezreader-update-test-{}", std::process::id()));
+        std::fs::write(&dest, b"stale").unwrap();
+        let mut a = asset("EzReader.exe");
+        a.browser_download_url = "http://127.0.0.1:1/EzReader.exe".into();
+        assert!(download(&a, &dest, "1.0.0").is_err());
+        assert!(!dest.exists());
+    }
+
+    #[test]
+    fn this_build_has_a_channel_and_no_leftover() {
+        let _ = detect_channel();
+        assert!(current_exe().is_some());
+        remove_leftover();
+        assert!(!with_suffix(&current_exe().unwrap(), ".old").exists());
+    }
+
+    #[test]
+    fn suffix_is_appended_to_the_whole_name() {
+        assert_eq!(with_suffix(Path::new("dir/EzReader.exe"), ".old"), PathBuf::from("dir/EzReader.exe.old"));
+    }
 }
