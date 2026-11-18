@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { bodySize, layoutPage, normalizeHeadings, textLength, type TextRun } from "../text-layout";
 
-/** A run of `str` at (x, baseline y) in a font of `size`, ~0.5 em per character. */
 const run = (str: string, x: number, y: number, size = 10): TextRun => ({ str, x, y, size, width: str.length * size * 0.5 });
 
 describe("text layout", () => {
@@ -38,7 +37,6 @@ describe("text layout", () => {
     expect(page.lines.map((l) => l.cells.map((c) => c.text))).toEqual([
       ["Region", "Q1", "Q2"], ["North", "1 234,50", "987"], ["South", "12", "3.5"],
     ]);
-    // Two lines lining up by chance are still prose.
     const prose = layoutPage([run("a word", 70, 100), run("next", 110, 100), run("b word", 70, 112), run("then", 110, 112)], 1, 595, 842, 10);
     expect(prose.lines.map((l) => l.cells.length)).toEqual([1, 1]);
   });

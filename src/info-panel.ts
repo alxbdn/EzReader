@@ -2,7 +2,6 @@ import { PDFDateString } from "pdfjs-dist";
 import type { PDFDocumentProxy } from "pdfjs-dist";
 import type { Translations } from "./i18n";
 
-/** Named paper sizes, in points (portrait). */
 const PAPER_SIZES: { name: string; w: number; h: number }[] = [
   { name: "A3", w: 841.89, h: 1190.55 },
   { name: "A4", w: 595.28, h: 841.89 },
@@ -14,7 +13,6 @@ const PAPER_SIZES: { name: string; w: number; h: number }[] = [
 
 const ptToCm = (pt: number) => (pt * 2.54) / 72;
 
-/** "21,0 × 29,7 cm (A4)" in the UI language. Exported for tests. */
 export function formatPageSize(wPt: number, hPt: number, lang: string): string {
   const nf = new Intl.NumberFormat(lang, { minimumFractionDigits: 1, maximumFractionDigits: 1 });
   const [a, b] = [Math.min(wPt, hPt), Math.max(wPt, hPt)];
@@ -23,7 +21,6 @@ export function formatPageSize(wPt: number, hPt: number, lang: string): string {
   return named ? `${size} (${named.name})` : size;
 }
 
-/** Formats a PDF date string ("D:20240131120000+01'00'") in the UI language. */
 export function formatPdfDate(raw: unknown, lang: string): string | null {
   if (typeof raw !== "string" || !raw) return null;
   const d = PDFDateString.toDateObject(raw);
@@ -45,7 +42,6 @@ interface PdfInfo {
 
 const ICON_CLOSE = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg>`;
 
-/** Right-hand drawer with the document metadata, like the Preview inspector. */
 export class InfoPanel {
   private el: HTMLElement;
   private body: HTMLElement;
@@ -83,7 +79,6 @@ export class InfoPanel {
     this.el.setAttribute("aria-hidden", "true");
   }
 
-  /** Opens the panel (or refreshes it if already open) for `doc`. */
   async show(doc: PDFDocumentProxy, fileName: string, t: Translations, lang: string): Promise<void> {
     this._open = true;
     const bar = document.getElementById("toolbar-container");

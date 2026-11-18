@@ -3,7 +3,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { PDFDocumentProxy } from "pdfjs-dist";
 import { PageSidebar } from "../page-sidebar";
 
-/** Collects the observers so the test can say which thumbnails came into view. */
 let observers: { cb: IntersectionObserverCallback; targets: Element[] }[] = [];
 
 class FakeIntersectionObserver {
@@ -18,7 +17,6 @@ class FakeIntersectionObserver {
   takeRecords(): IntersectionObserverEntry[] { return []; }
 }
 
-/** Every observed thumbnail scrolls into view. */
 function showAll(): void {
   for (const o of observers) {
     const entries = o.targets.map((target) => ({ target, isIntersecting: true }) as unknown as IntersectionObserverEntry);
@@ -32,7 +30,6 @@ const dims = (n: number) => Array.from({ length: n }, () => ({ width: 595, heigh
 beforeEach(() => {
   observers = [];
   vi.stubGlobal("IntersectionObserver", FakeIntersectionObserver);
-  // jsdom draws nothing; the panel stops once it has the page.
   vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue(null);
   localStorage.clear();
 });
@@ -48,7 +45,6 @@ describe("PageSidebar thumbnails", () => {
     document.body.appendChild(root);
     const sidebar = new PageSidebar(root);
 
-    // A document destroyed by the viewer: pdf.js drops the pending getPage answer.
     const stuck = { getPage: vi.fn(() => new Promise(() => {})) } as unknown as PDFDocumentProxy;
     sidebar.load(stuck, dims(3), 0);
     showAll();

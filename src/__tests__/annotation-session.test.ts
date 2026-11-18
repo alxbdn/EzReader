@@ -2,7 +2,6 @@ import { describe, it, expect, vi } from "vitest";
 import { AnnotationSession } from "../annotation-session";
 import type { RectAnnotation, RedactAnnotation } from "../models";
 
-// Each rect is told apart by its width.
 const rect = (width: number, page = 1): RectAnnotation => ({
   page, kind: "rect", x: 0, y: 0, width, height: 10,
   color: { r: 0, g: 0, b: 0 }, strokeWidth: 1,
@@ -42,10 +41,10 @@ describe("AnnotationSession page index", () => {
     expect(s.moveLayer(a, 1)).toBe(true);
     expect(widths(s)).toEqual([2, 1, 3]);
 
-    expect(s.moveLayer(c, 1)).toBe(false); // already on top
+    expect(s.moveLayer(c, 1)).toBe(false);
     expect(widths(s)).toEqual([2, 1, 3]);
 
-    expect(s.moveLayer(b, -1)).toBe(false); // already at the bottom
+    expect(s.moveLayer(b, -1)).toBe(false);
     s.moveLayer(c, -1);
     expect(widths(s)).toEqual([2, 3, 1]);
   });
@@ -55,7 +54,7 @@ describe("AnnotationSession page index", () => {
     const a = rect(1);
     s.add(a);
     s.beginEdit(); a.x = 5; s.edited();
-    s.moveLayer(a, 1); // no-op: no notification
+    s.moveLayer(a, 1);
     s.remove(a);
     expect(changed).toHaveBeenCalledTimes(3);
     s.undo(); s.redo(); s.load([rect(4)]);
@@ -85,7 +84,7 @@ describe("AnnotationSession undo / redo", () => {
     expect(s.redo()).toBe(true);
     expect(s.redo()).toBe(true);
     expect(widths(s)).toEqual([9]);
-    s.add(rect(3)); // a new change drops what could be redone
+    s.add(rect(3));
     expect(s.redo()).toBe(false);
   });
 
@@ -140,7 +139,7 @@ describe("AnnotationSession redaction gate", () => {
     const { s } = setup({ dirty: true });
     s.add(rect(1));
     s.add(redact(0));
-    s.add(rect(2)); // later changes go with the pending ones
+    s.add(rect(2));
     expect(s.discard()).toBe(true);
     expect(s.pending).toBe(false);
     expect(s.all().map(a => a.kind)).toEqual(["rect"]);

@@ -1,11 +1,3 @@
-// Fillable PDF form fields (AcroForm): one HTML control per widget, placed
-// over the page. pdf.js leaves these widgets off the canvas when it renders
-// with AnnotationMode.ENABLE_FORMS, so the controls are what the reader sees.
-// Values go to the caller as strings: text for text fields and lists, the
-// widget's on state (or "false") for check boxes, the chosen widget's state
-// for radio buttons. src-tauri/src/pdf/forms.rs writes them into the file.
-
-/** The parts of pdf.js's widget annotation data the controls use. */
 export interface WidgetData {
   subtype: string;
   fieldType?: string;
@@ -29,7 +21,6 @@ export interface WidgetData {
   alternativeText?: string;
 }
 
-/** A box on the page, in CSS pixels. */
 export interface FieldBox { left: number; top: number; width: number; height: number }
 
 const OFF = "Off";
@@ -39,7 +30,6 @@ function firstValue(v: WidgetData["fieldValue"]): string {
   return v ?? "";
 }
 
-/** The font size of a text control, in CSS pixels: the form's own, or one that fits the box. */
 export function fieldFontSize(a: WidgetData, box: FieldBox, scale: number): number {
   const own = a.defaultAppearanceData?.fontSize ?? 0;
   if (own > 0) return Math.max(own * scale, 6);
@@ -50,14 +40,9 @@ export function fieldFontSize(a: WidgetData, box: FieldBox, scale: number): numb
 function cssColor(c: ArrayLike<number> | undefined): string | null {
   if (!c || c.length < 3) return null;
   const [r, g, b] = [c[0], c[1], c[2]];
-  // Black is the stylesheet's default; only a form's own color is set inline.
   return r === 0 && g === 0 && b === 0 ? null : `rgb(${r}, ${g}, ${b})`;
 }
 
-/**
- * The control for one widget, or null for widgets that aren't filled in
- * (push buttons, signatures, hidden and read-only fields).
- */
 export function createFieldControl(
   a: WidgetData,
   box: FieldBox,
@@ -65,7 +50,6 @@ export function createFieldControl(
   stored: string | undefined,
   onChange: (name: string, value: string) => void,
 ): HTMLElement | null {
-  // Read-only fields keep their own appearance, which pdf.js paints on the canvas.
   if (a.subtype !== "Widget" || a.hidden || a.readOnly) return null;
   const name = a.fieldName ?? "";
   if (!name) return null;
@@ -87,7 +71,6 @@ export function createFieldControl(
     }
     if (a.maxLen && a.maxLen > 0) (el as HTMLInputElement).maxLength = a.maxLen;
     if (a.comb && a.maxLen && a.maxLen > 0) {
-      // One character per cell: a monospace face spaced to the cell width.
       const cell = box.width / a.maxLen;
       const glyph = size * 0.6;
       el.classList.add("comb");
@@ -132,7 +115,6 @@ export function createFieldControl(
       if (opt.exportValue === value) { option.selected = true; matched = true; }
       sel.appendChild(option);
     }
-    // A combo box with nothing chosen yet shows empty, not its first option.
     if (!matched) sel.selectedIndex = -1;
     sel.style.fontSize = `${fieldFontSize({ ...a, multiLine: false }, { ...box, height: Math.min(box.height, 24 * scale) }, scale)}px`;
     sel.addEventListener("change", () => onChange(name, sel.value));

@@ -99,7 +99,7 @@ describe("default reader checkbox", () => {
   });
 
   it("shows what the system says even if the user backed out", async () => {
-    const { prefs, check } = setUp({ setDefault: async () => { /* user closed Windows settings */ } });
+    const { prefs, check } = setUp({ setDefault: async () => {} });
     await prefs.refresh();
     check().click();
     await flush();

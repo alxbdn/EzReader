@@ -4,11 +4,6 @@ import type { TextItem } from "pdfjs-dist/types/src/display/api";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { bodySize, layoutPage, normalizeHeadings, type TextDoc, type TextRun } from "./text-layout";
 
-/**
- * Reads the text of `pages` (1-based) of the PDF at `filePath` with pdf.js
- * and lays it out for "Convert". Pages that are pictures (scans) come back
- * without lines.
- */
 export async function extractText(filePath: string, pages: number[], title: string): Promise<TextDoc> {
   const doc = await pdfjs.getDocument({ ...SAFE_PDF, url: convertFileSrc(filePath) + `?t=${Date.now()}` }).promise;
   try {

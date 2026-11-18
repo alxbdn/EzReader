@@ -1,6 +1,3 @@
-// SVG icons adapted from Mozilla pdf.js (MPL 2.0)
-// All paths converted to fill="currentColor" for theme compatibility.
-
 export const ICON_OPEN_FILE = `<svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M10.4287 1.08398C10.5111 1.02905 10.608 0.999824 10.707 1H14.7L15 1.3V5.293C15 5.39194 14.9706 5.48864 14.9156 5.57088C14.8606 5.65311 14.7824 5.71718 14.691 5.75498C14.5996 5.79277 14.499 5.80259 14.402 5.78319C14.3049 5.76379 14.2159 5.71605 14.146 5.646L12.973 4.473L12.692 4.192L9.067 7.817C8.94923 7.93347 8.79034 7.99888 8.6247 7.99907C8.45907 7.99925 8.30003 7.93421 8.182 7.818C8.06518 7.70036 7.99962 7.54129 7.99962 7.3755C7.99962 7.20971 8.06518 7.05065 8.182 6.933L11.807 3.308L10.353 1.854C10.2829 1.78407 10.2351 1.6949 10.2158 1.59779C10.1964 1.50068 10.2063 1.40001 10.2442 1.30854C10.2821 1.21707 10.3464 1.13891 10.4287 1.08398ZM7.81694 2.06694C7.69973 2.18415 7.54076 2.25 7.375 2.25H2.85L2.25 2.85V13.15L2.85 13.75H13.15L13.75 13.15V8.625C13.75 8.45924 13.8158 8.30027 13.9331 8.18306C14.0503 8.06585 14.2092 8 14.375 8C14.5408 8 14.6997 8.06585 14.8169 8.18306C14.9342 8.30027 15 8.45924 15 8.625V13C15 13.5304 14.7893 14.0391 14.4142 14.4142C14.0391 14.7893 13.5304 15 13 15H3C2.46957 15 1.96086 14.7893 1.58579 14.4142C1.21071 14.0391 1 13.5304 1 13V3C1 2.46957 1.21071 1.96086 1.58579 1.58579C1.96086 1.21071 2.46957 1 3 1H7.375C7.54076 1 7.69973 1.06585 7.81694 1.18306C7.93415 1.30027 8 1.45924 8 1.625C8 1.79076 7.93415 1.94973 7.81694 2.06694Z" fill="currentColor"/></svg>`;
 
 export const ICON_PAGE_UP = `<svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M8.35179 5.001L13.8178 10.466C13.876 10.524 13.9222 10.5929 13.9537 10.6688C13.9852 10.7447 14.0013 10.826 14.0012 10.9082C14.0011 10.9904 13.9848 11.0717 13.9531 11.1475C13.9215 11.2234 13.8751 11.2922 13.8168 11.35C13.6991 11.4668 13.5401 11.5324 13.3743 11.5324C13.2085 11.5324 13.0494 11.4668 12.9318 11.35L7.99879 6.416L3.06679 11.349C2.94842 11.4614 2.79085 11.5231 2.62765 11.521C2.46445 11.5189 2.30853 11.4531 2.19312 11.3377C2.07771 11.2223 2.01193 11.0663 2.00982 10.9031C2.0077 10.7399 2.06941 10.5824 2.18179 10.464L7.64779 5L8.35179 5.001Z" fill="currentColor"/></svg>`;
@@ -21,32 +18,26 @@ export const ICON_PRINT = `<svg width="16" height="16" viewBox="0 0 16 16" fill=
 
 export const ICON_ROTATE_CW = `<svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M12.5895 4.83613L11.23 6.19601C10.933 6.49201 11.143 7.00001 11.563 7.00001H15.138C15.398 7.00001 15.609 6.78901 15.609 6.52901V2.95401C15.609 2.53401 15.101 2.32401 14.804 2.62101L13.672 3.75328C12.3204 1.78973 10.0599 0.5 7.5 0.5C3.364 0.5 0 3.864 0 8C0 12.136 3.364 15.5 7.5 15.5C11.296 15.5 14.434 12.663 14.925 9H13.41C12.932 11.833 10.468 14 7.5 14C4.191 14 1.5 11.309 1.5 8C1.5 4.691 4.191 2 7.5 2C9.64738 2 11.5311 3.13503 12.5895 4.83613Z" fill="currentColor"/></svg>`;
 
-// Text alignment icons
 export const ICON_ALIGN_LEFT = `<svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path fill-rule="evenodd" clip-rule="evenodd" d="M2 3.25C2 2.83579 2.33579 2.5 2.75 2.5H13.25C13.6642 2.5 14 2.83579 14 3.25C14 3.66421 13.6642 4 13.25 4H2.75C2.33579 4 2 3.66421 2 3.25ZM2 6.25C2 5.83579 2.33579 5.5 2.75 5.5H9.25C9.66421 5.5 10 5.83579 10 6.25C10 6.66421 9.66421 7 9.25 7H2.75C2.33579 7 2 6.66421 2 6.25ZM2 9.25C2 8.83579 2.33579 8.5 2.75 8.5H13.25C13.6642 8.5 14 8.83579 14 9.25C14 9.66421 13.6642 10 13.25 10H2.75C2.33579 10 2 9.66421 2 9.25ZM2 12.25C2 11.8358 2.33579 11.5 2.75 11.5H9.25C9.66421 11.5 10 11.8358 10 12.25C10 12.6642 9.66421 13 9.25 13H2.75C2.33579 13 2 12.6642 2 12.25Z" fill="currentColor"/></svg>`;
 
 export const ICON_ALIGN_CENTER = `<svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path fill-rule="evenodd" clip-rule="evenodd" d="M2 3.25C2 2.83579 2.33579 2.5 2.75 2.5H13.25C13.6642 2.5 14 2.83579 14 3.25C14 3.66421 13.6642 4 13.25 4H2.75C2.33579 4 2 3.66421 2 3.25ZM4 6.25C4 5.83579 4.33579 5.5 4.75 5.5H11.25C11.6642 5.5 12 5.83579 12 6.25C12 6.66421 11.6642 7 11.25 7H4.75C4.33579 7 4 6.66421 4 6.25ZM2 9.25C2 8.83579 2.33579 8.5 2.75 8.5H13.25C13.6642 8.5 14 8.83579 14 9.25C14 9.66421 13.6642 10 13.25 10H2.75C2.33579 10 2 9.66421 2 9.25ZM4 12.25C4 11.8358 4.33579 11.5 4.75 11.5H11.25C11.6642 11.5 12 11.8358 12 12.25C12 12.6642 11.6642 13 11.25 13H4.75C4.33579 13 4 12.6642 4 12.25Z" fill="currentColor"/></svg>`;
 
 export const ICON_ALIGN_RIGHT = `<svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path fill-rule="evenodd" clip-rule="evenodd" d="M2 3.25C2 2.83579 2.33579 2.5 2.75 2.5H13.25C13.6642 2.5 14 2.83579 14 3.25C14 3.66421 13.6642 4 13.25 4H2.75C2.33579 4 2 3.66421 2 3.25ZM6 6.25C6 5.83579 6.33579 5.5 6.75 5.5H13.25C13.6642 5.5 14 5.83579 14 6.25C14 6.66421 13.6642 7 13.25 7H6.75C6.33579 7 6 6.66421 6 6.25ZM2 9.25C2 8.83579 2.33579 8.5 2.75 8.5H13.25C13.6642 8.5 14 8.83579 14 9.25C14 9.66421 13.6642 10 13.25 10H2.75C2.33579 10 2 9.66421 2 9.25ZM6 12.25C6 11.8358 6.33579 11.5 6.75 11.5H13.25C13.6642 11.5 14 11.8358 14 12.25C14 12.6642 13.6642 13 13.25 13H6.75C6.33579 13 6 12.6642 6 12.25Z" fill="currentColor"/></svg>`;
 
-// Fit-to-screen icons
 export const ICON_FIT_WIDTH = `<svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M1 8L3.5 5.5V7.25H12.5V5.5L15 8L12.5 10.5V8.75H3.5V10.5L1 8Z" fill="currentColor"/><path fill-rule="evenodd" clip-rule="evenodd" d="M5 2H11V3.5H5V2ZM5 12.5H11V14H5V12.5Z" fill="currentColor"/></svg>`;
 
 export const ICON_FIT_HEIGHT = `<svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M8 1L10.5 3.5H8.75V12.5H10.5L8 15L5.5 12.5H7.25V3.5H5.5L8 1Z" fill="currentColor"/><path fill-rule="evenodd" clip-rule="evenodd" d="M2 5V11H3.5V5H2ZM12.5 5V11H14V5H12.5Z" fill="currentColor"/></svg>`;
 
-// Settings / gear icon
 export const ICON_SETTINGS = `<svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path fill-rule="evenodd" clip-rule="evenodd" d="M6.354 1.5a.5.5 0 0 0-.49.402l-.3 1.5a5.023 5.023 0 0 0-1.006.577l-1.455-.486a.5.5 0 0 0-.58.224l-1 1.732a.5.5 0 0 0 .1.62l1.128 1.014a5.07 5.07 0 0 0 0 1.154L1.623 9.251a.5.5 0 0 0-.1.62l1 1.732a.5.5 0 0 0 .58.224l1.455-.486c.312.22.648.41 1.006.577l.3 1.5a.5.5 0 0 0 .49.402h2a.5.5 0 0 0 .49-.402l.3-1.5a5.02 5.02 0 0 0 1.006-.577l1.455.486a.5.5 0 0 0 .58-.224l1-1.732a.5.5 0 0 0-.1-.62l-1.128-1.014a5.07 5.07 0 0 0 0-1.154l1.128-1.013a.5.5 0 0 0 .1-.62l-1-1.733a.5.5 0 0 0-.58-.224l-1.455.487a5.023 5.023 0 0 0-1.006-.578l-.3-1.5A.5.5 0 0 0 8.354 1.5h-2zm1 3.5a3 3 0 1 0 0 6 3 3 0 0 0 0-6zm-1.5 3a1.5 1.5 0 1 1 3 0 1.5 1.5 0 0 1-3 0z" fill="currentColor"/></svg>`;
 
-// Page manager icons
 export const ICON_DELETE = `<svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M5.5 1C5.5 0.723858 5.72386 0.5 6 0.5H10C10.2761 0.5 10.5 0.723858 10.5 1V2.5H13.5C13.7761 2.5 14 2.72386 14 3C14 3.27614 13.7761 3.5 13.5 3.5H12.4616L11.8462 13.1346C11.8075 13.6285 11.3935 14 10.8981 14H5.10192C4.60645 14 4.19253 13.6285 4.15383 13.1346L3.53842 3.5H2.5C2.22386 3.5 2 3.27614 2 3C2 2.72386 2.22386 2.5 2.5 2.5H5.5V1ZM6.5 1.5V2.5H9.5V1.5H6.5ZM4.54262 3.5L5.14883 13H10.8512L11.4574 3.5H4.54262Z" fill="currentColor"/></svg>`;
 
 export const ICON_PAGES = `<svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path fill-rule="evenodd" clip-rule="evenodd" d="M1 1.5C1 1.22386 1.22386 1 1.5 1H6.5C6.77614 1 7 1.22386 7 1.5V6.5C7 6.77614 6.77614 7 6.5 7H1.5C1.22386 7 1 6.77614 1 6.5V1.5ZM2 2V6H6V2H2ZM9 1.5C9 1.22386 9.22386 1 9.5 1H14.5C14.7761 1 15 1.22386 15 1.5V6.5C15 6.77614 14.7761 7 14.5 7H9.5C9.22386 7 9 6.77614 9 6.5V1.5ZM10 2V6H14V2H10ZM1 9.5C1 9.22386 1.22386 9 1.5 9H6.5C6.77614 9 7 9.22386 7 9.5V14.5C7 14.7761 6.77614 15 6.5 15H1.5C1.22386 15 1 14.7761 1 14.5V9.5ZM2 10V14H6V10H2ZM9 9.5C9 9.22386 9.22386 9 9.5 9H14.5C14.7761 9 15 9.22386 15 9.5V14.5C15 14.7761 14.7761 15 14.5 15H9.5C9.22386 15 9 14.7761 9 14.5V9.5ZM10 10V14H14V10H10Z" fill="currentColor"/></svg>`;
 
-// Custom shape icons (not in pdf.js) drawn in the same style
 export const ICON_RECT = `<svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path fill-rule="evenodd" clip-rule="evenodd" d="M2 3C1.44772 3 1 3.44772 1 4V12C1 12.5523 1.44772 13 2 13H14C14.5523 13 15 12.5523 15 12V4C15 3.44772 14.5523 3 14 3H2ZM2.5 4.5V11.5H13.5V4.5H2.5Z" fill="currentColor"/></svg>`;
 
 export const ICON_CIRCLE = `<svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path fill-rule="evenodd" clip-rule="evenodd" d="M8 2C4.68629 2 2 4.68629 2 8C2 11.3137 4.68629 14 8 14C11.3137 14 14 11.3137 14 8C14 4.68629 11.3137 2 8 2ZM3.5 8C3.5 5.51472 5.51472 3.5 8 3.5C10.4853 3.5 12.5 5.51472 12.5 8C12.5 10.4853 10.4853 12.5 8 12.5C5.51472 12.5 3.5 10.4853 3.5 8Z" fill="currentColor"/></svg>`;
 
-// Line icons in the style of Lucide (ISC licence), stroke="currentColor".
 const lucide = (body: string): string =>
   `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">${body}</svg>`;
 
@@ -56,11 +47,9 @@ export const ICON_SEND_BACK = lucide(`<rect x="14" y="14" width="8" height="8" r
 export const ICON_STROKE_WIDTH = lucide(`<path d="M4 6h16" stroke-width="1"/><path d="M4 12h16" stroke-width="2"/><path d="M4 18h16" stroke-width="3.5"/>`);
 export const ICON_SEARCH = lucide(`<circle cx="11" cy="11" r="7"/><path d="m20 20-4.3-4.3"/>`);
 export const ICON_REDACT = lucide(`<rect x="3" y="5" width="18" height="14" rx="2"/><rect x="7" y="10" width="10" height="4" fill="currentColor" stroke="none"/>`);
-// A square squeezed from both sides.
 export const ICON_COMPRESS = lucide(`<rect x="8" y="5" width="8" height="14" rx="1.5"/><path d="M2 12h4"/><path d="m4.5 9.5 2.5 2.5-2.5 2.5"/><path d="M22 12h-4"/><path d="m19.5 9.5-2.5 2.5 2.5 2.5"/>`);
 export const ICON_LAYER_UP = lucide(`<path d="M12 19V5"/><path d="m5 12 7-7 7 7"/>`);
 export const ICON_LAYER_DOWN = lucide(`<path d="M12 5v14"/><path d="m19 12-7 7-7-7"/>`);
-/** Full screen: four corners pointing out / in. */
 export const ICON_PRESENT = lucide(`<path d="M2 3h20"/><path d="M21 3v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V3"/><path d="m7 21 5-5 5 5"/>`);
 export const ICON_CHEVRON_LEFT = lucide(`<path d="m15 18-6-6 6-6"/>`);
 export const ICON_CHEVRON_RIGHT = lucide(`<path d="m9 18 6-6-6-6"/>`);
@@ -78,7 +67,6 @@ export const ICON_FILL = lucide(`<path d="m19 11-8-8-8.6 8.6a2 2 0 0 0 0 2.8l5.2
 export const ICON_NO_FILL = lucide(`<rect x="4" y="4" width="16" height="16" rx="2"/><path d="m5 19 14-14"/>`);
 export const ICON_SIDEBAR = lucide(`<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18"/>`);
 
-// ── Redesigned main toolbar ──────────────────────────────────────────────────
 export const ICON_SAVE = lucide(`<path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><path d="M17 21v-8H7v8M7 3v5h8"/>`);
 export const ICON_UNDO = lucide(`<path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/>`);
 export const ICON_REDO = lucide(`<path d="m15 14 5-5-5-5"/><path d="M20 9H9.5a5.5 5.5 0 0 0 0 11H13"/>`);
@@ -87,15 +75,12 @@ export const ICON_POINTER = lucide(`<path d="M5 3l14 7-6 2-2 6z"/>`);
 export const ICON_MINUS = lucide(`<path d="M5 12h14"/>`);
 export const ICON_PLUS = lucide(`<path d="M12 5v14"/><path d="M5 12h14"/>`);
 export const ICON_EXPORT = lucide(`<path d="M14 4h6v6M20 4l-8.5 8.5"/><path d="M19 14v4a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h4"/>`);
-/** An arrow pressing down on curved layers. */
 export const ICON_COMPRESS_LAYERS = lucide(`<path d="M12 2v8"/><path d="m8.5 6.5 3.5 3.5 3.5-3.5"/><path d="M3 12.5Q12 18.5 21 12.5"/><path d="M3 17Q12 21 21 17"/><path d="M3 21.5h18"/>`);
-/** Magnifier with the handle on the left. */
 export const ICON_SEARCH_MIRRORED = lucide(`<circle cx="13" cy="11" r="7"/><path d="m4 20 4.3-4.3"/>`);
 export const ICON_CHEVRON_UP = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 15 6-6 6 6"/></svg>`;
 export const ICON_CHEVRON_DOWN = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>`;
 export const ICON_X_CIRCLE = lucide(`<circle cx="12" cy="12" r="9"/><path d="m9 9 6 6M15 9l-6 6"/>`);
 
-// ── Annotate tools and their options ─────────────────────────────────────────
 export const ICON_TOOL_TEXT = lucide(`<path d="M4 7V4h16v3"/><path d="M9 20h6"/><path d="M12 4v16"/>`);
 export const ICON_TOOL_PENCIL = lucide(`<path d="M21.17 6.81a1 1 0 0 0-3.99-3.99L3.84 16.17a2 2 0 0 0-.5.83l-1.32 4.35a.5.5 0 0 0 .62.62l4.35-1.32a2 2 0 0 0 .83-.5z"/><path d="m15 5 4 4"/>`);
 export const ICON_TOOL_SHAPES = lucide(`<rect x="3" y="3" width="10" height="10" rx="1.5"/><circle cx="15.5" cy="15.5" r="5.5"/>`);
@@ -114,7 +99,6 @@ export const ICON_OPT_COLOR = lucide(`<circle cx="13.5" cy="6.5" r=".5" fill="cu
 export const ICON_CHECK = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m4 12 5 5L20 6"/></svg>`;
 export const ICON_DISCARD = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" aria-hidden="true"><path d="M5 5l14 14M19 5 5 19"/></svg>`;
 
-// ── Edit tools ────────────────────────────────────────────────────────────────
 export const ICON_EDIT_TEXT = lucide(`<path d="M4 7V4h16v3"/><path d="M9 20h6"/><path d="M12 4v16"/>`);
 export const ICON_IMAGE = lucide(`<rect x="3" y="4" width="18" height="16" rx="2"/><path d="m21 15-5-5-9 9"/><circle cx="8.5" cy="9.5" r="1.5"/>`);
 export const ICON_REDACT_TEXT = lucide(`<path d="M4 6h16"/><rect x="4" y="10" width="16" height="5" rx="1" fill="currentColor" stroke="none"/><path d="M4 19h10"/>`);
@@ -124,25 +108,21 @@ export const ICON_STAMP_CROSS = lucide(`<path d="M6 6l12 12"/><path d="M18 6 6 1
 export const ICON_SHAPE_LASSO = lucide(`<path d="M6 5c5-3 13-1 13 5s-6 9-11 8-6-10-2-13z"/>`);
 export const ICON_SHAPE_POLY = lucide(`<path d="M4 7l9-3 7 8-5 8-9-2z"/><circle cx="4" cy="7" r="1.2" fill="currentColor"/><circle cx="13" cy="4" r="1.2" fill="currentColor"/><circle cx="20" cy="12" r="1.2" fill="currentColor"/><circle cx="15" cy="20" r="1.2" fill="currentColor"/><circle cx="6" cy="18" r="1.2" fill="currentColor"/>`);
 
-// ── Crop / Straighten ─────────────────────────────────────────────────────────
 export const ICON_CROP = lucide(`<path d="M6 2v14a2 2 0 0 0 2 2h14"/><path d="M2 6h14a2 2 0 0 1 2 2v14"/>`);
 export const ICON_STRAIGHTEN = lucide(`<path d="M5 6 19 4l1 15-15 1z"/><circle cx="5" cy="6" r="2" fill="currentColor" stroke="none"/><circle cx="19" cy="4" r="2" fill="currentColor" stroke="none"/><circle cx="20" cy="19" r="2" fill="currentColor" stroke="none"/><circle cx="5" cy="20" r="2" fill="currentColor" stroke="none"/>`);
 export const ICON_FLIP_V = lucide(`<path d="M3 12h18"/><path d="M7 8l5-5 5 5H7z"/><path d="M7 16l5 5 5-5H7z"/>`);
 export const ICON_FLIP_H = lucide(`<path d="M12 3v18"/><path d="M8 7l-5 5 5 5V7z"/><path d="M16 7l5 5-5 5V7z"/>`);
 
-// ── Password ──────────────────────────────────────────────────────────────────
 export const ICON_LOCK = lucide(`<rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/>`);
 export const ICON_UNLOCK = lucide(`<rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 7.7-1.5"/>`);
 export const ICON_EYE = lucide(`<path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>`);
 export const ICON_OCR = lucide(`<path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/><path d="M7 8h8"/><path d="M7 12h10"/><path d="M7 16h6"/>`);
 export const ICON_SUN = lucide(`<circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/>`);
 
-// Update status on the welcome screen.
 export const ICON_CIRCLE_CHECK = lucide(`<circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/>`);
 export const ICON_CIRCLE_X = lucide(`<circle cx="12" cy="12" r="10"/><path d="m15 9-6 6"/><path d="m9 9 6 6"/>`);
 export const ICON_LOADER = lucide(`<path d="M21 12a9 9 0 1 1-6.219-8.56"/>`);
 
-// ── Studio panel ────────────────────────────────────────────────────────────
 export const ICON_TRASH = lucide(`<path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M10 11v6"/><path d="M14 11v6"/>`);
 export const ICON_PANEL_RIGHT = lucide(`<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M15 3v18"/>`);
 export const ICON_IMAGE_SMALL = lucide(`<rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="m21 15-5-5-9 9"/>`);

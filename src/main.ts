@@ -107,9 +107,6 @@ import { InfoPanel } from "./info-panel";
 import { tempDir, basename } from "@tauri-apps/api/path";
 import { ask } from "@tauri-apps/plugin-dialog";
 
-// ── Zoom levels ───────────────────────────────────────────────────────────────
-
-// Zoom levels in internal (pdf.js) scale.  Each entry = user-visible fraction × CSS_UNITS.
 const ZOOM_LEVELS = [0.1, 0.15, 0.2, 0.25, 0.33, 0.5, 0.67, 0.75, 0.9, 1.0, 1.1, 1.25, 1.5, 1.75, 2.0, 2.5, 3.0, 4.0, 5.0, 6.0, 8.0]
   .map(z => Math.round(z * CSS_UNITS * 1000) / 1000);
 
@@ -121,8 +118,6 @@ function snapZoom(current: number, dir: 1 | -1): number {
   }
 }
 
-// ── State ─────────────────────────────────────────────────────────────────────
-
 const appWindow = getCurrentWindow();
 let unlistenClose: (() => void) | null = null;
 
@@ -131,29 +126,19 @@ const formValues = new Map<string, string>();
 let guardRegistering = false;
 let fitMode: "none" | "fit-width" | "fit-height" | "fit-page" = "none";
 let pendingSignature: string | null = null;
-/** The pen strokes of the pending signature, when it was drawn. */
 let pendingSignatureVector: InkVector | undefined;
 let editingTextAnn:      TextAnnotation | null = null;
 let editingShapeAnn:     ShapeAnnotation | null = null;
 let editingHighlightAnn: HighlightAnnotation | null = null;
-/** The selected drawn signature, whose ink the Sign options change. */
 let editingSignatureAnn: SignatureAnnotation | null = null;
 
-// ── Instances ─────────────────────────────────────────────────────────────────
-
 const viewer = new PdfViewer();
-// Scans and photos: their words can be selected and copied, read in the
-// background by the OCR built into the system.
 viewer.liveText.setRecognizer((data) => ocrImage(data, ocrLanguage()));
-/** The active tool, its style presets and the one selected annotation. */
 const tools = new ToolSelection();
 const toolState = tools.state;
 const toolbar   = new Toolbar();
-/** The documents open in this window. Only the active one is loaded. */
 const docTabs = new DocTabs<ParkedDoc>();
-/** The file the viewer shows for the active tab. */
 let shownPath: string | null = null;
-/** A tab is being parked or brought back. */
 let tabSwitch: Promise<void> | null = null;
 
 const tabStrip = new TabStrip(document.getElementById("menubar-row")!, toolbar.titleElement, {
@@ -165,16 +150,13 @@ const tabStrip = new TabStrip(document.getElementById("menubar-row")!, toolbar.t
   detach: (id, x, y) => void detachTab(id, x, y),
 });
 
-/** Annotations and undo / redo. */
 const annotations: AnnotationSession = new AnnotationSession({
   gateEnabled: () => false,
   isDirty: (): boolean => session.isDirty,
 });
 annotations.onChange(() => { setDirty(true); pageHistory.clearRedo(); });
 annotations.onPendingChange((pending) => toolbar.setPending(pending));
-/** Page edits of the open document, undone once its annotation changes are. */
 const pageHistory = new PageHistory();
-/** A page edit or its undo is being applied. */
 let pageEditBusy = false;
 const compressModal      = new CompressModal();
 const exportModal        = new ExportModal();
@@ -214,8 +196,6 @@ const adjustView         = new AdjustView(appEl, applyAdjust, () => {
 });
 document.getElementById("viewer-area")!.after(adjustView.el);
 
-// ── Studio panel: tool options and the list of annotations ──────────────────
-
 const studio = new StudioPanel(toolbar.toolOptions, {
   list: () => annotations.all(),
   selected: () => tools.selected,
@@ -223,7 +203,6 @@ const studio = new StudioPanel(toolbar.toolOptions, {
   remove: (ann) => removeAnnotation(ann),
 });
 document.getElementById("viewer-area")!.append(studio.el);
-// The common fonts of this computer, offered for text (embedded when saved).
 void listSystemFonts().then((names) => toolbar.setSystemFonts(names ?? [])).catch(() => {});
 toolbar.onToolOptions((title, mode) => {
   studio.setOptions(title);
@@ -241,12 +220,10 @@ tools.onSelect((ann) => {
   }
 });
 
-/** Shows the page of `ann` and selects it, ready to move or restyle. */
 function pickAnnotation(ann: Annotation): void {
   if (!annotations.has(ann)) return;
   if (toolState.tool !== "select") toolbar.clearActiveTool();
   if (ann.page !== viewer.currentPage) viewer.goToPage(ann.page, "instant");
-  // The page may still be drawing: try again for a second at most.
   let tries = 60;
   const attempt = (): void => {
     const pv = viewer.pageViews.find((p) => p.pageNum === ann.page);
@@ -259,7 +236,6 @@ function pickAnnotation(ann: Annotation): void {
   attempt();
 }
 
-/** The trash of a row in the studio panel. */
 function removeAnnotation(ann: Annotation): void {
   if (!annotations.has(ann)) return;
   if (tools.selected === ann) tools.select(null);
@@ -278,7 +254,6 @@ async function newTempPath(suffix: string): Promise<string> {
   return uniqueTempName(dir, tag, suffix);
 }
 
-/** The open document: paths, dirty flag and the edits not yet written to disk. */
 const session = new DocumentSession(
   {
     annotations: () => annotations.all(),
@@ -297,7 +272,6 @@ const session = new DocumentSession(
 const messages = createMessages(() => settingsModal.getSettings().language);
 const { msg, errText } = messages;
 
-/** Password rules as the user meets them (read-only while protected, the padlock). */
 const protection = new Protection({
   session,
   toolbar,
@@ -307,7 +281,6 @@ const protection = new Protection({
   setDirty: (dirty) => setDirty(dirty),
 });
 
-/** Toasts and warning questions, for the dialog flows. */
 const feedback: Feedback = {
   notify: (text, isError) => showToast(text, isError),
   ask: (text, title) => ask(text, title === undefined ? { kind: "warning" } : { title, kind: "warning" }),
@@ -332,15 +305,6 @@ const exportFlow = setUpExport({
   backend: tauriBackend,
 });
 
-/**
- * The room the pages get in the viewer, CSS px, whether its scroll bars show
- * right now or not. Fitting to the room left by the scroll bars of the
- * moment looped: the fitted page made a scroll bar appear, which narrowed
- * the room, which made the page smaller, which made the bar go away, and so
- * on, the page flickering between two sizes. So the vertical bar keeps its
- * place even when hidden (scrollbar-gutter in app.css) and the horizontal
- * one is counted only where it is always there, pages side by side.
- */
 function pageRoom(): { width: number; height: number } {
   const scroll = document.getElementById("viewer-scroll")!;
   const horizontal = viewer.scrollMode === "horizontal";
@@ -358,18 +322,15 @@ async function applyFitMode(): Promise<void> {
   if (fitMode === "fit-width") {
     scale = (room.width - VIEWER_PADDING) / page.width;
   } else if (fitMode === "fit-page") {
-    // The whole page, portrait or landscape: whichever side is tighter.
     scale = pageFitScale(page, room);
   } else {
     scale = (room.height - VIEWER_PADDING) / page.height;
   }
-  // Same zoom as now (the window only grew a scroll bar, say): nothing to redraw.
   if (Math.abs(viewer.clampScale(scale) - viewer.scale) > 1e-6) await viewer.setScale(scale);
   else viewer.reflow();
   toolbar.updateZoom(viewer.scale);
 }
 
-/** Applies the zoom chosen in Settings (on open, Ctrl+0 and the magnifier button). */
 async function applyDefaultZoom(): Promise<void> {
   if (!viewer.isLoaded()) return;
   const pref = settingsModal.getSettings().defaultZoom;
@@ -386,16 +347,13 @@ async function applyDefaultZoom(): Promise<void> {
   toolbar.updateZoom(viewer.scale);
 }
 
-/** The first page's size in points, as shown (view rotation applied). */
 function firstPageShown(): { width: number; height: number } {
   const w = viewer.pageWidthPt, h = viewer.pageHeightPt;
   return viewer.rotation % 180 === 0 ? { width: w, height: h } : { width: h, height: w };
 }
 
-/** False while a window opened only to print: it closes again at once. */
 let autoFitWindow = true;
 
-/** Width of the viewer's scroll bars (they are styled, see app.css). */
 function scrollbarSize(): number {
   const probe = document.createElement("div");
   probe.style.cssText = "position:absolute;visibility:hidden;width:100px;height:100px;overflow:scroll;";
@@ -405,28 +363,17 @@ function scrollbarSize(): number {
   return size;
 }
 
-/**
- * Gives the window the shape of one page of the document just opened,
- * portrait or landscape (see window-fit.ts), and frees its proportions,
- * which stay locked only on the launcher. A maximized or full-screen
- * window keeps its size. Returns false when the zoom from Settings does not
- * show a whole page in the window as it ends up (too big for the screen,
- * or a window that keeps its size): the page is fitted instead.
- */
 async function fitWindowToDocument(): Promise<boolean> {
   if (!("__TAURI_INTERNALS__" in window)) return true;
   const pref = parseFloat(settingsModal.getSettings().defaultZoom);
   try {
     await setLauncherRatioLock(false);
     if (!autoFitWindow) return true;
-    // Another tab's document already gave the window its size: it stays.
     if (fullscreen || docTabs.count > 1 || await appWindow.isMaximized()) return preferredZoomShowsPage(pref);
     const monitor = await currentMonitor();
     if (!monitor) return preferredZoomShowsPage(pref);
     const sf = monitor.scaleFactor || 1;
     const scroll = document.getElementById("viewer-scroll")!;
-    // The vertical scroll bar's place is always kept, the horizontal one is
-    // counted when pages sit side by side (see pageRoom).
     const bar = scrollbarSize();
     const horizontal = viewer.scrollMode === "horizontal";
     const plan = planWindowFit({
@@ -454,8 +401,6 @@ async function fitWindowToDocument(): Promise<boolean> {
       await appWindow.setPosition(new PhysicalPosition(at.x, at.y));
       await windowSizeSettles(target);
     }
-    // Judged on the window as it really ended up, not as planned: Windows
-    // may give it another size (a snapped window, a size it refuses).
     return plan.preferredFits && preferredZoomShowsPage(pref);
   } catch (err) {
     console.warn("fit window:", err);
@@ -463,19 +408,13 @@ async function fitWindowToDocument(): Promise<boolean> {
   }
 }
 
-/**
- * True when the zoom from Settings (`pref`, in percent) shows the whole
- * first page in the viewer as it is now, or when Settings asks for a fit.
- */
 function preferredZoomShowsPage(pref: number): boolean {
   if (!Number.isFinite(pref)) return true;
   const room = pageRoom();
-  // A pixel or two of slack: the window's size is rounded.
   const biggest = pageFitScale(firstPageShown(), { width: room.width + 2, height: room.height + 2 });
   return pref / 100 * CSS_UNITS <= biggest + 1e-6;
 }
 
-/** Waits (half a second at most) until the page sees the window's new size. */
 async function windowSizeSettles(target: { width: number; height: number }): Promise<void> {
   for (let i = 0; i < 30; i++) {
     if (Math.abs(window.innerWidth - target.width) <= 2 && Math.abs(window.innerHeight - target.height) <= 2) break;
@@ -484,7 +423,6 @@ async function windowSizeSettles(target: { width: number; height: number }): Pro
   await new Promise((r) => requestAnimationFrame(() => r(null)));
 }
 
-/** A document was just opened: the window fits one page, then the zoom from Settings. */
 async function showOpenedDocument(): Promise<void> {
   if (await fitWindowToDocument()) {
     await applyDefaultZoom();
@@ -501,15 +439,12 @@ viewer.onResizeCb = async () => {
 };
 
 function onFormChange(name: string, val: string): void {
-  // Form fields of a protected file are disabled (body.read-only); this is the backstop.
   if (refuseIfProtected()) return;
   formValues.set(name, val);
   setDirty(true);
 }
 
 viewer.setup(tools, annotations, formValues, onFormChange);
-
-// ── Per-page overlay event wiring ─────────────────────────────────────────────
 
 function wirePageOverlay(pv: PdfPageView): void {
   const ov = pv.overlay;
@@ -574,14 +509,10 @@ viewer.onLayoutChanged((pageViews) => {
 
 viewer.onRenderActivity((busy) => pageSidebar.setViewerBusy(busy));
 
-// ── Focused-page tracking → toolbar page indicator ────────────────────────────
-
 document.getElementById("viewer-scroll")!.addEventListener("focused-page-changed", (e: Event) => {
   const { page } = (e as CustomEvent<{ page: number }>).detail;
   pageSidebar.setCurrentPage(page);
 });
-
-// ── Document info ─────────────────────────────────────────────────────────────
 
 const infoPanel = new InfoPanel(document.getElementById("app")!);
 infoPanel.onClose = () => toolbar.setInfoOpen(false);
@@ -595,8 +526,6 @@ async function showInfo(): Promise<void> {
   await infoPanel.show(doc, name, getTranslations(s.language), s.language);
 }
 
-// ── Title bar (native decorations are off) ──────────────────────────────────
-
 mountWindowControls(document.getElementById("menubar-row")!, () => {
   const t = getTranslations(settingsModal.getSettings().language);
   return {
@@ -606,8 +535,6 @@ mountWindowControls(document.getElementById("menubar-row")!, () => {
     close:    t.wcClose    ?? "Close",
   };
 });
-
-// ── Translations ──────────────────────────────────────────────────────────────
 
 {
   const t = getTranslations(settingsModal.getSettings().language);
@@ -624,7 +551,6 @@ mountWindowControls(document.getElementById("menubar-row")!, () => {
   tabStrip.applyTranslations({ close: tabCloseLabel(t), dragNew: t.sbDragOut, dragMerge: t.tabDragMerge });
   applyTranslationsToDOM(t);
 }
-// Page brightness button in the toolbar, kept in step with Settings.
 toolbar.brightness.value = settingsModal.getSettings().pageBrightness;
 toolbar.brightness.onInput((v) => applyPageBrightness(v));
 toolbar.brightness.onCommit((v) => settingsModal.setPageBrightness(v));
@@ -646,22 +572,13 @@ settingsModal.onChange(s => {
   applyTranslationsToDOM(t);
 });
 
-// ── Startup handling ──────────────────────────────────────────────────────────
-
 (async () => {
   try {
-    // macOS: documents opened from the Finder while the app runs. The first
-    // one replaces the launcher, the others (or all, when a document is
-    // already open) get windows of their own.
     await appWindow.listen<string[]>("open-files", async ({ payload }) => {
       for (const p of payload) await openPath(p);
     });
   } catch {
-    // Not running in Tauri (browser preview)
   }
-  // The window shows nothing until it is known whether a document opens
-  // (index.html starts #app as "booting"): the launcher appears only when
-  // there is none, and a document shows once it fits its window.
   const app = document.getElementById("app")!;
   const reveal = () => app.classList.remove("booting");
   try {
@@ -670,43 +587,36 @@ settingsModal.onChange(s => {
       reveal();
     } else {
       setWelcomeVisible(false);
-      // A slow document: the viewer shows while it loads.
       const slow = setTimeout(reveal, 1500);
       try {
         await openStartupFile(startup);
       } finally {
         clearTimeout(slow);
-        // The document could not be opened: the launcher, not an empty viewer.
         if (!session.isOpen) setWelcomeVisible(true);
         reveal();
       }
     }
   } catch {
-    // Not running in Tauri (browser preview) — skip
     reveal();
   }
 })();
 
-/** Opens the document the app was started with (command line, Finder). */
 async function openStartupFile(startup: StartupArgs): Promise<void> {
   const file = startup.filePath!;
   if (startup.shouldPrint) {
     autoFitWindow = false;
     document.getElementById("toolbar-container")!.style.display = "none";
     await loadPdf(file);
-    document.getElementById("app")!.classList.remove("booting"); // the page shows while it prints
+    document.getElementById("app")!.classList.remove("booting");
     const all = Array.from({ length: viewer.pageCount }, (_, i) => i + 1);
     await printPages(await renderForPrint(all));
     await appWindow.close();
   } else if (openKind(file) === "pictures") {
     await openPictures([file]);
   } else {
-    // Pages or a tab dragged out of another window, or a file to open.
     await openTransferred(startup);
   }
 }
-
-// ── Helpers ───────────────────────────────────────────────────────────────────
 
 function showToast(msg: string, isError = false): void {
   const toast = document.getElementById("toast")!;
@@ -718,16 +628,12 @@ function showToast(msg: string, isError = false): void {
 function setDirty(val: boolean): void {
   session.markDirty(val);
   toolbar.setDocTitle(session.displayName, val);
-  // The first document opened in the window gets its tab here.
   if (session.isOpen && !docTabs.active) docTabs.add();
   syncActiveTab();
   if (docTabs.anyDirty) { void registerCloseGuard(); }
   else                  { unregisterCloseGuard(); }
 }
 
-// ── Changes waiting for ✓ / ✕ ───────────────────────────────────────────────
-
-/** The selected annotation objects were replaced: drop the stale ones. */
 function dropStaleSelection(): void {
   editingTextAnn = null;
   editingShapeAnn = null;
@@ -737,10 +643,6 @@ function dropStaleSelection(): void {
   toolbar.hideHighlightStyles();
 }
 
-/**
- * Ctrl+Z / Ctrl+Y: annotation changes first; once there are none left, the
- * page edits (delete, move, rotate, insert, crop, straighten) before them.
- */
 async function undoRedo(redo: boolean): Promise<void> {
   if (redo ? annotations.redo() : annotations.undo()) {
     dropStaleSelection();
@@ -768,7 +670,6 @@ async function undoRedo(redo: boolean): Promise<void> {
   }
 }
 
-/** ✕: the pending changes are thrown away. */
 function discardDraft(): void {
   const dirty = annotations.discard();
   if (dirty === null) return;
@@ -778,20 +679,15 @@ function discardDraft(): void {
 }
 
 let closeGuardBusy = false;
-/** "Save before closing?" was answered Yes and the save is running. */
 let savingBeforeLeaving = false;
 
 async function registerCloseGuard(): Promise<void> {
-  // guardRegistering is a synchronous flag that prevents a second async call
-  // from registering a second listener before the first await resolves.
   if (unlistenClose || guardRegistering) return;
   guardRegistering = true;
   try {
     unlistenClose = await appWindow.onCloseRequested(async (event) => {
       if (!docTabs.anyDirty) { return; }
-      // Saving before closing: wait for it.
       if (savingBeforeLeaving) { event.preventDefault(); return; }
-      // If the dialog is already open (e.g. user clicked close twice), force-close.
       if (closeGuardBusy) {
         setDirty(false);
         await appWindow.destroy();
@@ -819,7 +715,6 @@ function unregisterCloseGuard(): void {
   unlistenClose = null;
 }
 
-/** Re-sync annotation overlays for all currently-rendered pages. */
 function syncAllPageOverlays(): void {
   for (const pv of viewer.pageViews) {
     if (!pv.rendered || !pv.viewport) continue;
@@ -832,10 +727,6 @@ function syncAllPageOverlays(): void {
   }
 }
 
-/**
- * "Save the changes before …?" Yes saves and goes on once the save went
- * through, No goes on without saving, Cancel stays. True when it may go on.
- */
 async function settleUnsaved(key: "msgSaveBeforeClose" | "msgSaveBeforeOpen"): Promise<boolean> {
   if (!session.isDirty) return true;
   const answer = await saveChangesDialog({
@@ -854,30 +745,14 @@ async function settleUnsaved(key: "msgSaveBeforeClose" | "msgSaveBeforeOpen"): P
   return !session.isDirty;
 }
 
-// ── Load / Save ───────────────────────────────────────────────────────────────
-
-/**
- * Shows the protection state: the padlock is closed while the file has (or
- * will be saved with) a password, and a protected file is read-only.
- */
 function syncProtection(): void {
   protection.sync();
 }
 
-/**
- * Refuses an action on a protected document, saying how to unlock it.
- * Returns true when the action must stop.
- */
 function refuseIfProtected(): boolean {
   return protection.refuse();
 }
 
-/**
- * Opens a password-protected file read-only: it is shown from an
- * unencrypted temp copy, and nothing can change or copy it until its
- * password is removed. `password` is tried first when known (after saving
- * a protected file).
- */
 async function openProtected(fp: string, password?: string | null): Promise<void> {
   const name = fileNameOf(fp);
   let plain: string | null = null;
@@ -914,18 +789,13 @@ async function openProtected(fp: string, password?: string | null): Promise<void
   }
 }
 
-/** Fills the thumbnails sidebar from the document the viewer just opened. */
 function showThumbnails(reload = false): void {
   if (!viewer.document) return;
   pageSidebar.load(viewer.document, viewer.pageDimensions, viewer.rotation);
-  // After an edit the panel stays where the user left it.
   pageSidebar.setCurrentPage(viewer.currentPage, !reload);
-  // The text changed: search again (without jumping) if a term is entered.
   docSearch.reset(viewer.document);
   void runSearch(toolbar.search.query, false);
 }
-
-// ── Search in the document ───────────────────────────────────────────────────
 
 let searchMatches: SearchMatch[] = [];
 let searchIndex = -1;
@@ -934,7 +804,6 @@ function searchText(key: "sbSearchNone" | "sbSearching", fallback: string): stri
   return getTranslations(settingsModal.getSettings().language)[key] ?? fallback;
 }
 
-/** Finds `query` in the whole document and highlights it; `jump` shows the first match from the current page on. */
 async function runSearch(query: string, jump = true): Promise<void> {
   if (!query) {
     docSearch.reset(viewer.document);
@@ -948,7 +817,7 @@ async function runSearch(query: string, jump = true): Promise<void> {
   toolbar.search.setStatus(searchText("sbSearching", "Searching…"));
   const found = await docSearch.find(query, (done, total) =>
     toolbar.search.setStatus(`${Math.round((done / total) * 100)}%`));
-  if (!found) return; // superseded by a newer search
+  if (!found) return;
   searchMatches = found;
   const hits = new Map<number, number>();
   for (const m of found) hits.set(m.page, (hits.get(m.page) ?? 0) + 1);
@@ -983,20 +852,13 @@ function setWelcomeVisible(visible: boolean): void {
   if (el) el.classList.toggle("hidden", !visible);
 }
 
-/**
- * Loads `path` into the viewer with its saved annotations. Returns the
- * working copy actually displayed, or null when `path` itself is shown.
- */
 async function showInViewer(path: string, reload = false): Promise<string | null> {
   annotations.clear();
   formValues.clear();
 
-  // Read annotations BEFORE viewer.load() so IntersectionObserver finds them populated
   const saved = await readAnnotations(path);
   annotations.load(saved);
 
-  // A file with saved annotations is shown from a copy whose burned layer
-  // is stripped, so the overlay can draw the annotations editable.
   let workingCopy: string | null = null;
   if (saved.length > 0) {
     workingCopy = await newTempPath(`display-${await basename(path)}`);
@@ -1016,7 +878,6 @@ async function showInViewer(path: string, reload = false): Promise<string | null
 
 async function loadPdf(path: string, password?: string | null): Promise<void> {
   session.forgetName();
-  // Changes still waiting for ✓ / ✕ are kept as they are.
   annotations.apply();
   if (password) { await openProtected(path, password); return; }
   try {
@@ -1028,7 +889,6 @@ async function loadPdf(path: string, password?: string | null): Promise<void> {
     await showOpenedDocument();
     if (infoPanel.isOpen) await showInfo();
   } catch (err: unknown) {
-    // pdf.js's own error (not a command's): it has no code.
     const why = String(err);
     if (why.includes("PasswordException") || why.includes("password")) {
       await openProtected(path);
@@ -1044,10 +904,6 @@ async function openFile(): Promise<void> {
   await openPath(path);
 }
 
-/**
- * Opens `path` in a new tab: a PDF as it is, a picture as a new one-page
- * PDF. A PDF already open in a tab is shown there instead.
- */
 async function openPath(path: string): Promise<void> {
   if (openKind(path) === "pictures") { await openPictures([path]); return; }
   const open = tabShowing(path);
@@ -1055,15 +911,10 @@ async function openPath(path: string): Promise<void> {
   await inNewTab(() => loadPdf(path));
 }
 
-/** Opens the pictures in a new tab, as a new PDF (see `picturesToTab`). */
 async function openPictures(paths: string[]): Promise<void> {
   await inNewTab(() => picturesToTab(paths));
 }
 
-/**
- * Opens the pictures as a new PDF, one page each. It was never saved: the
- * first Save asks where to put it, suggesting the pictures' folder.
- */
 async function picturesToTab(paths: string[]): Promise<void> {
   const { name, suggested } = picturesDocument(paths);
   let pdf: string;
@@ -1080,15 +931,11 @@ async function picturesToTab(paths: string[]): Promise<void> {
   }
 }
 
-// ── Tabs ──────────────────────────────────────────────────────────────────────
-
-/** What a tab in the background needs to come back as it was left. */
 interface ParkedDoc {
   session: SessionSnapshot;
   annotations: AnnotationSnapshot;
   history: { undo: DocState[]; redo: DocState[] };
   forms: [string, string][];
-  /** The file the viewer showed (a working copy, or the file itself). */
   shownPath: string;
   rotation: number;
   scale: number;
@@ -1098,7 +945,6 @@ interface ParkedDoc {
   scrollLeft: number;
 }
 
-/** "Close tab (Ctrl+W)", with the macOS shortcut there. */
 function tabCloseLabel(t: { tabClose?: string }): string | undefined {
   return t.tabClose && (isMac ? macShortcuts(t.tabClose) : t.tabClose);
 }
@@ -1107,7 +953,6 @@ function renderTabs(): void {
   tabStrip.render(docTabs.tabs, docTabs.active?.id ?? null);
 }
 
-/** The active tab shows the open document's name and dirty flag. */
 function syncActiveTab(): void {
   const tab = docTabs.active;
   if (tab && session.isOpen) {
@@ -1117,7 +962,6 @@ function syncActiveTab(): void {
   renderTabs();
 }
 
-/** The tab showing the file at `path`, if one does. */
 function tabShowing(path: string): DocTab<ParkedDoc> | null {
   const same = (p: string | null | undefined) => !!p && samePath(p, path);
   return docTabs.tabs.find((t) => t.parked
@@ -1132,16 +976,10 @@ function samePath(a: string, b: string): boolean {
     : norm(a) === norm(b);
 }
 
-/** Waits for a tab switch in progress. */
 async function tabsSettled(): Promise<void> {
   while (tabSwitch) await tabSwitch;
 }
 
-/**
- * Puts the active document in the background: its state goes into its tab
- * and the viewer is free for another one. Changes waiting for ✓ / ✕ are
- * applied, as when another file was opened.
- */
 function parkActive(): void {
   const tab = docTabs.active;
   if (!tab || !session.isOpen || !shownPath || !viewer.isLoaded()) return;
@@ -1165,7 +1003,6 @@ function parkActive(): void {
   };
 }
 
-/** Brings a parked tab back into the viewer, as it was left. */
 async function showTab(tab: DocTab<ParkedDoc>): Promise<void> {
   const p = tab.parked;
   docTabs.activate(tab.id);
@@ -1181,7 +1018,6 @@ async function showTab(tab: DocTab<ParkedDoc>): Promise<void> {
   try {
     await viewer.load(p.shownPath, p.rotation);
   } catch (err) {
-    // The file went away meanwhile (a temp folder cleaned up): the tab goes too.
     showToast(msg("msgOpenFailed", { err: String(err) }), true);
     const next = docTabs.remove(tab.id);
     if (next) await showTab(next);
@@ -1203,7 +1039,6 @@ async function showTab(tab: DocTab<ParkedDoc>): Promise<void> {
   if (infoPanel.isOpen) await showInfo();
 }
 
-/** Shows tab `id`, parking the active one. */
 async function switchTab(id: number): Promise<void> {
   await tabsSettled();
   const tab = docTabs.get(id);
@@ -1216,11 +1051,6 @@ async function switchTab(id: number): Promise<void> {
   try { await run; } finally { tabSwitch = null; renderTabs(); }
 }
 
-/**
- * Opens a document in a new tab: `open` loads it into the viewer, the
- * active document parked first. When nothing opens (an error, a password
- * not given), the tab goes away and the one before comes back.
- */
 async function inNewTab(open: () => Promise<void>): Promise<void> {
   await tabsSettled();
   if (!toolbar.allowed()) return;
@@ -1240,14 +1070,12 @@ async function inNewTab(open: () => Promise<void>): Promise<void> {
   }
 }
 
-/** Closes tab `id`, asking first when it has unsaved changes. */
 async function closeTab(id: number): Promise<void> {
   await tabsSettled();
   const tab = docTabs.get(id);
   if (!tab) return;
   if (tab !== docTabs.active) {
     if (!tab.dirty) { docTabs.remove(id); renderTabs(); setDirty(session.isDirty); return; }
-    // Shown first, so the question is about what the user sees.
     await switchTab(id);
     if (docTabs.active !== tab) return;
   }
@@ -1255,7 +1083,6 @@ async function closeTab(id: number): Promise<void> {
   await dropActiveTab();
 }
 
-/** The active tab goes away: the next one shows, or the launcher. */
 async function dropActiveTab(): Promise<void> {
   const tab = docTabs.active;
   if (!tab) return;
@@ -1264,7 +1091,6 @@ async function dropActiveTab(): Promise<void> {
   else await closeDocument();
 }
 
-/** No document left: back to the launcher, the viewer emptied. */
 async function closeDocument(): Promise<void> {
   annotations.clear();
   pageHistory.clear();
@@ -1285,10 +1111,6 @@ async function closeDocument(): Promise<void> {
   setDirty(false);
 }
 
-/**
- * Closing the window: each tab with unsaved changes is shown in turn and
- * asked about. False when the user cancelled.
- */
 async function settleAllTabs(): Promise<boolean> {
   await tabsSettled();
   for (const tab of [...docTabs.tabs]) {
@@ -1298,17 +1120,11 @@ async function settleAllTabs(): Promise<boolean> {
       if (docTabs.active !== tab) return false;
     }
     if (!await settleUnsaved("msgSaveBeforeClose")) return false;
-    // "Don't save": nothing to ask about this one any more.
     tab.dirty = false;
   }
   return true;
 }
 
-/**
- * Tab `id` was dropped outside the title bar at the screen point (`x`,
- * `y`): it moves to the EzReader window there, or to a new window. Its
- * unsaved changes go with it, in a temp copy that saves back to its file.
- */
 async function detachTab(id: number, x: number, y: number): Promise<void> {
   await tabsSettled();
   const tab = docTabs.get(id);
@@ -1326,7 +1142,6 @@ async function detachTab(id: number, x: number, y: number): Promise<void> {
     return;
   }
   if (result === "stayed") return;
-  // The document lives in the other window now: forgotten here, no question.
   session.markDirty(false);
   tab.dirty = false;
   if (docTabs.count > 1) {
@@ -1337,13 +1152,11 @@ async function detachTab(id: number, x: number, y: number): Promise<void> {
   }
 }
 
-/** The active document, as another window opens it (see `openTransferred`). */
 async function transferOfActive(): Promise<{ args: StartupArgs; name: string | null }> {
   const page = viewer.currentPage;
   annotations.apply();
   const base = { shouldPrint: false, page };
   if (session.isProtected) {
-    // Read-only, so nothing pending: the file itself, and its password.
     return { args: { ...base, filePath: session.sourcePath, password: session.filePassword }, name: null };
   }
   const unsaved = session.isUnsavedCopy;
@@ -1353,15 +1166,10 @@ async function transferOfActive(): Promise<{ args: StartupArgs; name: string | n
   const file = await session.materialize();
   return {
     args: { ...base, filePath: file, unsaved, dirty: session.isDirty, savePath: unsaved ? null : session.saveTarget },
-    // A temp copy: the other window shows it under its own name.
     name: unsaved ? session.displayName : null,
   };
 }
 
-/**
- * Opens what another window handed over in a new tab: a file, pages
- * dragged out (a copy never saved), or a tab with its pending edits.
- */
 async function openTransferred(t: StartupArgs): Promise<void> {
   const file = t.filePath;
   if (!file) return;
@@ -1387,7 +1195,6 @@ void (async () => {
     });
     await appWindow.listen<boolean>("tab-drag-hover", ({ payload }) => tabStrip.setDropTarget(payload));
   } catch {
-    // Not running in Tauri (browser preview)
   }
 })();
 
@@ -1395,7 +1202,6 @@ async function saveFile(forceDialog: boolean): Promise<void> {
   const current = session.saveTarget;
   if (!current || refuseIfProtected()) return;
   let target = current;
-  // A plain Save also applies the name typed in the title bar.
   const { dialog, renameTo } = session.planSave(forceDialog);
   if (dialog !== null) {
     const picked = await savePdfDialog(dialog);
@@ -1422,10 +1228,9 @@ async function saveFile(forceDialog: boolean): Promise<void> {
         showToast(code === "exists" ? msg("msgRenameExists")
           : code === "invalid-name" ? msg("msgRenameInvalid")
           : msg("msgRenameFailed", { err: errText(err) }), true);
-        toolbar.flashSave("ok"); // the content was saved, only the rename failed
+        toolbar.flashSave("ok");
         return;
       }
-      // Show the file under its new name (pdf.js reads it from its path).
       const password = session.filePassword;
       session.saved(renameTo);
       await loadPdf(renameTo, password);
@@ -1436,13 +1241,10 @@ async function saveFile(forceDialog: boolean): Promise<void> {
     }
     setDirty(false);
     if (redacting) {
-      // Show the saved file: the redacted pages are now images and the
-      // redaction boxes are gone from the editable annotations.
       const page = viewer.currentPage;
       await loadPdf(target, session.filePassword);
       viewer.goToPage(page);
     }
-    // Saved with a new password: the file is now protected, so read-only.
     syncProtection();
     showToast(msg(session.isProtected ? "msgSavedProtected" : "msgSaved"));
     toolbar.flashSave("ok");
@@ -1454,7 +1256,6 @@ async function saveFile(forceDialog: boolean): Promise<void> {
   }
 }
 
-/** Name of the open document without its extension (for exported files). */
 function docStem(): string {
   return exportFlow.docStem();
 }
@@ -1463,12 +1264,9 @@ function openExport(tab: "pdf" | "images"): void {
   exportFlow.open(tab);
 }
 
-/** The padlock (see protection.ts). */
 async function editPassword(): Promise<void> {
   await protection.edit();
 }
-
-// ── Hand tool: drag the pages around ─────────────────────────────────────────
 
 const viewerScroll = document.getElementById("viewer-scroll")!;
 let panStart: { x: number; y: number; left: number; top: number; id: number } | null = null;
@@ -1504,42 +1302,24 @@ const endPan = (e: PointerEvent) => {
 viewerScroll.addEventListener("pointerup", endPan);
 viewerScroll.addEventListener("pointercancel", endPan);
 
-/**
- * Rasterises pages for printing exactly as the user sees them, including
- * annotations, form values and rotation that are not saved yet.
- */
 async function renderForPrint(pages: number[]): Promise<string[]> {
   if (!session.hasPendingEdits()) {
-    // What the viewer shows (its document plus view rotation) is exactly the
-    // base file, so render from it directly. This also works for
-    // password-protected files, which the viewer already has open.
     return viewer.renderPagesForPrint(pages, 200);
   }
   return viewer.renderFileForPrint(await session.materialize(), pages, 200);
 }
 
-
-// ── Page panel (thumbnails sidebar) ──────────────────────────────────────────
-
-/**
- * Replaces the open document's pages with `slots` and shows the result.
- * Returns false when it failed (a toast says why).
- */
-/** `keepPage` is the page to show afterwards; null stays exactly where the view is. */
 async function applyPageLayout({ slots, keepPage, select }: PagePlan): Promise<boolean> {
   const source = session.sourcePath;
   if (!source) return false;
   try {
-    // Burn pending edits first (no-op when there are none: the viewed file is
-    // used as is), then apply the new page layout as an incremental update.
     const input   = await session.materialize();
     const before  = { path: input, page: viewer.currentPage, dirty: session.isDirty };
     const tmpPath = await newTempPath(`pages-${await basename(source)}`);
     await rearrangePages(input, tmpPath, slots);
-    // Still the same document: Save keeps writing to the source / Save As target.
     const workingCopy = await showInViewer(tmpPath, true);
     session.replacedWorkingCopy(workingCopy ?? tmpPath);
-    pageHistory.record(before); // Ctrl+Z shows `input` again
+    pageHistory.record(before);
     setDirty(true);
     if (keepPage !== null && keepPage !== viewer.currentPage) viewer.goToPage(keepPage, "instant");
     pageSidebar.setSelection(select);
@@ -1550,7 +1330,6 @@ async function applyPageLayout({ slots, keepPage, select }: PagePlan): Promise<b
   }
 }
 
-/** Runs a page edit from the panel, with the panel locked meanwhile. */
 async function editPages(plan: PagePlan): Promise<boolean> {
   if (!session.isOpen || !viewer.isLoaded() || pageEditBusy) return false;
   if (refuseIfProtected() || !toolbar.allowed()) return false;
@@ -1562,20 +1341,15 @@ async function editPages(plan: PagePlan): Promise<boolean> {
   }
 }
 
-/** Inserts `inserted` after page `after` (0 = at the start). */
 async function insertSlots(after: number, inserted: PageSlot[]): Promise<void> {
   if (await editPages(planInsert(viewer.pageCount, after, inserted))) showToast(msg("msgPagesUpdated"));
 }
 
 pageSidebar.onSelectionChange((pages) => toolbar.setPageSelection(pages.length));
 
-// ── Crop / Straighten ────────────────────────────────────────────────────────
-
-/** Opens Crop / Straighten on the pages selected in the side panel. */
 function openAdjust(kind: "crop" | "straighten"): void {
   const doc = viewer.document;
   if (!doc || adjustView.isOpen) return;
-  // The checked pages, or else the page shown.
   const pages = pageSidebar.selection.length > 0 ? pageSidebar.selection : [viewer.currentPage];
   cancelSignaturePlacement();
   toolbar.search.close();
@@ -1583,12 +1357,6 @@ function openAdjust(kind: "crop" | "straighten"): void {
   adjustView.open(doc, pages, kind, viewer.rotation);
 }
 
-/**
- * ✓ of Crop / Straighten. Crops and flips stay vector (CropBox and a
- * mirroring matrix); straightened pages become pictures of the page, with
- * their text laid back invisibly (still searchable and selectable) and their
- * links and fields moved with the warp.
- */
 async function applyAdjust(settings: PageSetting[]): Promise<boolean> {
   const source = session.sourcePath;
   const doc = viewer.document;
@@ -1605,8 +1373,6 @@ async function applyAdjust(settings: PageSetting[]): Promise<boolean> {
       out = tmp;
     }
     if (warps.length > 0) {
-      // Pictures are taken without our annotation layer: the annotations
-      // stay editable on top, where they were.
       const bare = await newTempPath(`straighten-src-${name}`);
       await stripAnnotationStreams(out, bare);
       const pictures = await renderStraightenedPages(bare, warps);
@@ -1654,7 +1420,6 @@ pageSidebar.onMove(async (pages, insertAt) => {
 });
 
 pageSidebar.onInsertBlank(async (after) => {
-  // Same size as the page it follows (or the first page).
   const ref = viewer.pageDimensions[Math.max(0, after - 1)] ?? { width: 595.28, height: 841.89 };
   await insertSlots(after, [{ kind: "blank", width: ref.width, height: ref.height, rotation: 0 }]);
 });
@@ -1669,7 +1434,6 @@ pageSidebar.onInsertPdf(async (after) => {
   if (path) await insertPdfAt(after, path);
 });
 
-/** Inserts every page of the PDF at `path` after page `after`. */
 async function insertPdfAt(after: number, path: string): Promise<void> {
   let count: number;
   try {
@@ -1699,7 +1463,6 @@ pageSidebar.onExport(async (pages) => {
   }
 });
 
-// Pages dragged out of the window open as a new document in a new window.
 pageSidebar.onDragOut(async (pages, x, y) => {
   if (!session.isOpen || !viewer.isLoaded() || refuseIfProtected()) return;
   const t = getTranslations(settingsModal.getSettings().language);
@@ -1738,17 +1501,12 @@ printModal.onConfirm(async (settings) => {
   if (!viewer.isLoaded() || !source) return;
   try {
     if (isMicrosoftPrintToPdf(settings.printerName)) {
-      // Write the selected pages as a real (vector) PDF rather than a
-      // rasterised one. That is a copy, refused on a protected file.
       if (refuseIfProtected()) return;
       const out = await savePdfDialog(source);
       if (!out) return;
       await extractPdfPages(await session.materialize(), out, settings.pageRange);
       showToast(msg("msgPdfSaved"));
     } else {
-      // Rasterise and print in-process: handing the file to the shell's
-      // "printto" verb fails when the default PDF app (e.g. Edge, the
-      // Windows 10 default) registers no print verbs.
       const pages = await renderForPrint(settings.pageRange);
       await printPages(pages, settings.printerName, settings.copies, settings.orientation, settings.fitMode);
       showToast(msg("msgSentToPrinter"));
@@ -1758,18 +1516,13 @@ printModal.onConfirm(async (settings) => {
   }
 });
 
-// ── Welcome screen ────────────────────────────────────────────────────────────
-
 mountWelcomeDots(document.getElementById("welcome-screen")!);
 
-// Default reader checkbox + language picker at the bottom of the welcome screen.
 const welcomePrefs = new WelcomePrefs(document.getElementById("welcome-screen")!, {
   language: () => settingsModal.getSettings().language,
   setLanguage: (code) => settingsModal.setLanguage(code),
   t: () => getTranslations(settingsModal.getSettings().language),
   isDefault: () => isDefaultPdfReader(),
-  // Windows lets only the user pick the default app: register EzReader so it
-  // is offered, then open Default apps. On Linux registering sets it.
   setDefault: async (on) => {
     if (on) {
       await registerPdfHandler();
@@ -1781,7 +1534,6 @@ const welcomePrefs = new WelcomePrefs(document.getElementById("welcome-screen")!
   },
 });
 void welcomePrefs.refresh();
-// Up to date? Checked once per launch, next to the language picker.
 const updateBadge = new UpdateBadge(welcomePrefs.root, {
   t: () => getTranslations(settingsModal.getSettings().language),
   check: () => checkForUpdate(),
@@ -1793,14 +1545,11 @@ settingsModal.onChange(() => {
   welcomePrefs.render();
   updateBadge.render();
 });
-// Back from Windows' Default apps page: show what the user chose.
 window.addEventListener("focus", () => void welcomePrefs.refresh());
 
 document.getElementById("welcome-open-btn")?.addEventListener("click", async () => {
   await openFile();
 });
-
-// ── Toolbar events ────────────────────────────────────────────────────────────
 
 toolbar.on(async (e) => {
   if (adjustView.isOpen) {
@@ -1997,7 +1746,6 @@ toolbar.on(async (e) => {
     case "layer-change": {
       const ann = editingTextAnn ?? editingShapeAnn;
       if (ann) {
-        // The overlay reorders and reports back through onAnnotationReordered.
         const pv = viewer.pageViews.find(p => p.pageNum === ann.page);
         pv?.overlay.reorderAnnotation(ann, e.dir);
       }
@@ -2078,27 +1826,17 @@ toolbar.on(async (e) => {
   }
 });
 
-// ── Full screen ───────────────────────────────────────────────────────────────
-
 let fullscreen = false;
 
-/** Full screen on / off: the title bar hides, the toolbar stays. */
-/** The window was maximized when full screen began: it is maximized again after. */
 let maximizedBeforeFullscreen = false;
-/**
- * Bounds to put back when full screen was done by hand (the window stretched
- * over its monitor because the system's own full screen did not cover it).
- */
 let boundsBeforeFullscreen: { x: number; y: number; width: number; height: number } | null = null;
 
-/** True when the window covers the whole monitor it is on. */
 async function coversMonitor(): Promise<boolean> {
   const monitor = await currentMonitor();
   if (!monitor) return true;
   const pos = await appWindow.outerPosition();
   const size = await appWindow.outerSize();
   const m = monitor.position, ms = monitor.size;
-  // Wayland always reports window outerPosition as (0, 0), even on secondary monitors.
   if (pos.x === 0 && pos.y === 0 && size.width >= ms.width && size.height >= ms.height) {
     return true;
   }
@@ -2112,23 +1850,15 @@ const nextFrames = () => new Promise<void>((resolve) => setTimeout(resolve, 150)
 async function toggleFullscreen(on = !fullscreen): Promise<void> {
   try {
     if (on) {
-      // Windows keeps a maximized frameless window at its maximized size
-      // (taskbar still showing) when asked to go full screen: restore it
-      // first, and maximize it again on the way out.
       maximizedBeforeFullscreen = await appWindow.isMaximized();
       if (maximizedBeforeFullscreen) await appWindow.unmaximize();
       const pos = await appWindow.outerPosition();
       const size = await appWindow.outerSize();
       const before = { x: pos.x, y: pos.y, width: size.width, height: size.height };
-      // The invisible resize strip on the top edge would sit over the menu
-      // row (see resize_border.rs).
       await setResizeBorder(false).catch(() => {});
       await appWindow.setFullscreen(true);
       await nextFrames();
       if (!(await appWindow.isFullscreen()) || !(await coversMonitor())) {
-        // The system did not make it full screen (seen on Windows 10 with a
-        // frameless window): stretch the window over its monitor instead.
-        // A borderless window covering the screen hides the taskbar.
         const monitor = await currentMonitor();
         if (monitor) {
           boundsBeforeFullscreen = before;
@@ -2152,22 +1882,14 @@ async function toggleFullscreen(on = !fullscreen): Promise<void> {
       await setResizeBorder(true).catch(() => {});
     }
   } catch (err) {
-    // Browser preview: no window to resize.
     console.warn("full screen:", err);
   }
   fullscreen = on;
   document.body.classList.toggle("fullscreen", on);
 }
 
-// ── Presentation ──────────────────────────────────────────────────────────────
-
 let presentation: Presentation | null = null;
 
-/**
- * One page at a time over a black, full-screen view, from the current page.
- * On exit the viewer shows the last page presented and the window goes back
- * to how it was.
- */
 async function startPresentation(): Promise<void> {
   if (presentation || !viewer.isLoaded()) return;
   const t = getTranslations(settingsModal.getSettings().language);
@@ -2187,17 +1909,14 @@ async function startPresentation(): Promise<void> {
   });
   const p = presentation;
   if (wasFullscreen) { p.open(); return; }
-  // Black screen first, page later: going full screen moves and resizes the
-  // window a few times, and a page drawn at each step jumped around.
   p.open({ hold: true });
   try {
-    // Start drawing at the size the window is heading to (the monitor).
     const monitor = await currentMonitor();
     if (monitor) {
       const s = monitor.scaleFactor || window.devicePixelRatio || 1;
       p.prefetch(monitor.size.width / s, monitor.size.height / s);
     }
-  } catch { /* browser preview: no monitor */ }
+  } catch {}
   try {
     await toggleFullscreen(true);
   } finally {
@@ -2205,10 +1924,7 @@ async function startPresentation(): Promise<void> {
   }
 }
 
-// ── Keyboard shortcuts ────────────────────────────────────────────────────────
-
 document.addEventListener("keydown", async (e) => {
-  // macOS: the menu at the top of the screen answers these.
   if (menuOwnsKey(e)) return;
   const tag = (document.activeElement as HTMLElement)?.tagName ?? "";
   if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" ||
@@ -2223,7 +1939,6 @@ document.addEventListener("keydown", async (e) => {
     return;
   }
   if (e.key === "F5") {
-    // Also keeps WebView2 from reloading the app.
     e.preventDefault();
     if (!shift && !ctrl && toolbar.allowed()) await startPresentation();
     return;
@@ -2317,9 +2032,6 @@ document.addEventListener("keydown", async (e) => {
   }
 });
 
-// ── Signature events ──────────────────────────────────────────────────────────
-
-// Floating signature preview that follows the cursor during placement
 const sigPreview = document.createElement("img");
 sigPreview.className = "sig-preview";
 document.body.appendChild(sigPreview);
@@ -2340,7 +2052,6 @@ document.addEventListener("mousemove", (e: MouseEvent) => {
   sigPreview.style.top  = `${e.clientY}px`;
 });
 
-/** Height / width of the signature being placed (0 until its picture loads). */
 let pendingSignatureRatio = 0;
 
 function startSignaturePlacement(imageData: string, vector?: InkVector): void {
@@ -2368,7 +2079,6 @@ function cancelSignaturePlacement(): void {
   updateHandMode();
 }
 
-/** Saved signatures, shown in the Sign options. */
 function refreshSignatures(): void {
   toolbar.setSignatures(sigStore.getAll().map((s) => ({ id: s.id, dataUrl: s.imageDataUrl })));
 }
@@ -2379,7 +2089,6 @@ sigModal.onSignatureReady((imageData, vector) => {
   startSignaturePlacement(imageData, vector);
 });
 
-// Click on a page wrapper to place signature
 document.getElementById("viewer-scroll")!.addEventListener("click", (e: MouseEvent) => {
   if (!pendingSignature) return;
   const wrapper = (e.target as HTMLElement).closest(".page-wrapper") as HTMLElement | null;
@@ -2393,17 +2102,13 @@ document.getElementById("viewer-scroll")!.addEventListener("click", (e: MouseEve
   const x = e.clientX - rect.left;
   const y = e.clientY - rect.top;
 
-  // 150 pt wide in the picture's own proportions (at most 75 pt high).
   const ratio = pendingSignatureRatio > 0 ? pendingSignatureRatio : 0.4;
   const h = Math.min(75, 150 * ratio);
   const w = h / ratio;
   pv.overlay.placeSignature(x, y, pendingSignature, w, h, pendingSignatureVector);
   cancelSignaturePlacement();
-  // Ready to move and resize right away.
   if (toolState.tool !== "select") toolbar.clearActiveTool();
 });
-
-// ── Context menu ──────────────────────────────────────────────────────────────
 
 const ctxMenu    = document.getElementById("ctx-menu")!;
 const ctxCopyBtn = document.getElementById("ctx-copy") as HTMLButtonElement;
@@ -2427,8 +2132,6 @@ document.addEventListener("mousedown", (e: MouseEvent) => {
   if (!ctxMenu.contains(e.target as Node)) ctxMenu.classList.add("hidden");
 });
 
-// ── Escape / zoom keyboard shortcuts (window-level) ──────────────────────────
-
 window.addEventListener("keydown", async (e: KeyboardEvent) => {
   if (menuOwnsKey(e)) return;
   if (e.ctrlKey && (e.key === "+" || e.key === "=" || e.key === "-")) {
@@ -2443,7 +2146,6 @@ window.addEventListener("keydown", async (e: KeyboardEvent) => {
   const typing = !!active && (active.tagName === "INPUT" || active.tagName === "TEXTAREA" || active.tagName === "SELECT" || active.isContentEditable);
   if (typing) return;
   if (e.key === "Enter" && toolbar.isPending) {
-    // Enter validates the pending changes (✓).
     e.preventDefault();
     annotations.apply();
     return;
@@ -2453,7 +2155,6 @@ window.addEventListener("keydown", async (e: KeyboardEvent) => {
     cancelSignaturePlacement();
     showToast(msg("msgSignatureCancelled"));
   } else if (toolbar.isPending) {
-    // Escape discards them (✕).
     discardDraft();
   } else if (toolState.tool !== "select") {
     toolbar.clearActiveTool();
@@ -2462,9 +2163,6 @@ window.addEventListener("keydown", async (e: KeyboardEvent) => {
   }
 });
 
-// ── Edit text: click existing words to replace them ──────────────────────────
-
-/** PDF font family that looks like the one pdf.js reports for the text. */
 function familyOf(css: string | undefined): FontFamilyValue {
   if (!css) return "helvetica";
   if (/mono|courier/i.test(css)) return "courier";
@@ -2472,7 +2170,6 @@ function familyOf(css: string | undefined): FontFamilyValue {
   return "helvetica";
 }
 
-/** The page's colour around `r` (screen px), read from the rendered page. */
 function backgroundAround(wrapper: HTMLElement, r: DOMRect): RgbColor {
   const canvas = wrapper.querySelector<HTMLCanvasElement>(".page-canvas");
   const ctx = canvas?.getContext("2d", { willReadFrequently: true });
@@ -2502,7 +2199,6 @@ document.getElementById("viewer-scroll")!.addEventListener("click", (e: MouseEve
   const wrapper = (e.target as HTMLElement).closest<HTMLElement>(".page-wrapper");
   const pv = wrapper && viewer.pageViews.find((p) => p.pageNum === Number(wrapper.dataset.page));
   if (!wrapper || !pv) return;
-  // Text replaced earlier is edited again, not the original under it.
   if (pv.overlay.editTextAt(e.clientX, e.clientY)) { e.preventDefault(); return; }
   const span = (e.target as HTMLElement).closest<HTMLElement>(".page-text-layer span");
   if (!span || !span.dataset.pdf) return;
@@ -2515,7 +2211,6 @@ document.getElementById("viewer-scroll")!.addEventListener("click", (e: MouseEve
     family: familyOf(span.dataset.family),
     background: backgroundAround(wrapper, span.getBoundingClientRect()),
   };
-  // The new text starts out like the old one; the options can change it.
   const style = {
     color: { r: 0, g: 0, b: 0 }, fontSize: Math.max(4, Math.round(fontSize)),
     bold: false, italic: false, underline: false, fontFamily: item.family, backgroundColor: null,
@@ -2526,9 +2221,6 @@ document.getElementById("viewer-scroll")!.addEventListener("click", (e: MouseEve
   pv.overlay.replaceText(item);
 });
 
-// ── Pictures: placed on a page, or added as a page ───────────────────────────
-
-/** Reads the picture at `path`; shows an error and returns null if it can't. */
 async function readPicture(path: string): Promise<Picture | null> {
   try {
     return await loadPictureFile(path);
@@ -2538,19 +2230,15 @@ async function readPicture(path: string): Promise<Picture | null> {
   }
 }
 
-/** Places the picture (a file or one already read) centred on (x, y), canvas px of `pv`'s page. */
 async function placePicture(source: string | Picture, pv: PdfPageView, x: number, y: number): Promise<void> {
   const pic = typeof source === "string" ? await readPicture(source) : source;
   if (!pic) return;
-  // Natural size at 96 dpi, at most 60 % of the page.
   const page = pv.overlay.pageSizePt;
   const size = fitWithin(pic.width * 0.75, pic.height * 0.75, page.width * 0.6, page.height * 0.6);
   pv.overlay.placeImage(x, y, pic.data, size.width, size.height);
-  // Ready to move and resize right away.
   if (toolState.tool !== "select") toolbar.clearActiveTool();
 }
 
-/** Places a picture on the page shown, centred on the part in view. */
 async function placeInView(source: string | Picture): Promise<void> {
   const pv = viewer.pageViews.find((p) => p.pageNum === viewer.currentPage);
   if (!pv) return;
@@ -2560,17 +2248,11 @@ async function placeInView(source: string | Picture): Promise<void> {
   await placePicture(source, pv, r.width / 2, (top + bottom) / 2 - r.top);
 }
 
-/** Asks for a picture and places it on the page shown. */
 async function browsePicture(): Promise<void> {
   const path = await openImageDialog();
   if (path) await placeInView(path);
 }
 
-/**
- * Edit › Insert a picture and Ctrl+V of a copied picture: both switch to
- * Annotate (so it can be moved and resized right away) and place it on the
- * page shown.
- */
 async function insertPicture(source?: Picture): Promise<void> {
   if (!viewer.isLoaded() || refuseIfProtected()) return;
   toolbar.setMode("annotate");
@@ -2579,7 +2261,6 @@ async function insertPicture(source?: Picture): Promise<void> {
   else await browsePicture();
 }
 
-/** A copied picture as PNG (base64), whatever format the clipboard holds. */
 async function clipboardPicture(file: File): Promise<Picture | null> {
   try {
     const bmp = await createImageBitmap(file);
@@ -2608,7 +2289,6 @@ document.addEventListener("paste", async (e) => {
   if (pic) await insertPicture(pic);
 });
 
-/** Adds each picture as a new page, after page `after`. */
 async function insertPictures(after: number, paths: string[]): Promise<void> {
   const slots: PageSlot[] = [];
   for (const path of paths) {
@@ -2618,11 +2298,8 @@ async function insertPictures(after: number, paths: string[]): Promise<void> {
   if (slots.length > 0) await insertSlots(after, slots);
 }
 
-// ── Highlighter: applies to the text selected while it is on ─────────────────
-
 document.getElementById("viewer-scroll")!.addEventListener("mouseup", () => {
   if (toolState.tool !== "highlight" && toolState.tool !== "redact-text") return;
-  // Let the browser finish the selection first.
   setTimeout(() => {
     const sel = window.getSelection();
     if (!sel || sel.isCollapsed || sel.rangeCount === 0) return;
@@ -2645,8 +2322,6 @@ document.getElementById("viewer-scroll")!.addEventListener("mouseup", () => {
       const b = pv.overlay.screenRect;
       const list = byPage.get(pv) ?? [];
       const next = { left: r.left - b.left, top: r.top - b.top, right: r.right - b.left, bottom: r.bottom - b.top };
-      // A span inside the selection reports its box and its text's box: merge
-      // what sits on the same line so overlaps don't darken twice.
       const same = list.find((o) => {
         const v = Math.min(o.bottom, next.bottom) - Math.max(o.top, next.top);
         return v > 0.5 * Math.min(o.bottom - o.top, next.bottom - next.top) && next.left <= o.right + 1 && next.right >= o.left - 1;
@@ -2664,11 +2339,8 @@ document.getElementById("viewer-scroll")!.addEventListener("mouseup", () => {
   }, 0);
 });
 
-// ── Ctrl+wheel zoom ───────────────────────────────────────────────────────────
-
 document.getElementById("viewer-scroll")!.addEventListener("wheel", async (e: WheelEvent) => {
   if (!e.ctrlKey && viewer.scrollMode === "horizontal" && !e.shiftKey && Math.abs(e.deltaY) > Math.abs(e.deltaX)) {
-    // A plain mouse wheel moves along the row of pages.
     e.preventDefault();
     const el = e.currentTarget as HTMLElement;
     const lines = e.deltaMode === 1 ? 40 : e.deltaMode === 2 ? el.clientWidth : 1;
@@ -2677,25 +2349,17 @@ document.getElementById("viewer-scroll")!.addEventListener("wheel", async (e: Wh
   }
   if (!e.ctrlKey || !viewer.isLoaded()) return;
   e.preventDefault();
-  // Smooth zoom around the mouse: while the wheel turns, the pages already
-  // drawn are only stretched; they are redrawn sharp once it stops.
   const px = e.deltaMode === 1 ? e.deltaY * 40 : e.deltaMode === 2 ? e.deltaY * 400 : e.deltaY;
   wheelZoom.factor *= Math.min(1.25, Math.max(0.8, Math.exp(-px * 0.0015)));
   wheelZoom.anchor = { x: e.clientX, y: e.clientY };
-  // A touchpad pinch sends a steady stream of small steps and stops when the
-  // fingers do; a mouse wheel sends big notches with gaps between them.
   wheelZoom.settleMs = Math.abs(px) < 50 ? WHEEL_ZOOM_SETTLE_SMOOTH_MS : WHEEL_ZOOM_SETTLE_NOTCH_MS;
   if (fitMode !== "none") { fitMode = "none"; toolbar.updateFitMode(fitMode); }
-  // Many wheel events can come in one frame: stretch the pages once per frame.
   if (!wheelZoom.raf) wheelZoom.raf = requestAnimationFrame(applyWheelZoom);
 }, { passive: false });
 
-/** Wait after the last pinch step (touchpad) before the pages are redrawn sharp. */
 const WHEEL_ZOOM_SETTLE_SMOOTH_MS = 80;
-/** Wait after the last wheel notch (mouse) before the pages are redrawn sharp. */
 const WHEEL_ZOOM_SETTLE_NOTCH_MS = 130;
 
-/** The Ctrl+wheel zoom in progress: steps not yet shown, and the redraw timer. */
 const wheelZoom = {
   factor: 1,
   anchor: { x: 0, y: 0 },
@@ -2720,19 +2384,11 @@ function applyWheelZoom(): void {
   }, wheelZoom.settleMs);
 }
 
-/** The middle of the page area: buttons and keys zoom around it. */
 function viewerCenter(): { x: number; y: number } {
   const r = document.getElementById("viewer-scroll")!.getBoundingClientRect();
   return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
 }
 
-// ── Drag-drop ─────────────────────────────────────────────────────────────────
-
-/**
- * Files dropped on the window. In the side panel, PDFs and pictures are
- * inserted where they land; a picture dropped on a page is placed there;
- * otherwise a PDF is opened.
- */
 async function handleDrop(paths: string[], at: { x: number; y: number } | null, gap: number | null): Promise<void> {
   const pdfs = paths.filter((p) => p.toLowerCase().endsWith(".pdf"));
   const images = paths.filter(isImagePath);
@@ -2758,7 +2414,6 @@ async function handleDrop(paths: string[], at: { x: number; y: number } | null, 
   if (pdfs.length > 0) {
     for (const pdf of pdfs) await openPath(pdf);
   } else if (!viewer.isLoaded()) {
-    // On the launcher: the pictures become a new document.
     await openPictures(images);
   } else {
     showToast(msg("msgDropImageOnPage"));
@@ -2769,7 +2424,6 @@ async function handleDrop(paths: string[], at: { x: number; y: number } | null, 
   try {
     await appWindow.onDragDropEvent(async (event) => {
       const p = event.payload;
-      // Physical pixels → CSS pixels of the page.
       const at = "position" in p ? { x: p.position.x / devicePixelRatio, y: p.position.y / devicePixelRatio } : null;
       if (p.type === "over" || p.type === "enter") {
         document.body.classList.add("drag-over");
@@ -2785,6 +2439,5 @@ async function handleDrop(paths: string[], at: { x: number; y: number } | null, 
       }
     });
   } catch {
-    // Fallback for dev server / browser preview
   }
 })();

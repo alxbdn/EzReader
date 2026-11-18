@@ -1,8 +1,3 @@
-//! Text recognition on Linux: the PaddleOCR models RapidOCR uses (PP-OCR
-//! text detection + PP-OCRv5 Latin recognition, ONNX), run by ONNX Runtime
-//! linked into the app. The models are built into the binary: nothing to
-//! install or download, and nothing leaves the computer.
-
 use crate::ocr::{OcrLine, OcrWord};
 use image::{imageops::FilterType, RgbImage};
 use ort::session::{builder::GraphOptimizationLevel, Session};
@@ -13,23 +8,16 @@ const DET_MODEL: &[u8] = include_bytes!("../ocr-models/det.onnx");
 const REC_MODEL: &[u8] = include_bytes!("../ocr-models/rec.onnx");
 const REC_DICT: &str = include_str!("../ocr-models/dict.txt");
 
-/// Detection: pixels above this are text.
 const DET_THRESH: f32 = 0.3;
-/// Detection: a region whose mean score is below this is noise.
 const BOX_THRESH: f32 = 0.6;
-/// Detection: how much a region is grown back (DB shrinks text when training).
 const UNCLIP_RATIO: f32 = 1.6;
-/// Detection: the picture's long side is kept within this (multiple of 32).
 const DET_MAX_SIDE: u32 = 1920;
-/// Recognition: height of a line fed to the model.
 const REC_HEIGHT: u32 = 48;
-/// Recognition: lines read with less confidence are dropped.
 const REC_MIN_SCORE: f32 = 0.5;
 
 struct Engine {
     det: Session,
     rec: Session,
-    /// Index 0 is the CTC blank; then the dictionary; then the space.
     chars: Vec<String>,
 }
 
@@ -56,7 +44,6 @@ fn engine() -> Result<&'static Mutex<Engine>, String> {
         .map_err(Clone::clone)
 }
 
-/// The model's classes: blank, the dictionary's characters, then the space.
 pub(crate) fn dictionary(dict: &str) -> Vec<String> {
     let mut chars = vec![String::new()];
     chars.extend(dict.lines().map(|l| l.trim_end_matches('\r').to_string()));
@@ -64,7 +51,6 @@ pub(crate) fn dictionary(dict: &str) -> Vec<String> {
     chars
 }
 
-/// A text region found by detection, in pixels of the picture.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub(crate) struct Region {
     pub x0: u32,
@@ -73,16 +59,12 @@ pub(crate) struct Region {
     pub y1: u32,
 }
 
-/// Size the detector sees: within `DET_MAX_SIDE`, both sides multiples of 32.
 pub(crate) fn det_size(w: u32, h: u32) -> (u32, u32) {
     let scale = (DET_MAX_SIDE as f32 / w.max(h) as f32).min(1.0);
     let r = |v: u32| (((v as f32 * scale) / 32.0).round() as u32).max(1) * 32;
     (r(w), r(h))
 }
 
-/// Text regions of a detection map (`w` × `h` scores, 0 to 1): the connected
-/// areas above the threshold, kept when confident enough, grown back by the
-/// unclip ratio, as boxes in the map's pixels.
 pub(crate) fn regions(map: &[f32], w: usize, h: usize) -> Vec<Region> {
     let mut seen = vec![false; w * h];
     let mut out = Vec::new();
@@ -126,7 +108,6 @@ pub(crate) fn regions(map: &[f32], w: usize, h: usize) -> Vec<Region> {
         if bw.min(bh) < 3.0 || sum / (n as f32) < BOX_THRESH {
             continue;
         }
-        // Grow by area × ratio / perimeter, as DB's "unclip" does.
         let d = bw * bh * UNCLIP_RATIO / (2.0 * (bw + bh));
         let grow = |v: usize, by: f32, max: usize, up: bool| -> u32 {
             let v = if up { v as f32 + by } else { v as f32 - by };
@@ -139,7 +120,6 @@ pub(crate) fn regions(map: &[f32], w: usize, h: usize) -> Vec<Region> {
             y1: grow(y1, d, h, true),
         });
     }
-    // Reading order: top to bottom, then left to right on the same row.
     out.sort_by(|a, b| {
         let same_row = a.y0.abs_diff(b.y0) < (a.y1 - a.y0).min(b.y1 - b.y0) / 2;
         if same_row {
@@ -151,15 +131,12 @@ pub(crate) fn regions(map: &[f32], w: usize, h: usize) -> Vec<Region> {
     out
 }
 
-/// A recognized line: its text and, for each character, the model step it
-/// was read at (to place the words), with the mean confidence.
 #[derive(Debug, PartialEq)]
 pub(crate) struct Decoded {
     pub chars: Vec<(String, usize)>,
     pub score: f32,
 }
 
-/// Greedy CTC decoding of `steps` × `classes` scores.
 pub(crate) fn ctc_decode(probs: &[f32], steps: usize, classes: usize, dict: &[String]) -> Decoded {
     let mut chars = Vec::new();
     let mut scores = Vec::new();
@@ -180,9 +157,6 @@ pub(crate) fn ctc_decode(probs: &[f32], steps: usize, classes: usize, dict: &[St
     Decoded { chars, score }
 }
 
-/// Splits a decoded line into words with their boxes, in fractions of the
-/// picture. The line spans `region` (pixels of a `pw` × `ph` picture) and
-/// was read in `steps` model steps across its width.
 pub(crate) fn words_of(d: &Decoded, steps: usize, region: Region, pw: u32, ph: u32) -> Vec<OcrWord> {
     let lw = (region.x1 - region.x0 + 1) as f32;
     let step_w = lw / steps.max(1) as f32;
@@ -218,7 +192,6 @@ pub(crate) fn words_of(d: &Decoded, steps: usize, region: Region, pw: u32, ph: u
     words
 }
 
-/// Detection input: the picture in BGR order, normalized as PaddleOCR does.
 fn det_input(img: &RgbImage, w: u32, h: u32) -> Vec<f32> {
     let img = image::imageops::resize(img, w, h, FilterType::Triangle);
     const MEAN: [f32; 3] = [0.485, 0.456, 0.406];
@@ -233,7 +206,6 @@ fn det_input(img: &RgbImage, w: u32, h: u32) -> Vec<f32> {
     data
 }
 
-/// Recognition input: one line, `REC_HEIGHT` px high, values in -1..1.
 fn rec_input(line: &RgbImage) -> (Vec<f32>, u32) {
     let ratio = line.width() as f32 / line.height().max(1) as f32;
     let w = ((REC_HEIGHT as f32 * ratio).round() as u32).clamp(16, 3200);
@@ -255,7 +227,6 @@ fn run(session: &mut Session, shape: [usize; 4], data: Vec<f32>) -> Result<(Vec<
     Ok((shape.iter().map(|&d| d.max(0) as usize).collect(), values.to_vec()))
 }
 
-/// Reads the lines of text of a picture.
 pub fn read(img: &RgbImage) -> Result<Vec<OcrLine>, String> {
     let (pw, ph) = img.dimensions();
     if pw < 8 || ph < 8 {
@@ -326,10 +297,10 @@ mod tests {
                 }
             }
         };
-        fill(22, 4, 35, 7); // right, same row
-        fill(2, 4, 15, 7); // left
-        fill(2, 12, 15, 15); // next row
-        fill(30, 17, 30, 17); // a speck: dropped
+        fill(22, 4, 35, 7);
+        fill(2, 4, 15, 7);
+        fill(2, 12, 15, 15);
+        fill(30, 17, 30, 17);
         let r = regions(&map, w, h);
         assert_eq!(r.len(), 3);
         assert!(r[0].x0 < 2 && r[0].y0 < 4 && r[0].x1 > 15);
@@ -340,7 +311,6 @@ mod tests {
     #[test]
     fn decodes_ctc_and_places_words() {
         let dict = dictionary("a\nb");
-        // classes: blank, a, b, space
         let rows = [
             [0., 1., 0., 0.],
             [0., 1., 0., 0.],

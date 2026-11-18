@@ -1,9 +1,3 @@
-/* ══ Design tokens ════════════════════════════════════════════════════════
- * Neutral palette and component styles in the spirit of shadcn/ui.
- * Light is the default; <html data-theme="dark"> switches to dark
- * (set by applyTheme() in src/settings.ts; until then the system theme applies).
- */
-
 :root {
   color-scheme: light;
   --background: #ffffff;
@@ -64,7 +58,6 @@
   --selection: #E53935;
 }
 
-/* Before the settings are read, follow the system theme. */
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
     color-scheme: dark;
@@ -95,8 +88,6 @@
   }
 }
 
-/* ══ Base ═════════════════════════════════════════════════════════════════ */
-
 *, *::before, *::after {
   box-sizing: border-box;
   margin: 0;
@@ -113,9 +104,6 @@ html, body {
   -webkit-font-smoothing: antialiased;
 }
 
-/* The interface's own text (buttons, labels, titles) cannot be selected,
-   so the pointer stays an arrow over it. Text fields and the page's text
-   stay selectable. */
 body { user-select: none; -webkit-user-select: none; }
 input, textarea, [contenteditable="true"], .page-text-layer {
   user-select: text;
@@ -154,13 +142,6 @@ body.drag-over::after {
   flex-direction: column;
   height: 100vh;
 }
-
-/* ══ Buttons ══════════════════════════════════════════════════════════════
- * .btn            outline (default / secondary action)
- * .btn-primary    filled, the main action of a dialog
- * .btn-ghost      no border, for toolbars
- * .icon-btn       square ghost button holding an icon
- */
 
 .btn {
   display: inline-flex;
@@ -237,8 +218,6 @@ body.drag-over::after {
   pointer-events: none;
 }
 
-/* ══ Inputs ═══════════════════════════════════════════════════════════════ */
-
 .input,
 input[type="number"].toolbar-input,
 .settings-select,
@@ -278,8 +257,6 @@ input::placeholder { color: var(--muted-foreground); }
 
 .settings-select option { background: var(--popover); color: var(--foreground); }
 
-/* ══ Toolbar container ════════════════════════════════════════════════════ */
-
 #toolbar-container {
   display: flex;
   flex-direction: column;
@@ -287,8 +264,6 @@ input::placeholder { color: var(--muted-foreground); }
   border-bottom: 1px solid var(--border);
   flex-shrink: 0;
 }
-
-/* ── Menu bar ──────────────────────────────────────────────────────────── */
 
 #menubar-row {
   display: flex;
@@ -320,10 +295,6 @@ input::placeholder { color: var(--muted-foreground); }
   color: var(--accent-foreground);
 }
 
-/* ══ Tabs ══ */
-/* One document: just its name, centred on the window whatever sits on
-   either side. More: a quiet chip per document between the menus and the
-   window buttons. */
 .doc-tabs {
   display: flex;
   align-items: center;
@@ -372,7 +343,6 @@ input::placeholder { color: var(--muted-foreground); }
   color: var(--foreground);
   font-weight: 500;
 }
-/* A thin line between two inactive tabs, as in a browser. */
 .doc-tabs:not(.single) .doc-tab:not(.active):not(:hover) + .doc-tab:not(.active):not(:hover)::before {
   content: "";
   position: absolute;
@@ -399,7 +369,6 @@ input::placeholder { color: var(--muted-foreground); }
 .doc-tab.dirty .doc-tab-dirty { display: block; }
 .doc-tab.dirty .doc-tab-name { color: var(--foreground); }
 
-/* In a chip, the file name fills it and is no longer centred. */
 .doc-tabs:not(.single) .doc-title {
   flex: 1 1 auto;
   min-width: 0;
@@ -445,7 +414,6 @@ input::placeholder { color: var(--muted-foreground); }
 .doc-tab.dragging.torn { opacity: 0.4; box-shadow: none; transform: none !important; }
 body.tab-dragging, body.tab-dragging * { cursor: grabbing !important; }
 
-/* A tab torn off the title bar: its name, and what releasing it does. */
 .tab-ghost {
   position: fixed;
   z-index: 1000;
@@ -472,7 +440,6 @@ body.tab-dragging, body.tab-dragging * { cursor: grabbing !important; }
 .tab-ghost-hint { font-size: 12px; color: var(--muted-foreground); }
 .tab-ghost-hint:empty { display: none; }
 
-/* Another window's tab is dragged over this one: it lands in the title bar. */
 #menubar-row.tab-drop-target {
   background: var(--muted);
   box-shadow: inset 0 0 0 1px var(--ring);
@@ -514,7 +481,6 @@ body.tab-dragging, body.tab-dragging * { cursor: grabbing !important; }
 .doc-title-name:hover:not(:disabled) { border-color: var(--border); color: var(--foreground); }
 .doc-title-name:disabled { cursor: default; }
 
-/* Inline rename: the name is editable, the extension stays as it is. */
 .doc-title-field {
   display: none;
   align-items: center;
@@ -552,7 +518,6 @@ body.tab-dragging, body.tab-dragging * { cursor: grabbing !important; }
 .doc-title.dirty .doc-title-dirty { display: block; }
 .doc-title.dirty .doc-title-name { color: var(--foreground); }
 
-/* Keeps the title optically centred by balancing the menus on the left. */
 .menubar-spacer { flex-shrink: 0; }
 
 .menu-dropdown {
@@ -620,7 +585,6 @@ body.tab-dragging, body.tab-dragging * { cursor: grabbing !important; }
   margin-left: 24px;
 }
 
-/* State marks: a dot (one of several) or a tick (on/off), in a left gutter. */
 .menu-dropdown.has-marks .menu-entry {
   position: relative;
   padding-left: 30px;
@@ -655,8 +619,6 @@ body.tab-dragging, body.tab-dragging * { cursor: grabbing !important; }
   margin: 4px -4px;
 }
 
-/* ── Context toolbar ───────────────────────────────────────────────────── */
-
 #context-toolbar {
   display: none;
   flex-direction: column;
@@ -672,7 +634,6 @@ body.tab-dragging, body.tab-dragging * { cursor: grabbing !important; }
 
 .tb-main { min-height: 50px; flex-wrap: wrap; row-gap: 6px; }
 
-/* Tools of the Annotate / Edit mode, unfolded under the main row */
 .tb-tools {
   min-height: 42px;
   border-top: 1px solid var(--border);
@@ -688,8 +649,6 @@ body.tab-dragging, body.tab-dragging * { cursor: grabbing !important; }
 
 .tb-tool-group { gap: 6px; }
 
-/* The two side groups share the room; Read / Annotate / Edit sit at the
-   start of the left one, right after the side panel button. */
 .tb-left, .tb-right { flex: 1 1 0; min-width: max-content; }
 .toolbar-group.tb-left { gap: 8px; }
 .tb-right {
@@ -711,7 +670,6 @@ body.tab-dragging, body.tab-dragging * { cursor: grabbing !important; }
 .tb-save { background: var(--muted); }
 .tb-save.dirty { border-color: var(--ring); }
 
-/* Save feedback: a pulse while saving, then a green ring or a red shake. */
 .tb-save { position: relative; transition: border-color 200ms ease, box-shadow 200ms ease; }
 .tb-save.saving { animation: tb-save-pulse 0.9s ease-in-out infinite; }
 .tb-save.save-ok {
@@ -756,7 +714,6 @@ body.tab-dragging, body.tab-dragging * { cursor: grabbing !important; }
 .zoom-label:hover { background: var(--accent); }
 .zoom-label[hidden], .zoom-input[hidden] { display: none; }
 
-/* Read / Annotate / Edit */
 .mode-btn {
   height: 28px;
   padding: 0 12px;
@@ -774,7 +731,6 @@ body.tab-dragging, body.tab-dragging * { cursor: grabbing !important; }
 .mode-btn { display: inline-flex; align-items: center; gap: 6px; }
 .mode-icon { display: none; }
 .mode-icon svg { width: 16px; height: 16px; display: block; }
-/* Narrow window: the main row stays on one line (src/toolbar.ts fitMainRow). */
 .tb-compact .mode-btn { padding: 0 8px; }
 .tb-compact .mode-icon { display: inline-flex; }
 .tb-compact .mode-label { display: none; }
@@ -783,10 +739,7 @@ body.tab-dragging, body.tab-dragging * { cursor: grabbing !important; }
 .tb-compact-2 .toolbar-group.tb-left { gap: 5px; }
 .tb-compact-3 .tb-columns { display: none; }
 .mode-btn.active { background: var(--primary); color: var(--primary-foreground); }
-/* The modes of the main bar take the app's red. */
 .mode-segment .mode-btn.active { background: #E53935; color: #ffffff; }
-
-/* ── Annotate / Edit tools (src/tool-row.ts) ───────────────────────────── */
 
 .tb-tools { min-height: 46px; background: color-mix(in srgb, var(--muted) 35%, var(--background)); }
 
@@ -824,7 +777,6 @@ body.tab-dragging, body.tab-dragging * { cursor: grabbing !important; }
   font-size: 12px;
 }
 
-/* Round ✓ / ✕, shown while changes wait for validation */
 .tb-validate {
   display: none;
   align-items: center;
@@ -844,7 +796,6 @@ body.tab-dragging, body.tab-dragging * { cursor: grabbing !important; }
   border-radius: 16px;
   cursor: pointer;
 }
-/* ✓ is green; ✕ turns red under the pointer. */
 .validate-btn { border: none; background: #16a34a; color: #ffffff; }
 .discard-btn { border: 1px solid var(--ring); background: transparent; color: var(--foreground); transition: background-color 120ms ease, border-color 120ms ease, color 120ms ease; }
 .validate-btn:hover { filter: brightness(1.12); }
@@ -860,7 +811,6 @@ body.tab-dragging, body.tab-dragging * { cursor: grabbing !important; }
   75% { transform: translateX(-2px); }
 }
 
-/* Options of the chosen tool, unfolded under the tool row */
 .tb-options {
   min-height: 42px;
   border-top: 1px solid var(--border);
@@ -924,7 +874,6 @@ body.tab-dragging, body.tab-dragging * { cursor: grabbing !important; }
 .opt-italic { font-style: italic; font-family: Georgia, serif; }
 .opt-underline { text-decoration: underline; }
 
-/* Colour choice: icon, then 24 px swatches with a ring on the chosen one */
 .color-row { display: flex; align-items: center; gap: 6px; }
 .color-row-icon { display: inline-flex; color: var(--muted-foreground); margin-right: 2px; }
 .color-row-icon svg { width: 15px; height: 15px; }
@@ -947,7 +896,6 @@ body.tab-dragging, body.tab-dragging * { cursor: grabbing !important; }
 .color-swatch.none { background: #fafafa; }
 .color-swatch.none svg { position: absolute; inset: 0; width: 100%; height: 100%; }
 
-/* Custom colour: a rainbow swatch, filled with the colour once chosen */
 .color-swatch.custom {
   background:
     linear-gradient(var(--custom, transparent), var(--custom, transparent)),
@@ -973,7 +921,6 @@ body.tab-dragging, body.tab-dragging * { cursor: grabbing !important; }
 .slider-row input[type="range"] { width: 86px; accent-color: var(--foreground); }
 .slider-row-value { color: var(--foreground); min-width: 40px; font-variant-numeric: tabular-nums; }
 
-/* Saved signatures */
 .sig-chips { display: flex; align-items: center; gap: 8px; }
 .sig-chip {
   display: flex;
@@ -984,7 +931,6 @@ body.tab-dragging, body.tab-dragging * { cursor: grabbing !important; }
   background: #ffffff;
   overflow: hidden;
 }
-/* The signature being placed: red, like the selected pages of the side panel. */
 .sig-chip.active { border-color: #E53935; box-shadow: 0 0 0 1px #E53935; }
 .sig-chip-use { border: none; background: transparent; padding: 2px 8px; cursor: pointer; }
 .sig-chip-use img { height: 26px; max-width: 120px; display: block; }
@@ -1013,7 +959,6 @@ body.tab-dragging, body.tab-dragging * { cursor: grabbing !important; }
 
 #viewer-scroll .page-wrapper textarea { font-family: inherit; }
 
-/* Edit tools: icons only, in labelled groups */
 .edit-tools { display: flex; align-items: center; gap: 8px; }
 .edit-tools[hidden] { display: none; }
 .edit-tools .toolbar-segment { gap: 2px; }
@@ -1040,11 +985,8 @@ body.tab-dragging, body.tab-dragging * { cursor: grabbing !important; }
 }
 .opt-browse:hover { background: var(--accent); }
 
-/* Edit text: the words that can be clicked */
 #viewer-scroll.etext-mode .page-text-layer span { cursor: pointer; border-radius: 2px; }
 #viewer-scroll.etext-mode .page-text-layer span:hover { outline: 1.5px dashed var(--selection); outline-offset: 1px; }
-
-/* ── Search pill (src/search-pill.ts) ──────────────────────────────────── */
 
 .search-pill {
   width: 34px;
@@ -1060,7 +1002,6 @@ body.tab-dragging, body.tab-dragging * { cursor: grabbing !important; }
 }
 
 .search-pill.open {
-  /* Narrower on a narrow window (src/toolbar.ts fitMainRow). */
   width: var(--search-open-w, 250px);
   background: var(--background);
   border-color: var(--ring);
@@ -1142,7 +1083,6 @@ body.tab-dragging, body.tab-dragging * { cursor: grabbing !important; }
   gap: 2px;
 }
 
-/* A bordered cluster of buttons, like a shadcn ToggleGroup. */
 .toolbar-segment {
   display: inline-flex;
   align-items: center;
@@ -1218,11 +1158,9 @@ input[type="color"].color-picker::-webkit-color-swatch-wrapper { padding: 0; }
 input[type="color"].color-picker::-webkit-color-swatch {
   border: none;
   border-radius: 3px;
-  /* A thin ring keeps black or very dark colours visible on a dark toolbar. */
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--foreground) 22%, transparent);
 }
 
-/* "No fill": the swatch is crossed out and dimmed. */
 input[type="color"].color-picker.is-off { position: relative; opacity: 0.55; }
 input[type="color"].color-picker.is-off::-webkit-color-swatch {
   background:
@@ -1249,21 +1187,12 @@ input[type="color"].color-picker.is-off::-webkit-color-swatch {
   font-variant-numeric: tabular-nums;
 }
 
-/* ══ Viewer ═══════════════════════════════════════════════════════════════ */
-
 #viewer-scroll {
   flex: 1;
   overflow: auto;
-  /* Page offsets (offsetTop / offsetLeft) count from the scrolled content. */
   position: relative;
-  /* The viewer keeps its own place when pages are resized or redrawn; the
-     browser's scroll anchoring on top of that made the end of a document jump. */
   overflow-anchor: none;
-  /* The vertical scroll bar's place is kept even when it is hidden: the page
-     area keeps its width when the bar comes and goes, so a page fitted to it
-     cannot make the bar come and go forever (see pageRoom in main.ts). */
   scrollbar-gutter: stable;
-  /* The launcher's dot matrix, standing still. */
   background-color: var(--viewer);
   background-image: radial-gradient(circle, var(--viewer-dot) 1px, transparent 1.6px);
   background-size: 22px 22px;
@@ -1279,8 +1208,6 @@ input[type="color"].color-picker.is-off::-webkit-color-swatch {
 #viewer-scroll.hand-mode .page-link-layer a,
 #viewer-scroll.etext-mode .page-link-layer a { pointer-events: none; }
 #viewer-scroll.panning { cursor: grabbing; user-select: none; }
-
-/* ══ Page thumbnails sidebar (src/page-sidebar.ts) ════════════════════════ */
 
 #viewer-area {
   flex: 1;
@@ -1327,7 +1254,6 @@ input[type="color"].color-picker.is-off::-webkit-color-swatch {
   color: var(--foreground);
 }
 
-/* "⌃ | 12 / 48 | ⌄" */
 .page-nav-pill {
   flex: 1;
   max-width: 150px;
@@ -1396,7 +1322,6 @@ input[type="color"].color-picker.is-off::-webkit-color-swatch {
 
 .page-nav-total { color: var(--muted-foreground); white-space: nowrap; }
 
-/* "Select all", icon-only "Delete", and "Structure tree" toggle */
 .page-sidebar-pills {
   display: flex;
   align-items: center;
@@ -1507,7 +1432,6 @@ input[type="color"].color-picker.is-off::-webkit-color-swatch {
   background: var(--accent);
 }
 
-/* Search matches in the viewer's text layer */
 .page-text-layer mark.search-hit {
   color: transparent;
   background: rgba(250, 204, 21, 0.45);
@@ -1594,7 +1518,6 @@ input[type="color"].color-picker.is-off::-webkit-color-swatch {
   line-height: 1.45;
 }
 
-
 .page-sidebar-thumb {
   display: flex;
   flex-direction: column;
@@ -1623,13 +1546,11 @@ input[type="color"].color-picker.is-off::-webkit-color-swatch {
   box-shadow: 0 0 0 1px var(--border), var(--shadow-md);
 }
 
-/* The page on screen: a thin red line around its thumbnail. */
 .page-sidebar-thumb.current .page-sidebar-frame canvas { box-shadow: 0 0 0 1.5px var(--sidebar-select), var(--shadow-md); }
 
 .page-sidebar-thumb:hover .page-sidebar-frame { outline-color: color-mix(in srgb, var(--sidebar-select) 45%, transparent); }
 .page-sidebar-thumb.selected .page-sidebar-frame { outline-color: var(--sidebar-select); }
 
-/* Checkbox in the top-left corner: shown on hover, and while selected. */
 .page-sidebar-check {
   position: absolute;
   left: 6px;
@@ -1645,7 +1566,6 @@ input[type="color"].color-picker.is-off::-webkit-color-swatch {
 }
 
 .page-sidebar-check { cursor: pointer; }
-/* A larger, invisible hit area around the check box. */
 .page-sidebar-check::after { content: ""; position: absolute; inset: -6px; }
 .page-sidebar-thumb:hover .page-sidebar-check,
 .page-sidebar.selecting .page-sidebar-check { opacity: 1; }
@@ -1656,7 +1576,6 @@ input[type="color"].color-picker.is-off::-webkit-color-swatch {
   background: #fff url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M3.5 8.2 6.5 11l6-6.5' fill='none' stroke='%23E53935' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center / 100% no-repeat;
 }
 
-/* Page number (goes to the page) and rotate-left under each thumbnail */
 .page-sidebar-meta {
   display: flex;
   align-items: center;
@@ -1722,7 +1641,7 @@ input[type="color"].color-picker.is-off::-webkit-color-swatch {
   pointer-events: none;
   padding: 4px 10px;
   border-radius: 999px;
-  background: #E53935; /* the ghost is on body, outside the panel */
+  background: #E53935;
   color: #fff;
   font-size: 12px;
   font-weight: 600;
@@ -1738,7 +1657,6 @@ input[type="color"].color-picker.is-off::-webkit-color-swatch {
   #page-sidebar { display: none !important; }
   #viewer-area { display: block; }
 }
-
 
 .page-row {
   display: flex;
@@ -1771,9 +1689,6 @@ input[type="color"].color-picker.is-off::-webkit-color-swatch {
   z-index: 1;
 }
 
-/* Live text: words read from a scan, invisible until selected. Each line is
-   a block (lines copy on their own lines); each word an inline block
-   stretched over the word on the picture. */
 .page-text-layer .ocr-line {
   position: absolute;
   font-family: sans-serif;
@@ -1788,10 +1703,8 @@ input[type="color"].color-picker.is-off::-webkit-color-swatch {
   display: inline-block;
   transform-origin: 0 0;
 }
-/* Edit text works on the PDF's own text only. */
 #viewer-scroll.etext-mode .page-text-layer .ocr-line span { cursor: inherit; outline: none; }
 
-/* Highlight colour when text is selected */
 .page-text-layer ::selection {
   background: rgba(229, 57, 53, 0.25);
   color: transparent;
@@ -1821,9 +1734,6 @@ input[type="color"].color-picker.is-off::-webkit-color-swatch {
   pointer-events: none;
 }
 
-/* Fillable fields (src/form-fields.ts). The page stays paper-white in both
-   themes, so these colors are fixed: the usual soft blue of fillable PDF
-   fields, a darker edge on hover, the focus ring while typing. */
 .page-form-layer .form-field {
   position: absolute;
   margin: 0;
@@ -1839,7 +1749,6 @@ input[type="color"].color-picker.is-off::-webkit-color-swatch {
   color: #111;
   padding: 1px 3px;
   user-select: text;
-  /* Native parts (check marks, list arrows) drawn for paper, in both themes. */
   color-scheme: light;
   transition: background-color 120ms ease-out, box-shadow 120ms ease-out;
 }
@@ -1875,7 +1784,6 @@ input[type="color"].color-picker.is-off::-webkit-color-swatch {
   .page-form-layer .form-field { transition: none; }
 }
 
-/* Printing or exporting a picture of the page: no field tint. */
 @media print {
   .page-form-layer .form-field { background: transparent; box-shadow: none; }
 }
@@ -1884,12 +1792,10 @@ input[type="color"].color-picker.is-off::-webkit-color-swatch {
   position: absolute;
   top: 0;
   left: 0;
-  pointer-events: none; /* controlled by JS: auto for draw tools, none for select/read */
+  pointer-events: none;
   background: transparent;
   z-index: 4;
 }
-
-/* ══ Welcome screen (shown when no PDF is loaded) ═════════════════════════ */
 
 #welcome-screen {
   flex: 1;
@@ -1902,7 +1808,6 @@ input[type="color"].color-picker.is-off::-webkit-color-swatch {
   padding: 40px 24px;
 }
 
-/* Interactive dot grid (src/welcome-dots.ts), drawn behind the content. */
 .welcome-dots {
   position: absolute;
   top: 0;
@@ -1919,9 +1824,6 @@ input[type="color"].color-picker.is-off::-webkit-color-swatch {
   display: none;
 }
 
-/* Until the page knows whether it was started with a document (see the
-   startup handling in main.ts), it shows nothing: a PDF opened while the app
-   was closed goes straight to the viewer, never through the launcher. */
 #app.booting {
   visibility: hidden;
 }
@@ -2038,7 +1940,6 @@ kbd,
   .welcome-features { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 
-/* A short window (small or scaled screen): tighter, so it needs no scrolling. */
 @media (max-height: 700px) {
   #welcome-screen { padding: 16px 24px; }
   .welcome-inner { gap: 8px; }
@@ -2081,8 +1982,6 @@ kbd,
   color: var(--foreground);
 }
 
-/* Bottom bar of the welcome screen: default-reader checkbox (left) and
-   language picker (right, opens upward). */
 #welcome-screen { padding-bottom: 72px; }
 
 .welcome-footer {
@@ -2137,8 +2036,6 @@ kbd,
 .welcome-default.on .welcome-default-box { background: var(--primary); border-color: var(--primary); }
 .welcome-default.on .welcome-default-box svg { visibility: visible; }
 
-/* Up to date? Left of the language picker: a quiet version number with a
-   green check, or a red cross and "Update to …" that installs it. */
 .update-badge {
   display: inline-flex;
   align-items: center;
@@ -2260,8 +2157,6 @@ kbd,
   .lang-menu { animation: none; }
 }
 
-/* ══ Dialogs ══════════════════════════════════════════════════════════════ */
-
 .modal-backdrop {
   position: fixed;
   inset: 0;
@@ -2343,8 +2238,6 @@ kbd,
   z-index: 9999;
 }
 
-/* ── Saved signatures strip ────────────────────────────────────────────── */
-
 .sig-saved-section {
   display: flex;
   flex-direction: column;
@@ -2420,8 +2313,6 @@ kbd,
 .sig-saved-card:hover .sig-saved-delete { opacity: 1; }
 .sig-saved-delete:hover { background: #dc2626; }
 
-/* ── Settings dialog ───────────────────────────────────────────────────── */
-
 .settings-box {
   min-width: 340px;
   max-width: 540px;
@@ -2479,8 +2370,6 @@ kbd,
 .settings-btn:hover { background: var(--accent); }
 .settings-btn:disabled { opacity: 0.5; cursor: default; }
 
-/* ── Option cards (split) ──────────────────────────────────────────────── */
-
 .split-options {
   display: flex;
   flex-direction: column;
@@ -2535,8 +2424,6 @@ kbd,
 
 .split-summary.error { color: var(--destructive); }
 
-/* ══ Toast ════════════════════════════════════════════════════════════════ */
-
 .toast {
   position: fixed;
   bottom: 20px;
@@ -2576,8 +2463,6 @@ kbd,
 .toast.error { border-color: color-mix(in srgb, var(--destructive) 45%, var(--border)); color: var(--destructive); }
 .toast.error::before { background: var(--destructive); }
 
-/* ══ Context menu ═════════════════════════════════════════════════════════ */
-
 .ctx-menu {
   position: fixed;
   background: var(--popover);
@@ -2609,8 +2494,6 @@ kbd,
 .ctx-menu button:hover { background: var(--accent); }
 .ctx-menu button:disabled { opacity: 0.45; cursor: default; }
 .ctx-menu button:disabled:hover { background: transparent; }
-
-/* ══ Print dialog ═════════════════════════════════════════════════════════ */
 
 .print-box {
   min-width: 360px;
@@ -2694,8 +2577,6 @@ kbd,
   display: none;
 }
 
-/* ══ Print ════════════════════════════════════════════════════════════════ */
-
 @media print {
   #toolbar-container,
   .toast { display: none !important; }
@@ -2718,16 +2599,12 @@ kbd,
   }
 }
 
-/* ── Custom title bar (native decorations off) ─────────────────────────── */
-
 body.custom-titlebar #menubar-row {
   padding-right: 0;
   user-select: none;
   -webkit-user-select: none;
 }
 
-/* macOS: the menus are at the top of the screen and the system buttons sit
-   on the left of this row (tauri.macos.conf.json, TRAFFIC_LIGHTS in lib.rs). */
 body.mac #menubar-row { padding-left: 78px; }
 body.mac.mac-fullscreen #menubar-row { padding-left: 6px; }
 body.mac .menubar-menu,
@@ -2764,8 +2641,6 @@ body.mac .titlebar-logo { display: none !important; }
 }
 
 .window-control.wc-close:active { background: #b22a1b; }
-
-/* ── Actual-size calibration ───────────────────────────────────────────── */
 
 .settings-calib {
   display: flex;
@@ -2804,8 +2679,6 @@ body.mac .titlebar-logo { display: none !important; }
   width: 100%;
   accent-color: var(--primary);
 }
-
-/* ── Document info drawer ──────────────────────────────────────────────── */
 
 .info-panel {
   position: fixed;
@@ -2866,7 +2739,6 @@ body.mac .titlebar-logo { display: none !important; }
   overflow-wrap: anywhere;
 }
 
-/* Horizontal scrolling: one long row, centred vertically when it fits. */
 #viewer-scroll.horizontal {
   justify-content: safe center;
 }
@@ -2876,14 +2748,11 @@ body.mac .titlebar-logo { display: none !important; }
   gap: 20px;
 }
 
-/* App logo at the start of the title bar, as on the welcome screen. */
 .titlebar-logo {
   flex-shrink: 0;
   margin: 0 6px 0 4px;
   pointer-events: none;
 }
-
-/* ══ Crop / Straighten (src/adjust-view.ts) ═══════════════════════════════ */
 
 .edit-tools .tool-btn.off { color: var(--muted-foreground); opacity: 0.55; }
 .edit-tools .tool-btn.off:hover { background: transparent; }
@@ -2990,10 +2859,6 @@ body.mac .titlebar-logo { display: none !important; }
   background-position: 11px 11px;
 }
 .adj-frame { position: relative; flex-shrink: 0; box-shadow: var(--page-shadow); }
-/* Straighten: the page and, beside it, the result as it will be. */
-/* Straighten: once a corner is let go, the result shows in place of the page,
-   with the outline and the corners faint over it, ready to be grabbed again.
-   While a corner moves, the page itself shows (with the loupe). */
 .adj-live { position: absolute; inset: 0; }
 .adj-live[hidden] { display: none; }
 .adj-live-on .adj-warp-dim, .adj-live-on .adj-warp-link,
@@ -3005,7 +2870,6 @@ body.mac .titlebar-logo { display: none !important; }
 .adj-page { display: block; width: 100%; height: 100%; }
 .adj-crop .adj-page { transition: transform 320ms cubic-bezier(0.22, 1, 0.36, 1); }
 
-/* Crop: the dimming stays inside the page */
 .adj-clip { position: absolute; inset: 0; overflow: hidden; border-radius: 2px; }
 .adj-dim { position: absolute; box-shadow: 0 0 0 9999px rgba(9, 9, 11, 0.62); pointer-events: none; }
 .adj-cropbox {
@@ -3051,7 +2915,6 @@ body.mac .titlebar-logo { display: none !important; }
   white-space: nowrap;
 }
 
-/* Straighten: four corners and an offset loupe */
 .adj-svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; pointer-events: none; }
 .adj-warp-dim { fill: rgba(9, 9, 11, 0.5); fill-rule: evenodd; }
 .adj-warp-poly { fill: none; stroke: var(--selection); stroke-width: 1.5; stroke-dasharray: 6 4; }
@@ -3098,8 +2961,6 @@ body.mac .titlebar-logo { display: none !important; }
   z-index: 2;
 }
 .adj-loupe[hidden], .adj-loupe-label[hidden] { display: none; }
-
-/* ══ Export / Compress / Password dialogs (src/modal.ts) ══════════════════ */
 
 .ez-modal { width: 480px; padding: 20px; gap: 14px; }
 .ez-modal-title { display: inline-flex; align-items: center; gap: 10px; }
@@ -3173,7 +3034,6 @@ body.mac .titlebar-logo { display: none !important; }
 .ez-check-text { display: flex; flex-direction: column; gap: 2px; }
 .ez-summary { padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius); color: var(--muted-foreground); font-size: 12px; line-height: 1.5; }
 
-/* Recognize text (OCR) */
 .ez-modal.ocr-box { width: min(920px, calc(100vw - 48px)); }
 .ocr-bar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .ocr-nav { display: inline-flex; align-items: center; gap: 2px; }
@@ -3204,7 +3064,6 @@ body.mac .titlebar-logo { display: none !important; }
 .btn-destructive { background: #E53935; border-color: #E53935; color: #ffffff; }
 .btn-destructive:hover { background: #c62828; border-color: #c62828; }
 
-/* Password strength */
 .pw-meter { display: flex; flex-direction: column; gap: 6px; margin-top: -4px; }
 .pw-bars { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 4px; }
 .pw-bars span { height: 5px; border-radius: 3px; background: var(--muted); transition: background-color 200ms ease; }
@@ -3228,22 +3087,17 @@ body.mac .titlebar-logo { display: none !important; }
   display: inline-flex; align-items: center; justify-content: center; font-weight: 700; font-size: 12px;
 }
 
-/* Padlock in the main bar: green while the document has a password */
 .tb-lock.on { color: #16a34a; }
 :root[data-theme="dark"] .tb-lock.on { color: #4ade80; }
 
-/* A password-protected document is read-only: Annotate / Edit and its form
-   fields look unavailable until the password is removed (the padlock). */
 body.read-only .mode-btn:not([data-mode="read"]) { opacity: 0.45; }
 body.read-only .page-form-layer { pointer-events: none; }
 
-/* Compress: "won't shrink" warning and the progress while it runs. */
 .ez-warn { font-size: 12px; color: #b45309; padding: 0 2px; }
 :root[data-theme="dark"] .ez-warn { color: #fbbf24; }
 .ez-progress { display: flex; flex-direction: column; gap: 6px; }
 .compress-box.running .ez-list, .compress-box.running .ez-compare, .compress-box.running .ez-warn { opacity: 0.5; pointer-events: none; }.ez-warn.hidden, .ez-progress.hidden { display: none; }
 
-/* Page brightness (Settings): dims too-bright pages on screen only. */
 .dim-pages .page-wrapper,
 .dim-pages .page-sidebar-frame canvas,
 .dim-pages .adj-page,
@@ -3253,10 +3107,8 @@ body.read-only .page-form-layer { pointer-events: none; }
 .settings-brightness .settings-range { width: 140px; }
 @media print { .dim-pages .page-wrapper { filter: none; } }
 
-/* Full screen: no window buttons (F11, Esc or the toolbar button exit it). */
 body.fullscreen .window-controls { display: none; }
 
-/* Page brightness button and its slider. */
 .brightness-wrap { position: relative; display: inline-flex; }
 .brightness-pop {
   display: none;
@@ -3278,14 +3130,10 @@ body.fullscreen .window-controls { display: none; }
 .brightness-pop .settings-range { width: 140px; }
 .brightness-val { font-size: 12px; color: var(--muted-foreground); min-width: 38px; text-align: right; cursor: default; }
 
-/* Yes / no question (confirm-dialog.ts). */
 .confirm-dialog { z-index: 1000; }
 .confirm-box { max-width: 420px; }
 .confirm-text { margin: 4px 0 8px; font-size: 13px; color: var(--foreground); }
 
-/* One scrollbar everywhere (pages, page panel, menus, dialogs, notes): a
-   wide grab area, a slim thumb that widens and darkens under the pointer
-   and while dragged. */
 ::-webkit-scrollbar { width: 14px; height: 14px; }
 ::-webkit-scrollbar-track, ::-webkit-scrollbar-corner { background: transparent; }
 ::-webkit-scrollbar-thumb {
@@ -3301,9 +3149,6 @@ body.fullscreen .window-controls { display: none; }
   background-color: color-mix(in srgb, var(--muted-foreground) 60%, transparent);
 }
 
-/* ══ Presentation ══ */
-/* One page at a time on black, above everything; the pill and the cursor
-   hide after a short pause without mouse movement. */
 .presentation {
   position: fixed;
   inset: 0;
@@ -3321,8 +3166,6 @@ body.fullscreen .window-controls { display: none; }
   justify-content: center;
 }
 .presentation-stage canvas { display: block; background: #fff; }
-/* Going full screen: plain black until the window has its final size, then
-   the page fades in once (src/presentation.ts, reveal()). */
 .presentation-stage { transition: opacity 0.18s ease-out; }
 .presentation.holding .presentation-stage { opacity: 0; transition: none; }
 .presentation.holding .presentation-bar { visibility: hidden; }
@@ -3336,7 +3179,6 @@ body.fullscreen .window-controls { display: none; }
   gap: 2px;
   padding: 4px;
   border-radius: 999px;
-  /* Always dark: it sits on the black presentation screen in both themes. */
   background: rgba(24, 24, 27, 0.88);
   border: 1px solid #3f3f46;
   color: #fafafa;
@@ -3371,8 +3213,6 @@ body.fullscreen .window-controls { display: none; }
   .presentation-bar, .presentation-stage { transition: none; }
 }
 
-/* ══ Studio panel (src/studio-panel.ts): tool options and annotations ═════ */
-
 .studio-panel {
   width: 264px;
   flex-shrink: 0;
@@ -3400,7 +3240,6 @@ body.fullscreen .window-controls { display: none; }
 .studio-head .icon-btn svg, .studio-expand svg { width: 15px; height: 15px; }
 .studio-head .icon-btn:hover, .studio-expand:hover { background: var(--accent); color: var(--foreground); }
 
-/* Folded away: a thin rail with the button that brings it back. */
 .studio-expand { display: none; margin: 8px auto 0; }
 .studio-panel.collapsed { width: 44px; }
 .studio-panel.collapsed > :not(.studio-expand) { display: none; }
@@ -3416,7 +3255,6 @@ body.fullscreen .window-controls { display: none; }
 .studio-empty { margin: 0; color: var(--muted-foreground); font-size: 12px; line-height: 1.5; }
 .studio-empty[hidden] { display: none; }
 
-/* The options, one under the other. */
 .studio-options .tb-options { min-height: 0; border: 0; background: none; animation: none; }
 .studio-options .opt-panel { flex-direction: column; align-items: stretch; flex-wrap: nowrap; gap: 14px; padding: 0; }
 .studio-options .opt-group { flex-direction: column; align-items: stretch; gap: 14px; }
@@ -3439,7 +3277,6 @@ body.fullscreen .window-controls { display: none; }
 .color-row-swatches { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 .studio-options .color-swatch { border-radius: 50%; }
 
-/* The chosen colour as a hex code. */
 .color-hex { display: none; }
 .studio-options .color-hex {
   display: flex;
@@ -3467,7 +3304,6 @@ body.fullscreen .window-controls { display: none; }
 }
 .color-hex-fmt { color: var(--muted-foreground); font-size: 12px; }
 
-/* Pencil brushes: a name and a sample stroke each. */
 .opt-brushes { display: flex; flex-direction: column; gap: 6px; }
 .opt-brushes[hidden] { display: none; }
 .brush-list { display: flex; flex-direction: column; margin: 0 -8px; }
@@ -3491,7 +3327,6 @@ body.fullscreen .window-controls { display: none; }
 .brush-name { width: 110px; flex-shrink: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .brush-sample { flex: 1; height: 20px; min-width: 0; }
 
-/* The annotations of the document. */
 .studio-list-wrap { display: flex; flex-direction: column; min-height: 150px; flex: 1 1 150px; padding: 0 14px 10px; }
 .studio-list-head {
   display: flex;
@@ -3520,7 +3355,6 @@ body.fullscreen .window-controls { display: none; }
 .studio-ann > svg { width: 15px; height: 15px; flex-shrink: 0; color: var(--muted-foreground); }
 .studio-ann:hover, .studio-ann:focus-visible { background: color-mix(in srgb, var(--accent) 60%, transparent); }
 .studio-ann.on { background: var(--accent); }
-/* The selected annotation: a red mark, like the selected pages. */
 .studio-ann.on::before {
   content: "";
   position: absolute;
@@ -3551,7 +3385,6 @@ body.fullscreen .window-controls { display: none; }
 .studio-ann:hover .studio-ann-del, .studio-ann.on .studio-ann-del, .studio-ann:focus-within .studio-ann-del { visibility: visible; }
 .studio-ann-del:hover { color: var(--destructive, #dc2626); background: color-mix(in srgb, var(--destructive, #dc2626) 10%, transparent); }
 
-/* ══ Firefox-style floating highlight popover (src/canvas-overlay.ts) ════ */
 .hl-popover {
   position: absolute;
   z-index: 30;

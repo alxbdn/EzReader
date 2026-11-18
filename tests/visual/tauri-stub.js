@@ -1,10 +1,3 @@
-// Stands in for the Tauri IPC when the built frontend (dist/) runs in plain
-// Chromium for the visual regression tests: every Rust command answers with a
-// fixed, harmless value, so the screens look the same on every run.
-//
-// Injected with page.addInitScript before the app's own scripts. The test
-// sets window.__EZ_STUB__ first ({ startupFile }) to open a document.
-
 (() => {
   const opts = window.__EZ_STUB__ ?? {};
   let nextId = 1;
@@ -59,7 +52,6 @@
       const answer = answers[cmd];
       return answer ? answer(args) : null;
     },
-    // pdf.js reads documents through the asset protocol: served by the test.
     convertFileSrc(path) {
       return `/__fixtures__/${encodeURIComponent(String(path).split(/[\\/]/).pop())}`;
     },

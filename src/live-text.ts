@@ -1,20 +1,9 @@
 import type { PDFPageProxy } from "pdfjs-dist";
 import type { OcrResult } from "./ocr-modal";
 
-/**
- * Live text: pages without a text layer (scans, photos opened as a PDF) are
- * read in the background by the OCR engine of the system (Windows OCR on
- * Windows), and the words found become an invisible, selectable text layer
- * laid over the picture. Selecting and copying then works as on any PDF,
- * with no button to press. Everything stays on the computer.
- */
-
-/** Below this many letters, a page counts as having no text (a stray page number). */
 const MIN_TEXT_CHARS = 8;
-/** Long side of the picture handed to the OCR engine, in pixels (~200 dpi on A4). */
 const OCR_LONG_SIDE = 2400;
 
-/** True when the text items of a page hold real text, not just a few stray characters. */
 export function hasRealText(items: readonly unknown[]): boolean {
   let n = 0;
   for (const it of items) {
@@ -26,14 +15,10 @@ export function hasRealText(items: readonly unknown[]): boolean {
   return false;
 }
 
-/** A word placed on the page, in CSS pixels of the page. */
 export interface PlacedWord {
   text: string;
-  /** Left edge in the line (layout box), relative to the line's left. */
   margin: number;
-  /** Horizontal stretch so the glyphs cover the word on the picture. */
   scaleX: number;
-  /** How far below the line's top the word sits (a slightly tilted scan). */
   dy: number;
 }
 
@@ -44,13 +29,6 @@ export interface PlacedLine {
   words: PlacedWord[];
 }
 
-/**
- * Lays the OCR result out on a page of `width` × `height` CSS pixels.
- * `measure(text, fontSize)` is the natural width of `text` in the layer's
- * font. Each word is an inline block stretched to the box the engine found;
- * words keep a trailing space so a copied line reads "one two three", and
- * each line is its own block so lines copy on their own lines.
- */
 export function layoutOcr(
   result: OcrResult,
   width: number,
@@ -64,11 +42,10 @@ export function layoutOcr(
     words.sort((a, b) => a.x - b.x);
     const left = words[0].x * width;
     const top = Math.min(...words.map((w) => w.y)) * height;
-    // The tallest word sets the line height: it has the ascenders and descenders.
     const fontSize = Math.max(...words.map((w) => w.h)) * height;
     if (fontSize < 2) continue;
     const placed: PlacedWord[] = [];
-    let cursor = left; // layout x where the next word would start without a margin
+    let cursor = left;
     words.forEach((w, i) => {
       const last = i === words.length - 1;
       const text = last ? w.text : `${w.text} `;
@@ -85,7 +62,6 @@ export function layoutOcr(
   return out;
 }
 
-/** Fills `layer` (the page's text layer) with the recognized lines. */
 export function renderOcrLayer(layer: HTMLElement, lines: PlacedLine[]): void {
   const frag = document.createDocumentFragment();
   for (const line of lines) {
@@ -104,7 +80,6 @@ export function renderOcrLayer(layer: HTMLElement, lines: PlacedLine[]): void {
       if (t.length) word.style.transform = t.join(" ");
       el.appendChild(word);
     }
-    // Absolutely placed lines copy as one run: a <br> keeps them apart.
     if (frag.childNodes.length) frag.appendChild(Object.assign(document.createElement("br"), { className: "ocr-br" }));
     frag.appendChild(el);
   }
@@ -115,16 +90,10 @@ export function renderOcrLayer(layer: HTMLElement, lines: PlacedLine[]): void {
 
 export type Recognizer = (data: string, language: string) => Promise<OcrResult>;
 
-/**
- * Reads pages one at a time, newest request first, and keeps the result of
- * each page of the open document. `language` gives the language picked in
- * the OCR dialog ("" = the user's languages).
- */
 export class LiveText {
   private cache = new Map<string, Promise<OcrResult | null>>();
   private queue: { key: string; run: () => Promise<OcrResult | null>; resolve: (r: OcrResult | null) => void; wanted: () => boolean }[] = [];
   private busy = false;
-  /** Turned off for the session when the system has no OCR (e.g. no language pack). */
   private unavailable = false;
   private doc = 0;
 
@@ -132,7 +101,6 @@ export class LiveText {
 
   setRecognizer(fn: Recognizer | null): void { this.recognize = fn; }
 
-  /** A new document is open: forget the pages read so far. */
   reset(): void {
     this.doc++;
     this.cache.clear();
@@ -140,18 +108,12 @@ export class LiveText {
     this.queue = [];
   }
 
-  /**
-   * The words of `page` as displayed with `rotation`, read once and then
-   * served from the cache. Resolves to null when the page is no longer
-   * `wanted()` by the time its turn comes, or when OCR is not available.
-   */
   read(page: PDFPageProxy, rotation: number, wanted: () => boolean): Promise<OcrResult | null> {
     if (!this.recognize || this.unavailable) return Promise.resolve(null);
     const key = `${this.doc}:${page.pageNumber}:${rotation}`;
     const hit = this.cache.get(key);
     if (hit) return hit;
     const p = new Promise<OcrResult | null>((resolve) => {
-      // Newest first: the page just scrolled to is read before the ones passed by.
       this.queue.unshift({ key, run: () => this.run(page, rotation), resolve, wanted });
     });
     this.cache.set(key, p);
@@ -166,7 +128,6 @@ export class LiveText {
       let job;
       while ((job = this.queue.shift())) {
         if (!job.wanted()) {
-          // Read it next time the page comes into view.
           this.cache.delete(job.key);
           job.resolve(null);
           continue;

@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { SAFE_PDF } from "../pdf-options";
 
-/** The app's own sources (not the tests), by path. */
 const SOURCES = import.meta.glob("../*.ts", { query: "?raw", import: "default", eager: true }) as Record<string, string>;
 
 describe("pdf.js hardening", () => {

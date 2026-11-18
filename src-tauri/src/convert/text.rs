@@ -1,10 +1,6 @@
-//! Plain text, HTML, XML and RTF.
-
 use super::{blocks, xml_escape, Block, TextDoc};
 use std::fmt::Write;
 
-/// Plain text, one paragraph per line, table cells separated by tabs and a
-/// blank line between paragraphs. Windows line endings, for Notepad.
 pub fn txt(doc: &TextDoc) -> String {
     let mut out = String::new();
     for (i, page) in doc.pages.iter().enumerate() {
@@ -30,8 +26,6 @@ pub fn txt(doc: &TextDoc) -> String {
     out
 }
 
-/// A web page: one section per PDF page, titles as headings, tables as
-/// tables.
 pub fn html(doc: &TextDoc) -> String {
     let title = if doc.title.is_empty() { "Document" } else { doc.title.as_str() };
     let mut out = String::new();
@@ -79,7 +73,6 @@ pub fn html(doc: &TextDoc) -> String {
     out
 }
 
-/// The text with its structure: pages, headings, paragraphs and tables.
 pub fn xml(doc: &TextDoc) -> String {
     let mut out = String::from("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n");
     let _ = writeln!(out, "<document title=\"{}\" pages=\"{}\">", xml_escape(&doc.title), doc.pages.len());
@@ -118,7 +111,6 @@ pub fn xml(doc: &TextDoc) -> String {
     out
 }
 
-/// Text for an RTF file: ASCII as is, everything else as `\uN?`.
 fn rtf_escape(s: &str) -> String {
     let mut out = String::with_capacity(s.len());
     for c in s.chars() {
@@ -133,7 +125,6 @@ fn rtf_escape(s: &str) -> String {
             c => {
                 let mut buf = [0u16; 2];
                 for unit in c.encode_utf16(&mut buf) {
-                    // RTF takes signed 16-bit numbers.
                     let _ = write!(out, "\\u{}?", *unit as i16);
                 }
             }
@@ -142,14 +133,12 @@ fn rtf_escape(s: &str) -> String {
     out
 }
 
-/// Font size in half points, kept readable.
 pub(super) fn half_points(size: f32, heading: u8) -> u32 {
     let pt = if size.is_finite() && size > 0.0 { size } else { 11.0 };
     let (lo, hi) = if heading > 0 { (12.0, 36.0) } else { (8.0, 16.0) };
     (pt.clamp(lo, hi) * 2.0).round() as u32
 }
 
-/// Rich text: opens in WordPad, Word and LibreOffice.
 pub fn rtf(doc: &TextDoc) -> String {
     let mut out = String::from("{\\rtf1\\ansi\\ansicpg1252\\deff0\\uc1{\\fonttbl{\\f0\\fswiss Calibri;}}\\viewkind4\n");
     if !doc.title.is_empty() {
@@ -245,7 +234,6 @@ mod tests {
         assert!(r.ends_with('}'));
         assert!(r.contains("\\fs40\\b Annual report\\b0\\par"));
         assert!(r.contains("\\page\n"));
-        // É, é, € as Unicode escapes.
         assert!(r.contains("\\u201?t\\u233? \\u8364?"));
         assert_eq!(r.matches("\\row").count(), 2);
         let opens = r.matches('{').count() - r.matches("\\{").count();

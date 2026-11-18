@@ -1,5 +1,3 @@
-//! Thumbnail provider: page 1 of the PDF as its icon in Explorer.
-
 use crate::{layout, pdf, Alive};
 use std::cell::RefCell;
 use windows::core::{implement, Ref, Result};

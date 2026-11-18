@@ -2,7 +2,6 @@ import { vi } from "vitest";
 import type { Backend, Feedback } from "../backend";
 import type { TextDoc } from "../text-layout";
 
-/** An in-memory Backend: every dialog answers what `answers` says, every command is a spy. */
 export function fakeBackend(answers: { savePath?: string | null; dir?: string | null; existing?: string[] } = {}) {
   const written = new Map<string, string>();
   const backend: Backend = {
@@ -24,7 +23,6 @@ export function fakeBackend(answers: { savePath?: string | null; dir?: string | 
   return { backend, written };
 }
 
-/** Feedback that records the toasts and answers every question with `yes`. */
 export function fakeFeedback(yes = true) {
   const toasts: { text: string; isError: boolean }[] = [];
   const ui: Feedback = {

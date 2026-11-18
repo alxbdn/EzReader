@@ -1,13 +1,3 @@
-/**
- * "Up to date?" at the bottom of the welcome screen, left of the language
- * picker:
- *   up to date  — green check + "v1.1.0" (quiet, muted)
- *   outdated    — red cross + "Update to 1.2.0"; a click installs it the way
- *                 this copy was installed (see src-tauri/src/commands/update.rs)
- * Nothing shows while checking, offline, or outside the app.
- *
- * Everything that talks to the system is injected, so it runs in tests.
- */
 import { ICON_CIRCLE_CHECK, ICON_CIRCLE_X, ICON_LOADER } from "./icons";
 import type { Translations } from "./i18n";
 import type { UpdateOutcome, UpdateStatus } from "./tauri-bridge";
@@ -32,11 +22,9 @@ export class UpdateBadge {
     this.el.className = "update-badge";
     this.el.hidden = true;
     this.el.addEventListener("click", () => void this.onClick());
-    // Left of the language picker.
     footer.insertBefore(this.el, footer.querySelector(".lang-picker"));
   }
 
-  /** Asks for the latest version and shows the result. */
   async refresh(): Promise<void> {
     try {
       this.status = await this.deps.check();
@@ -48,7 +36,6 @@ export class UpdateBadge {
     this.render();
   }
 
-  /** Redraws (after a language change). */
   render(): void {
     const t = this.deps.t();
     const s = this.status;
@@ -80,7 +67,7 @@ export class UpdateBadge {
 
   private async onClick(): Promise<void> {
     if (this.state === "current") {
-      await this.refresh(); // checks again
+      await this.refresh();
       return;
     }
     if (this.state !== "outdated") return;
@@ -89,7 +76,7 @@ export class UpdateBadge {
     this.render();
     try {
       const outcome = await this.deps.install();
-      if (outcome === "restarting") return; // the app closes
+      if (outcome === "restarting") return;
       this.state = "outdated";
       this.deps.notify(
         outcome === "otherWindows"

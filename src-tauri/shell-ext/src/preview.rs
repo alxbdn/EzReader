@@ -1,11 +1,3 @@
-//! Preview handler: the pages of the PDF in Explorer's preview pane
-//! (Alt+P), and in other apps that use preview handlers, such as
-//! PowerToys Peek.
-//!
-//! The handler only keeps what Explorer gives it; the document and the
-//! drawn pages live with the child window (`Viewer`), which owns them
-//! until it is destroyed.
-
 use crate::{layout, pdf, Alive};
 use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
@@ -42,9 +34,7 @@ use windows::Win32::UI::WindowsAndMessaging::{
 };
 
 const CLASS_NAME: PCWSTR = w!("EzReaderPdfPreview");
-/// Pixels scrolled by an arrow key or one notch of the wheel.
 const LINE: i32 = 48;
-/// Sent to the viewer when Explorer changes the pane's colours.
 const WM_COLORS: u32 = WM_APP + 1;
 
 static CLASS_REGISTERED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
@@ -66,8 +56,6 @@ fn register_class() {
     }
 }
 
-/// Called before the DLL unloads, so a later load does not find the class
-/// pointing at code that is gone.
 pub fn unregister_class() {
     use std::sync::atomic::Ordering;
     if CLASS_REGISTERED.swap(false, Ordering::SeqCst) {
@@ -185,7 +173,6 @@ impl IPreviewHandler_Impl for PreviewHandler_Impl {
             return Ok(());
         }
         let stream = self.stream.borrow().clone().ok_or(windows::core::Error::from(E_UNEXPECTED))?;
-        // A file that cannot be read still gets a pane with a short message.
         let document = pdf::read_all(&stream).and_then(|bytes| pdf::open(&bytes)).ok();
         let viewer = Box::new(Viewer::new(document, self.colors.get()));
         register_class();
@@ -213,7 +200,6 @@ impl IPreviewHandler_Impl for PreviewHandler_Impl {
                 Ok(())
             }
             Err(e) => {
-                // WM_NCCREATE did not take the viewer: free it here.
                 if unsafe { (*raw).window.is_invalid() } {
                     drop(unsafe { Box::from_raw(raw) });
                 }
@@ -246,7 +232,6 @@ impl IPreviewHandler_Impl for PreviewHandler_Impl {
     }
 
     fn TranslateAccelerator(&self, message: *const MSG) -> Result<()> {
-        // Explorer's own shortcuts go back to Explorer.
         let frame = self.site.borrow().as_ref().and_then(|s| s.cast::<IPreviewHandlerFrame>().ok());
         let hr = match frame {
             Some(frame) => unsafe {
@@ -317,7 +302,6 @@ impl IPreviewHandlerVisuals_Impl for PreviewHandler_Impl {
     }
 }
 
-/// A drawn page, kept while it is on or near the screen.
 struct Drawn {
     bitmap: HBITMAP,
 }
@@ -328,7 +312,6 @@ impl Drop for Drawn {
     }
 }
 
-/// The child window's state: the document, its layout and drawn pages.
 struct Viewer {
     window: HWND,
     document: Option<PdfDocument>,
@@ -370,7 +353,6 @@ impl Viewer {
         if width != self.width {
             self.drawn.clear();
             let (slots, total) = layout::column(&self.sizes, width);
-            // Keep the same spot in the document when the width changes.
             let ratio = if self.total > 0 { self.scroll as f64 / self.total as f64 } else { 0.0 };
             self.slots = slots;
             self.total = total;
@@ -413,7 +395,6 @@ impl Viewer {
     fn paint(&mut self, target: HDC) {
         let (w, h) = (self.width.max(1), self.height.max(1));
         unsafe {
-            // Drawn off screen first, so scrolling does not flicker.
             let buffer_dc = CreateCompatibleDC(Some(target));
             let buffer = CreateCompatibleBitmap(target, w, h);
             let old = SelectObject(buffer_dc, HGDIOBJ(buffer.0));
@@ -425,7 +406,6 @@ impl Viewer {
                 self.paint_message(buffer_dc, w, h);
             } else {
                 let range = layout::visible(&self.slots, self.scroll, h);
-                // Pages well off screen are let go, to keep memory low.
                 let keep = range.start.saturating_sub(2)..range.end + 2;
                 self.drawn.retain(|i, _| keep.contains(i));
                 let page_dc = CreateCompatibleDC(Some(buffer_dc));
@@ -459,7 +439,6 @@ impl Viewer {
     }
 
     fn paint_message(&self, dc: HDC, w: i32, h: i32) {
-        // French UI → French message; English otherwise.
         let french = unsafe { GetUserDefaultUILanguage() } & 0x3ff == 0x0c;
         let text = if french {
             "EzReader ne peut pas afficher l’aperçu de ce PDF (protégé par mot de passe ou abîmé)."

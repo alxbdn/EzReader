@@ -6,10 +6,6 @@ type ConfirmHandler = (level: CompressLevel, targetBytes?: number) => void;
 
 const MB = 1024 * 1024;
 
-/**
- * True when `level` is estimated to give a file at least as big as the
- * current one (FR-009: say so before saving). Unknown until estimated.
- */
 export function wontShrink(level: CompressLevel, estimate: CompressEstimate | null, currentBytes: number): boolean {
   if (!estimate || level === "target" || currentBytes <= 0) return false;
   const size = level === "lossless" ? estimate.losslessBytes
@@ -18,10 +14,6 @@ export function wontShrink(level: CompressLevel, estimate: CompressEstimate | nu
   return size >= currentBytes;
 }
 
-/**
- * Compress: three levels with the size each gives (computed when the
- * dialog opens), or a target size that EzReader meets with the best quality.
- */
 export class CompressModal extends Modal {
   private level: CompressLevel = "balanced";
   private estimate: CompressEstimate | null = null;
@@ -39,7 +31,6 @@ export class CompressModal extends Modal {
   private progress: HTMLElement;
   private progressBar: HTMLElement;
   private progressLabel: HTMLElement;
-  /** Set while a compression runs: Cancel / Escape stop it instead of closing. */
   private onStop: (() => void) | null = null;
 
   constructor() {
@@ -117,10 +108,8 @@ export class CompressModal extends Modal {
     this.okBtn.addEventListener("click", () => this.confirm());
   }
 
-  /** True when the chosen level would not make the file smaller. */
   wontShrink(): boolean { return wontShrink(this.level, this.estimate, this.currentBytes); }
 
-  /** Shows the progress bar; Cancel, ✕ and Escape now call `onStop`. */
   startRunning(onStop: () => void): void {
     this.onStop = onStop;
     this.box.classList.add("running");
@@ -135,7 +124,6 @@ export class CompressModal extends Modal {
     this.progressLabel.textContent = this.tr("cmpRunning", "Compressing… {pct} %").replace("{pct}", String(pct));
   }
 
-  /** The compression ended (done, failed or cancelled): closes the dialog. */
   finishRunning(): void {
     this.onStop = null;
     this.box.classList.remove("running");
@@ -150,7 +138,6 @@ export class CompressModal extends Modal {
 
   onConfirm(cb: ConfirmHandler): void { this.handlers.push(cb); }
 
-  /** Opens with the file's size; the estimates follow with `setEstimate`. */
   open(currentBytes: number): void {
     this.currentBytes = currentBytes;
     this.estimate = null;
@@ -171,14 +158,12 @@ export class CompressModal extends Modal {
     return Number.isFinite(v) && v > 0 ? Math.round(v * MB) : null;
   }
 
-  /** The dialog stays open: the handler shows the progress, then closes it. */
   private confirm(): void {
     if (this.okBtn.disabled) return;
     const target = this.level === "target" ? this.targetBytes() ?? undefined : undefined;
     for (const h of this.handlers) h(this.level, target);
   }
 
-  /** "12.4 MB", "830 KB" in the interface language. */
   size(bytes: number): string {
     const lang = document.documentElement.lang || "en";
     const nf = (n: number, d: number) => n.toLocaleString(lang, { maximumFractionDigits: d, minimumFractionDigits: d });

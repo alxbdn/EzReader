@@ -1,5 +1,3 @@
-//! Password protection: AES-256 encryption (PDF 2.0, revision 6) and its removal.
-
 use crate::error::{CmdResult, ErrorCode, PdfError};
 use std::collections::BTreeMap;
 use std::sync::Arc;
@@ -9,8 +7,6 @@ use lopdf::{Document, EncryptionState, EncryptionVersion, Permissions};
 
 use crate::fsutil;
 
-/// Writes `input` to `output` encrypted with `password` (needed to open it).
-/// Everything stays allowed once it is open: printing, copying, editing.
 #[tauri::command(async)]
 pub fn encrypt_pdf(input_path: String, output_path: String, password: String) -> CmdResult<()> {
     crate::grants::check_all([&input_path, &output_path])?;
@@ -39,8 +35,6 @@ pub fn encrypt_pdf(input_path: String, output_path: String, password: String) ->
     fsutil::save_document(&mut doc, &output_path).map_err(PdfError::from)
 }
 
-/// Writes `input` to `output` without its password. Fails with
-/// [`ErrorCode::WrongPassword`] when `password` does not open it.
 #[tauri::command(async)]
 pub fn decrypt_pdf(input_path: String, output_path: String, password: String) -> CmdResult<()> {
     crate::grants::check_all([&input_path, &output_path])?;
@@ -53,7 +47,6 @@ pub fn decrypt_pdf(input_path: String, output_path: String, password: String) ->
         }
     })?;
     if doc.is_encrypted() {
-        // Loaded but still locked: the password did not open it.
         doc.decrypt(&password).map_err(|_| PdfError::new(ErrorCode::WrongPassword, "wrong password"))?;
     }
     doc.trailer.remove(b"Encrypt");
@@ -65,8 +58,6 @@ mod tests {
     use super::*;
     use crate::test_util::{fixture, tmp};
 
-    /// A fresh password for each run, with a non-ASCII character: a password
-    /// written in the source would be flagged as a hard-coded secret.
     fn random_password() -> String {
         let mut bytes = [0u8; 12];
         getrandom::fill(&mut bytes).unwrap();

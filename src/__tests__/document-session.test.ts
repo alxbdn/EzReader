@@ -92,7 +92,6 @@ describe("DocumentSession after a save", () => {
     state.rotation = 90;
     const input = await session.materialize();
     expect(saveAnnotated).toHaveBeenLastCalledWith("/docs/a.pdf", input, [], 90, []);
-    // The edited file holds the turn; the viewer reloads it upright (PdfViewer.reload).
     session.replacedWorkingCopy("/tmp/pages.pdf");
     state.rotation = 0;
     expect(session.hasPendingEdits()).toBe(false);
@@ -106,11 +105,9 @@ describe("DocumentSession after a save", () => {
     await session.saveTo("/docs/a.pdf");
     expect(saveAnnotated).toHaveBeenLastCalledWith("/docs/a.pdf", "/docs/a.pdf", [], 90, []);
 
-    // Saved file already holds the rotation: nothing pending, nothing to burn.
     expect(session.hasPendingEdits()).toBe(false);
     expect(await session.materialize()).toBe("/docs/a.pdf");
 
-    // A further quarter turn is applied once, on top of the saved file.
     state.rotation = 180;
     await session.saveTo("/docs/b.pdf");
     expect(saveAnnotated).toHaveBeenLastCalledWith("/docs/a.pdf", "/docs/b.pdf", [], 90, []);

@@ -4,13 +4,9 @@ use tauri::State;
 
 use crate::AppState;
 
-/// What this window opens: the command line for the main window, the
-/// pages dragged out for a window made by `open_pages_in_new_window`.
 #[tauri::command]
 pub fn get_startup_args(window: tauri::WebviewWindow, state: State<AppState>) -> crate::StartupArgs {
     if window.label() == "main" {
-        // Taken under the lock: a file opened from the Finder after this
-        // goes to the page (`open-files` event) instead.
         let args = state.startup_args.lock().unwrap();
         state.startup_taken.store(true, std::sync::atomic::Ordering::SeqCst);
         return args.clone();
@@ -18,10 +14,6 @@ pub fn get_startup_args(window: tauri::WebviewWindow, state: State<AppState>) ->
     state.window_args.lock().unwrap().get(window.label()).cloned().unwrap_or_default()
 }
 
-/// True when the app runs from its MSIX package (Store install). Windows then
-/// takes the .pdf association and the Print verb from the package manifest,
-/// and registry writes would only land in the package's private copy of
-/// HKCU, so the "default app" commands below leave the registry alone.
 #[cfg(target_os = "windows")]
 fn is_packaged() -> bool {
     std::env::current_exe()
@@ -61,7 +53,6 @@ fn desktop_entry_exists() -> bool {
 pub fn check_pdf_association() -> bool {
     #[cfg(target_os = "windows")]
     {
-        // Packaged: the button only opens Windows' Default apps page.
         if is_packaged() {
             return false;
         }
@@ -89,8 +80,6 @@ pub fn check_pdf_association() -> bool {
     }
 }
 
-/// The package family name (`Name_PublisherId`) of a Store/MSIX install,
-/// from the path of its exe (`…\WindowsApps\Name_Ver_Arch_Res_PublisherId\…`).
 #[cfg_attr(not(target_os = "windows"), allow(dead_code))]
 fn package_family_from_exe(exe: &str) -> Option<String> {
     let lower = exe.to_ascii_lowercase();
@@ -103,10 +92,6 @@ fn package_family_from_exe(exe: &str) -> Option<String> {
     Some(format!("{}_{}", parts[0], parts[parts.len() - 1]))
 }
 
-/// Whether Windows' choice for .pdf (`prog_id`, from UserChoice) is EzReader:
-/// our own ProgID, the `Applications\<exe>` entry Windows makes for an
-/// unregistered exe, or (Store version) a ProgID whose app belongs to our
-/// package family.
 #[cfg_attr(not(target_os = "windows"), allow(dead_code))]
 fn prog_id_is_ours(prog_id: &str, exe_name: &str, app_user_model_id: Option<&str>, family: Option<&str>) -> bool {
     if prog_id.eq_ignore_ascii_case("com.ezreader.app") {
@@ -121,17 +106,12 @@ fn prog_id_is_ours(prog_id: &str, exe_name: &str, app_user_model_id: Option<&str
     }
 }
 
-/// True when EzReader is the app PDFs open with (what the welcome screen's
-/// "Default PDF reader" box shows). Unlike `check_pdf_association`, this
-/// reads the user's actual choice, and also works for the Store version.
 #[tauri::command]
 pub fn is_default_pdf_reader() -> bool {
     #[cfg(target_os = "windows")]
     {
         use winreg::enums::{HKEY_CLASSES_ROOT, HKEY_CURRENT_USER};
         use winreg::RegKey;
-        // Recent Windows 11 builds keep the choice in UserChoiceLatest
-        // (value or subkey "ProgId"); older ones in UserChoice.
         const EXTS: &str = r"Software\Microsoft\Windows\CurrentVersion\Explorer\FileExts\.pdf";
         let hkcu = RegKey::predef(HKEY_CURRENT_USER);
         let read = |key: &str| {
@@ -218,40 +198,30 @@ pub fn register_pdf_handler() -> CmdResult<()> {
         let hkcu = RegKey::predef(HKEY_CURRENT_USER);
         let classes = hkcu.open_subkey_with_flags(r"Software\Classes", KEY_SET_VALUE).map_err(|e| e.to_string())?;
 
-        // ProgID root
         let (progid, _) = classes.create_subkey("com.ezreader.app").map_err(|e| e.to_string())?;
         progid.set_value("", &"EzReader Document").map_err(|e| e.to_string())?;
         progid.set_value("FriendlyTypeName", &"EzReader Document").map_err(|e| e.to_string())?;
 
-        // DefaultIcon
         let (icon_key, _) = progid.create_subkey("DefaultIcon").map_err(|e| e.to_string())?;
         icon_key.set_value("", &format!("\"{exe}\",0")).map_err(|e| e.to_string())?;
 
-        // shell\open\command
         let (open_cmd, _) = progid.create_subkey(r"shell\open\command").map_err(|e| e.to_string())?;
         open_cmd.set_value("", &format!("\"{exe}\" \"%1\"")).map_err(|e| e.to_string())?;
 
-        // shell\print\command
         let (print_cmd, _) = progid.create_subkey(r"shell\print\command").map_err(|e| e.to_string())?;
         print_cmd.set_value("", &format!("\"{exe}\" --print \"%1\"")).map_err(|e| e.to_string())?;
 
-        // .pdf → com.ezreader.app
         let (pdf_ext, _) = classes.create_subkey(".pdf").map_err(|e| e.to_string())?;
         pdf_ext.set_value("", &"com.ezreader.app").map_err(|e| e.to_string())?;
-        // Listed in "Open with" / the default-app picker for .pdf.
         let (open_with, _) = pdf_ext.create_subkey("OpenWithProgids").map_err(|e| e.to_string())?;
         open_with.set_value("com.ezreader.app", &"").map_err(|e| e.to_string())?;
 
-        // Also register print verb under Applications\ezreader.exe (used when
-        // Windows sets the default via Settings → Default Apps, which ignores our
-        // ProgID and uses Applications\<exe-name> instead).
         let exe_name = std::path::Path::new(&exe)
             .file_name()
             .map(|n| n.to_string_lossy().to_string())
             .unwrap_or_else(|| "ezreader.exe".to_string());
         let app_key_path = format!(r"Software\Classes\Applications\{exe_name}");
         let (app_key, _) = hkcu.create_subkey(&app_key_path).map_err(|e| e.to_string())?;
-        // Hide from "Open with" — this key is only needed for the print verb
         app_key.set_value("NoOpenWith", &"").map_err(|e| e.to_string())?;
         let (app_print_cmd, _) = app_key.create_subkey(r"shell\print\command").map_err(|e| e.to_string())?;
         app_print_cmd.set_value("", &format!("\"{exe}\" --print \"%1\"")).map_err(|e| e.to_string())?;
@@ -289,8 +259,6 @@ pub fn register_pdf_handler() -> CmdResult<()> {
         Ok(())
     }
 }
-
-// ── Printer helpers ──────────────────────────────────────────────────────────
 
 #[derive(serde::Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -375,19 +343,10 @@ fn list_printers_impl() -> Result<PrinterList, String> {
     const PRINTER_ENUM_CONNECTIONS: u32 = 0x4;
     let flags = PRINTER_ENUM_LOCAL | PRINTER_ENUM_CONNECTIONS;
 
-    // First call: get required buffer size
     let mut needed: u32 = 0;
     let mut returned: u32 = 0;
     unsafe {
-        EnumPrintersW(
-            flags,
-            ptr::null_mut(),
-            2, // PRINTER_INFO_2
-            ptr::null_mut(),
-            0,
-            &mut needed,
-            &mut returned,
-        );
+        EnumPrintersW(flags, ptr::null_mut(), 2, ptr::null_mut(), 0, &mut needed, &mut returned);
     }
 
     if needed == 0 {
@@ -395,9 +354,6 @@ fn list_printers_impl() -> Result<PrinterList, String> {
         return Ok(PrinterList { printers: vec![], default_printer: default });
     }
 
-    // Second call: fill buffer
-    // u64 words: the PRINTER_INFO_2W records read below hold pointers and
-    // must be 8-byte aligned, which a byte buffer does not guarantee.
     let mut buf = vec![0u64; (needed as usize).div_ceil(8)];
     let ok = unsafe {
         EnumPrintersW(flags, ptr::null_mut(), 2, buf.as_mut_ptr().cast::<u8>(), needed, &mut needed, &mut returned)
@@ -407,7 +363,6 @@ fn list_printers_impl() -> Result<PrinterList, String> {
         return Ok(PrinterList { printers: vec![], default_printer: default });
     }
 
-    // Parse PRINTER_INFO_2W structs
     #[repr(C)]
     #[allow(non_snake_case)]
     struct PrinterInfo2W {
@@ -454,8 +409,6 @@ fn list_printers_impl() -> Result<PrinterList, String> {
     let default = get_default_printer_name().unwrap_or_default();
     Ok(PrinterList { printers, default_printer: default })
 }
-
-// ── Print pages ──────────────────────────────────────────────────────────────
 
 #[tauri::command(async)]
 pub fn print_pages(
@@ -560,7 +513,6 @@ fn print_pages_impl(
         HORZRES, LOGPIXELSX, LOGPIXELSY, SRCCOPY, VERTRES,
     };
 
-    // Resolve printer name
     let printer_wide: Vec<u16> = match &printer_name {
         Some(name) => {
             let mut v: Vec<u16> = name.encode_utf16().collect();
@@ -575,9 +527,6 @@ fn print_pages_impl(
         }
     };
 
-    // Ask the driver for its full DEVMODE (public part + driver-private data)
-    // and set the orientation on it. A hand-built, zeroed DEVMODE is rejected
-    // by some drivers, so fall back to the driver defaults if this fails.
     let devmode_buf = orientation.as_deref().and_then(|o| printer_devmode(&printer_wide, o == "landscape"));
     let devmode_ptr = devmode_buf.as_ref().map_or(ptr::null(), |b| b.as_ptr() as *const winapi::um::wingdi::DEVMODEW);
 
@@ -607,7 +556,6 @@ fn print_pages_impl(
         return Err("StartDocW failed".to_string());
     }
 
-    // A real print job never needs more; a bad value must not run for hours.
     let num_copies = copies.unwrap_or(1).clamp(1, 999);
 
     for _ in 0..num_copies {
@@ -620,16 +568,15 @@ fn print_pages_impl(
             let (img_w, img_h) = img.dimensions();
             let rgb = img.as_raw();
 
-            // Convert RGB → BGR with 4-byte row alignment (required by GDI)
             let row_stride = (img_w as usize * 3 + 3) & !3;
             let mut dib = vec![0u8; row_stride * img_h as usize];
             for y in 0..img_h as usize {
                 for x in 0..img_w as usize {
                     let s = y * img_w as usize * 3 + x * 3;
                     let d = y * row_stride + x * 3;
-                    dib[d] = rgb[s + 2]; // B
-                    dib[d + 1] = rgb[s + 1]; // G
-                    dib[d + 2] = rgb[s]; // R
+                    dib[d] = rgb[s + 2];
+                    dib[d + 1] = rgb[s + 1];
+                    dib[d + 2] = rgb[s];
                 }
             }
 
@@ -637,10 +584,10 @@ fn print_pages_impl(
                 bmiHeader: BITMAPINFOHEADER {
                     biSize: std::mem::size_of::<BITMAPINFOHEADER>() as u32,
                     biWidth: img_w as i32,
-                    biHeight: -(img_h as i32), // top-down
+                    biHeight: -(img_h as i32),
                     biPlanes: 1,
                     biBitCount: 24,
-                    biCompression: 0, // BI_RGB
+                    biCompression: 0,
                     biSizeImage: 0,
                     biXPelsPerMeter: 0,
                     biYPelsPerMeter: 0,
@@ -650,16 +597,13 @@ fn print_pages_impl(
                 bmiColors: [winapi::um::wingdi::RGBQUAD { rgbBlue: 0, rgbGreen: 0, rgbRed: 0, rgbReserved: 0 }],
             };
 
-            // Compute destination rectangle
             let (dest_x, dest_y, dest_w, dest_h) = if actual_size {
-                // Map image pixels to printer units at native DPI
-                let w = (img_w as i64 * dpi_x as i64 / 200) as i32; // 200 = render DPI
+                let w = (img_w as i64 * dpi_x as i64 / 200) as i32;
                 let h = (img_h as i64 * dpi_y as i64 / 200) as i32;
                 let x = (page_w - w) / 2;
                 let y = (page_h - h) / 2;
                 (x.max(0), y.max(0), w.min(page_w), h.min(page_h))
             } else {
-                // Scale to fit the printable area, keeping the aspect ratio
                 let (w, h) = fit_within(img_w, img_h, page_w, page_h);
                 ((page_w - w) / 2, (page_h - h) / 2, w, h)
             };
@@ -692,13 +636,11 @@ fn print_pages_impl(
     Ok(())
 }
 
-/// Largest `(w, h)` with the image's aspect ratio that fits in `max_w × max_h`.
 #[cfg_attr(not(target_os = "windows"), allow(dead_code))]
 fn fit_within(img_w: u32, img_h: u32, max_w: i32, max_h: i32) -> (i32, i32) {
     if img_w == 0 || img_h == 0 || max_w <= 0 || max_h <= 0 {
         return (max_w.max(0), max_h.max(0));
     }
-    // Compare max_w / img_w against max_h / img_h without floating point
     if max_w as i64 * img_h as i64 <= max_h as i64 * img_w as i64 {
         (max_w, (img_h as i64 * max_w as i64 / img_w as i64) as i32)
     } else {
@@ -706,8 +648,6 @@ fn fit_within(img_w: u32, img_h: u32, max_w: i32, max_h: i32) -> (i32, i32) {
     }
 }
 
-/// Returns the printer driver's DEVMODE with the requested orientation set,
-/// as a raw buffer sized by the driver. `None` if the driver can't supply one.
 #[cfg(target_os = "windows")]
 fn printer_devmode(printer_wide: &[u16], landscape: bool) -> Option<Vec<u8>> {
     use std::ptr;
@@ -743,7 +683,6 @@ fn printer_devmode(printer_wide: &[u16], landscape: bool) -> Option<Vec<u8>> {
             dm.dmFields |= DM_ORIENTATION;
             dm.u1.s1_mut().dmOrientation = if landscape { DMORIENT_LANDSCAPE } else { DMORIENT_PORTRAIT } as i16;
         }
-        // Let the driver validate and merge the change
         let ok = unsafe {
             DocumentPropertiesW(ptr::null_mut(), handle, name.as_mut_ptr(), dm, dm, DM_IN_BUFFER | DM_OUT_BUFFER)
         };
@@ -763,11 +702,8 @@ mod tests {
 
     #[test]
     fn fit_within_keeps_aspect_ratio() {
-        // Portrait A4-ish image on a portrait page: height-bound
         assert_eq!(fit_within(1000, 1414, 4800, 6600), (4667, 6600));
-        // Landscape image on a portrait page: width-bound, letterboxed
         assert_eq!(fit_within(1414, 1000, 4800, 6600), (4800, 3394));
-        // Exact match
         assert_eq!(fit_within(100, 200, 50, 100), (50, 100));
     }
 
@@ -843,7 +779,6 @@ fn strip_ezreader_from_mimeapps(content: &str) -> String {
     res
 }
 
-/// Removes all registry entries created by register_pdf_handler.
 #[tauri::command]
 pub fn unregister_pdf_handler() -> CmdResult<()> {
     #[cfg(target_os = "windows")]
@@ -856,13 +791,10 @@ pub fn unregister_pdf_handler() -> CmdResult<()> {
 
         let hkcu = RegKey::predef(HKEY_CURRENT_USER);
 
-        // Remove ProgID
         hkcu.delete_subkey_all(r"Software\Classes\com.ezreader.app").ok();
 
-        // Remove .pdf extension mapping
         hkcu.delete_subkey_all(r"Software\Classes\.pdf").ok();
 
-        // Remove Applications\ezreader.exe
         let exe = std::env::current_exe().map_err(|e| e.to_string())?.to_string_lossy().to_string();
         let exe_name = std::path::Path::new(&exe)
             .file_name()
@@ -870,7 +802,6 @@ pub fn unregister_pdf_handler() -> CmdResult<()> {
             .unwrap_or_else(|| "ezreader.exe".to_string());
         hkcu.delete_subkey_all(format!(r"Software\Classes\Applications\{exe_name}")).ok();
 
-        // Remove from FileExts OpenWithProgids
         if let Ok(key) = hkcu.open_subkey_with_flags(
             r"Software\Microsoft\Windows\CurrentVersion\Explorer\FileExts\.pdf\OpenWithProgids",
             winreg::enums::KEY_SET_VALUE,
@@ -904,7 +835,6 @@ pub fn unregister_pdf_handler() -> CmdResult<()> {
     }
 }
 
-/// Registers only the print verb (silent, no prompt needed).
 #[tauri::command]
 pub fn register_print_verb() -> CmdResult<()> {
     #[cfg(target_os = "windows")]
@@ -924,13 +854,10 @@ pub fn register_print_verb() -> CmdResult<()> {
 
         let hkcu = RegKey::predef(HKEY_CURRENT_USER);
 
-        // Under our ProgID
         let (progid_print, _) =
             hkcu.create_subkey(r"Software\Classes\com.ezreader.app\shell\print\command").map_err(|e| e.to_string())?;
         progid_print.set_value("", &format!("\"{exe}\" --print \"%1\"")).map_err(|e| e.to_string())?;
 
-        // Under Applications\<exe> (used when default set via Windows Settings).
-        // NoOpenWith prevents this key from appearing in "Open with" — it only needs the print verb.
         let (app_key, _) =
             hkcu.create_subkey(format!(r"Software\Classes\Applications\{exe_name}")).map_err(|e| e.to_string())?;
         app_key.set_value("NoOpenWith", &"").map_err(|e| e.to_string())?;
@@ -945,12 +872,6 @@ pub fn register_print_verb() -> CmdResult<()> {
     }
 }
 
-/// `raw` as a plain web address to hand to the browser, or `None`.
-///
-/// Links come from the documents, so from anyone: only http(s) with a host
-/// gets through, without a user name (`https://bank.com@evil.example`), and
-/// in its parsed, percent-encoded form (no quotes, spaces or control
-/// characters left for Windows to interpret).
 fn web_url(raw: &str) -> Option<String> {
     let url = url::Url::parse(raw.trim()).ok()?;
     if !matches!(url.scheme(), "http" | "https") || url.host_str().is_none_or(str::is_empty) {
@@ -966,7 +887,6 @@ fn web_url(raw: &str) -> Option<String> {
     Some(s.to_string())
 }
 
-/// Opens a web link in the default browser.
 #[tauri::command]
 pub fn open_url(url: String) -> CmdResult<()> {
     let Some(url) = web_url(&url) else {
@@ -978,8 +898,6 @@ pub fn open_url(url: String) -> CmdResult<()> {
         use winapi::um::winuser::SW_SHOWNORMAL;
         let wide = |s: &str| s.encode_utf16().chain(std::iter::once(0)).collect::<Vec<u16>>();
         let (verb, target) = (wide("open"), wide(&url));
-        // ShellExecute hands the URL to the http(s) protocol handler (the
-        // browser): no command line to parse, unlike explorer.exe or cmd.
         // SAFETY: both strings are NUL-terminated and outlive the call.
         let code = unsafe {
             ShellExecuteW(
@@ -998,7 +916,6 @@ pub fn open_url(url: String) -> CmdResult<()> {
     }
     #[cfg(not(target_os = "windows"))]
     {
-        // `open` on macOS, the desktop's handler elsewhere.
         let opener = if cfg!(target_os = "macos") { "open" } else { "xdg-open" };
         Command::new(opener).arg(&url).spawn().map_err(|e| format!("could not open the link ({e})"))?;
         Ok(())
@@ -1030,12 +947,6 @@ mod url_tests {
     }
 }
 
-/// Lets the user pick the app PDFs open with (Windows decides that, never
-/// the app). On Windows 10, Settings → Default apps buries .pdf at the bottom
-/// of a long "by file type" list, so we show the shell's own "How do you want
-/// to open .pdf files?" picker instead: one click on EzReader and it is set.
-/// Windows 11 keeps Settings, where searching for the app or .pdf is quick.
-/// Async so the welcome screen can read the new state once the picker closes.
 #[tauri::command]
 pub async fn open_default_apps_settings() -> CmdResult<()> {
     #[cfg(target_os = "windows")]
@@ -1044,9 +955,7 @@ pub async fn open_default_apps_settings() -> CmdResult<()> {
             let picked = tauri::async_runtime::spawn_blocking(show_pdf_open_with_picker).await.unwrap_or(Err(0));
             match picked {
                 Ok(()) => return Ok(()),
-                // The user closed the picker: nothing to change.
                 Err(code) if code == ERROR_CANCELLED_HRESULT => return Ok(()),
-                // The picker is unavailable: fall back to Settings.
                 Err(_) => {}
             }
         }
@@ -1055,11 +964,9 @@ pub async fn open_default_apps_settings() -> CmdResult<()> {
     Ok(())
 }
 
-/// HRESULT_FROM_WIN32(ERROR_CANCELLED): what the picker returns on Cancel.
 #[cfg(target_os = "windows")]
 const ERROR_CANCELLED_HRESULT: i32 = 0x8007_04C7_u32 as i32;
 
-/// Windows 11 reports itself as 10.0 too: builds below 22000 are Windows 10.
 #[cfg(target_os = "windows")]
 fn is_windows_10() -> bool {
     use winreg::enums::HKEY_LOCAL_MACHINE;
@@ -1077,10 +984,6 @@ fn is_windows_10_build(build: u32) -> bool {
     (10240..22000).contains(&build)
 }
 
-/// Shows "How do you want to open .pdf files from now on?" and, when the user
-/// picks an app, makes it the default for .pdf (the shell records the choice
-/// itself, so it is a real user choice). Runs on its own STA thread because
-/// the dialog is modal. Returns the failing HRESULT, if any.
 #[cfg(target_os = "windows")]
 fn show_pdf_open_with_picker() -> Result<(), i32> {
     use windows::core::w;
@@ -1092,7 +995,6 @@ fn show_pdf_open_with_picker() -> Result<(), i32> {
     std::thread::spawn(|| unsafe {
         let com = CoInitializeEx(None, COINIT_APARTMENTTHREADED);
         let info = OPENASINFO {
-            // Only the extension matters: the file is never opened.
             pcszFile: w!("document.pdf"),
             pcszClass: windows::core::PCWSTR::null(),
             oaifInFlags: OAIF_ALLOW_REGISTRATION | OAIF_REGISTER_EXT | OAIF_FORCE_REGISTRATION,
@@ -1113,10 +1015,10 @@ mod windows_version_tests {
 
     #[test]
     fn windows_10_builds_are_told_apart_from_windows_11() {
-        assert!(is_windows_10_build(19045)); // 22H2
-        assert!(is_windows_10_build(10240)); // RTM
-        assert!(!is_windows_10_build(22000)); // Windows 11 21H2
+        assert!(is_windows_10_build(19045));
+        assert!(is_windows_10_build(10240));
+        assert!(!is_windows_10_build(22000));
         assert!(!is_windows_10_build(26100));
-        assert!(!is_windows_10_build(9600)); // Windows 8.1
+        assert!(!is_windows_10_build(9600));
     }
 }

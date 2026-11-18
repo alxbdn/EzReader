@@ -1,13 +1,7 @@
 import { ICON_SUN } from "./icons";
 
-/** Lowest page brightness offered, in percent. */
 export const MIN_BRIGHTNESS = 40;
 
-/**
- * The toolbar's page brightness button: a click opens a slider under it.
- * Moving the slider reports each value (`onInput`); letting go reports the
- * one to keep (`onCommit`). The button is highlighted while pages are dimmed.
- */
 export class BrightnessButton {
   readonly el: HTMLElement;
   readonly button: HTMLButtonElement;
@@ -47,7 +41,6 @@ export class BrightnessButton {
       this.inputHandlers.forEach((h) => h(this.value));
     });
     this.range.addEventListener("change", () => this.commitHandlers.forEach((h) => h(this.value)));
-    // Double-click the percentage: back to full brightness.
     this.label.addEventListener("dblclick", () => {
       this.value = 100;
       this.inputHandlers.forEach((h) => h(100));
@@ -77,7 +70,6 @@ export class BrightnessButton {
     return this.pop.classList.contains("open");
   }
 
-  /** Sets the tooltip (translated). */
   setTitle(title: string): void {
     this.button.title = title;
     this.range.setAttribute("aria-label", title);

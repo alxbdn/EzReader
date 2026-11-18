@@ -3,8 +3,6 @@ use std::path::Path;
 
 use tauri::AppHandle;
 
-/// Moves `from` to `to` unless `to` already exists, so a rename never
-/// overwrites another file. Both paths must be in the same folder.
 pub(crate) fn rename_no_clobber(from: &Path, to: &Path) -> CmdResult<()> {
     if from.parent() != to.parent() {
         return Err(PdfError::new(ErrorCode::InvalidName, "invalid"));
@@ -16,8 +14,6 @@ pub(crate) fn rename_no_clobber(from: &Path, to: &Path) -> CmdResult<()> {
     if from == to {
         return Ok(());
     }
-    // A case-only change ("a.pdf" -> "A.pdf") is the same file on Windows,
-    // and on macOS (its disks ignore case by default).
     let same_file = is_same_file(from, to);
     if to.exists() && !same_file {
         return Err(PdfError::new(ErrorCode::Exists, "exists"));
@@ -30,7 +26,6 @@ fn is_same_file(from: &Path, to: &Path) -> bool {
     from.to_string_lossy().eq_ignore_ascii_case(&to.to_string_lossy())
 }
 
-/// Both names lead to the same file on disk (a case-insensitive disk).
 #[cfg(unix)]
 fn is_same_file(from: &Path, to: &Path) -> bool {
     use std::os::unix::fs::MetadataExt;
@@ -40,12 +35,8 @@ fn is_same_file(from: &Path, to: &Path) -> bool {
     }
 }
 
-/// Renames the open document on disk (the title bar rename, applied on save).
-/// Fails with [`ErrorCode::Exists`] when another file already has that name.
 #[tauri::command]
 pub fn rename_file(app: AppHandle, from: String, to: String) -> CmdResult<()> {
-    // Only a document the user opened or saved can be renamed (and only
-    // within its folder: see `rename_no_clobber`).
     if !crate::grants::is_granted_file(&from) {
         return Err(PdfError::new(ErrorCode::NotAllowed, "not a file you opened"));
     }
@@ -102,8 +93,6 @@ mod tests {
         std::fs::write(&lower, b"lower").unwrap();
         std::fs::write(&upper, b"upper").unwrap();
         if std::fs::read(&lower).unwrap() == b"upper" {
-            // A disk that ignores case (macOS by default): both names are
-            // one file, and the rename only changes its case.
             assert_eq!(rename_no_clobber(&lower, &upper), Ok(()));
             let names: Vec<_> = std::fs::read_dir(&d).unwrap().map(|e| e.unwrap().file_name()).collect();
             assert_eq!(names, ["A.pdf"]);
@@ -166,10 +155,8 @@ mod tests {
     }
 }
 
-/// Largest picture accepted from disk.
 const MAX_IMAGE_BYTES: u64 = 64 * 1024 * 1024;
 
-/// The bytes of a picture file, checked by extension and size.
 pub fn read_image_bytes(path: &str) -> CmdResult<Vec<u8>> {
     let p = std::path::Path::new(path);
     let ext = p.extension().and_then(|e| e.to_str()).map(str::to_ascii_lowercase).unwrap_or_default();
@@ -183,7 +170,6 @@ pub fn read_image_bytes(path: &str) -> CmdResult<Vec<u8>> {
     std::fs::read(p).map_err(|e| e.to_string()).map_err(PdfError::from)
 }
 
-/// A picture ready to place on a page: base64 PNG or JPEG, and its size in pixels.
 #[derive(Debug, serde::Serialize, PartialEq)]
 pub struct Picture {
     pub data: String,
@@ -191,20 +177,14 @@ pub struct Picture {
     pub height: u32,
 }
 
-/// Longest side kept for a picture; larger ones are scaled down.
 const MAX_PICTURE_SIDE: u32 = 4096;
 
-/// Reads the picture at `path` for placing on a page. PNG and JPEG files
-/// that are not too large are kept byte for byte; other formats (WebP, GIF,
-/// BMP) and very large pictures are re-encoded: as JPEG when they were
-/// JPEG, as PNG otherwise (the PDF writer takes both).
 #[tauri::command(async)]
 pub fn load_picture(path: String) -> CmdResult<Picture> {
     crate::grants::check(&path)?;
     picture_from_bytes(&read_image_bytes(&path)?)
 }
 
-/// [`load_picture`] on bytes already read (and the fuzzing entry point).
 pub(crate) fn picture_from_bytes(bytes: &[u8]) -> CmdResult<Picture> {
     use base64::Engine;
     let not_an_image = |e: image::ImageError| PdfError::new(ErrorCode::NotAnImage, e.to_string());
@@ -235,22 +215,16 @@ pub(crate) fn picture_from_bytes(bytes: &[u8]) -> CmdResult<Picture> {
     Ok(Picture { data: b64(&out), width: img.width(), height: img.height() })
 }
 
-/// What this app's temp file names start with, after `ezreader-`: the
-/// app removes them on exit (see [`crate::tempfiles`]).
 #[tauri::command]
 pub fn temp_tag() -> String {
     crate::tempfiles::tag()
 }
 
-/// Which of `paths` already exist (export asks before replacing them).
-/// Only paths the export may write are looked at.
 #[tauri::command]
 pub fn existing_files(paths: Vec<String>) -> Vec<String> {
     paths.into_iter().filter(|p| crate::grants::check(p).is_ok() && std::path::Path::new(p).exists()).collect()
 }
 
-/// Writes base64 `data` (a page picture of an export) to `path`, atomically.
-/// Only PNG and JPEG files can be written this way.
 #[tauri::command(async)]
 pub fn write_image_file(path: String, data: String) -> CmdResult<()> {
     use base64::Engine;

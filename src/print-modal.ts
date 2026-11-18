@@ -49,18 +49,15 @@ export class PrintModal {
     this._pageCount = pageCount;
     this._currentPage = currentPage;
 
-    // Reset state
     this.copiesInput.value = "1";
     (this.backdrop.querySelector("input[name='print-range'][value='all']") as HTMLInputElement).checked = true;
     this.rangeCustomInput.value = "";
     this.rangeCustomInput.disabled = true;
     (this.backdrop.querySelector("input[name='print-scale'][value='fit']") as HTMLInputElement).checked = true;
 
-    // Auto-detect orientation from page dimensions
     const isLandscape = dims.w > dims.h;
     (this.backdrop.querySelector(`input[name='print-orient'][value='${isLandscape ? "landscape" : "portrait"}']`) as HTMLInputElement).checked = true;
 
-    // Populate printers
     try {
       const { printers, defaultPrinter } = await listPrinters();
       this.printerSelect.innerHTML = "";
@@ -81,7 +78,6 @@ export class PrintModal {
         }
       }
     } catch {
-      // Not running in Tauri (browser preview)
       this.noPrintersMsg.classList.remove("hidden");
       this.printerSelect.style.display = "none";
       this.printBtn.disabled = true;
@@ -102,7 +98,6 @@ export class PrintModal {
     if (rangeType === "current") {
       return [this._currentPage];
     }
-    // Custom range
     const input = this.rangeCustomInput.value.trim();
     if (!input) return Array.from({ length: this._pageCount }, (_, i) => i + 1);
 
@@ -125,20 +120,16 @@ export class PrintModal {
   }
 
   private bind(): void {
-    // Close button
     document.getElementById("print-close-btn")!
       .addEventListener("click", () => this.close());
 
-    // Cancel button
     document.getElementById("print-cancel-btn")!
       .addEventListener("click", () => this.close());
 
-    // Close on backdrop click
     this.backdrop.addEventListener("click", (e) => {
       if (e.target === this.backdrop) this.close();
     });
 
-    // Enable/disable custom range input based on radio selection
     const rangeRadios = this.backdrop.querySelectorAll<HTMLInputElement>("input[name='print-range']");
     rangeRadios.forEach(radio => {
       radio.addEventListener("change", () => {
@@ -149,7 +140,6 @@ export class PrintModal {
       });
     });
 
-    // Print button
     this.printBtn.addEventListener("click", () => {
       const orientation = (this.backdrop.querySelector("input[name='print-orient']:checked") as HTMLInputElement).value as "portrait" | "landscape";
       const fitMode = (this.backdrop.querySelector("input[name='print-scale']:checked") as HTMLInputElement).value as "fit" | "actual";
@@ -164,7 +154,6 @@ export class PrintModal {
       this.confirmHandlers.forEach(h => h(settings));
     });
 
-    // Register i18n targets
     const reg = (id: string, text?: keyof Translations, title?: keyof Translations) => {
       const el = document.getElementById(id);
       if (!el) return;

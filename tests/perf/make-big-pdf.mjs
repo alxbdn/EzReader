@@ -1,22 +1,16 @@
-// Writes a large test PDF with no dependencies, like a long report with
-// scanned pages in it: text and vector drawing on most pages, a colour
-// picture every 10th page, and every 5th page a scan (a full-page picture
-// of its own with no text), which the app reads in the background (OCR).
-// Usage: node tests/perf/make-big-pdf.mjs <out.pdf> [pages]
 import { writeFileSync } from "node:fs";
 import { deflateSync } from "node:zlib";
 
 const out = process.argv[2] ?? "big.pdf";
 const pages = Number(process.argv[3] ?? 1500);
 
-const objects = []; // index i holds object i+1
+const objects = [];
 const add = (body) => { objects.push(body); return objects.length; };
 const stream = (dict, data) =>
   Buffer.concat([Buffer.from(`<< ${dict} /Length ${data.length} >>\nstream\n`), data, Buffer.from("\nendstream")]);
 
 const font = add(Buffer.from("<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>"));
 
-// One 600×400 RGB picture shared by the illustrated pages (decoded per page by pdf.js).
 const IW = 600, IH = 400;
 const raw = Buffer.alloc((IW * 3 + 1) * IH);
 for (let y = 0; y < IH; y++) {
@@ -32,7 +26,6 @@ const image = add(stream(
   `/Type /XObject /Subtype /Image /Width ${IW} /Height ${IH} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /FlateDecode /DecodeParms << /Predictor 15 /Colors 3 /BitsPerComponent 8 /Columns ${IW} >>`,
   deflateSync(raw)));
 
-// A grey 850×1200 "scan" (~100 dpi): dark bars for lines of text, different on each page.
 const SW = 850, SH = 1200;
 function scan(p) {
   const rows = Buffer.alloc((SW + 1) * SH, 0xf4);
@@ -51,7 +44,7 @@ function scan(p) {
 const scans = new Map();
 for (let p = 1; p <= pages; p++) if (p % 5 === 3) scans.set(p, scan(p));
 
-const pagesId = objects.length + 1 + pages * 2; // reserved after the page objects
+const pagesId = objects.length + 1 + pages * 2;
 const kids = [];
 const words = "lorem ipsum dolor sit amet consectetur adipiscing elit sed do eiusmod tempor incididunt ut labore et dolore magna aliqua".split(" ");
 for (let p = 1; p <= pages; p++) {
@@ -69,7 +62,6 @@ for (let p = 1; p <= pages; p++) {
     c += `(${line}) '\n`;
   }
   c += "ET\n";
-  // Vector chart: bars and a polyline.
   c += "0.2 0.4 0.8 rg\n";
   for (let b = 0; b < 12; b++) c += `${60 + b * 40} 80 28 ${20 + ((p * 13 + b * 29) % 90)} re f\n`;
   c += "0.9 0.2 0.2 RG 1.5 w 60 140 m\n";

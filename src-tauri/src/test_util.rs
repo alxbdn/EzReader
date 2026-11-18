@@ -1,5 +1,3 @@
-//! Shared helpers for unit tests.
-
 pub fn fixture(name: &str) -> String {
     format!("{}/tests/fixtures/{name}", env!("CARGO_MANIFEST_DIR"))
 }
@@ -8,10 +6,6 @@ pub fn tmp(name: &str) -> String {
     std::env::temp_dir().join(format!("ezreader-{}-{name}", std::process::id())).to_string_lossy().into_owned()
 }
 
-/// Scans the raw file: for every stream with a direct `/Length N`, the
-/// `endstream` keyword must follow exactly N bytes after `stream`. lopdf's
-/// reader silently recovers from a wrong length, so this has to check the
-/// bytes other readers (Acrobat, Chrome, qpdf) actually see.
 pub fn assert_lengths_consistent(path: &str) {
     let bytes = std::fs::read(path).unwrap();
     let find = |hay: &[u8], needle: &[u8], from: usize| {
@@ -32,9 +26,7 @@ pub fn assert_lengths_consistent(path: &str) {
             continue;
         }
         data += 1;
-        // Nearest "/Length" before the keyword, inside the same object.
         let obj_start = bytes[..at].windows(3).rposition(|w| w == b"obj").unwrap_or(0);
-        // `/Length` itself, not `/Length1` (embedded font programs).
         let Some(len_at) =
             bytes[obj_start..at].windows(8).rposition(|w| &w[..7] == b"/Length" && !w[7].is_ascii_alphanumeric())
         else {
@@ -45,7 +37,7 @@ pub fn assert_lengths_consistent(path: &str) {
         let mut it = txt.split(|c: char| !c.is_ascii_digit()).filter(|t| !t.is_empty());
         let Some(n) = it.next().and_then(|t| t.parse::<usize>().ok()) else { continue };
         if txt.trim_start().trim_start_matches(char::is_numeric).trim_start().starts_with("0 R") {
-            continue; // indirect length
+            continue;
         }
         let mut end = data + n;
         while matches!(bytes.get(end), Some(b'\r' | b'\n' | b' ')) {

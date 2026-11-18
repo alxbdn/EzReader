@@ -8,25 +8,17 @@ import {
 import { getTranslations } from "./i18n";
 import { LANGUAGES } from "./languages";
 
-// ── Types ─────────────────────────────────────────────────────────────────────
-
 export type ThemePref = "system" | "light" | "dark";
 
 export interface AppSettings {
-  language: string; // BCP-47 code, e.g. "fr"
+  language: string;
   theme: ThemePref;
-  /** Zoom applied when a document opens and by the reset-zoom button:
-   *  a percentage ("100"), "fit-width" or "fit-page". */
   defaultZoom: string;
-  /** CSS pixels per real inch on this screen, used by the 1:1 zoom. */
   pxPerInch: number;
-  /** Brightness of the pages on screen, 40–100 % (dims too-bright PDFs). */
   pageBrightness: number;
 }
 
 export const ZOOM_CHOICES = ["fit-width", "fit-page", "50", "75", "100", "125", "150", "200"] as const;
-
-// ── Persistence ───────────────────────────────────────────────────────────────
 
 const STORAGE_KEY = "pdf-rider-settings";
 const DEFAULTS: AppSettings = { language: "en", theme: "system", defaultZoom: "100", pxPerInch: 96, pageBrightness: 100 };
@@ -34,18 +26,14 @@ const DEFAULTS: AppSettings = { language: "en", theme: "system", defaultZoom: "1
 const CARD_W_MM = 85.6;
 const CARD_H_MM = 53.98;
 
-// ── Theme ─────────────────────────────────────────────────────────────────────
-
 const darkQuery = window.matchMedia("(prefers-color-scheme: dark)");
 
-/** Dims the pages on screen (not what is saved or printed). */
 export function applyPageBrightness(pct: number): void {
   const v = Number.isFinite(pct) ? Math.min(100, Math.max(40, pct)) : 100;
   document.documentElement.style.setProperty("--page-brightness", String(v / 100));
   document.documentElement.classList.toggle("dim-pages", v < 100);
 }
 
-/** Sets the resolved theme ("light" or "dark") on <html data-theme>. */
 export function applyTheme(pref: ThemePref): void {
   const dark = pref === "dark" || (pref === "system" && darkQuery.matches);
   document.documentElement.dataset["theme"] = dark ? "dark" : "light";
@@ -56,7 +44,6 @@ export function loadSettings(): AppSettings {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (raw) return { ...DEFAULTS, ...(JSON.parse(raw) as Partial<AppSettings>) };
   } catch {
-    // ignore parse errors
   }
   return { ...DEFAULTS };
 }
@@ -65,11 +52,7 @@ function saveSettings(s: AppSettings): void {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(s));
 }
 
-// ── Language list ─────────────────────────────────────────────────────────────
-
 export { LANGUAGES } from "./languages";
-
-// ── Modal ─────────────────────────────────────────────────────────────────────
 
 export class SettingsModal {
   private backdrop: HTMLElement;
@@ -100,20 +83,17 @@ export class SettingsModal {
   }
   close(): void { this.backdrop.classList.add("hidden"); }
 
-  /** Language chosen elsewhere (the welcome screen): shown here, saved and applied. */
   setLanguage(code: string): void {
     const sel = document.getElementById("settings-lang") as HTMLSelectElement | null;
     if (sel) sel.value = code;
     if (code !== this.settings.language) this.set("language", code);
   }
 
-  /** Page brightness chosen elsewhere (the toolbar button): applied, shown here and saved. */
   setPageBrightness(pct: number): void {
     this.showBrightness(pct);
     if (pct !== this.settings.pageBrightness) this.set("pageBrightness", pct);
   }
 
-  /** Applies `pct` to the pages and shows it on this modal's slider. */
   private showBrightness(pct: number): void {
     const input = document.getElementById("settings-brightness") as HTMLInputElement | null;
     const label = document.getElementById("settings-brightness-val");
@@ -145,7 +125,6 @@ export class SettingsModal {
       const isSet = await checkPdfAssociation();
       const t = this.getSettings();
       const lang = t.language;
-      // Use translated strings if available, else fall back to English
       const translations = getTranslations(lang);
       if (isSet) {
         btn.textContent = translations.settingsRemoveDefault ?? "Remove as default";
@@ -155,7 +134,6 @@ export class SettingsModal {
         btn.dataset["state"] = "set";
       }
     } catch {
-      // Not running in Tauri (browser preview)
       btn.style.display = "none";
     }
   }
@@ -164,19 +142,16 @@ export class SettingsModal {
     document.getElementById("settings-close-btn")!
       .addEventListener("click", () => this.close());
 
-    // Close on backdrop click
     this.backdrop.addEventListener("click", (e) => {
       if (e.target === this.backdrop) this.close();
     });
 
-    // Language selector
     const langSelect = document.getElementById("settings-lang") as HTMLSelectElement;
     langSelect.value = this.settings.language;
     langSelect.addEventListener("change", () => {
       this.set("language", langSelect.value);
     });
 
-    // Theme selector
     const themeSelect = document.getElementById("settings-theme") as HTMLSelectElement;
     themeSelect.value = this.settings.theme;
     themeSelect.addEventListener("change", () => {
@@ -185,13 +160,11 @@ export class SettingsModal {
       this.set("theme", theme);
     });
 
-    // Default zoom
     const zoomSelect = document.getElementById("settings-zoom") as HTMLSelectElement;
     zoomSelect.value = (ZOOM_CHOICES as readonly string[]).includes(this.settings.defaultZoom)
       ? this.settings.defaultZoom : DEFAULTS.defaultZoom;
     zoomSelect.addEventListener("change", () => this.set("defaultZoom", zoomSelect.value));
 
-    // Actual-size calibration: the card outline follows the slider live.
     const ppiInput = document.getElementById("settings-ppi") as HTMLInputElement;
     const card = document.getElementById("settings-calib-card") as HTMLElement;
     const drawCard = (ppi: number) => {
@@ -204,7 +177,6 @@ export class SettingsModal {
     ppiInput.addEventListener("input", () => drawCard(parseFloat(ppiInput.value)));
     ppiInput.addEventListener("change", () => this.set("pxPerInch", parseFloat(ppiInput.value)));
 
-    // Page brightness: applied live while dragging.
     const brightInput = document.getElementById("settings-brightness") as HTMLInputElement | null;
     if (brightInput) {
       this.showBrightness(this.settings.pageBrightness);
@@ -212,7 +184,6 @@ export class SettingsModal {
       brightInput.addEventListener("change", () => this.set("pageBrightness", Number(brightInput.value)));
     }
 
-    // Default app button
     const defaultBtn = document.getElementById("settings-default-btn") as HTMLButtonElement;
     defaultBtn?.addEventListener("click", () => void this.handleDefaultBtn());
   }
@@ -230,7 +201,6 @@ export class SettingsModal {
       }
       await this.refreshDefaultBtn();
     } catch {
-      // ignore errors silently
     } finally {
       btn.disabled = false;
     }

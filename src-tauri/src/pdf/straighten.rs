@@ -1,54 +1,32 @@
-//! Straighten: a page photographed or scanned at an angle is replaced by a
-//! straightened picture of itself (warped by pdf.js on the frontend), and
-//! keeps what made it more than a picture:
-//!
-//! - its text, laid back on top as an invisible layer (render mode 3) at
-//!   the place the warp moved each run of text to, so it can still be
-//!   searched, selected and copied;
-//! - its links, form fields and other annotations, moved by the same warp;
-//! - the document's structure tree and form.
-//!
-//! Only the page's original content goes, like a redaction of the whole page.
-
 use lopdf::{dictionary, Document, Object, ObjectId, Stream};
 use serde::Deserialize;
 
 use crate::pdf::redact::{self, RedactedPage};
 use crate::pdf::writer;
 
-/// A run of text, as placed after straightening, in PDF user space.
 #[derive(Debug, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct TextRun {
     pub text: String,
-    /// Start of the baseline.
     pub x0: f64,
     pub y0: f64,
-    /// End of the baseline.
     pub x1: f64,
     pub y1: f64,
-    /// Height of the text (font size).
     pub size: f64,
 }
 
-/// One straightened page.
 #[derive(Debug, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct StraightenedPage {
     #[serde(flatten)]
     pub picture: RedactedPage,
-    /// Where the warp moves a point of the page: a 3×3 matrix (row by row,
-    /// on column vectors [x, y, 1]) from old to new PDF user space.
     pub map: [f64; 9],
     pub text: Vec<TextRun>,
 }
 
-/// Name of the invisible text font in a straightened page's resources.
 const FONT_NAME: &str = "EzText";
-/// Width of every glyph of that font, in thousandths of the font size.
 const GLYPH_WIDTH: f64 = 500.0;
 
-/// Page entries that describe the old content and no longer apply.
 const STALE_PAGE_KEYS: [&[u8]; 7] =
     [b"Thumb", b"PieceInfo", b"CropBox", b"BleedBox", b"TrimBox", b"ArtBox", b"Metadata"];
 
@@ -93,7 +71,6 @@ pub fn straighten_pages(doc: &mut Document, pages: &[StraightenedPage]) -> Resul
     Ok(())
 }
 
-/// The invisible text: one `Tj` per run, stretched (`Tz`) to the run's length.
 fn text_ops(runs: &[TextRun]) -> String {
     let mut ops = String::new();
     for run in runs {
@@ -126,9 +103,6 @@ fn text_ops(runs: &[TextRun]) -> String {
     ops
 }
 
-/// A font with no glyph shapes whose codes are the text's UTF-16 units: an
-/// invisible layer drawn with it can be searched, selected and copied
-/// (the same trick OCR tools use).
 fn add_text_font(doc: &mut Document) -> ObjectId {
     let mut cmap = String::from(
         "/CIDInit /ProcSet findresource begin\n12 dict begin\nbegincmap\n\
@@ -136,7 +110,6 @@ fn add_text_font(doc: &mut Document) -> ObjectId {
          /CMapName /Adobe-Identity-UCS def\n/CMapType 2 def\n\
          1 begincodespacerange\n<0000> <FFFF>\nendcodespacerange\n",
     );
-    // A bfrange may not cross a first-byte boundary: one per high byte.
     for chunk in (0u16..=0xFF).collect::<Vec<_>>().chunks(100) {
         cmap.push_str(&format!("{} beginbfrange\n", chunk.len()));
         for hi in chunk {
@@ -196,8 +169,6 @@ fn apply(m: &[f64; 9], x: f64, y: f64) -> (f64, f64) {
     ((m[0] * x + m[1] * y + m[2]) / w, (m[3] * x + m[4] * y + m[5]) / w)
 }
 
-/// Moves an annotation with the warp: its `/Rect` becomes the box around its
-/// moved corners, and `/QuadPoints` (highlights, links) move point by point.
 fn move_annotation(doc: &mut Document, id: ObjectId, map: &[f64; 9]) {
     let Ok(annot) = doc.get_object_mut(id).and_then(Object::as_dict_mut) else { return };
     let nums = |o: &Object| -> Option<Vec<f64>> {
@@ -232,8 +203,6 @@ mod tests {
     use super::*;
     use base64::Engine;
 
-    /// A page with text, a link and a form field, in a document with a
-    /// structure tree.
     fn page_with_extras() -> Document {
         let mut doc = Document::with_version("1.7");
         let pages_id = doc.new_object_id();
@@ -287,7 +256,6 @@ mod tests {
     #[test]
     fn text_stays_findable_and_annotations_move_with_the_page() {
         let mut doc = page_with_extras();
-        // The warp here doubles x and y.
         let map = [2.0, 0.0, 0.0, 0.0, 2.0, 0.0, 0.0, 0.0, 1.0];
         let text = vec![TextRun { text: "Hello world".into(), x0: 72.0, y0: 700.0, x1: 160.0, y1: 700.0, size: 12.0 }];
         straighten_pages(&mut doc, &[StraightenedPage { picture: picture(1, [0.0, 0.0, 300.0, 400.0]), map, text }])
@@ -320,7 +288,6 @@ mod tests {
     #[test]
     fn text_runs_are_rotated_and_stretched_to_fit() {
         let ops = text_ops(&[TextRun { text: "ab".into(), x0: 10.0, y0: 20.0, x1: 10.0, y1: 32.0, size: 6.0 }]);
-        // Going up: rotated 90°; 2 glyphs of 0.5 em at 6 pt = 6 pt natural, 12 pt wanted.
         assert_eq!(ops, "BT 3 Tr /EzText 1 Tf 0 6 -6 0 10 20 Tm 200 Tz <00610062> Tj ET\n");
         assert_eq!(text_ops(&[TextRun { text: "  ".into(), x0: 0.0, y0: 0.0, x1: 5.0, y1: 0.0, size: 6.0 }]), "");
     }

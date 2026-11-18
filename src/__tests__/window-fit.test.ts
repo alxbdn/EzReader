@@ -4,7 +4,6 @@ import { keepCentred, pageFitScale, planWindowFit } from "../window-fit";
 const A4 = { width: 595, height: 842 };
 const A4_LANDSCAPE = { width: 842, height: 595 };
 const SCREEN = { width: 1920, height: 1040 };
-// Launcher-sized window: 232 px side panel + 14 px scroll bar, 88 px of bars above.
 const base = {
   window: { width: 1100, height: 840 },
   viewer: { width: 868, height: 752 },
@@ -25,7 +24,6 @@ describe("planWindowFit", () => {
   it("makes a portrait window for a portrait page, as tall as the screen allows", () => {
     const fit = planWindowFit({ ...base, page: A4, preferredScale: null });
     expect(fit.window.height).toBeLessThanOrEqual(Math.floor(SCREEN.height * 0.9) + 1);
-    // Page area = page × scale + padding (rounded up): exactly one page.
     expect(Math.abs(fit.window.height - 88 - 40 - A4.height * fit.scale)).toBeLessThanOrEqual(1);
     expect(Math.abs(fit.window.width - 232 - 14 - 40 - A4.width * fit.scale)).toBeLessThanOrEqual(1);
   });

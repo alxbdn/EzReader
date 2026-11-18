@@ -1,15 +1,3 @@
-//! PDF compatibility corpus: every file in `tests/corpus/` (and the huge
-//! document built here) must open, take annotations and form values, and
-//! save without damage, through the same commands the app calls.
-//!
-//! "Without damage" is checked three ways: lopdf reads the result back with
-//! the same pages and the annotations, every stream's `/Length` matches its
-//! bytes, and (in CI) `qpdf --check` and pdf.js read each saved file, see
-//! `scripts/corpus-check.mjs`. Set `EZREADER_CORPUS_OUT` to a folder to keep
-//! the saved files for those checks.
-//!
-//! `tests/corpus/generate.py` builds the corpus and says what each file is.
-
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 
@@ -21,13 +9,10 @@ use crate::pdf::models::Annotation;
 use crate::pdf::writer::FormFieldValue;
 use crate::test_util::assert_lengths_consistent;
 
-/// The user password of every encrypted file of the corpus. Kept beside the
-/// files (written by generate.py): it is fixture data, not a secret.
 fn password() -> String {
     std::fs::read_to_string(corpus_dir().join("password.txt")).unwrap().trim().to_string()
 }
 
-/// Each corpus file and its page count (as qpdf counts them).
 const CORPUS: &[(&str, u32)] = &[
     ("damaged-xref-offsets.pdf", 4),
     ("encrypted-aes-128.pdf", 2),
@@ -48,15 +33,12 @@ const CORPUS: &[(&str, u32)] = &[
     ("unicode-links-outlines.pdf", 3),
 ];
 
-/// Pages of the huge document built by [`huge_document`].
 const HUGE_PAGES: u32 = 2000;
 
 fn corpus_dir() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("tests").join("corpus")
 }
 
-/// Where a test's saved files go: `EZREADER_CORPUS_OUT` (kept for the CI
-/// checks) or a temp folder of this run, one sub-folder per test.
 fn out_dir(test: &str) -> PathBuf {
     let dir = match std::env::var_os("EZREADER_CORPUS_OUT") {
         Some(d) => PathBuf::from(d),
@@ -71,7 +53,6 @@ fn s(p: &Path) -> String {
     p.to_string_lossy().into_owned()
 }
 
-/// What the toolbar tools add: one of each common kind, on `page`.
 fn annotations(page: u32) -> Vec<Annotation> {
     let json = serde_json::json!([
         { "kind": "rect", "page": page, "x": 60, "y": 80, "width": 120, "height": 60,
@@ -87,8 +68,6 @@ fn annotations(page: u32) -> Vec<Annotation> {
     serde_json::from_value(json).unwrap()
 }
 
-/// What the app works on: the file itself, or its unlocked copy when it has
-/// a password (see `openProtected` in main.ts).
 fn working_copy(src: &Path, out: &Path, name: &str) -> PathBuf {
     let raw = std::fs::read(src).unwrap();
     let needs_password = name.starts_with("encrypted-") && name != "encrypted-owner-only.pdf";
@@ -101,12 +80,10 @@ fn working_copy(src: &Path, out: &Path, name: &str) -> PathBuf {
     plain
 }
 
-/// Opens, annotates, saves, re-opens and saves again, as a user would.
 fn round_trip(name: &str, src: &Path, pages: u32, out: &Path) {
     let stem = name.trim_end_matches(".pdf");
     let input = working_copy(src, out, name);
 
-    // Open: what loadPdf asks the backend.
     assert_eq!(
         get_page_count(s(&input)).unwrap_or_else(|e| panic!("{name}: cannot open: {e:?}")),
         pages,
@@ -116,7 +93,6 @@ fn round_trip(name: &str, src: &Path, pages: u32, out: &Path) {
     let display = out.join(format!("{stem}.display.pdf"));
     strip_annotation_streams(s(&input), s(&display)).unwrap();
 
-    // Annotate the first and last pages, fill the form, save.
     let mut anns = annotations(1);
     if pages > 1 {
         anns.extend(annotations(pages));
@@ -135,7 +111,6 @@ fn round_trip(name: &str, src: &Path, pages: u32, out: &Path) {
         .unwrap_or_else(|e| panic!("{name}: save failed: {e:?}"));
     check_saved(name, &input, &saved, pages, anns.len());
 
-    // Saved again with fewer annotations and a rotation: still sound.
     let resaved = out.join(format!("{stem}.resaved.pdf"));
     let fewer = annotations(1);
     save_annotated_pdf(s(&saved), s(&resaved), fewer.clone(), 90, vec![])
@@ -153,12 +128,9 @@ fn check_saved(name: &str, before: &Path, after: &Path, pages: u32, annotation_c
     let old = Document::load(before).unwrap();
     let new = Document::load(after).unwrap_or_else(|e| panic!("{name}: saved file does not open: {e}"));
     assert_eq!(new.get_pages().len() as u32, pages, "{name}: saved page count");
-    // What EzReader writes must read as written, even from a damaged file:
-    // other readers do not all repair a wrong cross-reference table.
     assert_eq!(new.xref_recovery, None, "{name}: the saved file's cross-reference table needed repair");
     assert_eq!(read_annotations(s(after)).unwrap().len(), annotation_count, "{name}: annotations read back");
     assert_lengths_consistent(&s(after));
-    // Page sizes and the other viewers' annotations are kept.
     for ((n, a), (_, b)) in old.get_pages().into_iter().zip(new.get_pages()) {
         let size = |d: &Document, id| d.get_dictionary(id).ok().and_then(|p| p.get(b"MediaBox").ok().cloned());
         assert_eq!(format!("{:?}", size(&old, a)), format!("{:?}", size(&new, b)), "{name}: page {n} size");
@@ -169,7 +141,6 @@ fn check_saved(name: &str, before: &Path, after: &Path, pages: u32, annotation_c
         };
         assert!(annots(&new, b) >= annots(&old, a), "{name}: page {n} lost its links or annotations");
     }
-    // No decryption leftovers: an unlocked copy must not keep /Encrypt.
     if name.starts_with("encrypted-") && name != "encrypted-owner-only.pdf" {
         assert!(new.trailer.get(b"Encrypt").is_err(), "{name}: still marked encrypted after unlocking");
     }
@@ -200,7 +171,6 @@ fn every_corpus_file_opens_and_saves_without_damage() {
             failures.push(format!("{name}: {why}"));
         }
     }
-    // Plus the app's older fixture written by an online tool.
     round_trip(
         "objstm-indirect-length.pdf",
         Path::new(&crate::test_util::fixture("objstm-indirect-length.pdf")),
@@ -213,7 +183,6 @@ fn every_corpus_file_opens_and_saves_without_damage() {
     }
 }
 
-/// A long report or a scanned book: many pages sharing one picture.
 fn huge_document(path: &Path) {
     let mut doc = Document::with_version("1.7");
     let pages_id = doc.new_object_id();
@@ -263,16 +232,12 @@ fn a_huge_document_opens_and_saves_in_reasonable_time() {
     let started = Instant::now();
     round_trip("huge-2000-pages.pdf", &src, HUGE_PAGES, &out);
     let took = started.elapsed();
-    // Generous (debug build, slow runners): catches a save that went quadratic.
     assert!(took.as_secs() < 120, "huge document round trip took {took:?}");
     if std::env::var_os("EZREADER_CORPUS_OUT").is_none() {
         std::fs::remove_dir_all(&out).ok();
     }
 }
 
-/// A filled form reads back as typed, in every reader: values in the fields
-/// (accents included), each radio and check box widget in its state, and an
-/// appearance drawn for the text fields and the combo box.
 #[test]
 fn filled_form_reads_back_with_its_appearances() {
     let out = out_dir("filled-form");

@@ -1,13 +1,3 @@
-# Downloads the .msix built by CI for a release into store\ (git-ignored),
-# ready to upload to the Microsoft Store in Partner Center.
-# The .msix is not attached to the GitHub releases: it lives in the
-# store-msix-<version> artifact of the run that built the release, for 90 days.
-#
-#   scripts\get-store-msix.ps1            # latest release
-#   scripts\get-store-msix.ps1 v1.2.3     # a given release
-#
-# Needs the GitHub CLI (gh), signed in.
-
 param([string]$Tag = "")
 
 $ErrorActionPreference = "Stop"

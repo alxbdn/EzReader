@@ -1,30 +1,16 @@
-/**
- * The two quiet controls at the bottom of the welcome screen:
- *   left  — "Default PDF reader" checkbox
- *   right — language picker (flag + name, opens a menu upward)
- *
- * Everything that talks to the system is injected, so the DOM part runs in
- * tests without Tauri.
- */
 import { ICON_CHECK, ICON_CHEVRON_DOWN } from "./icons";
 import { flagMarkup } from "./flags";
 import { LANGUAGES } from "./languages";
 import type { Translations } from "./i18n";
 
 export interface WelcomePrefsDeps {
-  /** Current language code. */
   language(): string;
-  /** Applies and saves a new language. */
   setLanguage(code: string): void;
-  /** Current translations. */
   t(): Translations;
-  /** True when EzReader opens PDFs by default. Rejects outside the app. */
   isDefault(): Promise<boolean>;
-  /** Makes EzReader the default (`true`) or stops being it (`false`). */
   setDefault(on: boolean): Promise<void>;
 }
 
-/** Languages in menu order: English and French first, then the rest. */
 export function menuLanguages(): { code: string; native: string }[] {
   const first = ["en", "fr"];
   const head = first.map((c) => LANGUAGES.find((l) => l.code === c)!).filter(Boolean);
@@ -49,7 +35,7 @@ export class WelcomePrefs {
     this.check.className = "welcome-default";
     this.check.setAttribute("role", "checkbox");
     this.check.setAttribute("aria-checked", "false");
-    this.check.hidden = true; // shown once we know the state (not in a browser preview)
+    this.check.hidden = true;
     this.check.innerHTML = `<span class="welcome-default-box" aria-hidden="true">${ICON_CHECK}</span><span class="welcome-default-label"></span>`;
     this.check.addEventListener("click", () => void this.toggleDefault());
 
@@ -79,7 +65,6 @@ export class WelcomePrefs {
     this.render();
   }
 
-  /** Redraws the labels (after a language change). */
   render(): void {
     const t = this.deps.t();
     const lang = this.deps.language();
@@ -117,13 +102,12 @@ export class WelcomePrefs {
     });
   }
 
-  /** Reads whether EzReader is the default reader and shows it. */
   async refresh(): Promise<void> {
     try {
       this.setChecked(await this.deps.isDefault());
       this.check.hidden = false;
     } catch {
-      this.check.hidden = true; // not running in the app
+      this.check.hidden = true;
     }
   }
 
@@ -140,7 +124,6 @@ export class WelcomePrefs {
     try {
       await this.deps.setDefault(!this.isDefault);
     } catch {
-      // The state below says what actually happened.
     } finally {
       this.busy = false;
       this.check.disabled = false;

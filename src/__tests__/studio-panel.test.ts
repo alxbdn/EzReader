@@ -16,7 +16,6 @@ const text = (content: string): TextAnnotation => ({
   page: 2, kind: "text", x: 0, y: 0, width: 50, content, color: black, fontSize: 12, bold: false, italic: false, underline: false,
 } as TextAnnotation);
 
-/** Runs the queued animation frame of the list right away. */
 function flush(): void { vi.runAllTimers(); }
 
 describe("describeAnnotation", () => {

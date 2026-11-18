@@ -8,7 +8,6 @@ pub struct RgbColor {
 }
 
 impl RgbColor {
-    /// Normalize channel to 0.0–1.0 for PDF operators.
     pub fn r_f(&self) -> f64 {
         self.r as f64 / 255.0
     }
@@ -38,10 +37,8 @@ pub struct RectAnnotation {
     pub height: f64,
     pub color: RgbColor,
     pub stroke_width: f64,
-    /// Interior colour; `None` (and files saved before fills existed) means hollow.
     #[serde(default)]
     pub fill_color: Option<RgbColor>,
-    /// 0–1; absent means opaque.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub opacity: Option<f64>,
 }
@@ -56,15 +53,12 @@ pub struct CircleAnnotation {
     pub height: f64,
     pub color: RgbColor,
     pub stroke_width: f64,
-    /// Interior colour; `None` (and files saved before fills existed) means hollow.
     #[serde(default)]
     pub fill_color: Option<RgbColor>,
-    /// 0–1; absent means opaque.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub opacity: Option<f64>,
 }
 
-/// One of the PDF standard fonts, which every viewer has without embedding.
 #[derive(Debug, Serialize, Deserialize, Clone, Copy, Default, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub enum FontFamily {
@@ -88,23 +82,16 @@ pub struct TextAnnotation {
     pub italic: bool,
     pub underline: bool,
     pub alignment: TextAlignment,
-    /// Absent in files saved before font choice existed.
     #[serde(default)]
     pub font_family: FontFamily,
-    /// A font of the computer (one of `sysfont::FAMILIES`), embedded when
-    /// installed; `font_family` is used when it is not.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub font_name: Option<String>,
-    /// Box colour behind the text.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub background_color: Option<RgbColor>,
-    /// Edited text: the area of the original words, painted over first.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub cover: Option<TextCover>,
 }
 
-/// Area painted with the page's own colour under edited text, so the
-/// original words no longer show.
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct TextCover {
     pub x: f64,
@@ -114,8 +101,6 @@ pub struct TextCover {
     pub color: RgbColor,
 }
 
-/// Pencil stroke, straight line or arrow. `points` are relative to the box
-/// (0–1 from its left and bottom edges).
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct InkAnnotation {
@@ -143,7 +128,6 @@ pub struct PdfRect {
     pub height: f64,
 }
 
-/// Highlighted text, one rectangle per line (absolute PDF points).
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct HighlightAnnotation {
@@ -157,7 +141,6 @@ pub struct HighlightAnnotation {
     pub opacity: f64,
 }
 
-/// Sticky note: a coloured square with text.
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct NoteAnnotation {
@@ -178,22 +161,17 @@ pub struct SignatureAnnotation {
     pub y: f64,
     pub width: f64,
     pub height: f64,
-    /// Base64-encoded PNG (no data: URI prefix); a picture of `vector` when there is one.
     pub image_data: String,
-    /// The pen strokes of a drawn signature, written instead of the picture.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub vector: Option<InkVector>,
-    /// Ink of the drawn strokes; the default dark ink when absent.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub color: Option<RgbColor>,
 }
 
-/// A drawn signature as round-capped Bézier segments in a `w` × `h` box (y down).
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct InkVector {
     pub w: f64,
     pub h: f64,
-    /// x0 y0 c1x c1y c2x c2y x1 y1 lineWidth, 9 numbers per segment.
     pub segs: Vec<f64>,
 }
 
@@ -204,7 +182,6 @@ pub enum StampMark {
     Cross,
 }
 
-/// A check mark or a cross, drawn in its box.
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct StampAnnotation {
@@ -227,7 +204,6 @@ pub enum Annotation {
     Note(NoteAnnotation),
     Text(TextAnnotation),
     Signature(SignatureAnnotation),
-    /// A picture placed on the page (same fields as a signature).
     Image(SignatureAnnotation),
     Stamp(StampAnnotation),
 }

@@ -1,11 +1,7 @@
 import type { InkVector } from "./models";
 
-/** Colour of a drawn signature (same on screen and in the PDF). */
 export const SIGNATURE_INK = { r: 15, g: 15, b: 35 };
 
-// ── Smoothing algorithms (ported from full-rust branch) ──────────────────────
-
-/** Douglas-Peucker polyline simplification. */
 function douglasPeucker(points: [number, number][], epsilon: number): [number, number][] {
   const n = points.length;
   if (n <= 2) return points.slice();
@@ -31,7 +27,6 @@ function douglasPeucker(points: [number, number][], epsilon: number): [number, n
   return [points[0], points[n - 1]];
 }
 
-/** Smooth point positions with moving average, keeping endpoints fixed. */
 function smoothPoints(points: [number, number][], window: number): [number, number][] {
   const n = points.length;
   if (n <= 2) return points.slice();
@@ -49,7 +44,6 @@ function smoothPoints(points: [number, number][], window: number): [number, numb
   return result;
 }
 
-/** Smooth a float array with moving average, keeping endpoints fixed. */
 function smoothValues(values: number[], window: number): number[] {
   const n = values.length;
   if (n <= 2) return values.slice();
@@ -66,11 +60,6 @@ function smoothValues(values: number[], window: number): number[] {
   return result;
 }
 
-/**
- * The pen strokes as round-capped Bézier segments, each with its own width
- * (thicker where the pen moves vertically): x0 y0 c1x c1y c2x c2y x1 y1 width,
- * 9 numbers per segment, in the coordinates of the strokes.
- */
 export function strokeSegments(strokes: [number, number][][]): number[] {
   const segs: number[] = [];
   for (const rawPoints of strokes) {
@@ -121,10 +110,6 @@ export function strokeSegments(strokes: [number, number][][]): number[] {
 
 const round2 = (v: number): number => Math.round(v * 100) / 100;
 
-/**
- * The segments moved into the smallest box that holds their ink (half the
- * widest line as margin), or null when there is no ink.
- */
 export function fitVector(segs: number[]): InkVector | null {
   if (segs.length < 9) return null;
   let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity, maxW = 0;
@@ -144,7 +129,6 @@ export function fitVector(segs: number[]): InkVector | null {
   return { w: round2(maxX - minX + 2 * m), h: round2(maxY - minY + 2 * m), segs: out };
 }
 
-/** Draws `v` in the context's current transform, its box at (0, 0). */
 export function drawVector(ctx: CanvasRenderingContext2D, v: InkVector, ink: { r: number; g: number; b: number } = SIGNATURE_INK): void {
   const { r, g, b } = ink;
   ctx.save();
@@ -162,7 +146,6 @@ export function drawVector(ctx: CanvasRenderingContext2D, v: InkVector, ink: { r
   ctx.restore();
 }
 
-/** `v` as a PNG data URL, `scale` pixels per box unit (for thumbnails and the placing preview). */
 export function vectorToPng(v: InkVector, scale: number): string {
   const c = document.createElement("canvas");
   c.width = Math.max(1, Math.ceil(v.w * scale));

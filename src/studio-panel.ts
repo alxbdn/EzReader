@@ -23,7 +23,6 @@ type Key = keyof Translations;
 
 const COLLAPSED_KEY = "ezreader-studio-collapsed";
 
-/** What a row of the list says about an annotation: icon, name, and quoted words if any. */
 export function describeAnnotation(ann: Annotation): { icon: string; key: Key; fb: string; quote?: string } {
   switch (ann.kind) {
     case "text":
@@ -49,21 +48,12 @@ export function describeAnnotation(ann: Annotation): { icon: string; key: Key; f
 }
 
 export interface StudioPanelHooks {
-  /** Every annotation of the document. */
   list(): Annotation[];
-  /** The selected annotation, if any. */
   selected(): Annotation | null;
-  /** A row was clicked: show and select its annotation. */
   pick(ann: Annotation): void;
-  /** The trash of a row was clicked. */
   remove(ann: Annotation): void;
 }
 
-/**
- * The right-hand panel of the Annotate and Edit modes: the options of the
- * chosen tool or of the selected annotation, then every annotation of the
- * document, page by page. A row selects its annotation; its trash removes it.
- */
 export class StudioPanel {
   readonly el: HTMLElement;
   private titleEl: HTMLElement;
@@ -97,7 +87,6 @@ export class StudioPanel {
     this.collapseBtn.addEventListener("click", () => this.setCollapsed(true));
     head.append(this.titleEl, this.collapseBtn);
 
-    // Shown alone while the panel is folded away.
     this.expandBtn = this.iconBtn("studio-expand");
     this.expandBtn.addEventListener("click", () => this.setCollapsed(false));
 
@@ -128,11 +117,10 @@ export class StudioPanel {
 
     this.el.append(head, body, listWrap, this.expandBtn);
 
-    try { this.collapsed = localStorage.getItem(COLLAPSED_KEY) === "1"; } catch { /* not kept */ }
+    try { this.collapsed = localStorage.getItem(COLLAPSED_KEY) === "1"; } catch {}
     this.sync();
   }
 
-  /** On show in Annotate and Edit (with a document open). */
   setShown(shown: boolean): void {
     if (this.shown === shown) return;
     this.shown = shown;
@@ -140,7 +128,6 @@ export class StudioPanel {
     if (shown) this.refresh();
   }
 
-  /** The options on show (their title), or none. */
   setOptions(title: string | null): void {
     this.hasOptions = title !== null;
     this.title = title;
@@ -161,7 +148,6 @@ export class StudioPanel {
     this.render();
   }
 
-  /** The annotations changed: the list is redrawn (once per frame). */
   refresh(): void {
     if (!this.shown || this.renderQueued) return;
     this.renderQueued = true;
@@ -171,7 +157,6 @@ export class StudioPanel {
     });
   }
 
-  /** Marks the row of the selected annotation. */
   setSelected(ann: Annotation | null): void {
     for (const [a, row] of this.rows) {
       const on = a === ann;
@@ -183,7 +168,7 @@ export class StudioPanel {
 
   private setCollapsed(c: boolean): void {
     this.collapsed = c;
-    try { localStorage.setItem(COLLAPSED_KEY, c ? "1" : "0"); } catch { /* not kept */ }
+    try { localStorage.setItem(COLLAPSED_KEY, c ? "1" : "0"); } catch {}
     this.sync();
   }
 

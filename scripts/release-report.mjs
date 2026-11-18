@@ -1,17 +1,3 @@
-// Builds the security and performance reports attached to each GitHub release.
-//
-//   node scripts/release-report.mjs security --version 1.0.1 --commit <sha> \
-//        --npm npm-audit.json --deny cargo-deny.jsonl --codeql codeql-alerts.json \
-//        --runs security-jobs.json --out ezreader-1.0.1-security-report.pdf
-//
-//   node scripts/release-report.mjs performance --version 1.0.1 --commit <sha> \
-//        --results perf-results.json --out ezreader-1.0.1-performance-report.pdf
-//
-// Every input is optional except --out: a missing or unreadable file shows as
-// "not available" in the report instead of failing the release. The page is
-// printed to PDF with the Chromium that Playwright installs; with --html the
-// HTML is written instead (handy to preview the layout).
-
 import { readFileSync, writeFileSync, existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
@@ -38,7 +24,6 @@ const readJson = (path) => {
   if (!path || !existsSync(path)) return null;
   try { return JSON.parse(readFileSync(path, "utf8")); } catch { return null; }
 };
-// cargo deny --format json prints one JSON object per line.
 const readJsonLines = (path) => {
   if (!path || !existsSync(path)) return null;
   return readFileSync(path, "utf8").split("\n").flatMap((line) => {
@@ -50,8 +35,6 @@ const plural = (n, word) => `${n} ${n === 1 ? word : word.endsWith("y") ? word.s
 
 const OK = "ok", WARN = "warn", FAIL = "fail", NA = "na";
 const badge = (status, text) => `<span class="st st-${status}"><i></i>${esc(text)}</span>`;
-
-// ── Security ────────────────────────────────────────────────────────────────
 
 function npmSection() {
   const audit = readJson(opt("--npm"));
@@ -79,7 +62,6 @@ function denySection() {
   const count = (key) => Object.values(summaryLine.fields).reduce((n, c) => n + (c?.[key] ?? 0), 0);
   const errors = count("errors"), warnings = count("warnings");
   const diags = lines.filter((l) => l.type === "diagnostic" && l.fields);
-  // Advisories ignored in deny.toml come with the reason written there.
   const reasons = new Map();
   for (const d of diags.filter((d) => d.fields.code === "advisory-ignored")) {
     const labels = d.fields.labels ?? [];
@@ -98,7 +80,6 @@ function denySection() {
       severity: reason !== undefined ? `Accepted: ${reason}` : d.fields.severity,
     };
   });
-  // License, ban and source findings (no advisory attached).
   for (const d of diags) {
     const f = d.fields;
     if (f.advisory || !["error", "warning"].includes(f.severity)) continue;
@@ -192,8 +173,6 @@ function securityHtml() {
   `);
 }
 
-// ── Performance ─────────────────────────────────────────────────────────────
-
 const PERF_ROWS = [
   ["open_ms", "Opening, until the first page is shown", "ms"],
   ["jump_p95_ms", "Jump to a page, 95th percentile", "ms"],
@@ -243,8 +222,6 @@ function performanceHtml() {
   `);
 }
 
-// The load test stopped before the end (a crash, a timeout): the report shows
-// how far it went and the last lines it printed, rather than nothing.
 function performanceFailedHtml() {
   const logPath = opt("--log");
   const log = logPath && existsSync(logPath) ? readFileSync(logPath, "utf8") : "";
@@ -264,8 +241,6 @@ function performanceFailedHtml() {
     <p>The test opens a PDF of 1,500 pages, part of them scanned, and scrolls, jumps through and zooms it in a loop in Chromium through Playwright, while it measures memory, CPU and response times. The thresholds live in <span class="mono">tests/perf/thresholds.json</span>.</p>
   `);
 }
-
-// ── Page ────────────────────────────────────────────────────────────────────
 
 function page(title, [headline, sub], status, body) {
   const iconPath = join(root, "src-tauri/icons/128x128.png");

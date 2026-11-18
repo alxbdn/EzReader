@@ -1,32 +1,21 @@
 import { ICON_CLOSE } from "./icons";
 import type { DocTab } from "./doc-tabs";
 
-/** Pixels the pointer moves before a press on a tab becomes a drag. */
 const DRAG_THRESHOLD_PX = 5;
-/** How far below the title bar a dragged tab tears off (like a browser). */
 const TEAR_OFF_PX = 40;
 
 export interface TabStripLabels {
   close: string;
-  /** Ghost of a tab dragged out over nothing: a new window opens. */
   dragNew: string;
-  /** Ghost of a tab dragged over another EzReader window: it moves there. */
   dragMerge: string;
 }
 
 export interface TabStripHandlers {
   activate(id: number): void;
   close(id: number): void;
-  /** The tab was dragged to `index` along the strip. */
   move(id: number, index: number): void;
-  /**
-   * The tab is dragged out of the strip, the pointer at (`screenX`,
-   * `screenY`): resolves true when another EzReader window is under it.
-   */
   hover(screenX: number, screenY: number): Promise<boolean>;
-  /** The drag ended without a drop outside (back on the strip, cancelled). */
   hoverEnd(): void;
-  /** The tab was dropped outside the strip, at (`screenX`, `screenY`). */
   detach(id: number, screenX: number, screenY: number): void;
 }
 
@@ -40,21 +29,10 @@ interface Drag {
   outside: boolean;
   overWindow: boolean;
   ghost: HTMLElement | null;
-  /** Hover question in flight, and the latest point waiting for an answer. */
   asking: boolean;
   pending: { x: number; y: number } | null;
 }
 
-/**
- * The tabs of the documents open in the window, in the middle of the title
- * bar. With one document it is just the file name, as before tabs; with
- * more, one quiet chip per document. The active one holds the toolbar's
- * file name (click to rename, dot while unsaved).
- *
- * A tab can be dragged along the strip to reorder it, down off the title
- * bar or out of the window to open it in a window of its own, or onto
- * another EzReader window to move it there.
- */
 export class TabStrip {
   readonly el: HTMLElement;
   private labels: TabStripLabels = {
@@ -68,7 +46,6 @@ export class TabStrip {
 
   constructor(
     private readonly bar: HTMLElement,
-    /** The file name of the active document (from the toolbar). */
     private readonly title: HTMLElement,
     private readonly on: TabStripHandlers,
   ) {
@@ -77,7 +54,6 @@ export class TabStrip {
     this.el.setAttribute("role", "tablist");
     title.replaceWith(this.el);
     this.el.append(title);
-    // A click that ends a drag must not also start a rename.
     this.el.addEventListener("click", (e) => {
       if (!this.suppressClick) return;
       e.stopPropagation();
@@ -93,11 +69,10 @@ export class TabStrip {
 
   private activeId: number | null = null;
 
-  /** Shows `tabs`, `activeId` holding the file name. */
   render(tabs: readonly DocTab<unknown>[], activeId: number | null): void {
     this.tabs = tabs;
     this.activeId = activeId;
-    if (this.drag?.dragging) return; // redrawn when the drag ends
+    if (this.drag?.dragging) return;
     const multi = tabs.length > 1;
     this.el.classList.toggle("single", !multi);
     const items: HTMLElement[] = [];
@@ -131,7 +106,6 @@ export class TabStrip {
         item.append(close);
       }
       item.addEventListener("pointerdown", (e) => this.press(e, tab.id, item));
-      // Middle click closes, as in a browser.
       item.addEventListener("auxclick", (e) => {
         if (e.button === 1 && multi) { e.preventDefault(); this.on.close(tab.id); }
       });
@@ -142,12 +116,9 @@ export class TabStrip {
     this.el.querySelector(".doc-tab.active")?.scrollIntoView?.({ block: "nearest", inline: "nearest" });
   }
 
-  /** Another window's tab is dragged over this window: show where it lands. */
   setDropTarget(on: boolean): void {
     this.bar.classList.toggle("tab-drop-target", on);
   }
-
-  // ── Dragging ───────────────────────────────────────────────────────────────
 
   private press(e: PointerEvent, id: number, el: HTMLElement): void {
     if (e.button !== 0 || this.drag) return;
@@ -157,8 +128,7 @@ export class TabStrip {
       id, el, pointerId: e.pointerId, startX: e.clientX, startY: e.clientY,
       dragging: false, outside: false, overWindow: false, ghost: null, asking: false, pending: null,
     };
-    // Keeps the events coming when the pointer leaves the window.
-    try { el.setPointerCapture(e.pointerId); } catch { /* not supported */ }
+    try { el.setPointerCapture(e.pointerId); } catch {}
     window.addEventListener("pointermove", this.onMove);
     window.addEventListener("pointerup", this.onUp);
     window.addEventListener("pointercancel", this.onUp);
@@ -210,7 +180,6 @@ export class TabStrip {
     setTimeout(() => { this.suppressClick = false; }, 0);
     if (e.type === "pointercancel") { this.on.hoverEnd(); return; }
     if (d.outside) {
-      // A lone tab only moves into another window: dropped on nothing, it stays.
       if (this.tabs.length > 1 || d.overWindow) this.on.detach(d.id, e.screenX, e.screenY);
       else this.on.hoverEnd();
       return;
@@ -233,7 +202,7 @@ export class TabStrip {
   private endDrag(): void {
     const d = this.drag;
     if (!d) return;
-    try { d.el.releasePointerCapture(d.pointerId); } catch { /* already released */ }
+    try { d.el.releasePointerCapture(d.pointerId); } catch {}
     window.removeEventListener("pointermove", this.onMove);
     window.removeEventListener("pointerup", this.onUp);
     window.removeEventListener("pointercancel", this.onUp);
@@ -245,14 +214,12 @@ export class TabStrip {
     this.drag = null;
   }
 
-  /** Past the window's edge, or pulled well below the title bar. */
   private isOutside(e: PointerEvent): boolean {
     if (e.clientX < 0 || e.clientY < 0 || e.clientX >= window.innerWidth || e.clientY >= window.innerHeight) return true;
     if (this.tabs.length < 2) return false;
     return e.clientY > this.bar.getBoundingClientRect().bottom + TEAR_OFF_PX;
   }
 
-  /** Follows the pointer along the strip, swapping places with the tabs it passes. */
   private slide(x: number): void {
     const d = this.drag!;
     if (this.tabs.length < 2) return;
@@ -276,7 +243,6 @@ export class TabStrip {
   private placeGhost(e: PointerEvent): void {
     const g = this.drag?.ghost;
     if (!g) return;
-    // Outside the window the ghost waits at the edge the pointer crossed.
     const x = Math.min(Math.max(e.clientX + 12, 4), window.innerWidth - g.offsetWidth - 4);
     const y = Math.min(Math.max(e.clientY + 12, 4), window.innerHeight - g.offsetHeight - 4);
     g.style.left = `${x}px`;
@@ -292,7 +258,6 @@ export class TabStrip {
     d.ghost!.classList.toggle("merge", d.overWindow);
   }
 
-  /** Asks which window is under the pointer, one question at a time. */
   private askHover(x: number, y: number): void {
     const d = this.drag!;
     if (d.asking) { d.pending = { x, y }; return; }

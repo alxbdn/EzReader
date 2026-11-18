@@ -2,18 +2,12 @@ import { CheckMenuItem, Menu, MenuItem, PredefinedMenuItem, Submenu } from "@tau
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import type { Translations } from "./i18n";
 
-// macOS keeps menus at the top of the screen, not in the window: the same
-// menus as the window's menu row (toolbar.ts), as the app's native menu.
-// Each window builds its own and puts it up when it comes to the front, so
-// a menu acts on the window in front.
-
 export interface NativeMenuItem {
   label: keyof Translations;
   shortcut?: string;
   action: () => void;
   requiresDoc?: boolean;
   mark?: { id: string; kind: "radio" | "check" };
-  /** Shown in the app menu (EzReader ▸ Settings…), not in its own menu. */
   appMenu?: boolean;
 }
 
@@ -23,23 +17,17 @@ export interface NativeMenu {
   items: (NativeMenuItem | null)[];
 }
 
-/** The shortcut of a menu entry ("Ctrl+Shift+S") as a native accelerator. */
 export function accelerator(shortcut: string | undefined): string | undefined {
   if (!shortcut) return undefined;
   switch (shortcut) {
     case "Ctrl++": return "CmdOrCtrl+=";
     case "Ctrl+-": return "CmdOrCtrl+-";
     case "Ctrl+Y": return "CmdOrCtrl+Shift+Z";
-    // Full screen is ⌃⌘F on the Mac, F11 elsewhere.
     case "F11": return "Ctrl+Cmd+F";
   }
   return shortcut.replace(/^Ctrl\+/, "CmdOrCtrl+");
 }
 
-/**
- * Keys (with ⌘) that the native menu answers: the page leaves them alone,
- * or the action would run twice.
- */
 export function menuOwnsKey(e: KeyboardEvent): boolean {
   if (!menuUp || !e.metaKey || e.altKey || e.ctrlKey) return false;
   return OWNED_KEYS.has(e.key.toLowerCase());
@@ -75,7 +63,6 @@ export class MacMenu {
         accelerator: accelerator(def.shortcut),
         enabled: !def.requiresDoc,
         action: () => {
-          // ⌘Z in a text field undoes the typing, not the document.
           if ((def.label === "menuUndo" || def.label === "menuRedo") && editing()) {
             document.execCommand(def.label === "menuUndo" ? "undo" : "redo");
             return;
@@ -110,17 +97,13 @@ export class MacMenu {
     const subs: Submenu[] = [app];
     for (const menu of menus) {
       const items: (MenuItem | CheckMenuItem | PredefinedMenuItem)[] = [];
-      // macOS adds its own Enter Full Screen to the View menu.
       const defs = menu.items.filter((i) => !i?.appMenu && i?.shortcut !== "F11");
       for (const [i, def] of defs.entries()) {
         if (def === null) {
-          // No separator at either end, nor two in a row.
           if (i > 0 && i < defs.length - 1 && defs[i - 1] !== null) items.push(await sep());
           continue;
         }
         items.push(await make(def));
-        // Text fields need Cut / Copy / Paste / Select All from the Edit
-        // menu: macOS sends ⌘C and friends through it.
         if (menu.id === "edit" && def.shortcut === "Ctrl+Y") {
           items.push(
             await sep(),

@@ -1,10 +1,3 @@
-//! Dynamic tests: the commands fed broken and hostile files.
-//!
-//! Each property starts from a valid fixture and damages it (flipped bytes,
-//! truncation, garbage spliced in). Opening the result may fail, but must
-//! never panic: a panic in a command loses the work in every window. The
-//! fuzz targets in `fuzz/` explore the same entry points for longer.
-
 use proptest::prelude::*;
 
 use crate::commands::compress::{compress_to_bytes, Job};
@@ -13,7 +6,6 @@ use crate::commands::pdf::get_page_count;
 use crate::error::ErrorCode;
 use crate::test_util::{fixture, tmp};
 
-/// `base` damaged: some bytes overwritten, then maybe cut short.
 fn damaged(base: Vec<u8>) -> impl Strategy<Value = Vec<u8>> {
     let len = base.len();
     (
@@ -77,7 +69,6 @@ fn a_file_that_is_not_a_pdf_is_an_error() {
 
 #[test]
 fn an_oversized_picture_is_refused_before_reading() {
-    // Sparse: takes no room on disk.
     let path = tmp("huge.png");
     std::fs::File::create(&path).unwrap().set_len(65 * 1024 * 1024).unwrap();
     assert_eq!(load_picture(path.clone()).unwrap_err().code, ErrorCode::TooLarge);

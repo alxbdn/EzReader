@@ -6,8 +6,8 @@ const st = (path: string, page = 1, dirty = true): DocState => ({ path, page, di
 describe("PageHistory", () => {
   it("undoes page edits back to the first state, then redoes them", () => {
     const h = new PageHistory();
-    h.record(st("a", 3, false)); // a → b
-    h.record(st("b", 2));        // b → c
+    h.record(st("a", 3, false));
+    h.record(st("b", 2));
     expect(h.undo(st("c"))).toEqual(st("b", 2));
     expect(h.undo(st("b", 2))).toEqual(st("a", 3, false));
     expect(h.canUndo).toBe(false);

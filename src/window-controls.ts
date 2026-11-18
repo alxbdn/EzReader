@@ -1,11 +1,6 @@
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { isMac } from "./platform";
 
-// The native title bar is turned off (decorations: false), so the menu row
-// doubles as the title bar: empty space drags the window, a double click
-// maximises it, and the three buttons below replace the system ones
-// (except on macOS, which keeps its own).
-
 const ICON_MIN = `<svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true"><path d="M0 5h10" stroke="currentColor" stroke-width="1"/></svg>`;
 const ICON_MAX = `<svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true"><rect x="0.5" y="0.5" width="9" height="9" fill="none" stroke="currentColor" stroke-width="1"/></svg>`;
 const ICON_RESTORE = `<svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true"><rect x="0.5" y="2.5" width="7" height="7" fill="none" stroke="currentColor" stroke-width="1"/><path d="M2.5 2.5V0.5h7v7h-2" fill="none" stroke="currentColor" stroke-width="1"/></svg>`;
@@ -18,7 +13,6 @@ export interface WindowControlLabels {
   close: string;
 }
 
-/** `labels` is read on every state change so a language switch is picked up. */
 export function mountWindowControls(row: HTMLElement, getLabels: () => WindowControlLabels): void {
   if (!("__TAURI_INTERNALS__" in window)) return;
 
@@ -27,11 +21,8 @@ export function mountWindowControls(row: HTMLElement, getLabels: () => WindowCon
   document.body.classList.add("custom-titlebar");
 
   if (isMac) {
-    // macOS draws its own buttons, on the left over the menu row
-    // (tauri.macos.conf.json). They go away in full screen: so does the room
-    // kept for them.
     const syncFullscreen = async () => {
-      try { document.body.classList.toggle("mac-fullscreen", await win.isFullscreen()); } catch { /* tests */ }
+      try { document.body.classList.toggle("mac-fullscreen", await win.isFullscreen()); } catch {}
     };
     void syncFullscreen();
     void win.onResized(() => { void syncFullscreen(); }).catch(() => {});
@@ -71,7 +62,7 @@ export function mountWindowControls(row: HTMLElement, getLabels: () => WindowCon
       maxBtn.title = t;
       maxBtn.setAttribute("aria-label", t);
       document.body.classList.toggle("window-maximized", maximized);
-    } catch { /* not available in tests */ }
+    } catch {}
   };
   void syncMax();
   void win.onResized(() => { void syncMax(); }).catch(() => {});

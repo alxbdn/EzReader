@@ -1,12 +1,6 @@
-//! Sizes and positions, kept apart from Windows so they can be tested anywhere.
-
-/// Space around and between the pages in the preview pane, in pixels.
 pub const MARGIN: i32 = 12;
-/// The preview pane never draws a page wider than this, in pixels.
 pub const MAX_PAGE_WIDTH: i32 = 1400;
 
-/// The size of a `width` × `height` page scaled to fit a `side` × `side`
-/// square (Explorer asks for thumbnails by their longest side).
 pub fn fit_in_square(width: f32, height: f32, side: u32) -> (u32, u32) {
     if !(width > 0.0 && height > 0.0) || side == 0 {
         return (side.max(1), side.max(1));
@@ -16,7 +10,6 @@ pub fn fit_in_square(width: f32, height: f32, side: u32) -> (u32, u32) {
     ((w.round() as u32).clamp(1, side), (h.round() as u32).clamp(1, side))
 }
 
-/// Where a page sits in the scrolling column of the preview pane.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Slot {
     pub top: i32,
@@ -25,8 +18,6 @@ pub struct Slot {
     pub height: i32,
 }
 
-/// Lays the pages (their sizes in points) out in one column, as wide as the
-/// pane allows. Returns each page's slot and the column's full height.
 pub fn column(pages: &[(f32, f32)], pane_width: i32) -> (Vec<Slot>, i32) {
     let width = (pane_width - 2 * MARGIN).clamp(1, MAX_PAGE_WIDTH);
     let left = ((pane_width - width) / 2).max(0);
@@ -41,8 +32,6 @@ pub fn column(pages: &[(f32, f32)], pane_width: i32) -> (Vec<Slot>, i32) {
     (slots, top)
 }
 
-/// The indices of the slots seen through a window of `height` pixels
-/// scrolled down by `scroll`.
 pub fn visible(slots: &[Slot], scroll: i32, height: i32) -> std::ops::Range<usize> {
     let bottom = scroll + height;
     let start = slots.partition_point(|s| s.top + s.height <= scroll);
@@ -50,7 +39,6 @@ pub fn visible(slots: &[Slot], scroll: i32, height: i32) -> std::ops::Range<usiz
     start..end.max(start)
 }
 
-/// `scroll` kept between the top and the last screen of the column.
 pub fn clamp_scroll(scroll: i32, total: i32, height: i32) -> i32 {
     scroll.clamp(0, (total - height).max(0))
 }
@@ -90,7 +78,7 @@ mod tests {
 
     #[test]
     fn only_pages_on_screen_are_visible() {
-        let (slots, _) = column(&[(1.0, 1.0); 10], 124); // 100 px squares, 112 px apart
+        let (slots, _) = column(&[(1.0, 1.0); 10], 124);
         assert_eq!(visible(&slots, 0, 50), 0..1);
         assert_eq!(visible(&slots, 0, 130), 0..2);
         assert_eq!(visible(&slots, 200, 100), 1..3);

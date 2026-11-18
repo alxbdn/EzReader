@@ -13,7 +13,6 @@ export interface ExportDeps {
     renderFilePages(path: string, pages: number[], dpi: number, type: string, write: (data: string) => Promise<void>): Promise<void>;
   };
   modal: ExportModal;
-  /** The name typed in the title bar and not saved yet, if any. */
   pendingRename(): string | null;
   messages: Messages;
   ui: Feedback;
@@ -23,16 +22,10 @@ export interface ExportDeps {
 }
 
 export interface ExportFlow {
-  /** Opens Export on a tab. */
   open(tab: "pdf" | "images"): void;
-  /** Name of the open document without its extension (for exported files). */
   docStem(): string;
 }
 
-/**
- * Export: pictures of the pages, a flattened PDF copy, the text as Word /
- * Excel / RTF / HTML / text / XML, or pictures to a new PDF.
- */
 export function setUpExport(d: ExportDeps): ExportFlow {
   const { msg, errText } = d.messages;
   const { backend, ui } = d;
@@ -54,8 +47,6 @@ export function setUpExport(d: ExportDeps): ExportFlow {
       }
       if (!d.session.isOpen || !d.viewer.isLoaded()) return;
       if (isDocFormat(req.format)) {
-        // The text only: annotations are drawings, and redactions are already
-        // burnt into the materialized file, so nothing hidden can leak.
         const input = await d.session.materialize({ annotations: false });
         const doc = await backend.extractText(input, req.pages, docStem());
         if (textLength(doc) === 0) {

@@ -30,58 +30,42 @@ import { drawVector } from "./signature-ink";
 import type { AnnotationSession } from "./annotation-session";
 import type { SelectionOwner, ToolSelection } from "./tool-selection";
 
-/** Shapes whose outline, fill, thickness and opacity can be changed. */
 export type ShapeAnnotation = RectAnnotation | CircleAnnotation | InkAnnotation;
 
-/** Default sticky-note size, in PDF points. */
-/** Size of a sticky note placed by a click (points); a drag sets another size. */
 const NOTE_W = 150;
 const NOTE_H = 100;
 const NOTE_FONT = 10;
 const NOTE_PAD = 6;
-/** How far each note's text is scrolled (points); kept while the app runs. */
 const noteScroll = new WeakMap<NoteAnnotation, number>();
-/** Height of each note's text as last drawn (points). */
 const noteTextHeight = new WeakMap<NoteAnnotation, number>();
 
-/** How far the text of `ann` can scroll (points). */
 function noteMaxScroll(ann: NoteAnnotation): number {
   return Math.max(0, (noteTextHeight.get(ann) ?? 0) - (ann.height - 2 * NOTE_PAD));
 }
 
-/** Size of a new check mark or cross, in PDF points. */
 const STAMP_SIZE = 22;
 
-/** Pictures keep their proportions when resized from a corner. */
-/** Pixels of an annotation (each way) that a drag keeps on its page. */
 const REACHABLE = 24;
 const KEEPS_RATIO = new Set<Annotation["kind"]>(["signature", "image", "stamp"]);
 
-/** Decoded pictures, by their base64 data, so redraws don't decode again. */
 const pictures = new Map<string, HTMLImageElement>();
 
-/** A picture's base64 data as an image URL (JPEG or PNG). */
 export function pictureSrc(b64: string): string {
   return `data:image/${b64.startsWith("/9j/") ? "jpeg" : "png"};base64,${b64}`;
 }
 
-/** Text of the page under the Edit text tool, in PDF points. */
 export interface PageTextItem {
   text: string;
-  /** Baseline start. */
   x: number;
   y: number;
   width: number;
   fontSize: number;
   family: FontFamilyValue;
-  /** Page colour around the words, to paint them over. */
   background: RgbColor;
 }
 
-/** Average glyph width (em) the PDF writer assumes when wrapping text. */
 const PDF_CHAR_W: Record<string, number> = { helvetica: 0.5, times: 0.45, courier: 0.6 };
 
-/** Minimal duck-type for pdfjs PageViewport — avoids importing pdfjs-dist here. */
 interface PdfViewport {
   convertToViewportPoint(pdfX: number, pdfY: number): number[];
   convertToPdfPoint(viewX: number, viewY: number): number[];
@@ -93,21 +77,16 @@ type ShapeAnnotationSelectedHandler     = (ann: ShapeAnnotation | null) => void;
 type HighlightAnnotationSelectedHandler = (ann: HighlightAnnotation | null) => void;
 type ResizeHandle = "nw" | "n" | "ne" | "e" | "se" | "s" | "sw" | "w";
 
-const HANDLE_R = 4; // half-size of handle squares in px
-/** Selection boxes and handles: the app's selection red (as in the page panel). */
+const HANDLE_R = 4;
 const SELECT = "#E53935";
-const HANDLE_HIT = 7; // hit radius in px
+const HANDLE_HIT = 7;
 const HANDLE_CURSORS: Record<ResizeHandle, string> = {
   nw: "nw-resize", n: "n-resize",  ne: "ne-resize",
   e:  "e-resize",  se: "se-resize", s:  "s-resize",
   sw: "sw-resize", w:  "w-resize",
 };
-const MIN_SIZE_PT = 10; // minimum annotation dimension in PDF pts
+const MIN_SIZE_PT = 10;
 
-/**
- * A click on a page that closes an open text box or note only closes it:
- * it does not also start a new annotation with the active tool.
- */
 function endsEditOnly(ev: MouseEvent): void {
   if ((ev.target as Element | null)?.classList?.contains("page-annotation-canvas")) ev.stopPropagation();
 }
@@ -117,20 +96,15 @@ export class CanvasOverlay implements SelectionOwner {
   private container: HTMLElement;
   private ctx: CanvasRenderingContext2D;
 
-  /** The active tool's style presets, shared by every page. */
   private get style(): ActiveToolState { return this.tools.state; }
   private activeTool: ToolKind = "select";
   private editingAnn: Annotation | null = null;
 
-  // ── Draw state ──────────────────────────────────────────────────────────────
   private isDrawing = false;
   private startX = 0;
   private startY = 0;
-  /** Canvas points of the pencil stroke being drawn. */
   private inkPts: [number, number][] = [];
 
-  // ── Select / move / resize state ────────────────────────────────────────────
-  /** The selected annotation when it is on this page (one selection across all pages). */
   private get selected(): Annotation | null {
     const s = this.tools.selected;
     return s && this.shown && s.page === this.currentPage ? s : null;
@@ -142,7 +116,6 @@ export class CanvasOverlay implements SelectionOwner {
   private dragging = false;
   private resizing = false;
   private resizeHandle: ResizeHandle | null = null;
-  /** PDF-coord anchor for the FIXED edge during resize */
   private resizeAnchorX = 0;
   private resizeAnchorY = 0;
   private dragTarget: Annotation | null = null;
@@ -152,42 +125,31 @@ export class CanvasOverlay implements SelectionOwner {
   private dragOrigH = 0;
   private dragOffsetX = 0;
   private dragOffsetY = 0;
-  /** PDF coords of the mouse at drag-start — used for delta-based dragging. */
   private dragStartPdfX = 0;
   private dragStartPdfY = 0;
-  /** Where the dragged annotation was when the drag started (on this page). */
   private dragBaseX = 0;
   private dragBaseY = 0;
-  /** A move, resize or corner drag follows the pointer anywhere (window listeners). */
   private tracking = false;
-  /** The overlay of each page, by its page wrapper: a drag can hand over to another page. */
   private static readonly byContainer = new WeakMap<HTMLElement, CanvasOverlay>();
-  /** Whether the current drag has reported "about to modify" yet. */
   private changeNotified = true;
-  /** Corner of a stretchable redaction being dragged, as page points. */
   private vertexDrag: { ann: RedactAnnotation; index: number; pts: [number, number][] } | null = null;
 
-  // ── Page state ──────────────────────────────────────────────────────────────
   private currentPage = 1;
   private pageHeightPt = 841;
   private scale = 1.5;
   private viewport: PdfViewport | null = null;
   private viewportRotation = 0;
 
-  // ── Callbacks ───────────────────────────────────────────────────────────────
   private textSelectedHandlers:      TextAnnotationSelectedHandler[]      = [];
   private shapeSelectedHandlers:     ShapeAnnotationSelectedHandler[]     = [];
   private highlightSelectedHandlers: HighlightAnnotationSelectedHandler[] = [];
   private hlPopover: HTMLElement | null = null;
   private containerDownPos: { x: number; y: number } | null = null;
 
-  /** Called on hover when no annotation is hit; return the desired cursor string (e.g. "pointer") or "" for default. */
   onHoverCursor: ((offsetX: number, offsetY: number) => string) | null = null;
 
-  /** False while the page is cleared (scrolled out of range): nothing is drawn. */
   private shown = false;
 
-  /** This page's annotations, straight from the session (the single source of truth). */
   private get committed(): readonly Annotation[] {
     return this.shown ? this.session.forPage(this.currentPage) : [];
   }
@@ -210,10 +172,6 @@ export class CanvasOverlay implements SelectionOwner {
     this.canvas.addEventListener("contextmenu",  this.onContextMenu);
     window.addEventListener("keydown", this.onKeyDown);
 
-    // In select mode the canvas has pointer-events:none by default so text
-    // selection works.  We listen on the container (always receives
-    // events) to detect when the cursor is over an annotation and temporarily
-    // flip pointer-events:auto so the canvas can handle clicks/drags.
     CanvasOverlay.byContainer.set(container, this);
     container.addEventListener("mousemove", this.onContainerMouseMove);
     container.addEventListener("mousedown", this.onContainerMouseDown);
@@ -227,7 +185,6 @@ export class CanvasOverlay implements SelectionOwner {
   onShapeAnnotationSelected    (h: ShapeAnnotationSelectedHandler):     void { this.shapeSelectedHandlers.push(h); }
   onHighlightAnnotationSelected(h: HighlightAnnotationSelectedHandler): void { this.highlightSelectedHandlers.push(h); }
 
-  /** A click only selects; the first actual move or resize opens the change. */
   private notifyChangeOnce(): void {
     if (this.changeNotified) return;
     this.changeNotified = true;
@@ -238,13 +195,8 @@ export class CanvasOverlay implements SelectionOwner {
   private emitHighlightSelected(a: HighlightAnnotation | null): void { this.highlightSelectedHandlers.forEach(h => h(a)); }
 
   private pickHandlers: ((ann: Annotation) => void)[] = [];
-  /**
-   * A click (no drag) with a drawing tool on an existing annotation: the app
-   * switches back to selecting, then calls `select(ann)`.
-   */
   onPick(h: (ann: Annotation) => void): void { this.pickHandlers.push(h); }
 
-  /** Selects `ann` (ready to move, resize or restyle). */
   select(ann: Annotation): void {
     if (!this.committed.includes(ann)) return;
     this.selected = ann;
@@ -256,13 +208,10 @@ export class CanvasOverlay implements SelectionOwner {
 
   get currentTool(): ToolKind { return this.activeTool; }
 
-  /** Drawing a freeform redaction area. */
   private get lassoing(): boolean { return this.activeTool === "redact" && this.style.redactShape === "lasso"; }
 
-  /** Where the page's annotation layer is on screen. */
   get screenRect(): DOMRect { return this.canvas.getBoundingClientRect(); }
 
-  /** Apply highlight style fields to an existing highlight and redraw. */
   applyHighlightAnnotationStyle(
     ann: HighlightAnnotation,
     color: RgbColor,
@@ -275,7 +224,6 @@ export class CanvasOverlay implements SelectionOwner {
     this.session.edited();
   }
 
-  /** Apply shape style fields to an existing shape or stroke and redraw. */
   applyShapeAnnotationStyle(
     ann: ShapeAnnotation,
     color: RgbColor,
@@ -292,7 +240,6 @@ export class CanvasOverlay implements SelectionOwner {
     this.session.edited();
   }
 
-  /** Apply text style fields to an existing annotation and redraw. */
   applyTextAnnotationStyle(
     ann: TextAnnotation,
     style: Pick<ActiveToolState, "color" | "fontSize" | "bold" | "italic" | "underline" | "alignment" | "fontFamily" | "fontName" | "textBackground">
@@ -311,13 +258,11 @@ export class CanvasOverlay implements SelectionOwner {
     this.session.edited();
   }
 
-  /** The shared tool state changed: follow its tool. */
   refreshStyle(): void {
     this.activeTool = this.style.tool;
     this.applyPointerEvents(this.activeTool);
   }
 
-  /** The selection moved to another page: stop drawing its box here. */
   selectionLost(): void {
     this.redrawCommitted();
   }
@@ -339,22 +284,13 @@ export class CanvasOverlay implements SelectionOwner {
   }
 
   private applyPointerEvents(tool: ToolKind): void {
-    // Annotation canvas only captures events when a draw tool is active.
-    // "select" and "signature" keep pointer-events:none so the text layer
-    // (below in z-index) receives events and text can be selected.
     this.canvas.style.pointerEvents = DRAW_TOOLS.includes(tool) ? "auto" : "none";
   }
 
-  /**
-   * The page view is thrown away: drops the window listener, which would
-   * otherwise keep the whole old page (and its canvases) alive after every
-   * new layout.
-   */
   destroy(): void {
     window.removeEventListener("keydown", this.onKeyDown);
   }
 
-  /** The page was cleared (scrolled out of range): draws nothing until the next sync. */
   hide(): void {
     this.selected = null;
     this.syncToPage(this.currentPage, 1, 841);
@@ -362,7 +298,6 @@ export class CanvasOverlay implements SelectionOwner {
     this.redrawCommitted();
   }
 
-  /** Convert PDF user-space point → canvas pixel coords (handles rotation via viewport). */
   private toCanvas(pdfX: number, pdfY: number): [number, number] {
     if (this.viewport) {
       const r = this.viewport.convertToViewportPoint(pdfX, pdfY);
@@ -372,7 +307,6 @@ export class CanvasOverlay implements SelectionOwner {
     return [c.x, c.y];
   }
 
-  /** Convert canvas pixel coords → PDF user-space point (handles rotation via viewport). */
   private toPdf(canvasX: number, canvasY: number): [number, number] {
     if (this.viewport) {
       const r = this.viewport.convertToPdfPoint(canvasX, canvasY);
@@ -382,7 +316,6 @@ export class CanvasOverlay implements SelectionOwner {
     return [p.x, p.y];
   }
 
-  /** Shows page `page`'s annotations at this scale (after a render). */
   syncToPage(page: number, scale: number, pageHeightPt: number, viewport?: PdfViewport): void {
     this.shown        = true;
     this.currentPage  = page;
@@ -390,21 +323,14 @@ export class CanvasOverlay implements SelectionOwner {
     this.pageHeightPt = pageHeightPt;
     this.viewport         = viewport ?? null;
     this.viewportRotation = viewport?.rotation ?? 0;
-    // A re-render (zoom, layout) keeps the selection if the annotation is still there.
     if (this.selected && !this.committed.includes(this.selected)) this.selected = null;
     this.dragging = false;
     this.resizing = false;
     this.dragTarget = null;
 
     this.redrawCommitted();
-    // Always reset pointer-events to the correct state for the current tool.
-    // Without this, if the canvas was left with pointer-events:auto (from a draw
-    // mode or annotation hover) before loading a new PDF, form inputs below the
-    // canvas would be unclickable.
     this.applyPointerEvents(this.activeTool);
   }
-
-  // ── Bounding box ─────────────────────────────────────────────────────────────
 
   private getAnnBounds(ann: Annotation): { left: number; top: number; right: number; bottom: number } {
     const { scale } = this;
@@ -432,9 +358,8 @@ export class CanvasOverlay implements SelectionOwner {
         top:  Math.min(...ys), bottom: Math.max(...ys),
       };
     } else {
-      // Convert the two opposite PDF corners and take the axis-aligned bounding box.
-      const [x1, y1] = this.toCanvas(ann.x, ann.y + ann.height);            // PDF top-left
-      const [x2, y2] = this.toCanvas(ann.x + ann.width, ann.y);             // PDF bottom-right
+      const [x1, y1] = this.toCanvas(ann.x, ann.y + ann.height);
+      const [x2, y2] = this.toCanvas(ann.x + ann.width, ann.y);
       return {
         left:   Math.min(x1, x2),
         top:    Math.min(y1, y2),
@@ -473,9 +398,6 @@ export class CanvasOverlay implements SelectionOwner {
     return null;
   }
 
-  // ── Resize handles ───────────────────────────────────────────────────────────
-
-  /** Returns canvas-px positions of all handles for a selection box. */
   private handlePositions(b: { left: number; top: number; right: number; bottom: number }): Record<ResizeHandle, { x: number; y: number }> {
     const mx = (b.left + b.right)  / 2;
     const my = (b.top  + b.bottom) / 2;
@@ -489,17 +411,15 @@ export class CanvasOverlay implements SelectionOwner {
   private handlesFor(ann: Annotation): ResizeHandle[] {
     if (ann.kind === "highlight") return [];
     if (ann.kind === "text") return ["w", "e"];
-    if (ann.kind === "redact" && ann.shape === "poly") return []; // its corners are the handles
+    if (ann.kind === "redact" && ann.shape === "poly") return [];
     if (KEEPS_RATIO.has(ann.kind)) return ["nw", "ne", "se", "sw"];
     return ["nw", "n", "ne", "e", "se", "s", "sw", "w"];
   }
 
-  /** Page points of a freeform or stretchable redaction's outline. */
   private outlineOf(ann: RedactAnnotation): [number, number][] {
     return (ann.points ?? []).map(([u, v]) => [ann.x + u * ann.width, ann.y + v * ann.height]);
   }
 
-  /** Index of the stretchable redaction's corner under the cursor, if any. */
   private hitVertex(cx: number, cy: number, ann: Annotation): number | null {
     if (ann.kind !== "redact" || ann.shape !== "poly") return null;
     const pts = this.outlineOf(ann);
@@ -510,7 +430,6 @@ export class CanvasOverlay implements SelectionOwner {
     return null;
   }
 
-  /** Stores page points as the box and points of `ann` (relative to the box). */
   private setOutline(ann: RedactAnnotation, pts: [number, number][]): void {
     const xs = pts.map(p => p[0]), ys = pts.map(p => p[1]);
     const x0 = Math.min(...xs), y0 = Math.min(...ys);
@@ -532,13 +451,6 @@ export class CanvasOverlay implements SelectionOwner {
     return null;
   }
 
-  /** Remaps a canvas-space handle to the PDF-space handle that accounts for
-   *  the current viewport rotation, so startResize/applyResize always anchor
-   *  the correct PDF edge and resize the correct PDF dimension.
-   *
-   *  At rotation 0 the mapping is identity.  At 90° the canvas up direction
-   *  corresponds to PDF x+ (east), canvas right to PDF y+ (north), etc.
-   *  Only applied for rect/circle annotations; text uses e/w exclusively. */
   private effectiveHandle(h: ResizeHandle): ResizeHandle {
     const rot = ((this.viewportRotation % 360) + 360) % 360;
     if (rot === 0) return h;
@@ -550,7 +462,6 @@ export class CanvasOverlay implements SelectionOwner {
     return maps[rot]?.[h] ?? h;
   }
 
-  /** Compute fixed-edge anchors in PDF pts for the given handle. */
   private startResize(ann: Annotation, handle: ResizeHandle): void {
     this.resizing      = true;
     this.resizeHandle  = handle;
@@ -560,11 +471,8 @@ export class CanvasOverlay implements SelectionOwner {
     this.dragOrigW     = ann.width;
     this.dragOrigH     = ann.kind !== "text" ? ann.height : 0;
 
-    // For rect/circle, remap the canvas-space handle to PDF-space so the
-    // correct edge is anchored when the viewport is rotated.
     const eh = ann.kind !== "text" ? this.effectiveHandle(handle) : handle;
 
-    // anchorX = the FIXED x edge (left or right) in PDF pts
     const left   = ann.x;
     const right  = ann.x + ann.width;
     const bottom = ann.y;
@@ -573,7 +481,6 @@ export class CanvasOverlay implements SelectionOwner {
     if (["e", "ne", "se"].includes(eh)) this.resizeAnchorX = left;
     else if (["w", "nw", "sw"].includes(eh)) this.resizeAnchorX = right;
 
-    // anchorY = the FIXED y edge (top or bottom) in PDF pts
     if (["n", "ne", "nw"].includes(eh)) this.resizeAnchorY = bottom;
     else if (["s", "se", "sw"].includes(eh)) this.resizeAnchorY = top;
   }
@@ -604,7 +511,6 @@ export class CanvasOverlay implements SelectionOwner {
         ann.height = this.resizeAnchorY - newBottom;
       }
       if (KEEPS_RATIO.has(ann.kind) && this.dragOrigW > 0 && this.dragOrigH > 0) {
-        // Follow the larger change and keep the proportions.
         const k = Math.max(ann.width / this.dragOrigW, ann.height / this.dragOrigH);
         ann.width = this.dragOrigW * k;
         ann.height = this.dragOrigH * k;
@@ -613,8 +519,6 @@ export class CanvasOverlay implements SelectionOwner {
       }
     }
   }
-
-  // ── Redraw ───────────────────────────────────────────────────────────────────
 
   redrawCommitted(): void {
     const dpr = window.devicePixelRatio || 1;
@@ -654,7 +558,6 @@ export class CanvasOverlay implements SelectionOwner {
       }
     }
 
-    // Draw resize handles
     const positions = this.handlePositions(box);
     this.ctx.fillStyle   = "#fff";
     this.ctx.strokeStyle = SELECT;
@@ -666,7 +569,6 @@ export class CanvasOverlay implements SelectionOwner {
     }
   }
 
-  /** Shows or hides the Firefox-style floating highlight popover below the selected highlight. */
   private syncHighlightPopover(): void {
     const ann = this.selected?.kind === "highlight" && this.committed.includes(this.selected)
       ? this.selected
@@ -751,9 +653,6 @@ export class CanvasOverlay implements SelectionOwner {
     pop.style.right = `${Math.round(rightOffset)}px`;
   }
 
-  // ── Annotation drawing ───────────────────────────────────────────────────────
-
-  /** Compute the number of rendered lines for a text annotation (accounts for word-wrap). */
   private textLineCount(ann: TextAnnotation): number {
     const { scale } = this;
     const saved = this.ctx.font;
@@ -763,7 +662,6 @@ export class CanvasOverlay implements SelectionOwner {
     return count;
   }
 
-  /** Split text on explicit newlines then word-wrap each paragraph to maxWidth. */
   private wrapLines(ctx: CanvasRenderingContext2D, text: string, maxWidth: number): string[] {
     const result: string[] = [];
     for (const para of text.split("\n")) {
@@ -799,8 +697,8 @@ export class CanvasOverlay implements SelectionOwner {
     const { scale } = this;
 
     if (ann.kind === "rect") {
-      const [x1, y1] = this.toCanvas(ann.x, ann.y + ann.height); // PDF top-left
-      const [x2, y2] = this.toCanvas(ann.x + ann.width, ann.y);  // PDF bottom-right
+      const [x1, y1] = this.toCanvas(ann.x, ann.y + ann.height);
+      const [x2, y2] = this.toCanvas(ann.x + ann.width, ann.y);
       const l = Math.min(x1, x2), t = Math.min(y1, y2), w = Math.abs(x2 - x1), h = Math.abs(y2 - y1);
       if (ann.fillColor) { ctx.fillStyle = rgbToCss(ann.fillColor); ctx.fillRect(l, t, w, h); }
       if (ann.strokeWidth > 0) {
@@ -858,7 +756,6 @@ export class CanvasOverlay implements SelectionOwner {
       const maxW    = ann.width * scale;
       const lines   = this.wrapLines(ctx, ann.content, maxW);
       if (ann.backgroundColor) {
-        // Same box as the PDF writer: first line's ascent to last line's descent.
         const fs = ann.fontSize * scale;
         const top = -(fs * 0.95 + 2 * scale);
         const bottom = (lines.length - 1) * lineH + fs * 0.3 + 2 * scale;
@@ -886,7 +783,6 @@ export class CanvasOverlay implements SelectionOwner {
       ctx.restore();
 
     } else if (ann.kind === "redact") {
-      // Solid black, outline included, like the saved result.
       this.redactPath(ann);
       ctx.fillStyle = "#000";
       ctx.fill();
@@ -902,7 +798,6 @@ export class CanvasOverlay implements SelectionOwner {
     }
   }
 
-  /** Outline of a redaction area as the current canvas path. */
   private redactPath(ann: RedactAnnotation): void {
     const ctx = this.ctx;
     const b = this.boxOf(ann);
@@ -922,7 +817,6 @@ export class CanvasOverlay implements SelectionOwner {
 
   private drawPicture(ann: SignatureAnnotation | ImageAnnotation): void {
     if (ann.kind === "signature" && ann.vector && ann.vector.w > 0 && ann.vector.h > 0) {
-      // Pen strokes: drawn as curves, sharp at any zoom.
       const v = ann.vector;
       const [x, y] = this.toCanvas(ann.x, ann.y + ann.height);
       const rotRad = (this.viewportRotation * Math.PI) / 180;
@@ -942,7 +836,7 @@ export class CanvasOverlay implements SelectionOwner {
       pictures.set(ann.imageData, img);
     }
     if (!img.complete || img.naturalWidth === 0) return;
-    const [x, y] = this.toCanvas(ann.x, ann.y + ann.height); // PDF top-left → canvas anchor
+    const [x, y] = this.toCanvas(ann.x, ann.y + ann.height);
     const rotRad = (this.viewportRotation * Math.PI) / 180;
     this.ctx.save();
     this.ctx.translate(x, y);
@@ -951,7 +845,6 @@ export class CanvasOverlay implements SelectionOwner {
     this.ctx.restore();
   }
 
-  /** Same strokes as the PDF writer: a check is one stroke, a cross two. */
   private drawStamp(ann: StampAnnotation): void {
     const ctx = this.ctx;
     const at = (u: number, v: number) => this.toCanvas(ann.x + u * ann.width, ann.y + v * ann.height);
@@ -974,7 +867,6 @@ export class CanvasOverlay implements SelectionOwner {
     ctx.restore();
   }
 
-  /** Draws a stroke through canvas points, with an optional fill or arrowhead. */
   private strokeInk(pts: [number, number][], color: RgbColor, strokeWidth: number, fill: RgbColor | null, arrow: boolean): void {
     if (pts.length < 2) return;
     const ctx = this.ctx;
@@ -1021,7 +913,6 @@ export class CanvasOverlay implements SelectionOwner {
     ctx.restore();
   }
 
-  /** Canvas box of an annotation stored as x/y/width/height (any rotation). */
   private boxOf(ann: { x: number; y: number; width: number; height: number }): { l: number; t: number; w: number; h: number } {
     const [x1, y1] = this.toCanvas(ann.x, ann.y + ann.height);
     const [x2, y2] = this.toCanvas(ann.x + ann.width, ann.y);
@@ -1053,8 +944,6 @@ export class CanvasOverlay implements SelectionOwner {
       if (rot) ctx.rotate(rot);
       ctx.font = `${NOTE_FONT * scale}px ${fontCss("helvetica")}`;
       const lines = this.wrapLines(ctx, ann.content, (ann.width - 2 * NOTE_PAD) * scale);
-      // Text taller than the note scrolls (vertically) inside it; a thin
-      // bar on the right shows where you are.
       const lineH = NOTE_FONT * 1.2;
       const textH = lines.length * lineH;
       noteTextHeight.set(ann, textH);
@@ -1138,15 +1027,9 @@ export class CanvasOverlay implements SelectionOwner {
     ctx.setLineDash([]);
   }
 
-  // ── Mouse handlers ────────────────────────────────────────────────────────────
-
-  /** Runs on the parent viewer-container (always receives events regardless of
-   *  canvas pointer-events).  In select mode, enables pointer-events on the
-   *  canvas only when the cursor is actually over an annotation or resize handle,
-   *  keeping text selection available for the rest of the page. */
   private onContainerMouseMove = (e: MouseEvent): void => {
     if (this.activeTool !== "select") return;
-    if (this.dragging || this.resizing) return; // keep state stable mid-drag
+    if (this.dragging || this.resizing) return;
 
     const rect = this.canvas.getBoundingClientRect();
     const cx = e.clientX - rect.left;
@@ -1214,7 +1097,6 @@ export class CanvasOverlay implements SelectionOwner {
     if (this.activeTool === "signature") return;
 
     if (this.activeTool === "select") {
-      // 0. A corner of the selected stretchable redaction
       if (this.selected?.kind === "redact") {
         const v = this.hitVertex(e.offsetX, e.offsetY, this.selected);
         if (v !== null) {
@@ -1224,7 +1106,6 @@ export class CanvasOverlay implements SelectionOwner {
           return;
         }
       }
-      // 1. Check resize handle on selected annotation first
       if (this.selected) {
         const h = this.hitHandle(e.offsetX, e.offsetY, this.selected);
         if (h) {
@@ -1235,7 +1116,6 @@ export class CanvasOverlay implements SelectionOwner {
           return;
         }
       }
-      // 2. Check for annotation hit (drag/select)
       const hit = this.hitTest(e.offsetX, e.offsetY);
       this.selected = hit;
       if (hit) {
@@ -1278,8 +1158,7 @@ export class CanvasOverlay implements SelectionOwner {
 
   private onMouseMove = (e: MouseEvent): void => {
     if (this.activeTool === "select") {
-      if (this.tracking) return; // the window listener follows the gesture
-      // Hover: check handle cursor, then grab cursor
+      if (this.tracking) return;
       if (this.selected) {
         const h = this.hitHandle(e.offsetX, e.offsetY, this.selected);
         if (h) { this.canvas.style.cursor = HANDLE_CURSORS[h]; return; }
@@ -1302,12 +1181,11 @@ export class CanvasOverlay implements SelectionOwner {
   };
 
   private onMouseUp = (e: MouseEvent): void => {
-    if (this.activeTool === "select") return; // gestures end in onGestureUp
+    if (this.activeTool === "select") return;
 
     if (!this.isDrawing) return;
     this.isDrawing = false;
 
-    // A plain click on an existing annotation picks it instead of adding one.
     if (!this.lassoing && Math.hypot(e.offsetX - this.startX, e.offsetY - this.startY) < 4 && this.pickHandlers.length > 0) {
       const hit = this.hitTest(this.startX, this.startY);
       if (hit) {
@@ -1356,8 +1234,6 @@ export class CanvasOverlay implements SelectionOwner {
 
     if (this.activeTool === "note") {
       this.redrawCommitted();
-      // A click sticks a note of the default size; a drag sets its size.
-      // Text longer than the note scrolls inside it.
       const dragged = Math.abs(e.offsetX - this.startX) >= 12 && Math.abs(e.offsetY - this.startY) >= 12;
       const [ax, ay] = this.toPdf(this.startX, this.startY);
       const [bx, by] = dragged ? this.toPdf(e.offsetX, e.offsetY) : [ax + NOTE_W, ay - NOTE_H];
@@ -1413,7 +1289,6 @@ export class CanvasOverlay implements SelectionOwner {
         kind: "redact", page: this.currentPage,
         x: px, y: py, width: pw, height: ph,
         ...(shape === "rect" ? {} : { shape }),
-        // A stretchable area starts as the rectangle drawn; drag its corners.
         ...(shape === "poly" ? { points: [[0, 1], [1, 1], [1, 0], [0, 0]] as [number, number][] } : {}),
       };
       this.session.add(ann);
@@ -1431,8 +1306,6 @@ export class CanvasOverlay implements SelectionOwner {
     }
   };
 
-  // ── Move / resize / corner drag: followed anywhere on screen ────────────────
-
   private track(): void {
     if (this.tracking) return;
     this.tracking = true;
@@ -1447,22 +1320,16 @@ export class CanvasOverlay implements SelectionOwner {
     window.removeEventListener("mouseup", this.onGestureUp, true);
   }
 
-  /** The pointer in this canvas's pixels (it may be outside the page). */
   private canvasPoint(e: MouseEvent): [number, number] {
     const r = this.canvas.getBoundingClientRect();
     return [e.clientX - r.left, e.clientY - r.top];
   }
 
-  /**
-   * `p` held within one page size around the page: an annotation may be
-   * stretched past the edge (the page cuts it off), not without end.
-   */
   private clampNearPage([x, y]: [number, number]): [number, number] {
     const w = this.canvas.clientWidth, h = this.canvas.clientHeight;
     return [Math.min(Math.max(x, -w), 2 * w), Math.min(Math.max(y, -h), 2 * h)];
   }
 
-  /** Moves `ann` by (dx, dy) canvas pixels. */
   private shiftBy(ann: Annotation, dx: number, dy: number): void {
     if (!dx && !dy) return;
     const [x0, y0] = this.toPdf(0, 0);
@@ -1471,7 +1338,6 @@ export class CanvasOverlay implements SelectionOwner {
     ann.y += y1 - y0;
   }
 
-  /** Shifts `ann` back inside the page, keeping its size (top left first when it is bigger). */
   private keepInside(ann: Annotation): void {
     const w = this.canvas.clientWidth, h = this.canvas.clientHeight;
     if (w <= 0 || h <= 0) return;
@@ -1481,11 +1347,6 @@ export class CanvasOverlay implements SelectionOwner {
     this.shiftBy(ann, fit(b.left, b.right, w), fit(b.top, b.bottom, h));
   }
 
-  /**
-   * Shifts `ann` just enough that some of it stays on the page (REACHABLE
-   * pixels each way, or all of it when smaller): it may hang off the edge,
-   * where the page cuts it off, but can't be lost off the page.
-   */
   private keepReachable(ann: Annotation): void {
     const w = this.canvas.clientWidth, h = this.canvas.clientHeight;
     if (w <= 0 || h <= 0) return;
@@ -1497,18 +1358,15 @@ export class CanvasOverlay implements SelectionOwner {
     this.shiftBy(ann, fit(b.left, b.right, w), fit(b.top, b.bottom, h));
   }
 
-  /** Adds an annotation placed by a click, kept inside the page. */
   private addInside(ann: Annotation): void {
     this.keepInside(ann);
     this.session.add(ann);
   }
 
-  /** Text that replaces words of the page stays with them; anything else can go to another page. */
   private static canChangePage(ann: Annotation): boolean {
     return !(ann.kind === "text" && ann.cover);
   }
 
-  /** The page overlay under the pointer, if any. */
   private static overlayAt(e: MouseEvent): CanvasOverlay | null {
     const el = document.elementFromPoint(e.clientX, e.clientY);
     const wrap = el?.closest?.(".page-wrapper") as HTMLElement | null;
@@ -1572,10 +1430,6 @@ export class CanvasOverlay implements SelectionOwner {
     }
   };
 
-  /**
-   * A drag from page `from` reached this page: `ann` moves here, under the
-   * pointer at the same grab point, and this page carries on the drag.
-   */
   private adoptDrag(from: CanvasOverlay, ann: Annotation, e: MouseEvent): void {
     const offX = from.dragOffsetX, offY = from.dragOffsetY;
     from.untrack();
@@ -1590,11 +1444,10 @@ export class CanvasOverlay implements SelectionOwner {
     this.keepReachable(ann);
     this.session.settle();
 
-    this.selected = ann; // the other page stops drawing it as selected
+    this.selected = ann;
     this.changeNotified = true;
     this.dragging = true;
     this.dragTarget = ann;
-    // Never equal: the drop counts as a change even back at the same spot.
     this.dragOrigX = Number.NaN;
     this.dragOrigY = Number.NaN;
     this.dragBaseX = ann.x;
@@ -1611,7 +1464,6 @@ export class CanvasOverlay implements SelectionOwner {
   }
 
   private onMouseLeave = (): void => {
-    // A move or resize carries on outside the page (see onGestureMove).
     if (this.isDrawing) {
       this.isDrawing = false;
       this.inkPts = [];
@@ -1619,7 +1471,6 @@ export class CanvasOverlay implements SelectionOwner {
     }
   };
 
-  /** Turns canvas points into a stroke whose points are relative to its box. */
   private makeInk(canvasPts: [number, number][], arrow: boolean): InkAnnotation | null {
     if (canvasPts.length < 2) return null;
     const lenPx = canvasPts.slice(1).reduce((acc, p, i) => acc + Math.hypot(p[0] - canvasPts[i][0], p[1] - canvasPts[i][1]), 0);
@@ -1627,7 +1478,6 @@ export class CanvasOverlay implements SelectionOwner {
     const pdf = canvasPts.map(([cx, cy]) => this.toPdf(cx, cy));
     const xs = pdf.map(p => p[0]), ys = pdf.map(p => p[1]);
     const minX = Math.min(...xs), maxX = Math.max(...xs), minY = Math.min(...ys), maxY = Math.max(...ys);
-    // A flat line still gets a box of 1 pt so its points stay well defined.
     const w = Math.max(maxX - minX, 1), h = Math.max(maxY - minY, 1);
     const x0 = (minX + maxX) / 2 - w / 2, y0 = (minY + maxY) / 2 - h / 2;
     const round = (n: number) => Math.round(n * 10000) / 10000;
@@ -1643,12 +1493,6 @@ export class CanvasOverlay implements SelectionOwner {
     };
   }
 
-  // ── Highlighter ──────────────────────────────────────────────────────────────
-
-  /**
-   * Highlights the text under `rects` (canvas px, one per selected span).
-   * Highlighting text that is already highlighted removes that highlight.
-   */
   applyHighlight(rects: { left: number; top: number; right: number; bottom: number }[], color: RgbColor, opacity: number): void {
     const pdfRects = rects
       .filter(r => r.right - r.left > 0.5 && r.bottom - r.top > 0.5)
@@ -1670,7 +1514,6 @@ export class CanvasOverlay implements SelectionOwner {
       acc + Math.min(area(r), touched.reduce((s2, h) => s2 + h.rects.reduce((s3, hr) => s3 + overlap(hr, r), 0), 0)), 0);
 
     if (touched.length > 0 && covered >= total * 0.6) {
-      // Already highlighted: highlighting it again takes the highlight off.
       this.session.change(() => {
         for (const h of touched) this.session.remove(h);
       });
@@ -1691,7 +1534,6 @@ export class CanvasOverlay implements SelectionOwner {
   }
 
   private onKeyDown = (e: KeyboardEvent): void => {
-    // Don't intercept keys while the user is typing in a form field
     const tag = (document.activeElement as HTMLElement)?.tagName ?? "";
     if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" ||
         (document.activeElement as HTMLElement)?.isContentEditable) return;
@@ -1705,13 +1547,6 @@ export class CanvasOverlay implements SelectionOwner {
     }
   };
 
-  // ── Text placement ───────────────────────────────────────────────────────────
-
-  /**
-   * @param left    canvas-px left edge of the text box
-   * @param top     canvas-px top edge of the text box
-   * @param widthPx drawn width in canvas-px; 0 = auto (default size)
-   */
   private openTextInput(left: number, top: number, widthPx: number): void {
     const container = this.container;
     const fontSize  = this.style.fontSize * this.scale;
@@ -1751,7 +1586,6 @@ export class CanvasOverlay implements SelectionOwner {
       const content = (input.innerText ?? input.textContent ?? "").trim();
       cleanup();
       if (content) {
-        // baseline = top of box + top padding (2px) + font size
         const baselineCanvasY = top + 2 + fontSize;
         const [pdfX, pdfY] = this.toPdf(left, baselineCanvasY);
         const annWidth = hasWidth
@@ -1782,10 +1616,8 @@ export class CanvasOverlay implements SelectionOwner {
     };
 
     input.addEventListener("keydown", (ev: KeyboardEvent) => {
-      // Enter / Escape belong to the text box, not to the ✓ / ✕ shortcuts.
       if (ev.key === "Enter" || ev.key === "Escape") ev.stopPropagation();
       if (ev.key === "Escape") { cleanup(); }
-      // Enter places the text; Shift+Enter starts a new line.
       else if (ev.key === "Enter" && !ev.shiftKey) { ev.preventDefault(); commit(); }
     });
 
@@ -1793,8 +1625,6 @@ export class CanvasOverlay implements SelectionOwner {
     input.focus();
     setTimeout(() => document.addEventListener("mousedown", outsideClick, true), 0);
   }
-
-  // ── Double-click edit ─────────────────────────────────────────────────────────
 
   private onDblClick = (e: MouseEvent): void => {
     if (this.activeTool !== "select") return;
@@ -1807,10 +1637,9 @@ export class CanvasOverlay implements SelectionOwner {
   };
 
   private onContextMenu = (e: MouseEvent): void => {
-    e.preventDefault(); // suppress browser context menu
+    e.preventDefault();
   };
 
-  /** Moves `ann` one layer up or down among this page's annotations. */
   reorderAnnotation(ann: Annotation, dir: "up" | "down"): void {
     if (this.session.moveLayer(ann, dir === "up" ? 1 : -1)) this.redrawCommitted();
   }
@@ -1818,12 +1647,10 @@ export class CanvasOverlay implements SelectionOwner {
   private handleTextEdit(ann: TextAnnotation): void {
     const container = this.container;
     const { scale } = this;
-    const [canvasX, canvasY] = this.toCanvas(ann.x, ann.y); // baseline
-    // boxTop = baseline - 2px padding - fontSize (mirrors openTextInput commit logic)
+    const [canvasX, canvasY] = this.toCanvas(ann.x, ann.y);
     const boxTop = canvasY - 2 - ann.fontSize * scale;
     const boxW   = ann.width * scale;
 
-    // Hide the canvas rendering while the edit div is visible
     this.editingAnn = ann;
     this.selected = null;
     this.redrawCommitted();
@@ -1864,7 +1691,6 @@ export class CanvasOverlay implements SelectionOwner {
       if (content && content !== ann.content) {
         this.session.beginEdit();
         ann.content = content;
-        // Text placed with a click grows with what is typed.
         ann.width = Math.max(ann.width, this.fitTextWidth(content, { ...ann, fontFamily: ann.fontFamily ?? "helvetica", fontName: ann.fontName }));
         this.session.edited();
       }
@@ -1894,7 +1720,6 @@ export class CanvasOverlay implements SelectionOwner {
     setTimeout(() => document.addEventListener("mousedown", outsideClick, true), 0);
   }
 
-  /** Width (pt) that fits every line on screen and in the saved PDF. */
   private fitTextWidth(content: string, st: Pick<TextAnnotation, "fontSize" | "bold" | "italic"> & { fontFamily: string; fontName?: string | null }): number {
     const ctx = this.ctx;
     ctx.save();
@@ -1906,7 +1731,6 @@ export class CanvasOverlay implements SelectionOwner {
     return Math.max(measured + 4, longest * st.fontSize * (PDF_CHAR_W[st.fontFamily] ?? 0.5) + 1);
   }
 
-  /** Lets the user type in a sticky note, right on the page. */
   private editNote(ann: NoteAnnotation, fresh = false): void {
     const { scale } = this;
     const b = this.boxOf(ann);
@@ -1914,8 +1738,6 @@ export class CanvasOverlay implements SelectionOwner {
     this.selected = null;
     this.redrawCommitted();
 
-    // The note itself is the writing surface: the same paper as drawn on
-    // the page, typed on directly.
     const darker = { r: ann.color.r * 0.8, g: ann.color.g * 0.8, b: ann.color.b * 0.8 };
     const area = document.createElement("textarea");
     area.className = "note-editor";
@@ -1941,8 +1763,6 @@ export class CanvasOverlay implements SelectionOwner {
         this.session.edited();
       }
       this.redrawCommitted();
-      // A new note stays (even empty) and is selected, ready to move or
-      // resize; a double click writes in it again.
       if (fresh) this.pickHandlers.forEach(h => h(ann));
     };
     const outside = (ev: MouseEvent): void => {
@@ -1961,7 +1781,6 @@ export class CanvasOverlay implements SelectionOwner {
     setTimeout(() => document.addEventListener("mousedown", outside, true), 0);
   }
 
-  /** The wheel over a note whose text overflows scrolls the text, not the page (until it ends). */
   private onWheel = (e: WheelEvent): void => {
     if (e.ctrlKey || e.metaKey || e.deltaY === 0 || !this.shown) return;
     const [cx, cy] = this.canvasPoint(e);
@@ -1972,7 +1791,7 @@ export class CanvasOverlay implements SelectionOwner {
     const px = e.deltaMode === 1 ? e.deltaY * NOTE_FONT * 1.2 * this.scale : e.deltaMode === 2 ? e.deltaY * hit.height * this.scale : e.deltaY;
     const cur = Math.min(noteScroll.get(hit) ?? 0, max);
     const next = Math.min(max, Math.max(0, cur + px / this.scale));
-    if (next === cur) return; // at the end: the page scrolls on
+    if (next === cur) return;
     e.preventDefault();
     noteScroll.set(hit, next);
     this.redrawCommitted();
@@ -1984,7 +1803,6 @@ export class CanvasOverlay implements SelectionOwner {
     this.emitTextSelected(ann);
   }
 
-  /** Places a picture centred on the given canvas point and selects it. */
   placeImage(canvasX: number, canvasY: number, imageData: string, widthPt: number, heightPt: number): ImageAnnotation {
     const [pdfX, pdfY] = this.toPdf(canvasX, canvasY);
     const ann: ImageAnnotation = {
@@ -1998,18 +1816,11 @@ export class CanvasOverlay implements SelectionOwner {
     return ann;
   }
 
-  /** Size of the page in PDF points, as shown (rotation included). */
   get pageSizePt(): { width: number; height: number } {
     const r = this.canvas.getBoundingClientRect();
     return { width: r.width / this.scale, height: r.height / this.scale };
   }
 
-  // ── Redact text ─────────────────────────────────────────────────────────────
-
-  /**
-   * Marks the text under `rects` (canvas px, one per selected line) for
-   * redaction. Selecting text that is already marked takes the mark off.
-   */
   applyRedactText(rects: { left: number; top: number; right: number; bottom: number }[]): void {
     const pdfRects = rects
       .filter(r => r.right - r.left > 0.5 && r.bottom - r.top > 0.5)
@@ -2041,9 +1852,6 @@ export class CanvasOverlay implements SelectionOwner {
     this.redrawCommitted();
   }
 
-  // ── Edit text ───────────────────────────────────────────────────────────────
-
-  /** Opens text already added (or replaced) at the screen point for editing. */
   editTextAt(clientX: number, clientY: number): boolean {
     const r = this.canvas.getBoundingClientRect();
     const hit = this.hitTest(clientX - r.left, clientY - r.top);
@@ -2052,15 +1860,10 @@ export class CanvasOverlay implements SelectionOwner {
     return true;
   }
 
-  /**
-   * Opens a box over existing text of the page to type its replacement.
-   * The result is text drawn over a patch of the page's own colour.
-   */
   replaceText(item: PageTextItem): void {
     const st = this.style;
     const fs = st.fontSize * this.scale;
-    const [bx, by] = this.toCanvas(item.x, item.y); // baseline start
-    // Area of the original words: descent below the baseline, ascent above.
+    const [bx, by] = this.toCanvas(item.x, item.y);
     const cover = {
       x: item.x - 1, y: item.y - item.fontSize * 0.28,
       width: item.width + 2, height: item.fontSize * 1.18,
@@ -2112,7 +1915,6 @@ export class CanvasOverlay implements SelectionOwner {
     };
     const outside = (ev: MouseEvent): void => {
       if (input.contains(ev.target as Node)) return;
-      // Clicking other text of the page moves on to that text.
       commit();
     };
     input.addEventListener("keydown", (ev) => {
@@ -2129,7 +1931,6 @@ export class CanvasOverlay implements SelectionOwner {
     setTimeout(() => document.addEventListener("mousedown", outside, true), 0);
   }
 
-  /** Place a signature image centred on the given canvas coordinates. */
   placeSignature(
     canvasX: number, canvasY: number, imageData: string, widthPt: number, heightPt: number, vector?: InkVector,
   ): SignatureAnnotation {

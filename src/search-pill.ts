@@ -3,11 +3,6 @@ import { ICON_SEARCH_MIRRORED, ICON_CHEVRON_UP, ICON_CHEVRON_DOWN, ICON_X_CIRCLE
 
 const SEARCH_DEBOUNCE_MS = 250;
 
-/**
- * Search field of the main toolbar: a round magnifier that widens into a
- * pill holding the query, the "n / total" counter, previous / next chevrons
- * and a clear button. Escape (or leaving it empty) folds it back.
- */
 export class SearchPill {
   readonly el: HTMLElement;
   private input: HTMLInputElement;
@@ -41,7 +36,6 @@ export class SearchPill {
       e.stopPropagation();
       if (e.key === "Enter") {
         e.preventDefault();
-        // A search still waiting to run jumps to its first match by itself.
         if (this.timer) this.flush();
         else this.step(e.shiftKey ? -1 : 1);
       } else if (e.key === "Escape") {
@@ -50,7 +44,6 @@ export class SearchPill {
       }
     });
     this.input.addEventListener("blur", () => {
-      // Fold back when left empty (but not when focus moves to its own buttons).
       setTimeout(() => {
         if (!this.input.value && !this.el.contains(document.activeElement)) this.close();
       }, 0);
@@ -90,7 +83,6 @@ export class SearchPill {
     this.input.select();
   }
 
-  /** Folds the pill and clears the search. */
   close(): void {
     const had = this.input.value !== "";
     this.input.value = "";
@@ -100,7 +92,6 @@ export class SearchPill {
     if (this.el.contains(document.activeElement)) (document.activeElement as HTMLElement).blur();
   }
 
-  /** "3 / 12", "No results", a progress percentage, or nothing. */
   setStatus(text: string, empty = false): void {
     this.status.textContent = text;
     this.status.classList.toggle("empty", empty);

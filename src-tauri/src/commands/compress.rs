@@ -9,17 +9,14 @@ use tauri::Emitter;
 use crate::fsutil;
 use crate::pdf::compress::{self, ImageSettings, BALANCED, LADDER, MAXIMUM};
 
-/// Returned to the frontend after a successful compression.
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CompressResult {
     pub original_bytes: u64,
     pub compressed_bytes: u64,
-    /// False when a target size could not be reached (the smallest result is written).
     pub reached_target: bool,
 }
 
-/// Size each level would give, for the Compress dialog.
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CompressEstimate {
@@ -29,23 +26,18 @@ pub struct CompressEstimate {
     pub maximum_bytes: u64,
 }
 
-/// The error of a compression the user cancelled.
 pub fn cancelled() -> PdfError {
     PdfError::new(ErrorCode::Cancelled, "cancelled")
 }
 
-/// What a running compression reports to, and is stopped by.
 pub struct Job<'a> {
-    /// Set by the user's Cancel.
     pub cancel: &'a AtomicBool,
-    /// Called with the share of the work done, from 0 to 1.
     pub progress: &'a dyn Fn(f64),
 }
 
 static NEVER_CANCELLED: AtomicBool = AtomicBool::new(false);
 
 impl Job<'static> {
-    /// A job nobody watches or cancels (estimates, tests).
     pub fn silent() -> Self {
         Job { cancel: &NEVER_CANCELLED, progress: &|_| {} }
     }
@@ -57,9 +49,6 @@ impl Job<'_> {
     }
 }
 
-/// The document compressed in memory: streams recompressed and unused
-/// objects dropped; with `images`, pictures re-encoded. Form fields and
-/// annotations are kept as they are. Reports progress within `span`.
 pub(crate) fn compress_to_bytes(
     doc: &Document,
     images: Option<ImageSettings>,
@@ -73,7 +62,6 @@ pub(crate) fn compress_to_bytes(
     let page_count = doc.get_pages().len();
     let (from, to) = span;
     if let Some(settings) = images {
-        // Pictures are the slow part: they take 90 % of the span.
         let mut on_image = |done: usize, total: usize| {
             (job.progress)(from + (to - from) * 0.9 * done as f64 / total.max(1) as f64);
             !job.cancelled()
@@ -87,8 +75,6 @@ pub(crate) fn compress_to_bytes(
     compress::strip_metadata(&mut doc);
     compress::prune_dead_objects(&mut doc);
 
-    // Refuse to write a result that lost pages rather than hand the user a
-    // broken file.
     let pages_after = doc.get_pages().len();
     if page_count == 0 || pages_after != page_count {
         return Err(PdfError::new(
@@ -102,16 +88,6 @@ pub(crate) fn compress_to_bytes(
     Ok(out)
 }
 
-/// Compresses `input_path` into `output_path` (the source is never modified).
-///
-/// `level` is "lossless", "balanced", "maximum", or "target": then the best
-/// quality whose result fits in `target_bytes` is kept.
-///
-/// Compression needs a full rewrite (the whole point is to drop the original
-/// bytes), so this relies on lopdf ≥ 0.47: 0.39 could not load PDFs that
-/// combine object streams with indirect `/Length` entries.
-///
-/// Nothing is written when `job` is cancelled: the error is [`cancelled`].
 pub fn compress_file(
     input_path: &str,
     output_path: &str,
@@ -129,7 +105,6 @@ pub fn compress_file(
         "maximum" => (compress_to_bytes(&doc, Some(MAXIMUM), job, (0.0, 1.0))?, true),
         "target" => {
             let target = target_bytes.ok_or("No target size given")?;
-            // Worst case: lossless, then every step of the ladder.
             let steps = (LADDER.len() + 1) as f64;
             let span = |i: usize| (i as f64 / steps, (i + 1) as f64 / steps);
             let mut smallest = compress_to_bytes(&doc, None, job, span(0))?;
@@ -160,7 +135,6 @@ pub fn compress_file(
     Ok(CompressResult { original_bytes, compressed_bytes: bytes.len() as u64, reached_target })
 }
 
-/// Sizes of the three levels, computed in memory.
 pub fn estimate_file(input_path: &str) -> CmdResult<CompressEstimate> {
     let original_bytes = std::fs::metadata(input_path).map_err(|e| e.to_string())?.len();
     let doc = Document::load(input_path).map_err(|e| e.to_string())?;
@@ -174,16 +148,11 @@ pub fn estimate_file(input_path: &str) -> CmdResult<CompressEstimate> {
     })
 }
 
-/// The Cancel flag of the compression in progress (one at a time per app).
 #[derive(Default)]
 pub struct CompressCancel(pub Arc<AtomicBool>);
 
-/// Event carrying the share of the compression done (0 to 1).
 pub const PROGRESS_EVENT: &str = "compress-progress";
 
-/// See [`compress_file`]. Runs off the main thread: big files take a while.
-/// Reports progress as [`PROGRESS_EVENT`] events; [`cancel_compression`]
-/// stops it.
 #[tauri::command]
 pub async fn compress_pdf(
     app: tauri::AppHandle,
@@ -197,7 +166,6 @@ pub async fn compress_pdf(
     let flag = cancel.0.clone();
     flag.store(false, Ordering::Relaxed);
     tauri::async_runtime::spawn_blocking(move || {
-        // Whole percents only: no need to flood the frontend.
         let last = std::sync::Mutex::new(-1i64);
         let progress = |share: f64| {
             let pct = (share.clamp(0.0, 1.0) * 100.0).floor() as i64;
@@ -214,13 +182,11 @@ pub async fn compress_pdf(
     .map_err(|e| e.to_string())?
 }
 
-/// Stops the compression in progress; it ends with the [`cancelled`] error.
 #[tauri::command]
 pub fn cancel_compression(cancel: tauri::State<'_, CompressCancel>) {
     cancel.0.store(true, Ordering::Relaxed);
 }
 
-/// See [`estimate_file`].
 #[tauri::command]
 pub async fn estimate_compression(input_path: String) -> CmdResult<CompressEstimate> {
     crate::grants::check(&input_path)?;
@@ -233,8 +199,6 @@ mod tests {
 
     use crate::test_util::{assert_lengths_consistent, fixture, tmp};
 
-    /// Object streams + indirect /Length (what qpdf, iLovePDF and Acrobat
-    /// produce). lopdf 0.39 loaded this file with zero pages.
     #[test]
     fn compress_keeps_pages_and_stream_lengths_on_object_stream_pdf() {
         for level in ["lossless", "balanced", "maximum"] {
@@ -244,15 +208,12 @@ mod tests {
 
             let doc = Document::load(&out).unwrap();
             assert_eq!(doc.get_pages().len(), 2);
-            // The page text must still be decodable.
             let text = doc.extract_text(&[1]).unwrap();
             assert!(text.contains("Page 1"), "got {text:?}");
             std::fs::remove_file(&out).ok();
         }
     }
 
-    /// A page with a big plain RGB picture: it is scaled down and turned
-    /// into a JPEG, and a target size picks a level that fits.
     #[test]
     fn pictures_are_scaled_down_and_target_size_is_met() {
         use lopdf::{dictionary, Object, Stream};
@@ -312,7 +273,6 @@ mod tests {
                 _ => None,
             })
             .unwrap();
-        // 96 dpi over an 11.7 in page: at most 1123 px.
         assert_eq!(pic.dict.get(b"Height").unwrap().as_i64().unwrap(), 1123);
         assert_eq!(pic.dict.get(b"Filter").unwrap().as_name().unwrap(), b"DCTDecode");
 
@@ -320,7 +280,6 @@ mod tests {
         let r = compress_file(&input, &target, "target", Some(est.balanced_bytes + 1), &Job::silent()).unwrap();
         assert!(r.reached_target && r.compressed_bytes <= est.balanced_bytes + 1);
 
-        // Progress climbs to 1; a cancelled run writes nothing.
         let seen = std::sync::Mutex::new(Vec::new());
         let record = |p: f64| seen.lock().unwrap().push(p);
         let flag = AtomicBool::new(false);
@@ -342,7 +301,6 @@ mod tests {
         }
     }
 
-    /// FR-006 of the compress spec: form fields survive every level.
     #[test]
     fn form_fields_survive_every_level() {
         use lopdf::{dictionary, Object, Stream};

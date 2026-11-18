@@ -20,8 +20,8 @@ describe("compress dialog", () => {
   it("warns only for a level that won't shrink the file", () => {
     const modal = open();
     const warn = modal.box.querySelector(".ez-warn")!;
-    expect(warn.classList.contains("hidden")).toBe(true); // balanced
-    card(modal, 0).click(); // lossless: 1100 > 1000
+    expect(warn.classList.contains("hidden")).toBe(true);
+    card(modal, 0).click();
     expect(warn.classList.contains("hidden")).toBe(false);
     expect(modal.wontShrink()).toBe(true);
   });

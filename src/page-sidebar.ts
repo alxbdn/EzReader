@@ -2,9 +2,7 @@ import type { PDFDocumentProxy, RenderTask } from "pdfjs-dist";
 import type { Translations } from "./i18n";
 import { fmt } from "./i18n";
 
-/** Width of a thumbnail in CSS pixels. */
 const THUMB_WIDTH_CSS = 132;
-/** How far outside the visible area thumbnails are rendered ahead of time. */
 const PRERENDER_MARGIN = "600px 0px";
 const VISIBLE_STORAGE_KEY = "pdf-rider:page-sidebar-visible";
 const DRAG_THRESHOLD_PX = 5;
@@ -13,14 +11,12 @@ const AUTOSCROLL_STEP_PX = 14;
 
 const svg = (body: string, size = 12, stroke = 2.5): string =>
   `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="${stroke}" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${body}</svg>`;
-/** Rotate a quarter turn anticlockwise: open arc, with the arrowhead set apart from its tail. */
 const ICON_ROTATE_LEFT = `<svg width="15" height="15" viewBox="0 0 24 24" aria-hidden="true"><path d="M9.6 4.4A8 8 0 1 1 4.4 15.2" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/><path d="M2.2 3.6v6.6h6.6z" fill="currentColor"/></svg>`;
 const ICON_TRASH   = svg(`<path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6M10 11v6M14 11v6"/>`, 13, 2);
 const ICON_OUTLINE = svg(`<line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><circle cx="4" cy="6" r="1"/><circle cx="4" cy="12" r="1"/><circle cx="4" cy="18" r="1"/>`, 13, 2);
 const ICON_PLUS_LG = svg(`<path d="M12 5v14"/><path d="M5 12h14"/>`, 22, 2);
 const ICON_UP     = svg(`<path d="m18 15-6-6-6 6"/>`, 13, 2.5);
 const ICON_DOWN   = svg(`<path d="m6 9 6 6 6-6"/>`, 13, 2.5);
-/** Holding a page arrow repeats after this delay, then every HOLD_REPEAT_MS. */
 const HOLD_DELAY_MS = 500;
 const HOLD_REPEAT_MS = 45;
 
@@ -37,11 +33,9 @@ interface DragState {
   startX: number;
   startY: number;
   page: number;
-  /** Pages being moved, set once the pointer moved far enough to count as a drag. */
   moving: number[] | null;
   insertAt: number;
   lastY: number;
-  /** The pointer left the window: releasing opens the pages in a new window. */
   outside: boolean;
   ghost: HTMLElement | null;
   scrollRaf: number;
@@ -49,20 +43,10 @@ interface DragState {
 
 type PagesHandler = (pages: number[]) => void;
 
-/** True when the pointer is past the edge of the window. */
 function isOutsideWindow(e: PointerEvent): boolean {
   return e.clientX < 0 || e.clientY < 0 || e.clientX >= window.innerWidth || e.clientY >= window.innerHeight;
 }
 
-/**
- * Page panel beside the viewer: a page counter to jump anywhere, a scrollable
- * column of thumbnails to select (check box), reorder (drag and drop), rotate
- * and delete, and an "add a PDF" card at the end.
- *
- * A click on a thumbnail selects or deselects it; its number underneath shows
- * it in the viewer. The panel only reports what the user asked for; the
- * caller rewrites the document and calls `load()` again with the result.
- */
 export class PageSidebar {
   private root: HTMLElement;
   private list: HTMLElement;
@@ -79,12 +63,6 @@ export class PageSidebar {
   private viewerBusy = false;
   private pendingThumbs = new Set<Thumb>();
   private renderingThumb = false;
-  /**
-   * Bumped by clear(). A thumbnail render started for an earlier document
-   * may never settle: pdf.js drops the answers to requests still pending
-   * when the viewer destroys that document (another tab, another file), so
-   * the panel cannot wait for it to free the render slot.
-   */
   private renderGeneration = 0;
   private revealRaf = 0;
   private drag: DragState | null = null;
@@ -115,7 +93,6 @@ export class PageSidebar {
   private hintEl!: HTMLElement;
   private outlineMode = false;
   private outlineLoadedFor: PDFDocumentProxy | null = null;
-  /** Page the arrows are heading to while held down (the viewer catches up). */
   private navTarget = 0;
   private holdTimer: ReturnType<typeof setTimeout> | null = null;
   private holdInterval: ReturnType<typeof setInterval> | null = null;
@@ -126,7 +103,6 @@ export class PageSidebar {
     this.root = root;
     this.root.classList.add("page-sidebar");
 
-    // Header: title and page counter, then "Select all" and "Delete".
     const header = document.createElement("div");
     header.className = "page-sidebar-header";
     const titleRow = document.createElement("div");
@@ -163,7 +139,6 @@ export class PageSidebar {
     pills.append(this.selectAllBtn, this.deleteBtn, this.outlineBtn);
     header.append(titleRow, pills);
 
-    // Thumbnails
     this.list = document.createElement("div");
     this.list.className = "page-sidebar-list";
     this.list.tabIndex = 0;
@@ -171,7 +146,6 @@ export class PageSidebar {
     this.dropIndicator = document.createElement("div");
     this.dropIndicator.className = "page-sidebar-drop hidden";
 
-    // "+" at the end of the list: append another PDF (to merge it in)
     this.addCard = document.createElement("button");
     this.addCard.className = "page-sidebar-add";
     this.addCard.innerHTML = ICON_PLUS_LG;
@@ -188,7 +162,6 @@ export class PageSidebar {
     this.text(hint, "sbHint", "Drag pages to reorder them.");
     this.hintEl = hint;
 
-    // Document structure / outline tree
     this.outlineList = document.createElement("div");
     this.outlineList.className = "page-sidebar-outline";
     this.outlineList.hidden = true;
@@ -207,32 +180,19 @@ export class PageSidebar {
     this.updateHeader();
   }
 
-  // ── Events ──────────────────────────────────────────────────────────────────
-
-  /** Show `page` in the viewer; `instant` while an arrow is held down. */
   onGoTo(cb: (page: number, instant: boolean) => void): void { this.goToHandlers.push(cb); }
-  /** Navigate to a PDF destination from the structure tree. */
   onDestination(cb: (dest: unknown) => void): void { this.destHandlers.push(cb); }
-  /** Pages (1-based, ascending) to delete. */
   onDelete(cb: PagesHandler): void { this.deleteHandlers.push(cb); }
-  /** Pages (1-based, ascending) to save as a new PDF. */
   onExport(cb: PagesHandler): void { this.exportHandlers.push(cb); }
-  /** Pages (1-based, ascending) to turn by quarter turns (positive = clockwise). */
   onRotate(cb: (pages: number[], quarterTurns: number) => void): void { this.rotateHandlers.push(cb); }
-  /** Pages (1-based, ascending) to move to the gap `insertAt` (0 = before page 1). */
   onMove(cb: (pages: number[], insertAt: number) => void): void { this.moveHandlers.push(cb); }
-  /** Pages dragged out of the window and released at the screen point. */
   onDragOut(cb: (pages: number[], screenX: number, screenY: number) => void): void { this.dragOutHandlers.push(cb); }
-  /** A blank page is wanted after page `after` (0 = at the start). */
   onInsertBlank(cb: (after: number) => void): void { this.insertBlankHandlers.push(cb); }
-  /** Another PDF's pages are wanted after page `after` (0 = at the start). */
   onInsertPdf(cb: (after: number) => void): void { this.insertPdfHandlers.push(cb); }
-  /** Pictures are wanted as new pages after page `after` (0 = at the start). */
   onInsertImages(cb: (after: number) => void): void { this.insertImagesHandlers.push(cb); }
   onVisibilityChange(cb: (visible: boolean) => void): void { this.visibilityHandlers.push(cb); }
   onSelectionChange(cb: (pages: number[]) => void): void { this.selectionHandlers.push(cb); }
 
-  /** Menu commands acting on the selection, or after the page shown. */
   requestInsertBlank(): void { if (this.canAct()) for (const cb of this.insertBlankHandlers) cb(this.insertionPoint()); }
   requestInsertPdf(): void { if (this.canAct()) for (const cb of this.insertPdfHandlers) cb(this.insertionPoint()); }
   requestInsertImages(): void { if (this.canAct()) for (const cb of this.insertImagesHandlers) cb(this.insertionPoint()); }
@@ -242,10 +202,8 @@ export class PageSidebar {
     if (pages.length > 0) for (const cb of this.exportHandlers) cb(pages);
   }
 
-  /** Selected pages, ascending. */
   get selection(): number[] { return this.sortedSelection(); }
 
-  /** Marks the thumbnails of pages with search matches (count per page). */
   setHits(counts: Map<number, number>): void {
     for (const t of this.thumbs) {
       const n = counts.get(t.page) ?? 0;
@@ -254,8 +212,6 @@ export class PageSidebar {
       if (badge) badge.textContent = n > 0 ? String(n) : "";
     }
   }
-
-  // ── Public API ──────────────────────────────────────────────────────────────
 
   get visible(): boolean { return this._visible; }
 
@@ -272,20 +228,17 @@ export class PageSidebar {
     for (const cb of this.visibilityHandlers) cb(visible);
   }
 
-  /** Pauses thumbnail rendering while the main viewer is drawing visible pages. */
   setViewerBusy(busy: boolean): void {
     if (this.viewerBusy === busy) return;
     this.viewerBusy = busy;
     if (!busy) this.pumpThumbs();
   }
 
-  /** Shows the panel and moves keyboard focus into it. */
   focus(): void {
     if (!this._visible) this.setVisible(true);
     this.list.focus({ preventScroll: true });
   }
 
-  /** Disables the actions while the document is being rewritten. */
   setBusy(busy: boolean): void {
     this.busy = busy;
     this.root.classList.toggle("busy", busy);
@@ -293,10 +246,6 @@ export class PageSidebar {
     this.updateHeader();
   }
 
-  /**
-   * Shows the thumbnails of `doc`. `dims` are the page sizes at scale 1 (used
-   * to size the placeholders before a thumbnail is drawn).
-   */
   load(doc: PDFDocumentProxy, dims: { width: number; height: number }[], rotation: number): void {
     const scrollTop = this.doc ? this.list.scrollTop : 0;
     this.clear();
@@ -312,13 +261,11 @@ export class PageSidebar {
     frag.appendChild(this.dropIndicator);
     this.list.appendChild(frag);
     for (const t of this.thumbs) this.observer.observe(t.card);
-    // A reload of the same document (after an edit) keeps the panel where it was.
     this.list.scrollTop = scrollTop;
     if (this.outlineMode) void this.ensureOutline();
     this.updateHeader();
   }
 
-  /** Forgets the document (on close / before reload). */
   clear(): void {
     this.cancelDrag();
     this.stopHold();
@@ -342,14 +289,12 @@ export class PageSidebar {
     for (const cb of this.selectionHandlers) cb([]);
   }
 
-  /** Selects exactly `pages` (after an edit, to keep the moved/rotated pages selected). */
   setSelection(pages: number[]): void {
     this.selected = new Set(pages.filter((p) => p >= 1 && p <= this.thumbs.length));
     this.anchor = pages[0] ?? null;
     this.updateSelectionClasses();
   }
 
-  /** Redraws every thumbnail with a new view rotation. */
   setRotation(rotation: number, dims: { width: number; height: number }[]): void {
     if (rotation === this.rotation) return;
     this.rotation = rotation;
@@ -364,8 +309,6 @@ export class PageSidebar {
     }
   }
 
-  /** Highlights the page shown in the viewer and keeps it in view. */
-  /** Marks the page shown in the viewer; `reveal` scrolls the panel to it. */
   setCurrentPage(page: number, reveal = true): void {
     if (page === this.current) return;
     this.thumbs[this.current - 1]?.card.classList.remove("current");
@@ -393,9 +336,6 @@ export class PageSidebar {
     this.updateHeader();
   }
 
-  // ── Page counter ────────────────────────────────────────────────────────────
-
-  /** "⌃ | 12 / 48 | ⌄": type a page number, or hold an arrow to run through pages. */
   private buildPageNav(): HTMLElement {
     const pill = document.createElement("div");
     pill.className = "page-nav-pill";
@@ -493,7 +433,6 @@ export class PageSidebar {
     this.sizePageInput();
   }
 
-  /** Grows the field with the number of digits, so "1 / 6" and "142 / 2941" both sit tight. */
   private sizePageInput(): void {
     const digits = Math.max(String(this.thumbs.length || 1).length, this.pageInput.value.length, 1);
     this.pageInput.style.width = `${digits + 1}ch`;
@@ -622,7 +561,6 @@ export class PageSidebar {
     return empty;
   }
 
-  /** Fallback heading extractor when a PDF has no formal `/Outlines` bookmark tree. */
   private async scanHeadingOutline(doc: PDFDocumentProxy): Promise<{ title: string; page: number }[]> {
     const maxPages = Math.min(doc.numPages, 80);
     const lines: { text: string; size: number; page: number }[] = [];
@@ -657,7 +595,6 @@ export class PageSidebar {
         }
         flush();
       } catch {
-        // ignore page errors
       }
     }
     if (sizes.length < 4) return [];
@@ -682,8 +619,6 @@ export class PageSidebar {
   private allSelected(): boolean {
     return this.thumbs.length > 0 && this.selected.size === this.thumbs.length;
   }
-
-  // ── Thumbnails ──────────────────────────────────────────────────────────────
 
   private createThumb(page: number, dim: { width: number; height: number } | undefined): Thumb {
     const card = document.createElement("div");
@@ -782,12 +717,6 @@ export class PageSidebar {
     void this.render(best);
   }
 
-  /**
-   * A thumbnail far out of view gives its pixels back (its place in the list
-   * is kept by the aspect ratio) and is drawn again when it comes near.
-   * Otherwise every page the panel ever showed stays in memory: 1500 pages
-   * held about 900 MB.
-   */
   private release(thumb: Thumb): void {
     this.pendingThumbs.delete(thumb);
     thumb.task?.cancel();
@@ -819,22 +748,16 @@ export class PageSidebar {
       await task.promise;
       thumb.task = null;
       if (doc !== this.doc) return;
-      // Swap in the finished canvas so a half-drawn one is never shown.
       canvas.style.aspectRatio = `${canvas.width} / ${canvas.height}`;
       thumb.canvas.replaceWith(canvas);
       thumb.canvas = canvas;
       thumb.rendered = true;
-      // Only free the page's operator list if it is not near the main viewer's
-      // current page; otherwise cleaning it up here forces the main viewer to
-      // re-parse the page when zooming or rendering.
       if (Math.abs(thumb.page - (this.current || 1)) > 5) {
         page.cleanup();
       }
     } catch {
-      // Cancelled, or the document was replaced meanwhile.
       thumb.task = null;
     } finally {
-      // A render for a document since replaced no longer holds the slot.
       if (generation === this.renderGeneration) {
         this.renderingThumb = false;
         this.pumpThumbs();
@@ -842,21 +765,13 @@ export class PageSidebar {
     }
   }
 
-  // ── Selection ───────────────────────────────────────────────────────────────
-
-  /**
-   * A click shows the page. The check box, Ctrl+click and Shift+click select
-   * (Shift extends from the last one checked).
-   */
   private handleClick(page: number, e: MouseEvent): void {
     if (this.suppressClick) {
       this.suppressClick = false;
       return;
     }
-    // By position: the frame captures the pointer (for dragging), so the
-    // click's target is the frame even on the check box.
     const box = (e.currentTarget as HTMLElement | null)?.querySelector(".page-sidebar-check")?.getBoundingClientRect();
-    const pad = 6; // the check box's enlarged hit area
+    const pad = 6;
     const onCheck = !!box && e.clientX >= box.left - pad && e.clientX <= box.right + pad
       && e.clientY >= box.top - pad && e.clientY <= box.bottom + pad;
     if (!onCheck && !e.shiftKey && !e.ctrlKey && !e.metaKey) {
@@ -890,7 +805,6 @@ export class PageSidebar {
       e.stopPropagation();
       this.emitSelection(this.deleteHandlers);
     } else if (ctrl && (e.key === "ArrowUp" || e.key === "ArrowDown") && this.selected.size > 0) {
-      // Keyboard reordering: move the selection one place up or down.
       e.preventDefault();
       e.stopPropagation();
       if (!this.canAct()) return;
@@ -921,7 +835,6 @@ export class PageSidebar {
     return [...this.selected].sort((a, b) => a - b);
   }
 
-  /** Where inserted pages go: after the selection, else after the page shown. */
   private insertionPoint(): number {
     if (this.selected.size > 0) return Math.max(...this.selected);
     return this.current || this.thumbs.length;
@@ -949,8 +862,6 @@ export class PageSidebar {
     for (const cb of handlers) cb(pages);
   }
 
-  // ── Drag and drop reordering ────────────────────────────────────────────────
-
   private handlePointerDown(page: number, e: PointerEvent): void {
     if (e.button !== 0 || !this.canAct() || e.shiftKey || e.ctrlKey || e.metaKey) return;
     this.cancelDrag();
@@ -966,8 +877,7 @@ export class PageSidebar {
       ghost: null,
       scrollRaf: 0,
     };
-    // Keeps the events coming when the pointer leaves the window.
-    try { (e.currentTarget as Element | null)?.setPointerCapture(e.pointerId); } catch { /* not supported */ }
+    try { (e.currentTarget as Element | null)?.setPointerCapture(e.pointerId); } catch {}
     window.addEventListener("pointermove", this.onPointerMove);
     window.addEventListener("pointerup", this.onPointerUp);
     window.addEventListener("pointercancel", this.onPointerUp);
@@ -999,7 +909,6 @@ export class PageSidebar {
     }
     d.outside = outside;
     if (d.ghost) {
-      // Outside the window the ghost waits at the edge the pointer crossed.
       const w = d.ghost.offsetWidth;
       const h = d.ghost.offsetHeight;
       const x = Math.min(Math.max(e.clientX + 12, 4), window.innerWidth - w - 4);
@@ -1017,7 +926,6 @@ export class PageSidebar {
     const insertAt = d.insertAt;
     this.cancelDrag();
     if (!moving || e.type === "pointercancel") return;
-    // The click that ends a drag must not also navigate.
     this.suppressClick = true;
     setTimeout(() => { this.suppressClick = false; }, 0);
     if (isOutsideWindow(e) && this.dragOutHandlers.length > 0) {
@@ -1028,16 +936,13 @@ export class PageSidebar {
     for (const cb of this.moveHandlers) cb(moving, insertAt);
   }
 
-  /** True when dropping `pages` at `insertAt` leaves the order unchanged. */
   private isNoOpMove(pages: number[], insertAt: number): boolean {
     const first = pages[0];
     const last = pages[pages.length - 1];
     const contiguous = last - first + 1 === pages.length;
-    // Gaps first-1 .. last (0-based gap indices) all sit inside or next to the block.
     return contiguous && insertAt >= first - 1 && insertAt <= last;
   }
 
-  /** Gap index under the pointer, and the line showing it. */
   private updateDropTarget(): void {
     const d = this.drag;
     if (!d) return;
@@ -1049,11 +954,6 @@ export class PageSidebar {
     d.insertAt = this.showGapAt(d.lastY);
   }
 
-  /**
-   * Files dragged in from outside: the gap (number of pages before it) under
-   * the screen point, shown with the drop line, or null when the point is
-   * not over the panel (the line is hidden then).
-   */
   externalDropAt(x: number, y: number): number | null {
     const r = this.root.getBoundingClientRect();
     if (this.root.hidden || this.thumbs.length === 0 || x < r.left || x > r.right || y < r.top || y > r.bottom) {
@@ -1079,7 +979,7 @@ export class PageSidebar {
   }
 
   private placeDropLine(at: number): void {
-    const gap = 7; // half of the list's row gap
+    const gap = 7;
     const ref = this.thumbs[at] ?? this.thumbs[at - 1];
     if (!ref) return;
     const top = at < this.thumbs.length
@@ -1119,8 +1019,6 @@ export class PageSidebar {
     window.removeEventListener("pointercancel", this.onPointerUp);
     this.drag = null;
   }
-
-  // ── Helpers ─────────────────────────────────────────────────────────────────
 
   private scrollToCurrent(): void {
     const t = this.thumbs[this.current - 1];
@@ -1162,7 +1060,6 @@ export class PageSidebar {
     try {
       localStorage.setItem(VISIBLE_STORAGE_KEY, visible ? "1" : "0");
     } catch {
-      /* storage unavailable */
     }
   }
 }

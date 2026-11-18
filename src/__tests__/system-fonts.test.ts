@@ -1,7 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { fontCss, SYSTEM_FONTS } from "../models";
 
-// The Rust side of the list, read as text.
 const RUST = Object.values(import.meta.glob("../../src-tauri/src/pdf/sysfont.rs", { query: "?raw", import: "default", eager: true }))[0] as string;
 
 describe("system fonts", () => {

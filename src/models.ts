@@ -1,15 +1,10 @@
-// PDF points are 1/72 inch; CSS pixels are 1/96 inch.
-// Multiplying the pdf.js scale by this factor makes "100%" match actual size.
 export const CSS_UNITS = 96 / 72;
 
-/** Zoom limits, as a share of actual size. */
 export const MIN_SCALE = 0.1;
 export const MAX_SCALE = 8.0;
 
-// ── Colour ────────────────────────────────────────────────────────────────────
-
 export interface RgbColor {
-  r: number; // 0–255
+  r: number;
   g: number;
   b: number;
 }
@@ -32,14 +27,9 @@ export function rgbToCss(c: RgbColor): string {
   return `rgb(${c.r},${c.g},${c.b})`;
 }
 
-// ── Annotations ───────────────────────────────────────────────────────────────
-
 interface BaseAnnotation {
-  /** 1-indexed page number */
   page: number;
-  /** Left edge in PDF points (bottom-left origin) */
   x: number;
-  /** Bottom edge in PDF points */
   y: number;
 }
 
@@ -49,9 +39,7 @@ export interface RectAnnotation extends BaseAnnotation {
   height: number;
   color: RgbColor;
   strokeWidth: number;
-  /** Interior colour; null or absent means hollow. */
   fillColor?: RgbColor | null;
-  /** 0–1; absent means opaque. */
   opacity?: number;
 }
 
@@ -61,17 +49,10 @@ export interface CircleAnnotation extends BaseAnnotation {
   height: number;
   color: RgbColor;
   strokeWidth: number;
-  /** Interior colour; null or absent means hollow. */
   fillColor?: RgbColor | null;
-  /** 0–1; absent means opaque. */
   opacity?: number;
 }
 
-/**
- * A pencil stroke, straight line or arrow. The points are relative to the
- * box (0–1 from its left and bottom edges), so moving or resizing the box
- * moves or stretches the stroke with it.
- */
 export interface InkAnnotation extends BaseAnnotation {
   kind: "ink";
   width: number;
@@ -79,26 +60,20 @@ export interface InkAnnotation extends BaseAnnotation {
   points: [number, number][];
   color: RgbColor;
   strokeWidth: number;
-  /** Closes the stroke and fills it; null or absent means no fill. */
   fillColor?: RgbColor | null;
-  /** 0–1; absent means opaque. */
   opacity?: number;
-  /** Draws an arrowhead at the last point. */
   arrow?: boolean;
 }
 
-/** Highlighted text: one rectangle per line, in PDF points. */
 export interface HighlightAnnotation extends BaseAnnotation {
   kind: "highlight";
   width: number;
   height: number;
   rects: { x: number; y: number; width: number; height: number }[];
   color: RgbColor;
-  /** 0–1 */
   opacity: number;
 }
 
-/** A sticky note: a coloured square with text, drawn on the page. */
 export interface NoteAnnotation extends BaseAnnotation {
   kind: "note";
   width: number;
@@ -109,7 +84,6 @@ export interface NoteAnnotation extends BaseAnnotation {
 
 export type TextAlignmentValue = "left" | "center" | "right";
 
-/** PDF standard fonts: available in every viewer without embedding. */
 export type FontFamilyValue = "helvetica" | "times" | "courier";
 
 export const FONT_FAMILIES: { value: FontFamilyValue; label: string; css: string }[] = [
@@ -118,11 +92,6 @@ export const FONT_FAMILIES: { value: FontFamilyValue; label: string; css: string
   { value: "courier",   label: "Courier",   css: `"Courier New", Courier, monospace` },
 ];
 
-/**
- * The 30 most common fonts of Windows and macOS, offered when installed
- * (embedded in the saved PDF), each with the standard font that stands in
- * for it where it is not installed.
- */
 export const SYSTEM_FONTS: { name: string; fallback: FontFamilyValue }[] = [
   { name: "Arial", fallback: "helvetica" },
   { name: "Arial Black", fallback: "helvetica" },
@@ -156,7 +125,6 @@ export const SYSTEM_FONTS: { name: string; fallback: FontFamilyValue }[] = [
   { name: "Menlo", fallback: "courier" },
 ];
 
-/** CSS font-family list that looks like the PDF font the text will be saved with. */
 export function fontCss(family: FontFamilyValue | undefined, name?: string | null): string {
   const base = (FONT_FAMILIES.find(f => f.value === family) ?? FONT_FAMILIES[0]).css;
   return name ? `"${name.replace(/["\\]/g, "")}", ${base}` : base;
@@ -164,7 +132,6 @@ export function fontCss(family: FontFamilyValue | undefined, name?: string | nul
 
 export interface TextAnnotation extends BaseAnnotation {
   kind: "text";
-  /** Bounding box width in PDF points (used for alignment and word-wrap) */
   width: number;
   content: string;
   color: RgbColor;
@@ -173,26 +140,17 @@ export interface TextAnnotation extends BaseAnnotation {
   italic: boolean;
   underline: boolean;
   alignment: TextAlignmentValue;
-  /** Absent in files saved before font choice existed (Helvetica). */
   fontFamily?: FontFamilyValue;
-  /** A font of the computer (see SYSTEM_FONTS), embedded on save; `fontFamily` stands in without it. */
   fontName?: string;
-  /** Box colour behind the text; null or absent means none. */
   backgroundColor?: RgbColor | null;
-  /** Edited text: the original words' area, painted with the page colour first. */
   cover?: TextCover;
 }
 
 export interface TextCover { x: number; y: number; width: number; height: number; color: RgbColor }
 
-/**
- * A drawn signature as vectors: round-capped Bézier segments in a `w` × `h`
- * box (y down), sharp at any size on screen and in the saved PDF.
- */
 export interface InkVector {
   w: number;
   h: number;
-  /** x0 y0 c1x c1y c2x c2y x1 y1 lineWidth, 9 numbers per segment. */
   segs: number[];
 }
 
@@ -200,26 +158,20 @@ export interface SignatureAnnotation extends BaseAnnotation {
   kind: "signature";
   width: number;
   height: number;
-  /** Base64-encoded PNG (no data: URI prefix); a picture of `vector` when there is one. */
   imageData: string;
-  /** The pen strokes of a drawn signature; drawn instead of `imageData`. */
   vector?: InkVector;
-  /** Ink of the pen strokes; the default dark ink when absent. */
   color?: RgbColor;
 }
 
-/** A picture placed on the page; same fields as a signature. */
 export interface ImageAnnotation extends BaseAnnotation {
   kind: "image";
   width: number;
   height: number;
-  /** Base64-encoded PNG or JPEG (no data: URI prefix) */
   imageData: string;
 }
 
 export type StampMark = "check" | "cross";
 
-/** A check mark or a cross. */
 export interface StampAnnotation extends BaseAnnotation {
   kind: "stamp";
   width: number;
@@ -228,22 +180,13 @@ export interface StampAnnotation extends BaseAnnotation {
   color: RgbColor;
 }
 
-/** Outline of a redaction area. */
 export type RedactShape = "rect" | "ellipse" | "lasso" | "poly";
 
-/**
- * An area to black out. Until the document is saved it is an ordinary,
- * editable annotation; on save the page is rasterised with the area filled
- * and the original page content is dropped, so the hidden content is gone
- * for good (see DocumentSession and the `redact_pages` command).
- */
 export interface RedactAnnotation extends BaseAnnotation {
   kind: "redact";
   width: number;
   height: number;
-  /** Absent means a rectangle. */
   shape?: RedactShape;
-  /** Outline of a freeform or stretchable area, relative to the box (0–1 from its left and bottom edges). */
   points?: [number, number][];
 }
 
@@ -259,31 +202,22 @@ export type Annotation =
   | StampAnnotation
   | RedactAnnotation;
 
-/** Annotations the backend stores as editable metadata (everything but redactions). */
 export type StoredAnnotation = Exclude<Annotation, RedactAnnotation>;
 
 export function isRedaction(a: Annotation): a is RedactAnnotation {
   return a.kind === "redact";
 }
 
-// ── Form fields ───────────────────────────────────────────────────────────────
-
 export interface FormFieldValue {
-  /** Full PDF field name (dotted path for nested fields). */
   name: string;
-  /** Text value, or "true"/"false" for checkboxes, or export value for radios. */
   value: string;
 }
-
-// ── Tool state ────────────────────────────────────────────────────────────────
 
 export type ToolKind =
   | "select" | "rect" | "circle" | "arrow" | "ink" | "line" | "highlight" | "note"
   | "text" | "signature" | "redact"
-  /** Edit mode: replace existing text, place pictures, redact selected text, stamp. */
   | "etext" | "image" | "redact-text" | "stamp";
 
-/** Tools that draw by dragging on the page (the overlay takes the mouse). */
 export const DRAW_TOOLS: readonly ToolKind[] = ["rect", "circle", "arrow", "ink", "line", "note", "text", "redact", "stamp"];
 
 export interface ActiveToolState {
@@ -295,29 +229,21 @@ export interface ActiveToolState {
   underline: boolean;
   alignment: TextAlignmentValue;
   fontFamily: FontFamilyValue;
-  /** A font of the computer for new text, or null for the standard `fontFamily`. */
   fontName: string | null;
-  /** Outline colour of rectangles and ellipses (text uses `color`). */
   shapeColor: RgbColor;
-  /** Interior colour of new shapes, or null for hollow. */
   fillColor: RgbColor | null;
   strokeWidth: number;
-  /** Opacity of new shapes and pencil strokes, 0–1. */
   opacity: number;
-  /** Box colour behind new text, or null. */
   textBackground: RgbColor | null;
   highlightColor: RgbColor;
   highlightOpacity: number;
   noteColor: RgbColor;
-  /** Outline of new redaction areas. */
   redactShape: RedactShape;
   stampMark: StampMark;
   stampColor: RgbColor;
-  /** Ink of drawn signatures being placed. */
   signatureColor: RgbColor;
 }
 
-/** Softer pastel highlighter palette (shared by the toolbar and the floating highlight popover). */
 export const HIGHLIGHT_PRESETS: [string, string][] = [
   ["#fef08a", "Yellow"],
   ["#bbf7d0", "Green"],
@@ -337,7 +263,6 @@ export function defaultToolState(): ActiveToolState {
     alignment: "left",
     fontFamily: "helvetica",
     fontName: null,
-    // Red reads on white pages and on the dark toolbar alike.
     shapeColor: { r: 229, g: 57, b: 53 },
     fillColor: null,
     strokeWidth: 2,
@@ -353,8 +278,6 @@ export function defaultToolState(): ActiveToolState {
   };
 }
 
-// ── Document state ────────────────────────────────────────────────────────────
-
 export interface DocumentState {
   filePath: string | null;
   outputPath: string | null;
@@ -364,12 +287,6 @@ export interface DocumentState {
   isDirty: boolean;
 }
 
-// ── Coordinate conversion ─────────────────────────────────────────────────────
-
-/**
- * Convert canvas pixel coordinates (top-left origin, Y down) to PDF user-space
- * points (bottom-left origin, Y up).
- */
 export function canvasToPdf(
   canvasX: number,
   canvasY: number,
@@ -382,9 +299,6 @@ export function canvasToPdf(
   };
 }
 
-/**
- * Convert PDF user-space points to canvas pixel coordinates.
- */
 export function pdfToCanvas(
   pdfX: number,
   pdfY: number,

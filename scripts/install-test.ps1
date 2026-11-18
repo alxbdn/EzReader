@@ -1,17 +1,3 @@
-# Install test on a clean Windows machine (CI runner), before a release:
-#
-#   1. installs the previous release (NSIS installer, then MSIX),
-#   2. upgrades it to the new build and checks the new version is in place,
-#   3. starts the installed app on a PDF and checks it stays up,
-#   4. uninstalls it and checks nothing is left behind.
-#
-#   scripts/install-test.ps1 -Setup <new setup.exe> -Msix <new .msix> -Version 1.2.3
-#
-# The previous release is downloaded from GitHub (gh CLI, GH_TOKEN). Without
-# one (first release, or no network) the upgrade step is skipped, not failed.
-# The Store signs the MSIX; here it is signed with a throwaway certificate
-# whose subject matches the manifest's Publisher, trusted on this machine only.
-
 param(
     [Parameter(Mandatory)] [string]$Setup,
     [Parameter(Mandatory)] [string]$Msix,
@@ -28,15 +14,12 @@ $work = Join-Path $env:RUNNER_TEMP "install-test"
 New-Item -ItemType Directory -Force $work | Out-Null
 $failures = [System.Collections.Generic.List[string]]::new()
 
-# Compares release versions, ignoring a pre-release suffix (1.2.0-beta).
 function V($v) { [version](($v -split '-')[0]) }
 function Step($text) { Write-Host "`n=== $text ===" -ForegroundColor Cyan }
 function Check($ok, $text) {
     if ($ok) { Write-Host "  ok   $text" -ForegroundColor Green }
     else { Write-Host "  FAIL $text" -ForegroundColor Red; $failures.Add($text) }
 }
-
-# ── Previous release ──────────────────────────────────────────────────────────
 
 function Get-PreviousRelease {
     if (-not $Repo -or -not (Get-Command gh -ErrorAction SilentlyContinue)) { return $null }
@@ -58,8 +41,6 @@ function Get-PreviousRelease {
         return $null
     }
 }
-
-# ── NSIS installer ────────────────────────────────────────────────────────────
 
 $uninstallKeys = @(
     "HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*",
@@ -85,8 +66,6 @@ function Install-Nsis($path) {
     if ($p.ExitCode -ne 0) { throw "installer $path exited with $($p.ExitCode)" }
 }
 
-# Starts the installed app on a PDF: it must still be running a few seconds
-# later (no crash at start, no missing DLL), then it is closed.
 function Test-Launch($start, $name) {
     $before = @(Get-Process -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Id)
     & $start
@@ -118,7 +97,6 @@ $dupes = @(Get-ItemProperty $uninstallKeys -ErrorAction SilentlyContinue | Where
 Check ($dupes.Count -eq 1) "a single EzReader entry after the upgrade (found $($dupes.Count))"
 if ($exe) { Test-Launch { Start-Process $exe.FullName -ArgumentList "`"$Pdf`"" } "installed EzReader" }
 
-# Explorer add-in: PDF thumbnails and the preview pane (installer-hooks.nsh).
 $shellDll = Join-Path ($install.InstallLocation -replace '"', '') "ezreader_shell.dll"
 $thumbClsid = "{5AE37068-61BA-478F-9D24-EA58E7C1EBF6}"
 $previewClsid = "{202348CF-BD0B-4EB3-91B2-C87E74F2FD32}"
@@ -132,7 +110,6 @@ Check ((Get-Default "HKCU:\Software\Classes\CLSID\$thumbClsid\InprocServer32") -
 Step "NSIS: uninstall"
 $uninstaller = ($install.UninstallString -replace '"', '')
 $p = Start-Process $uninstaller -ArgumentList "/S" -Wait -PassThru
-# The NSIS uninstaller copies itself to TEMP and returns at once: wait for it.
 for ($i = 0; $i -lt 30 -and (Get-NsisInstall); $i++) { Start-Sleep -Seconds 1 }
 Check ($null -eq (Get-NsisInstall)) "EzReader is gone from Installed apps"
 if ($exe) {
@@ -141,8 +118,6 @@ if ($exe) {
 }
 Check (-not (Test-Path "$pdfShellEx\{e357fccd-a995-4576-b01f-234630154e96}")) "PDF thumbnails are unregistered"
 Check (-not (Test-Path "HKCU:\Software\Classes\CLSID\$previewClsid")) "the PDF preview handler is unregistered"
-
-# ── MSIX ──────────────────────────────────────────────────────────────────────
 
 Step "MSIX: signing with a test certificate"
 $manifest = [xml](Get-Content src-tauri/AppxManifest.xml)

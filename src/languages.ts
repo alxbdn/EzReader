@@ -1,4 +1,3 @@
-/** The languages the app is translated into (the 20 most spoken). */
 export const LANGUAGES: { code: string; native: string; label: string }[] = [
   { code: "en", native: "English",          label: "English" },
   { code: "zh", native: "中文",              label: "Mandarin Chinese" },

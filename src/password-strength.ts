@@ -1,20 +1,12 @@
 export interface PasswordCheck {
-  /** 0 (empty) to 4 (strong). */
   score: 0 | 1 | 2 | 3 | 4;
   long: boolean;
   digit: boolean;
   special: boolean;
   upper: boolean;
-  /** Rough guesses an offline attacker would need: 10^log10Guesses. */
   log10Guesses: number;
 }
 
-/**
- * How hard a password is to guess. Four criteria (12+ characters, a
- * number, a special character, an uppercase letter); 16+ characters count
- * as one more. The guess count assumes random picks from the character
- * sets used, discounted for repeats, so it stays on the optimistic side.
- */
 export function checkPassword(pw: string): PasswordCheck {
   const long = [...pw].length >= 12;
   const digit = /\d/.test(pw);
@@ -29,7 +21,6 @@ export function checkPassword(pw: string): PasswordCheck {
   return { score, long, digit, special, upper, log10Guesses: length * Math.log10(pool) };
 }
 
-/** Time bucket for guessing at ten billion tries a second. */
 export function crackTime(log10Guesses: number): "instant" | "minutes" | "days" | "years" | "centuries" {
   const seconds = log10Guesses - 10;
   if (seconds < 1) return "instant";

@@ -1,10 +1,3 @@
-//! Explorer add-in for EzReader: draws page 1 of a PDF as its icon
-//! (thumbnail provider) and shows the pages in Explorer's preview pane
-//! (preview handler, also used by PowerToys Peek).
-//!
-//! The installer (NSIS hooks) and the Store package (AppxManifest.xml)
-//! register the two classes below for `.pdf`.
-
 pub mod layout;
 
 #[cfg(windows)]
@@ -29,21 +22,17 @@ mod com {
     use windows::Win32::System::SystemServices::DLL_PROCESS_ATTACH;
     use windows_core::IUnknown;
 
-    /// `{5AE37068-61BA-478F-9D24-EA58E7C1EBF6}`: the thumbnail provider.
     pub const CLSID_THUMBNAIL: GUID = GUID::from_u128(0x5ae37068_61ba_478f_9d24_ea58e7c1ebf6);
-    /// `{202348CF-BD0B-4EB3-91B2-C87E74F2FD32}`: the preview handler.
     pub const CLSID_PREVIEW: GUID = GUID::from_u128(0x202348cf_bd0b_4eb3_91b2_c87e74f2fd32);
 
     static MODULE: AtomicIsize = AtomicIsize::new(0);
     static OBJECTS: AtomicUsize = AtomicUsize::new(0);
     static LOCKS: AtomicUsize = AtomicUsize::new(0);
 
-    /// This DLL's module handle (for its window class).
     pub(crate) fn module() -> HINSTANCE {
         HINSTANCE(MODULE.load(Ordering::Relaxed) as *mut c_void)
     }
 
-    /// Held by each live object, so the DLL is not unloaded under it.
     pub(crate) struct Alive;
 
     impl Alive {

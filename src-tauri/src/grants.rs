@@ -1,17 +1,3 @@
-//! Which files the commands may read and write.
-//!
-//! The commands take paths from the webview. If a malicious document ever
-//! managed to run script there, unchecked paths would let it read any file
-//! or write one anywhere (a script in the Startup folder runs at the next
-//! sign-in). So the backend only touches:
-//!
-//! - files the user picked: open and save dialogs, drag and drop, the
-//!   command line, and the new name of a renamed document;
-//! - files directly inside a folder the user picked (page export, split);
-//! - the app's own temp files (`%TEMP%\ezreader-…`).
-//!
-//! Everything else is refused with [`ErrorCode::NotAllowed`].
-
 use std::collections::HashSet;
 use std::path::{Component, Path, PathBuf};
 use std::sync::{LazyLock, Mutex};
@@ -26,8 +12,6 @@ pub struct Grants {
 
 static GRANTS: LazyLock<Grants> = LazyLock::new(Grants::default);
 
-/// A path as compared: absolute, without `.` or `..`, one separator, and
-/// case-folded on Windows. `None` for a path that is not plainly absolute.
 fn key(path: &Path) -> Option<String> {
     if !path.is_absolute() {
         return None;
@@ -38,7 +22,6 @@ fn key(path: &Path) -> Option<String> {
             Component::Prefix(p) => parts.push(p.as_os_str().to_string_lossy().into_owned()),
             Component::RootDir => {}
             Component::CurDir => {}
-            // A picked path never climbs: refuse rather than guess.
             Component::ParentDir => return None,
             Component::Normal(n) => parts.push(n.to_string_lossy().into_owned()),
         }
@@ -47,8 +30,6 @@ fn key(path: &Path) -> Option<String> {
     Some(if cfg!(windows) { joined.to_lowercase() } else { joined })
 }
 
-/// A file name that names a plain file: no stream (`a.pdf:x`), no
-/// separators, not empty.
 fn plain_name(name: &str) -> bool {
     !name.trim().is_empty() && !name.contains([':', '/', '\\'])
 }
@@ -74,7 +55,6 @@ impl Grants {
         key(path).is_some_and(|k| self.dirs.lock().unwrap().contains(&k))
     }
 
-    /// May the commands read or write `path`?
     fn allows(&self, path: &Path, temp: &Path) -> bool {
         if self.file_granted(path) {
             return true;
@@ -92,7 +72,6 @@ impl Grants {
         if name.starts_with("ezreader-") && same(parent, temp) {
             return true;
         }
-        // A document dragged out to a new window: %TEMP%\ezreader-window-…\<name>.
         let in_window_dir =
             parent.file_name().and_then(|n| n.to_str()).is_some_and(|n| n.starts_with("ezreader-window-"));
         in_window_dir && parent.parent().is_some_and(|p| same(p, temp))
@@ -107,25 +86,18 @@ impl Grants {
     }
 }
 
-/// Lets the commands use `path`, a file the user picked.
 pub fn allow_file(path: &str) {
     GRANTS.allow_file(Path::new(path));
 }
 
-/// Lets the commands use the files directly inside `path`, a folder the user picked.
 pub fn allow_dir(path: &str) {
     GRANTS.allow_dir(Path::new(path));
 }
 
-/// Is `path` itself a file the user picked (not just one in a picked folder)?
 pub fn is_granted_file(path: &str) -> bool {
     GRANTS.file_granted(Path::new(path))
 }
 
-/// Refuses a `path` the user did not open or choose.
-///
-/// Unit tests call the commands directly with fixture paths, so the check
-/// only runs in the app (the rules are tested on their own below).
 pub fn check(path: &str) -> CmdResult<()> {
     if cfg!(test) {
         return Ok(());
@@ -133,7 +105,6 @@ pub fn check(path: &str) -> CmdResult<()> {
     GRANTS.check(path, &std::env::temp_dir())
 }
 
-/// Refuses an `output_dir` that is not a folder the user picked.
 pub fn check_dir(path: &str) -> CmdResult<()> {
     if cfg!(test) || GRANTS.dir_granted(Path::new(path)) {
         return Ok(());
@@ -141,13 +112,10 @@ pub fn check_dir(path: &str) -> CmdResult<()> {
     Err(PdfError::new(ErrorCode::NotAllowed, format!("not a folder you chose: {path}")))
 }
 
-/// [`check`] for each of `paths`.
 pub fn check_all<'a>(paths: impl IntoIterator<Item = &'a String>) -> CmdResult<()> {
     paths.into_iter().try_for_each(|p| check(p))
 }
 
-/// An absolute version of a path given on the command line (Windows passes
-/// absolute paths; a path typed in a terminal may be relative).
 pub fn absolute(path: &str) -> PathBuf {
     std::path::absolute(path).unwrap_or_else(|_| PathBuf::from(path))
 }
@@ -178,7 +146,6 @@ mod tests {
 
         assert!(g.allows(&doc, &temp()));
         assert!(g.allows(&out.join("contrat-1.png"), &temp()));
-        // Not the folder's sub-folders, nor a sibling of the picked file.
         assert!(!g.allows(&out.join("sub").join("x.png"), &temp()));
         assert!(!g.allows(&root().join("Docs").join("other.pdf"), &temp()));
         let startup = root()
@@ -214,7 +181,6 @@ mod tests {
 
     use proptest::prelude::*;
 
-    /// One path segment as a hostile webview could send it.
     fn segment() -> impl Strategy<Value = String> {
         prop_oneof![
             "[a-zA-Z0-9 _.-]{1,12}",
@@ -226,8 +192,6 @@ mod tests {
     }
 
     proptest! {
-        /// Whatever is appended to a picked folder, only a plain file name
-        /// directly inside it gets through.
         #[test]
         fn nothing_escapes_a_picked_folder(parts in prop::collection::vec(segment(), 1..5)) {
             let g = Grants::default();
@@ -245,7 +209,6 @@ mod tests {
             }
         }
 
-        /// A relative path is never allowed, even one naming a picked file.
         #[test]
         fn relative_paths_are_refused(parts in prop::collection::vec(segment(), 1..5)) {
             let g = Grants::default();

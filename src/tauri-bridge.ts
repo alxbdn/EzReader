@@ -6,7 +6,6 @@ import type { TextDoc } from "./text-layout";
 import type { DocFormat } from "./export-modal";
 import type { OcrLanguage, OcrResult } from "./ocr-modal";
 
-/** Runs a Rust command; its errors come back as `CommandError` (see errors.ts). */
 async function call<T>(cmd: string, args?: Record<string, unknown>): Promise<T> {
   try {
     return await invoke<T>(cmd, args);
@@ -17,25 +16,18 @@ async function call<T>(cmd: string, args?: Record<string, unknown>): Promise<T> 
 
 import type { FormFieldValue, StoredAnnotation } from "./models";
 
-/** Opens a file-picker dialog filtered to PDF files. Returns the path or null. */
 export async function openPdfDialog(): Promise<string | null> {
   return call<string | null>("open_pdf_dialog");
 }
 
-/** Opens a file-picker dialog for a PDF or a picture to open. Returns the path or null. */
 export async function openDocumentDialog(): Promise<string | null> {
   return call<string | null>("open_document_dialog");
 }
 
-/**
- * Makes a new temp PDF named `name` with one page per picture and returns
- * its path (a document never saved, to open in this window).
- */
 export async function picturesToNewPdf(imagePaths: string[], name: string): Promise<string> {
   return call<string>("pictures_to_new_pdf", { imagePaths, name });
 }
 
-/** Opens a Save As dialog. Returns the chosen path or null. */
 export async function savePdfDialog(
   currentPath: string
 ): Promise<string | null> {
@@ -44,29 +36,18 @@ export async function savePdfDialog(
   });
 }
 
-/**
- * Renames a file in place. Rejects with "exists" when another file already
- * has that name, or "invalid" for an unusable name.
- */
 export async function renameFile(from: string, to: string): Promise<void> {
   return call<void>("rename_file", { from, to });
 }
 
-/** The common fonts (models.SYSTEM_FONTS) installed on this computer. */
 export async function listSystemFonts(): Promise<string[]> {
   return call<string[]>("list_system_fonts", {});
 }
 
-/** Returns the number of pages in the PDF at `filePath`. */
 export async function getPageCount(filePath: string): Promise<number> {
   return call<number>("get_page_count", { filePath });
 }
 
-/**
- * Stores `annotations` as JSON metadata in the PDF at `inputPath` and saves
- * the result to `outputPath`. Annotations are NOT burned into the content
- * stream, so they remain fully editable when the file is reopened.
- */
 export async function saveAnnotatedPdf(
   inputPath: string,
   outputPath: string,
@@ -83,8 +64,6 @@ export async function saveAnnotatedPdf(
   });
 }
 
-/** Creates a copy of the PDF with annotation content streams emptied (display use).
- *  CCAnnot metadata is preserved. Returns true if streams were found and cleared. */
 export async function stripAnnotationStreams(
   inputPath: string,
   outputPath: string,
@@ -92,10 +71,6 @@ export async function stripAnnotationStreams(
   return call<boolean>("strip_annotation_streams", { inputPath, outputPath });
 }
 
-/**
- * Reads editable annotations stored in the PDF's CCAnnot catalog entry.
- * Returns an empty array if the file has no stored annotations.
- */
 export async function readAnnotations(
   filePath: string
 ): Promise<StoredAnnotation[]> {
@@ -105,20 +80,13 @@ export async function readAnnotations(
 export interface StartupArgs {
   filePath: string | null;
   shouldPrint: boolean;
-  /** A temp copy never saved (pages dragged out to this window). */
   unsaved?: boolean;
-  /** A tab moved from another window: Save writes back to this file. */
   savePath?: string | null;
-  /** That tab had unsaved changes. */
   dirty?: boolean;
-  /** The password of a protected document moved from another window. */
   password?: string | null;
-  /** The page that tab showed (1-based; 0: the first). */
   page?: number;
 }
 
-/** Returns the CLI arguments parsed at startup (file path and print flag). */
-/** Opens `path` (a file the user already chose) in a new EzReader window. */
 export async function openFileInNewWindow(path: string): Promise<void> {
   return call<void>("open_file_in_new_window", { path });
 }
@@ -127,16 +95,10 @@ export async function getStartupArgs(): Promise<StartupArgs> {
   return call<StartupArgs>("get_startup_args");
 }
 
-/** Returns true if our ProgID is already registered in HKCU. */
 export async function checkPdfAssociation(): Promise<boolean> {
   return call<boolean>("check_pdf_association");
 }
 
-/** Writes ProgID and .pdf association into HKCU (no admin required). */
-/**
- * True when EzReader is the app PDFs open with: Windows' own choice for
- * .pdf (installer, portable or Store version), or xdg-mime on Linux.
- */
 export async function isDefaultPdfReader(): Promise<boolean> {
   return call<boolean>("is_default_pdf_reader");
 }
@@ -145,17 +107,14 @@ export async function registerPdfHandler(): Promise<void> {
   return call<void>("register_pdf_handler");
 }
 
-/** Removes all HKCU registry entries created by registerPdfHandler. */
 export async function unregisterPdfHandler(): Promise<void> {
   return call<void>("unregister_pdf_handler");
 }
 
-/** Registers the print verb under both ProgIDs. */
 export async function registerPrintVerb(): Promise<void> {
   return call<void>("register_print_verb");
 }
 
-/** Extracts selected pages from a PDF into a new file, preserving vector text. */
 export async function extractPdfPages(
   inputPath: string,
   outputPath: string,
@@ -165,13 +124,10 @@ export async function extractPdfPages(
 }
 
 export interface SplitRange {
-  /** 1-based inclusive */
   start: number;
-  /** 1-based inclusive */
   end: number;
 }
 
-/** Splits a PDF into one output file per range. Returns the list of created paths. */
 export async function splitPdf(
   inputPath: string,
   outputDir: string,
@@ -181,7 +137,6 @@ export async function splitPdf(
   return call<string[]>("split_pdf", { inputPath, outputDir, baseName, ranges });
 }
 
-/** Opens a folder-picker dialog. Returns the chosen path or null. */
 export async function pickDirectoryDialog(): Promise<string | null> {
   return call<string | null>("pick_directory_dialog");
 }
@@ -191,12 +146,10 @@ export interface PrinterList {
   defaultPrinter: string;
 }
 
-/** Returns the list of available printers and the default printer name. */
 export async function listPrinters(): Promise<PrinterList> {
   return call<PrinterList>("list_printers");
 }
 
-/** Sends pre-rendered page images (base64 JPEG) to a printer. */
 export async function printPages(
   pagesB64: string[],
   printerName?: string,
@@ -213,17 +166,14 @@ export async function printPages(
   });
 }
 
-/** Opens Windows Settings → Default Apps. */
 export async function openDefaultAppsSettings(): Promise<void> {
   return call<void>("open_default_apps_settings");
 }
 
-/** Opens an http/https URL in the system default browser. */
 export async function openUrl(url: string): Promise<void> {
   return call<void>("open_url", { url });
 }
 
-/** How this copy was installed: decides what "update" does. */
 export type UpdateChannel = "store" | "installer" | "portable" | "deb" | "homebrew" | "dmg" | "other";
 
 export interface UpdateStatus {
@@ -233,31 +183,22 @@ export interface UpdateStatus {
   channel: UpdateChannel;
 }
 
-/** What the update button did (see src-tauri/src/commands/update.rs). */
 export type UpdateOutcome = "restarting" | "opened" | "otherWindows";
 
-/** Asks GitHub for the latest release. Rejects offline. */
 export async function checkForUpdate(): Promise<UpdateStatus> {
   return call<UpdateStatus>("check_for_update");
 }
 
-/** Installs the latest release; on "restarting" the app closes and reopens. */
 export async function installUpdate(): Promise<UpdateOutcome> {
   return call<UpdateOutcome>("install_update");
 }
 
-/** One page of the document built by `rearrangePages`, in output order. */
 export type PageSlot =
   | { kind: "original"; page: number; rotation: number }
   | { kind: "blank"; width: number; height: number; rotation: number }
   | { kind: "imported"; path: string; page: number; rotation: number }
   | { kind: "image"; data: string; rotation: number };
 
-/**
- * Writes `inputPath` with its pages replaced by `slots` (reordered, rotated,
- * deleted, blank or taken from other PDFs) to `outputPath`, as an
- * incremental update.
- */
 export async function rearrangePages(
   inputPath: string,
   outputPath: string,
@@ -269,17 +210,11 @@ export async function rearrangePages(
 export interface CompressResult {
   originalBytes: number;
   compressedBytes: number;
-  /** False when a target size could not be reached (the smallest result was written). */
   reachedTarget: boolean;
 }
 
 export type CompressLevel = "lossless" | "balanced" | "maximum" | "target";
 
-/**
- * Compresses `inputPath` into `outputPath`: "lossless" recompresses streams,
- * "balanced" / "maximum" also re-encode pictures (150 dpi JPEG 75 / 96 dpi
- * JPEG 55), "target" keeps the best quality that fits in `targetBytes`.
- */
 export async function compressPdf(
   inputPath: string,
   outputPath: string,
@@ -289,21 +224,14 @@ export async function compressPdf(
   return call<CompressResult>("compress_pdf", { inputPath, outputPath, level, targetBytes: targetBytes ?? null });
 }
 
-/**
- * Writes `pages` (1-based) of `inputPath` to `outputPath` as a flattened
- * copy: annotations and form fields are drawn into the pages and nothing
- * stays editable (links excepted).
- */
 export async function exportFlattenedPages(inputPath: string, outputPath: string, pages: number[]): Promise<void> {
   return call<void>("export_flattened_pages", { inputPath, outputPath, pages });
 }
 
-/** Stops the compression in progress: `compressPdf` then fails with "cancelled". */
 export async function cancelCompression(): Promise<void> {
   return call<void>("cancel_compression");
 }
 
-/** Calls `cb` with the share of the running compression done (0 to 1). */
 export async function onCompressProgress(cb: (share: number) => void): Promise<() => void> {
   return listen<number>("compress-progress", (e) => cb(e.payload));
 }
@@ -315,40 +243,23 @@ export interface CompressEstimate {
   maximumBytes: number;
 }
 
-/** Sizes the three levels would give, computed without writing anything. */
 export async function estimateCompression(inputPath: string): Promise<CompressEstimate> {
   return call<CompressEstimate>("estimate_compression", { inputPath });
 }
 
-/** A page rendered with its redacted areas blacked out, ready to replace the original. */
 export interface RedactedPage {
-  /** 1-based page number. */
   page: number;
-  /** Base64 JPEG of the page's visible area (pdf.js `page.view`), unrotated. */
   jpegBase64: string;
   widthPx: number;
   heightPx: number;
-  /** The area the image covers, in PDF user space: [x0, y0, x1, y1]. */
   view: [number, number, number, number];
 }
 
-/**
- * Replaces each page's content with its image and rewrites the whole file
- * so the original content (text, images, links, form fields) of those pages
- * is gone, not just hidden.
- */
-/** A straightened page for `straightenPages`: its picture, the warp, its text. */
 export interface StraightenedPage extends RedactedPage {
-  /** Where the warp moves a point: 3×3, row by row, old → new PDF user space. */
   map: Mat3;
-  /** The page's text, moved by the warp, laid back invisibly to stay searchable. */
   text: TextRun[];
 }
 
-/**
- * Replaces `pages` of `inputPath` with their straightened pictures, keeping
- * their text (invisible, searchable), links, form fields and annotations.
- */
 export async function straightenPages(inputPath: string, outputPath: string, pages: StraightenedPage[]): Promise<void> {
   return call<void>("straighten_pages", { inputPath, outputPath, pages });
 }
@@ -361,134 +272,93 @@ export async function redactPages(
   return call<void>("redact_pages", { inputPath, outputPath, pages });
 }
 
-/** Opens a file picker for pictures; null if cancelled. */
 export async function openImageDialog(): Promise<string | null> {
   return call<string | null>("open_image_dialog");
 }
 
-/**
- * The picture at `path`, ready to place on a page: base64 PNG or JPEG and
- * its size. Other formats and very large pictures are re-encoded in Rust.
- */
 export async function loadPictureFile(path: string): Promise<{ data: string; width: number; height: number }> {
   return call("load_picture", { path });
 }
 
-
-/** How one page is cropped and flipped (see `adjust_pages`). */
 export interface PageAdjust {
-  /** 1-based page number. */
   page: number;
-  /** Visible area kept, in PDF user space: [x0, y0, x1, y1]. */
   crop?: [number, number, number, number];
   flipH?: boolean;
   flipV?: boolean;
 }
 
-/** Crops and flips pages, as an incremental update (the content stays vector). */
 export async function adjustPages(inputPath: string, outputPath: string, pages: PageAdjust[]): Promise<void> {
   return call<void>("adjust_pages", { inputPath, outputPath, pages });
 }
 
-/** Writes `inputPath` to `outputPath` protected by `password` (AES-256). */
 export async function encryptPdf(inputPath: string, outputPath: string, password: string): Promise<void> {
   return call<void>("encrypt_pdf", { inputPath, outputPath, password });
 }
 
-/** Writes `inputPath` to `outputPath` without its password; rejects with "wrong password". */
 export async function decryptPdf(inputPath: string, outputPath: string, password: string): Promise<void> {
   return call<void>("decrypt_pdf", { inputPath, outputPath, password });
 }
 
-/** Opens a file picker for several pictures; empty if cancelled. */
 export async function openImagesDialog(): Promise<string[]> {
   return call<string[]>("open_images_dialog");
 }
 
-/** Makes a PDF with one page per picture. */
 export async function imagesToPdf(imagePaths: string[], outputPath: string): Promise<void> {
   return call<void>("images_to_pdf", { imagePaths, outputPath });
 }
 
-/** What this app's temp file names carry after `ezreader-` (its process). */
 export async function tempTag(): Promise<string> {
   return call<string>("temp_tag");
 }
 
-/** Which of `paths` already exist. */
 export async function existingFiles(paths: string[]): Promise<string[]> {
   return call<string[]>("existing_files", { paths });
 }
 
-/** Writes a PNG or JPEG picture (base64, or a data: URL) to `path`. */
 export async function writeImageFile(path: string, data: string): Promise<void> {
   return call<void>("write_image_file", { path, data });
 }
 
-/** Writes `doc` (text extracted from a PDF) to `output` as Word, Excel, RTF, HTML, text or XML. */
 export async function convertText(doc: TextDoc, format: DocFormat, output: string): Promise<void> {
   return call<void>("convert_text", { doc, format, output });
 }
 
-/** Save As dialog for a converted file of `format`, pre-filled with `suggested`. */
 export async function saveAsDialog(suggested: string, format: DocFormat): Promise<string | null> {
   return call<string | null>("save_as_dialog", { suggested, format });
 }
 
-/** The languages Windows can recognize text in (its installed OCR packs). */
 export async function ocrLanguages(): Promise<OcrLanguage[]> {
   return call<OcrLanguage[]>("ocr_languages");
 }
 
-/** Recognizes the text of a picture (base64 or data URL) in `language` ("" = the user's languages). */
 export async function ocrImage(data: string, language: string): Promise<OcrResult> {
   return call<OcrResult>("ocr_image", { data, language: language || null });
 }
 
-/** Opens `pages` of `inputPath` as a new document `name` in a new window near the screen point. */
 export async function openPagesInNewWindow(
   inputPath: string, pages: number[], name: string, x: number, y: number,
 ): Promise<void> {
   return call<void>("open_pages_in_new_window", { inputPath, pages, name, x, y });
 }
 
-/**
- * A tab is dragged out of the title bar, the pointer at the screen point
- * (`x`, `y`): true when another EzReader window is under it (it then shows
- * the tab would land there).
- */
 export async function tabDragHover(x: number, y: number): Promise<boolean> {
   return call<boolean>("tab_drag_hover", { x, y });
 }
 
-/** The tab drag is over. */
 export async function tabDragEnd(): Promise<void> {
   return call<void>("tab_drag_end");
 }
 
-/**
- * Moves a tab to the EzReader window under the screen point (`x`, `y`), or
- * to a new window there when there is none and `allowNew`. `name`: the file
- * is a temp copy shown under that name. Says what happened.
- */
 export async function moveTab(
   x: number, y: number, tab: StartupArgs, name: string | null, allowNew: boolean,
 ): Promise<"merged" | "window" | "stayed"> {
   return call<"merged" | "window" | "stayed">("move_tab", { x, y, tab, name, allowNew });
 }
 
-/**
- * Keeps the window's proportions while it is resized (the launcher), or
- * frees them (a document is open). Windows only; elsewhere it does nothing.
- */
 export async function setLauncherRatioLock(locked: boolean): Promise<void> {
   return call<void>("set_launcher_ratio_lock", { locked });
 }
 
-/**
- * Hides (full screen) or shows again the invisible resize strip Tauri keeps
- * along the top edge of a frameless window. Windows only.
- */
 export async function setResizeBorder(visible: boolean): Promise<void> {
   return call<void>("set_resize_border", { visible });
 }

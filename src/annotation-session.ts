@@ -1,38 +1,20 @@
 import type { Annotation } from "./models";
 
-/** The redactions among `anns`, as text to compare. */
 function redactionsOf(anns: Annotation[]): string {
   return JSON.stringify(anns.filter((a) => a.kind === "redact"));
 }
 
 export interface Snapshot {
-  /** Every annotation, as JSON. */
   annotations: string;
-  /** The redactions among them, as JSON (to see whether a change touched one). */
   redactions: string;
-  /** The document's dirty flag at that moment. */
   dirty: boolean;
 }
 
 export interface AnnotationSessionOptions {
-  /** False while redactions must not wait for ✓ / ✕ (read mode). */
   gateEnabled?: () => boolean;
-  /** The document's dirty flag, restored when pending redactions are thrown away. */
   isDirty?: () => boolean;
 }
 
-/**
- * The annotations of the open document: the one list every page draws from,
- * its undo / redo history, and the ✓ / ✕ gate that holds back redactions.
- *
- * Every change is one undo step. Most changes apply at once; a change that
- * adds, moves or removes a redaction (which destroys content when saved)
- * opens the gate until it is applied (✓) or discarded (✕).
- *
- * Changes made by the user notify `onChange`; restoring a state (undo, redo,
- * discard, load) does not — the caller redraws and sets the dirty flag.
- */
-/** A parked `AnnotationSession` (see `snapshot()`). */
 export interface AnnotationSnapshot {
   pages: Map<number, Annotation[]>;
   undo: string[];
@@ -46,11 +28,8 @@ export class AnnotationSession {
   private pages = new Map<number, Annotation[]>();
   private undoStack: string[] = [];
   private redoStack: string[] = [];
-  /** State before the redactions waiting for ✓ / ✕; null when none wait. */
   private draft: Snapshot | null = null;
-  /** State before the change in progress, while it may still open the gate. */
   private candidate: Snapshot | null = null;
-  /** Depth of nested `change()` calls: only the outermost records history. */
   private depth = 0;
 
   private changeHandlers: (() => void)[] = [];
@@ -59,14 +38,10 @@ export class AnnotationSession {
 
   constructor(private readonly opts: AnnotationSessionOptions = {}) {}
 
-  // ── Reading ────────────────────────────────────────────────────────────────
-
-  /** The annotations of 1-indexed `page`, bottom layer first. Do not mutate the array. */
   forPage(page: number): readonly Annotation[] {
     return this.pages.get(page) ?? [];
   }
 
-  /** Every annotation, page by page. */
   all(): Annotation[] {
     const result: Annotation[] = [];
     for (const list of this.pages.values()) result.push(...list);
@@ -81,7 +56,6 @@ export class AnnotationSession {
     return this.pages.size === 0;
   }
 
-  /** Redactions are waiting for ✓ / ✕. */
   get pending(): boolean {
     return this.draft !== null;
   }
@@ -91,12 +65,8 @@ export class AnnotationSession {
 
   onChange(h: () => void): void { this.changeHandlers.push(h); }
   onPendingChange(h: (pending: boolean) => void): void { this.pendingHandlers.push(h); }
-  /** Any change of the list, restores (undo, redo, load, tabs) included: for views of it. */
   onContentChange(h: () => void): void { this.contentHandlers.push(h); }
 
-  // ── Changes (one undo step each) ───────────────────────────────────────────
-
-  /** Runs `fn` as one undo step: the mutations inside it record no history of their own. */
   change(fn: () => void): void {
     if (this.depth === 0) this.begin();
     this.depth++;
@@ -127,7 +97,6 @@ export class AnnotationSession {
     return true;
   }
 
-  /** Moves `ann` one layer up (+1, drawn later) or down (-1) on its page. */
   moveLayer(ann: Annotation, step: 1 | -1): boolean {
     const list = this.pages.get(ann.page);
     const idx = list?.indexOf(ann) ?? -1;
@@ -139,19 +108,10 @@ export class AnnotationSession {
     return true;
   }
 
-  /**
-   * Opens an undo step for an annotation about to be changed in place
-   * (moved, resized, restyled, retyped). Call `settle()` after each partial
-   * change of a drag, and `edited()` when it is done.
-   */
   beginEdit(): void {
     this.begin();
   }
 
-  /**
-   * Moves `ann` to 1-indexed `page` (on top of its annotations), as part of
-   * the in-place change opened by `beginEdit()`: no undo step of its own.
-   */
   relocate(ann: Annotation, page: number): void {
     if (ann.page === page) return;
     const from = this.pages.get(ann.page);
@@ -165,7 +125,6 @@ export class AnnotationSession {
     to.push(ann);
   }
 
-  /** Re-checks the ✓ / ✕ gate after an in-place change (a drag step). */
   settle(): void {
     if (!this.candidate || this.draft) return;
     if (redactionsOf(this.all()) === this.candidate.redactions) return;
@@ -174,38 +133,25 @@ export class AnnotationSession {
     this.emitPending(true);
   }
 
-  /** An in-place change opened by `beginEdit()` is done. */
   edited(): void {
     this.settle();
     this.emitChange();
   }
 
-  // ── Undo / redo ────────────────────────────────────────────────────────────
-
-  /** Restores the state before the last change. False when there is none. */
   undo(): boolean {
     return this.step(this.undoStack, this.redoStack);
   }
 
-  /** Re-applies the last undone change. False when there is none. */
   redo(): boolean {
     return this.step(this.redoStack, this.undoStack);
   }
 
-  // ── ✓ / ✕ gate ─────────────────────────────────────────────────────────────
-
-  /** ✓: the pending redactions are kept. */
   apply(): void {
     if (!this.draft) return;
     this.draft = null;
     this.emitPending(false);
   }
 
-  /**
-   * ✕: the pending redactions (and everything changed since) are thrown away;
-   * Ctrl+Z brings them back. Returns the dirty flag the document had before
-   * them, or null when nothing was pending.
-   */
   discard(): boolean | null {
     const draft = this.draft;
     if (!draft) return null;
@@ -218,9 +164,6 @@ export class AnnotationSession {
     return draft.dirty;
   }
 
-  // ── Whole-document ─────────────────────────────────────────────────────────
-
-  /** A freshly opened document: these annotations, no history, nothing pending. */
   load(anns: Annotation[]): void {
     this.setAll(anns);
     this.undoStack = [];
@@ -232,14 +175,12 @@ export class AnnotationSession {
     }
   }
 
-  /** Everything, to park it while another tab is shown (see `restoreParked`). */
   snapshot(): AnnotationSnapshot {
     const pages = new Map<number, Annotation[]>();
     for (const [n, list] of this.pages) pages.set(n, [...list]);
     return { pages, undo: [...this.undoStack], redo: [...this.redoStack], draft: this.draft };
   }
 
-  /** Back to a parked state, without notifying `onChange`. */
   restoreParked(s: AnnotationSnapshot): void {
     this.pages = new Map([...s.pages].map(([n, list]) => [n, [...list]]));
     this.emitContent();
@@ -252,12 +193,9 @@ export class AnnotationSession {
     if (was !== (s.draft !== null)) this.emitPending(s.draft !== null);
   }
 
-  /** Forgets every annotation (and the history). */
   clear(): void {
     this.load([]);
   }
-
-  // ── Internals ──────────────────────────────────────────────────────────────
 
   private begin(): void {
     const before = JSON.stringify(this.all());
@@ -289,7 +227,6 @@ export class AnnotationSession {
     to.push(JSON.stringify(this.all()));
     this.restore(state);
     this.candidate = null;
-    // Undoing every pending redaction leaves nothing to validate.
     if (this.draft && redactionsOf(this.all()) === this.draft.redactions) this.apply();
     return true;
   }

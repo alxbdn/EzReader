@@ -3,28 +3,20 @@ import { hexToRgb, rgbToHex, type RgbColor } from "./models";
 const NONE_SWATCH = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M1 23 23 1" stroke="#E53935" stroke-width="1.8"/></svg>`;
 
 export interface ColorRowOptions {
-  /** Small icon shown before the swatches (its title says what the colour is for). */
   icon: string;
   title: string;
-  /** Preset colours as "#rrggbb" with their names. */
   presets: [string, string][];
-  /** Adds a crossed-out swatch meaning "no colour". */
   noneTitle?: string;
   customTitle: string;
   onPick: (color: RgbColor | null) => void;
 }
 
-/** "#1d4ed8", "1D4ED8" or "#abc" as a colour; null when it is not one. */
 export function parseHex(text: string): RgbColor | null {
   let h = text.trim().replace(/^#/, "");
   if (/^[0-9a-f]{3}$/i.test(h)) h = h.split("").map((c) => c + c).join("");
   return /^[0-9a-f]{6}$/i.test(h) ? hexToRgb(`#${h}`) : null;
 }
 
-/**
- * A label, then 24 px rounded swatches (a ring marks the chosen one), a
- * custom colour picker, and the chosen colour as an editable hex code.
- */
 export class ColorRow {
   readonly el: HTMLElement;
   private icon: HTMLElement;
@@ -77,7 +69,6 @@ export class ColorRow {
     this.customWrap.append(this.custom);
     this.swatchRow.append(this.customWrap);
 
-    // The chosen colour as a hex code, typed or pasted to pick any colour.
     this.hexWrap = document.createElement("label");
     this.hexWrap.className = "color-hex";
     this.hexChip = document.createElement("span");
@@ -115,7 +106,6 @@ export class ColorRow {
     this.custom.setAttribute("aria-label", customTitle);
   }
 
-  /** Marks `color` (or "none") as the chosen one. */
   set(color: RgbColor | null): void {
     const hex = color ? rgbToHex(color).toLowerCase() : null;
     this.current = hex;
@@ -150,7 +140,6 @@ export class ColorRow {
   }
 }
 
-/** "Thickness ━━●━━ 3 px" */
 export class SliderRow {
   readonly el: HTMLElement;
   private label: HTMLElement;

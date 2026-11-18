@@ -10,8 +10,6 @@ fn filepath_to_string(p: FilePath) -> String {
     }
 }
 
-/// Opens a native file-picker dialog filtered to PDF files.
-/// Returns the selected absolute path, or null if cancelled.
 #[tauri::command(async)]
 pub fn open_pdf_dialog(app: AppHandle) -> CmdResult<Option<String>> {
     let result = app.dialog().file().add_filter("PDF Files", &["pdf"]).blocking_pick_file();
@@ -23,8 +21,6 @@ pub fn open_pdf_dialog(app: AppHandle) -> CmdResult<Option<String>> {
     Ok(picked)
 }
 
-/// Opens a native file-picker for a document to open: a PDF, or a picture
-/// that becomes a new one-page PDF. Returns the selected path, or null.
 #[tauri::command(async)]
 pub fn open_document_dialog(app: AppHandle) -> CmdResult<Option<String>> {
     let mut all = vec!["pdf"];
@@ -44,11 +40,8 @@ pub fn open_document_dialog(app: AppHandle) -> CmdResult<Option<String>> {
     Ok(picked)
 }
 
-/// Picture types that can be placed on a page or added as a page.
 pub const IMAGE_EXTENSIONS: [&str; 6] = ["png", "jpg", "jpeg", "webp", "gif", "bmp"];
 
-/// Opens a native file-picker dialog filtered to pictures.
-/// Returns the selected absolute path, or null if cancelled.
 #[tauri::command(async)]
 pub fn open_image_dialog(app: AppHandle) -> CmdResult<Option<String>> {
     let result = app.dialog().file().add_filter("Images", &IMAGE_EXTENSIONS).blocking_pick_file();
@@ -59,8 +52,6 @@ pub fn open_image_dialog(app: AppHandle) -> CmdResult<Option<String>> {
     Ok(picked)
 }
 
-/// Opens a native file-picker dialog for several pictures at once.
-/// Returns the selected paths (empty if cancelled).
 #[tauri::command(async)]
 pub fn open_images_dialog(app: AppHandle) -> CmdResult<Vec<String>> {
     let result = app.dialog().file().add_filter("Images", &IMAGE_EXTENSIONS).blocking_pick_files();
@@ -71,9 +62,6 @@ pub fn open_images_dialog(app: AppHandle) -> CmdResult<Vec<String>> {
     Ok(picked)
 }
 
-/// Opens a native Save As dialog.
-/// Pre-fills the filename from `current_path` basename.
-/// Returns the chosen absolute path, or null if cancelled.
 #[tauri::command(async)]
 pub fn save_pdf_dialog(app: AppHandle, current_path: String) -> CmdResult<Option<String>> {
     let default_name =
@@ -89,7 +77,6 @@ pub fn save_pdf_dialog(app: AppHandle, current_path: String) -> CmdResult<Option
     Ok(picked)
 }
 
-/// Opens a native folder-picker dialog. Returns the chosen path or null.
 #[tauri::command(async)]
 pub fn pick_directory_dialog(app: AppHandle) -> CmdResult<Option<String>> {
     let result = app.dialog().file().blocking_pick_folder();

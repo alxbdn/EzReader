@@ -1,22 +1,8 @@
-//! Flattening: what annotations and form fields show becomes part of the
-//! page, and nothing stays interactive or editable.
-//!
-//! Each annotation with an appearance is painted into its page's content as
-//! a form XObject, placed the way PDF 32000-1 §12.5.5 places appearances:
-//! the appearance's bounding box, through its `/Matrix`, is fitted to the
-//! annotation's `/Rect`. The annotation is then removed. Links stay (they
-//! are navigation, not content). The AcroForm and EzReader's own editable
-//! annotation data (`CCAnnot`) go too, so reopening the file gives nothing
-//! back to edit: EzReader's annotations are already drawn in the page's
-//! content by the time a document is exported.
-
 use lopdf::{dictionary, Dictionary, Document, Object, ObjectId, Stream};
 
-/// Annotation flags (PDF 32000-1 §12.5.3).
 const FLAG_HIDDEN: i64 = 1 << 1;
 const FLAG_NO_VIEW: i64 = 1 << 5;
 
-/// Annotations kept as they are.
 const KEPT: [&[u8]; 1] = [b"Link"];
 
 pub fn flatten(doc: &mut Document) -> Result<(), String> {
@@ -49,7 +35,7 @@ fn flatten_page(doc: &mut Document, page_id: ObjectId) -> Result<(), String> {
             continue;
         }
         if subtype == b"Popup" {
-            continue; // goes with its parent
+            continue;
         }
         let flags = annot.get(b"F").and_then(Object::as_i64).unwrap_or(0);
         if flags & (FLAG_HIDDEN | FLAG_NO_VIEW) != 0 {
@@ -79,8 +65,6 @@ fn flatten_page(doc: &mut Document, page_id: ObjectId) -> Result<(), String> {
         }
         resources.set("XObject", Object::Dictionary(xobjects));
 
-        // The original content is wrapped in q … Q so whatever state it
-        // leaves behind does not move the annotations.
         let before = doc.add_object(Stream::new(dictionary! {}, b"q\n".to_vec()));
         let after = doc.add_object(Stream::new(dictionary! {}, format!("Q\n{ops}").into_bytes()));
         let mut contents = vec![Object::Reference(before)];
@@ -127,7 +111,6 @@ fn numbers(doc: &Document, o: &Object) -> Option<Vec<f64>> {
     arr.iter().map(|v| v.as_float().ok().map(f64::from)).collect()
 }
 
-/// The annotation's `/Rect`, normalised to [x0, y0, x1, y1] with x0 < x1, y0 < y1.
 fn rect_of(doc: &Document, annot: &Dictionary) -> Option<[f64; 4]> {
     let r = numbers(doc, annot.get(b"Rect").ok()?)?;
     if r.len() != 4 {
@@ -136,8 +119,6 @@ fn rect_of(doc: &Document, annot: &Dictionary) -> Option<[f64; 4]> {
     Some([r[0].min(r[2]), r[1].min(r[3]), r[0].max(r[2]), r[1].max(r[3])])
 }
 
-/// The normal appearance stream; for a state dictionary (check boxes, radio
-/// buttons) the one `/AS` names.
 fn appearance(doc: &Document, annot: &Dictionary) -> Option<ObjectId> {
     let ap = deref_dict(doc, annot.get(b"AP").ok()?)?;
     match ap.get(b"N").ok()? {
@@ -156,8 +137,6 @@ fn state_stream(states: &Dictionary, annot: &Dictionary) -> Option<ObjectId> {
     states.get(state).and_then(Object::as_reference).ok()
 }
 
-/// The matrix that fits the appearance's transformed bounding box to `rect`
-/// (PDF 32000-1 §12.5.5, algorithm 8.1, step 2).
 fn placement(doc: &Document, form_id: ObjectId, rect: [f64; 4]) -> Option<[f64; 6]> {
     let form = doc.get_object(form_id).ok()?.as_stream().ok()?;
     let bbox = numbers(doc, form.dict.get(b"BBox").ok()?)?;
@@ -184,7 +163,6 @@ fn placement(doc: &Document, form_id: ObjectId, rect: [f64; 4]) -> Option<[f64; 
     Some([sx, 0.0, 0.0, sy, rect[0] - sx * bx0, rect[1] - sy * by0])
 }
 
-/// The page's resources as a direct dictionary, inherited ones included.
 fn page_resources(doc: &Document, page_id: ObjectId) -> Dictionary {
     let mut cursor = Some(page_id);
     let mut depth = 0;
@@ -228,8 +206,6 @@ fn num(v: f64) -> String {
 mod tests {
     use super::*;
 
-    /// A page with a filled text field, a highlight, a link and a hidden
-    /// note, plus EzReader's own annotation data in the catalog.
     fn annotated() -> Document {
         let mut doc = Document::with_version("1.7");
         let pages_id = doc.new_object_id();
@@ -296,8 +272,6 @@ mod tests {
         let annots = page.get(b"Annots").unwrap().as_array().unwrap();
         assert_eq!(annots.len(), 1, "only the link stays");
 
-        // The field's value and the highlight are now drawn by the page,
-        // placed on their /Rect; the hidden note is not drawn.
         let content = String::from_utf8(doc.get_page_content(page_id)).unwrap();
         assert!(content.contains("q 2 0 0 2 50 700 cm /EzFlat0 Do Q"), "{content}");
         assert!(content.contains("q 1 0 0 1 50 600 cm /EzFlat1 Do Q"), "{content}");
