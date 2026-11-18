@@ -22,7 +22,7 @@ tauri = { version = "2", features = ["protocol-asset"] }
 tauri-plugin-dialog = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-lopdf = "0.47"
+lopdf = { version = "0.47", default-features = false, features = ["rayon"] }
 # Fonts of the computer, embedded as subsets for text annotations.
 subsetter = { version = "0.2", default-features = false }
 # Only the formats the app opens: fewer decoders a hostile file can reach.
