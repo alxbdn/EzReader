@@ -1,13 +1,13 @@
 import { defineConfig } from "@playwright/test";
 
 export default defineConfig({
-  testDir: "tests/visual",
+  testDir: ".",
   snapshotPathTemplate: "{testDir}/__screenshots__/{arg}{ext}",
-  outputDir: "tests/visual/results",
+  outputDir: "results",
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
   retries: 0,
-  reporter: process.env.CI ? [["list"], ["html", { open: "never", outputFolder: "tests/visual/report" }]] : "list",
+  reporter: process.env.CI ? [["list"], ["html", { open: "never", outputFolder: "report" }]] : "list",
   use: {
     baseURL: "http://127.0.0.1:4173",
     viewport: { width: 1100, height: 840 },
@@ -21,6 +21,7 @@ export default defineConfig({
   },
   webServer: {
     command: "npx vite preview --host 127.0.0.1 --port 4173 --strictPort",
+    cwd: "../..",
     url: "http://127.0.0.1:4173",
     reuseExistingServer: !process.env.CI,
   },

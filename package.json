@@ -11,7 +11,7 @@
     "tauri": "tauri",
     "test": "vitest run",
     "test:e2e": "node --test --test-reporter=spec --test-concurrency=1 tests/e2e/app.e2e.mjs",
-    "test:visual": "playwright test",
+    "test:visual": "playwright test -c tests/visual/playwright.config.ts",
     "test:ui": "playwright test -c tests/ui/playwright.config.ts",
     "test:corpus": "cargo test --manifest-path src-tauri/Cargo.toml --lib corpus_tests",
     "test:perf": "vite build && node tests/perf/make-big-pdf.mjs perf-big.pdf && node tests/perf/stress.mjs perf-big.pdf"
