@@ -745,6 +745,21 @@ mod tests {
             )
         );
     }
+
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn printers_and_their_settings_can_be_read() {
+        let list = super::list_printers_impl().unwrap();
+        let _ = super::get_default_printer_name();
+        let _ = super::is_windows_10();
+        assert!(!super::is_packaged());
+        for name in list.printers.iter().take(3) {
+            let mut wide: Vec<u16> = name.encode_utf16().collect();
+            wide.push(0);
+            let _ = super::printer_devmode(&wide, true);
+            let _ = super::printer_devmode(&wide, false);
+        }
+    }
 }
 
 #[cfg(not(target_os = "windows"))]

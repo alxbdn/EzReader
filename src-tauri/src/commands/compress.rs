@@ -357,4 +357,12 @@ mod tests {
         }
         std::fs::remove_file(input).ok();
     }
+
+    #[test]
+    fn estimate_command_matches_the_estimate() {
+        let input = fixture("objstm-indirect-length.pdf");
+        let direct = estimate_file(&input).unwrap();
+        let via_command = tauri::async_runtime::block_on(estimate_compression(input)).unwrap();
+        assert_eq!(serde_json::to_value(direct).unwrap(), serde_json::to_value(via_command).unwrap());
+    }
 }

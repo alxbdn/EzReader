@@ -29,3 +29,25 @@ pub async fn ocr_image(data: String, language: Option<String>) -> CmdResult<OcrR
         .map_err(|e| PdfError::from(e.to_string()))?
         .map_err(to_error)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn missing_language_has_its_own_code() {
+        assert_eq!(to_error("no-ocr-language".into()).code, ErrorCode::NoOcrLanguage);
+        assert_ne!(to_error("other".into()).code, ErrorCode::NoOcrLanguage);
+    }
+
+    #[test]
+    fn refuses_data_that_is_not_base64() {
+        let err = tauri::async_runtime::block_on(ocr_image("data:image/png;base64,***".into(), None)).unwrap_err();
+        assert_eq!(err.code, ErrorCode::NotAnImage);
+    }
+
+    #[test]
+    fn lists_languages_or_explains_why_not() {
+        let _ = tauri::async_runtime::block_on(ocr_languages());
+    }
+}

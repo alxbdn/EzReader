@@ -1335,6 +1335,54 @@ mod tests {
         }
         std::fs::remove_file(out).ok();
     }
+
+    fn black_jpeg(page: u32) -> redact::RedactedPage {
+        use base64::Engine;
+        let img = image::RgbImage::from_pixel(20, 30, image::Rgb([0, 0, 0]));
+        let mut buf = Vec::new();
+        image::DynamicImage::ImageRgb8(img)
+            .write_to(&mut std::io::Cursor::new(&mut buf), image::ImageFormat::Jpeg)
+            .unwrap();
+        redact::RedactedPage {
+            page,
+            jpeg_base64: base64::engine::general_purpose::STANDARD.encode(buf),
+            width_px: 20,
+            height_px: 30,
+            view: [0.0, 0.0, 612.0, 792.0],
+        }
+    }
+
+    #[test]
+    fn redact_command_keeps_every_page() {
+        let input = crate::test_util::fixture("objstm-indirect-length.pdf");
+        let out = crate::test_util::tmp("redact-command.pdf");
+        redact_pages(input, out.clone(), vec![black_jpeg(1)]).unwrap();
+        assert_eq!(Document::load(&out).unwrap().get_pages().len(), 2);
+        let _ = std::fs::remove_file(out);
+    }
+
+    #[test]
+    fn straighten_command_keeps_every_page() {
+        let input = crate::test_util::fixture("objstm-indirect-length.pdf");
+        let out = crate::test_util::tmp("straighten-command.pdf");
+        let page = crate::pdf::straighten::StraightenedPage {
+            picture: black_jpeg(2),
+            map: [1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0],
+            text: vec![],
+        };
+        straighten_pages(input, out.clone(), vec![page]).unwrap();
+        assert_eq!(Document::load(&out).unwrap().get_pages().len(), 2);
+        let _ = std::fs::remove_file(out);
+    }
+
+    #[test]
+    fn commands_report_a_missing_file() {
+        let missing = crate::test_util::tmp("does-not-exist.pdf");
+        let out = crate::test_util::tmp("never-written.pdf");
+        assert!(redact_pages(missing.clone(), out.clone(), vec![]).is_err());
+        assert!(straighten_pages(missing, out.clone(), vec![]).is_err());
+        assert!(!std::path::Path::new(&out).exists());
+    }
 }
 
 #[tauri::command(async)]
