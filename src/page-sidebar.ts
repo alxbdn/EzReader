@@ -79,6 +79,13 @@ export class PageSidebar {
   private viewerBusy = false;
   private pendingThumbs = new Set<Thumb>();
   private renderingThumb = false;
+  /**
+   * Bumped by clear(). A thumbnail render started for an earlier document
+   * may never settle: pdf.js drops the answers to requests still pending
+   * when the viewer destroys that document (another tab, another file), so
+   * the panel cannot wait for it to free the render slot.
+   */
+  private renderGeneration = 0;
   private revealRaf = 0;
   private drag: DragState | null = null;
   private suppressClick = false;
@@ -319,6 +326,8 @@ export class PageSidebar {
     this.pendingThumbs.clear();
     this.observer.disconnect();
     for (const t of this.thumbs) t.task?.cancel();
+    this.renderGeneration++;
+    this.renderingThumb = false;
     this.thumbs = [];
     this.list.replaceChildren();
     this.outlineList.replaceChildren();
@@ -791,6 +800,7 @@ export class PageSidebar {
   private async render(thumb: Thumb): Promise<void> {
     const doc = this.doc;
     if (!doc) return;
+    const generation = this.renderGeneration;
     this.renderingThumb = true;
     try {
       const page = await doc.getPage(thumb.page);
@@ -824,8 +834,11 @@ export class PageSidebar {
       // Cancelled, or the document was replaced meanwhile.
       thumb.task = null;
     } finally {
-      this.renderingThumb = false;
-      this.pumpThumbs();
+      // A render for a document since replaced no longer holds the slot.
+      if (generation === this.renderGeneration) {
+        this.renderingThumb = false;
+        this.pumpThumbs();
+      }
     }
   }
 

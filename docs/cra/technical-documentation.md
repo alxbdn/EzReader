@@ -17,7 +17,7 @@ Draft of the technical documentation the Cyber Resilience Act asks for. EzReader
 | Product class | Default (not in Annex III or IV) |
 | Previous versions | Listed on the [releases page](https://github.com/alxbdn/EzReader/releases) |
 
-User information and instructions: [README](../../README.md), [SECURITY.md](../../SECURITY.md), [PRIVACY.md](../../PRIVACY.md).
+User information and instructions: [README](../../README.md), [SECURITY.md](../../.github/SECURITY.md), [PRIVACY.md](../../.github/PRIVACY.md).
 
 ## 2. Design, development and production
 
@@ -53,7 +53,7 @@ How each essential requirement is met: see the [gap analysis](README.md#gap-anal
 
 ## 4. Vulnerability handling
 
-Described in [SECURITY.md](../../SECURITY.md): private reporting, response and fix targets, advisories, support period, update channels and reporting of actively exploited vulnerabilities. SBOMs (CycloneDX) are attached to every release.
+Described in [SECURITY.md](../../.github/SECURITY.md): private reporting, response and fix targets, advisories, support period, update channels and reporting of actively exploited vulnerabilities. SBOMs (CycloneDX) are attached to every release.
 
 ## 5. Standards and specifications applied
 
@@ -72,4 +72,4 @@ Template: [eu-declaration-of-conformity.md](eu-declaration-of-conformity.md). No
 
 ## 8. Support period
 
-See [SECURITY.md](../../SECURITY.md#supported-versions).
+See [SECURITY.md](../../.github/SECURITY.md#supported-versions).

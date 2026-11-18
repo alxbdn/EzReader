@@ -49,7 +49,7 @@ A separate DLL (`ezreader_shell.dll`) that Explorer loads: a thumbnail provider 
 ## Build and release
 
 - `npm run tauri build` produces the app for the current platform; GitHub Actions builds Windows (installer, portable, MSIX), macOS (universal `.dmg`) and Linux (`.deb`, portable).
-- Releases come only from the *Bump & Release* and *Release* workflows. See [SECURITY.md](../SECURITY.md#how-ezreader-is-checked) and [GOVERNANCE.md](../GOVERNANCE.md#releases).
+- Releases come only from the *Bump & Release* and *Release* workflows. See [SECURITY.md](../.github/SECURITY.md#how-ezreader-is-checked) and [GOVERNANCE.md](../.github/GOVERNANCE.md#releases).
 
 ## Tests
 
@@ -59,7 +59,7 @@ A separate DLL (`ezreader_shell.dll`) that Explorer loads: a thumbnail provider 
 | Rust unit tests | `#[cfg(test)]` modules next to the code | `cargo test` |
 | Explorer add-in | `src-tauri/shell-ext/` | `cargo test --manifest-path src-tauri/shell-ext/Cargo.toml` (Windows) |
 | Hostile input and PDF corpus | `src-tauri/src/hostile_input_tests.rs`, `corpus_tests.rs` | `cargo test` |
-| End-to-end on the real app | `e2e/` | `npm run test:e2e` |
-| Visual regression | `visual/` | `npm run test:visual` |
-| Load test | `perf/` | `npm run test:perf` |
+| End-to-end on the real app | `tests/e2e/` | `npm run test:e2e` |
+| Visual regression | `tests/visual/` | `npm run test:visual` |
+| Load test | `tests/perf/` | `npm run test:perf` |
 | Fuzzing | `src-tauri/fuzz/` | `cargo fuzz run <target>` |

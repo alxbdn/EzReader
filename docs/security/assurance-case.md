@@ -68,15 +68,15 @@ flowchart LR
 | Path traversal (CWE-22) | Grant allowlist on absolute, normalized paths. | `src-tauri/src/grants.rs` |
 | OS command injection (CWE-78) | External programs started with separate arguments, never a shell string. | `src-tauri/src/commands/shell.rs` |
 | Open redirect, dangerous URL schemes | Only `http`/`https` links with a host are opened. | `shell.rs` tests |
-| Uncontrolled resource use (CWE-400) | Fuzzing with memory and time limits (2 GB, 10 s per input); load test of a 1,500-page PDF on every pull request. | `perf/`, fuzz settings |
+| Uncontrolled resource use (CWE-400) | Fuzzing with memory and time limits (2 GB, 10 s per input); load test of a 1,500-page PDF on every pull request. | `tests/perf/`, fuzz settings |
 | Broken or weak crypto (CWE-327) | AES-256 (PDF revision 6) through lopdf; SHA-256 for updates; OS random generator. | `src-tauri/src/commands/security.rs` |
 | Hard-coded credentials (CWE-798) | None; CodeQL and GitHub secret scanning check it. | Security tab |
-| Insufficient verification of data authenticity (CWE-345) | Update digest check; signed SLSA provenance on every release. | [SECURITY.md](../../SECURITY.md) |
+| Insufficient verification of data authenticity (CWE-345) | Update digest check; signed SLSA provenance on every release. | [SECURITY.md](../../.github/SECURITY.md) |
 | Vulnerable dependencies (CWE-1395) | `npm audit`, `cargo deny`, Dependabot; a release is blocked if they fail. | Security workflow |
 
 ## Residual risks
 
-- Saved signatures are stored unencrypted in the webview's storage (planned: system keychain, see [ROADMAP.md](../../ROADMAP.md)).
+- Saved signatures are stored unencrypted in the webview's storage (planned: system keychain, see [ROADMAP.md](../../.github/ROADMAP.md)).
 - The Windows downloads from GitHub are not yet Authenticode-signed, and the macOS app is not notarized. Provenance lets users check them meanwhile.
 
 ## Keeping this case current

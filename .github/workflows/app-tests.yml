@@ -2,7 +2,7 @@ name: App tests
 
 # Three suites that run on every PR, in parallel with CI:
 #   - end-to-end: the real app (Rust + webview) driven through WebDriver;
-#   - visual regression: screenshots compared with visual/__screenshots__;
+#   - visual regression: screenshots compared with tests/visual/__screenshots__;
 #   - PDF corpus: varied PDFs opened, annotated and saved, then re-read by
 #     qpdf and pdf.js.
 # The install test runs before each release instead (install-test.yml).
@@ -78,7 +78,7 @@ jobs:
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: e2e-failures
-          path: e2e/results/
+          path: tests/e2e/results/
           if-no-files-found: ignore
 
   visual:
@@ -118,7 +118,7 @@ jobs:
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: visual-baselines
-          path: visual/__screenshots__/
+          path: tests/visual/__screenshots__/
 
       - name: Upload the differences
         if: failure()
@@ -126,8 +126,8 @@ jobs:
         with:
           name: visual-diff
           path: |
-            visual/report/
-            visual/results/
+            tests/visual/report/
+            tests/visual/results/
           if-no-files-found: ignore
 
   corpus:
