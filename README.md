@@ -84,11 +84,10 @@ Prefer to download? **[Get the latest release](https://github.com/alxbdn/EzReade
 |--------|------|------------|
 | **Windows** | `ezreader-<version>-win-x64-setup.exe` | Installer |
 | | `ezreader-portable-<version>-win-x64.exe` | Portable app: a single file you can run from anywhere |
-| **macOS** | `ezreader-<version>-macos-universal.dmg` | Disk image |
 | **Linux** | `ezreader_<version>_amd64.deb` | Package for Debian, Ubuntu and derivatives |
 | | `ezreader-portable-<version>-linux-x64` | Portable app: make it executable (`chmod +x`) and run it |
 
-The macOS app is not notarized by Apple: installed with Homebrew it opens straight away; from the disk image, right-click EzReader in Applications and choose **Open** the first time.
+The macOS disk image (`ezreader-<version>-macos-universal.dmg`) is published on the [Homebrew tap's releases](https://github.com/alxbdn/homebrew-ezreader/releases/latest), shortly after each EzReader release. The app is not notarized by Apple: installed with Homebrew it opens straight away; from the disk image, right-click EzReader in Applications and choose **Open** the first time.
 
 Each release also carries **[`ezreader-reports.zip`](https://github.com/alxbdn/EzReader/releases/latest/download/ezreader-reports.zip)**, which holds its security report, its performance report and the **software bills of materials** (CycloneDX) of its dependencies, and its signed **build provenance** ([SLSA](https://slsa.dev), `.intoto.jsonl`). To check that a download was built by this repository's release workflow, with the [GitHub CLI](https://cli.github.com):
 

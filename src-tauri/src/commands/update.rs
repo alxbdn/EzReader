@@ -5,6 +5,7 @@ use std::process::Command;
 use tauri::Manager;
 
 const LATEST_URL: &str = "https://api.github.com/repos/alxbdn/EzReader/releases/latest";
+const MAC_LATEST_URL: &str = "https://api.github.com/repos/alxbdn/homebrew-ezreader/releases/latest";
 const RELEASE_PAGE: &str = "https://github.com/alxbdn/EzReader/releases/latest";
 #[cfg(target_os = "windows")]
 const STORE_PAGE: &str = "ms-windows-store://pdp/?productid=9P9PVN4DRVS8";
@@ -169,9 +170,16 @@ fn curl_get(version: &str, max_secs: u32) -> Command {
     cmd
 }
 
-fn fetch_latest(version: &str) -> Result<Release, String> {
+fn latest_url(channel: Channel) -> &'static str {
+    match channel {
+        Channel::Dmg | Channel::Homebrew => MAC_LATEST_URL,
+        _ => LATEST_URL,
+    }
+}
+
+fn fetch_latest(channel: Channel, version: &str) -> Result<Release, String> {
     let out = curl_get(version, 15)
-        .args(["-H", "Accept: application/vnd.github+json", LATEST_URL])
+        .args(["-H", "Accept: application/vnd.github+json", latest_url(channel)])
         .output()
         .map_err(|e| format!("could not run curl ({e})"))?;
     if !out.status.success() {
@@ -211,14 +219,10 @@ fn digest_matches(bytes: &[u8], digest: Option<&str>) -> bool {
 pub async fn check_for_update(app: tauri::AppHandle) -> CmdResult<UpdateStatus> {
     let current = app.package_info().version.to_string();
     tauri::async_runtime::spawn_blocking(move || {
-        let latest = fetch_latest(&current)?;
+        let channel = detect_channel();
+        let latest = fetch_latest(channel, &current)?;
         let latest_v = latest.tag_name.trim_start_matches(['v', 'V']).to_string();
-        Ok(UpdateStatus {
-            up_to_date: !is_newer(&latest_v, &current),
-            latest: latest_v,
-            current,
-            channel: detect_channel(),
-        })
+        Ok(UpdateStatus { up_to_date: !is_newer(&latest_v, &current), latest: latest_v, current, channel })
     })
     .await
     .map_err(|e| e.to_string())?
@@ -252,7 +256,7 @@ fn run_update(channel: Channel, version: &str) -> CmdResult<UpdateOutcome> {
         return brew_upgrade();
     }
 
-    let release = fetch_latest(version)?;
+    let release = fetch_latest(channel, version)?;
     let windows = cfg!(target_os = "windows");
     let Some(asset) = pick_asset(&release.assets, channel, windows) else {
         return open_release_page();
@@ -416,6 +420,14 @@ mod tests {
         assert!(!is_newer("1.0", "1.0.0"));
         assert!(!is_newer("1.0.0", "1.1.0"));
         assert!(!is_newer("1.1.0-beta.1", "1.1.0"));
+    }
+
+    #[test]
+    fn macos_looks_for_updates_in_the_tap() {
+        assert_eq!(latest_url(Channel::Dmg), MAC_LATEST_URL);
+        assert_eq!(latest_url(Channel::Homebrew), MAC_LATEST_URL);
+        assert_eq!(latest_url(Channel::Installer), LATEST_URL);
+        assert_eq!(latest_url(Channel::Deb), LATEST_URL);
     }
 
     #[test]
