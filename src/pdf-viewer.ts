@@ -299,7 +299,8 @@ export class PdfPageView {
     rotation: number,
     formValues: Map<string, string>,
     onFormChange: (name: string, val: string) => void,
-    linkHandler?: LinkNavigationHandler
+    linkHandler?: LinkNavigationHandler,
+    onPainted?: () => void
   ): Promise<void> {
     if (this.rendering) return;
     this.rendering = true;
@@ -373,16 +374,19 @@ export class PdfPageView {
         viewport.height / scale,
         viewport
       );
+      // The sharp page is on screen: the next page can start drawing while
+      // this one lays out its words, links and fields.
+      onPainted?.();
 
       // Build overlay layers (text first — link layer scans text spans)
-      const hasText = await this.buildTextLayer(page, viewport);
+      const hasText = await this.buildTextLayer(page, viewport, stale);
       if (stale()) return;
       // A scan or a photo: read its words in the background, then lay them
       // over the picture so they can be selected like any text.
       if (!hasText && this.liveText) void this.addLiveText(page, viewport, stale);
-      await this.buildLinkLayer(page, viewport, linkHandler);
+      await this.buildLinkLayer(page, viewport, stale, linkHandler);
       if (stale()) return;
-      await this.buildFormLayer(page, viewport, formValues, onFormChange);
+      await this.buildFormLayer(page, viewport, stale, formValues, onFormChange);
       if (stale()) return;
 
       this._renderedScale = scale;
@@ -419,18 +423,22 @@ export class PdfPageView {
     this._renderedRotation = -1;
     this._renderedDpr = 0;
     this.rendered = false;
+    // The render it stopped can no longer finish: let the page be drawn again.
+    this.rendering = false;
   }
 
   // ── Text layer ──────────────────────────────────────────────────────────────
 
   /** Builds the text layer; false when the page has no real text (a scan). */
-  private async buildTextLayer(page: PDFPageProxy, viewport: PageViewport): Promise<boolean> {
+  private async buildTextLayer(page: PDFPageProxy, viewport: PageViewport, stale: () => boolean): Promise<boolean> {
     this.textLayer.innerHTML = "";
     this.textLayer.classList.remove("has-ocr");
     this.textLayer.style.width  = `${viewport.width}px`;
     this.textLayer.style.height = `${viewport.height}px`;
 
     const textContent = await page.getTextContent();
+    // Cleared or redrawn meanwhile: the newer render lays the words out.
+    if (stale()) return true;
     const fragment = document.createDocumentFragment();
     const measureCtx = document.createElement("canvas").getContext("2d")!;
     let lastFont = "";
@@ -548,6 +556,7 @@ export class PdfPageView {
   private async buildLinkLayer(
     page: PDFPageProxy,
     viewport: PageViewport,
+    stale: () => boolean,
     linkHandler?: LinkNavigationHandler
   ): Promise<void> {
     this.linkLayer.innerHTML = "";
@@ -678,6 +687,7 @@ export class PdfPageView {
     // Formal PDF link annotations
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const annotations: any[] = await (page as any).getAnnotations();
+    if (stale()) return;
     const addedUrls = new Set<string>();
 
     const normalizeViewportRect = ([x1, y1, x2, y2]: number[]): Rect | null => {
@@ -769,6 +779,7 @@ export class PdfPageView {
   private async buildFormLayer(
     page: PDFPageProxy,
     viewport: PageViewport,
+    stale: () => boolean,
     storedValues: Map<string, string>,
     onChange: (name: string, val: string) => void
   ): Promise<void> {
@@ -777,6 +788,7 @@ export class PdfPageView {
     this.formLayer.style.height = `${viewport.height}px`;
 
     const annotations = (await page.getAnnotations({ intent: "display" })) as WidgetData[];
+    if (stale()) return;
     const fieldEls: { el: HTMLElement; top: number }[] = [];
 
     for (const a of annotations) {
@@ -1032,7 +1044,7 @@ export class PdfViewer {
   // ── Layout (T011 + T018-T019) ────────────────────────────────────────────────
 
   buildLayout(): void {
-    this._previewScale = null;
+    this._clearPreview();
     this._pageOffsets = null;
     this._renderQueue.clear();
     this._updateRenderActivity();
@@ -1212,9 +1224,15 @@ export class PdfViewer {
 
   private _pumpRenderQueue(): void {
     const maxConcurrent = 2;
+    // While a zoom gesture runs, nothing is drawn: it would be drawn at the
+    // old scale and thrown away when the gesture ends. The queue waits.
+    if (this._previewScale !== null) { this._updateRenderActivity(); return; }
+    let screen: DOMRect | null = null;
     while (this._activeRenders < maxConcurrent && this._renderQueue.size > 0) {
-      // Pick the queued page closest to the currently focused page so the page
-      // right in front of the user is always drawn before off-screen neighbours.
+      // Pages actually on screen come first, then the queued page closest to
+      // the focused one, so what the user looks at is drawn before the
+      // neighbours just outside the view.
+      screen ??= this.scrollEl.getBoundingClientRect();
       let best: PdfPageView | null = null;
       let bestDist = Infinity;
       const focus = this._focusedPage;
@@ -1223,7 +1241,9 @@ export class PdfViewer {
           this._renderQueue.delete(pv);
           continue;
         }
-        const dist = Math.abs(pv.pageNum - focus);
+        const r = pv.wrapper.getBoundingClientRect();
+        const onScreen = r.bottom > screen.top && r.top < screen.bottom && r.right > screen.left && r.left < screen.right;
+        const dist = Math.abs(pv.pageNum - focus) + (onScreen ? 0 : 10_000);
         if (dist < bestDist) {
           bestDist = dist;
           best = pv;
@@ -1242,6 +1262,13 @@ export class PdfViewer {
     this._renderQueue.delete(pageView);
     this._activeRenders++;
     this._updateRenderActivity();
+    let released = false;
+    const release = () => {
+      if (released) return;
+      released = true;
+      this._activeRenders = Math.max(0, this._activeRenders - 1);
+      this._pumpRenderQueue();
+    };
     const expectedScale    = this._scale;
     const expectedRotation = this._rotation;
     try {
@@ -1251,7 +1278,8 @@ export class PdfViewer {
         expectedRotation,
         this._formValues,
         this._onFormChange,
-        this._linkHandler
+        this._linkHandler,
+        release
       );
       if (pageView.viewport) {
         const unitW = pageView.viewport.width / expectedScale;
@@ -1280,8 +1308,8 @@ export class PdfViewer {
         this._queueRender(pageView);
       }
     } finally {
-      this._activeRenders = Math.max(0, this._activeRenders - 1);
-      this._pumpRenderQueue();
+      release();
+      this._updateRenderActivity();
     }
   }
 
@@ -1448,23 +1476,67 @@ export class PdfViewer {
   previewScale(scale: number, anchor: { x: number; y: number }): void {
     if (!this.pdfDoc) return;
     const next = this.clampScale(scale);
-    const spot = this._spotAt(anchor);
-    this._previewScale = next;
-    const z = String(next / this._scale);
-    for (const row of Array.from(this.scrollEl.children) as HTMLElement[]) row.style.zoom = z;
-    if (spot) {
-      const r = this.pageViews[spot.page - 1]?.wrapper.getBoundingClientRect();
-      if (r) {
-        this.scrollEl.scrollLeft += r.left + spot.fx * r.width - anchor.x;
-        this.scrollEl.scrollTop  += r.top  + spot.fy * r.height - anchor.y;
+    const el = this.scrollEl;
+    let p = this._preview;
+    if (this._previewScale === null || !p) {
+      // The gesture starts: stop drawing at the old scale (each page keeps
+      // the bitmap it has), so the whole machine goes to the gesture.
+      this._renderQueue.clear();
+      for (const view of this.pageViews) view.cancelRender();
+      // The rows are scaled with a CSS transform, which moves pixels without
+      // laying the document out again (CSS zoom restyled and re-laid out
+      // every page at each wheel step). A 1 px marker holds the scroll range
+      // where it is, so shrinking rows cannot pull the view back.
+      const rows = (Array.from(el.children) as HTMLElement[]).filter((r) => r.classList.contains("page-row"));
+      const marker = document.createElement("div");
+      marker.className = "zoom-preview-marker";
+      marker.style.cssText = `position:absolute;width:1px;height:1px;left:${el.scrollWidth - 1}px;top:${el.scrollHeight - 1}px;pointer-events:none;visibility:hidden`;
+      el.appendChild(marker);
+      // The widest row of pages, without the room around it.
+      let widest = 0;
+      for (const r of rows) {
+        const pages = Array.from(r.children) as HTMLElement[];
+        if (pages.length === 0) continue;
+        widest = Math.max(widest, pages[pages.length - 1].offsetLeft + pages[pages.length - 1].offsetWidth - pages[0].offsetLeft);
       }
+      p = this._preview = { rows: rows.map((r) => ({ el: r, x: r.offsetLeft, y: r.offsetTop })), marker, widest, tx: 0, ty: 0, z: 1 };
+      for (const r of rows) r.style.transformOrigin = "0 0";
+    }
+    this._previewScale = next;
+    // Screen = t + z × layout position (in scrolled-content pixels). The
+    // content point under the anchor stays under it.
+    const er = el.getBoundingClientRect();
+    // Pages narrower than the view sit in its middle once redrawn: then they
+    // grow or shrink from the middle, so nothing slides sideways at the end.
+    const z = next / this._scale;
+    const ax = this._scrollMode !== "horizontal" && p.widest * z + 40 <= el.clientWidth ? er.left + el.clientLeft + el.clientWidth / 2 : anchor.x;
+    const sx = el.scrollLeft + ax - er.left - el.clientLeft;
+    const sy = el.scrollTop  + anchor.y - er.top  - el.clientTop;
+    const cx = (sx - p.tx) / p.z;
+    const cy = (sy - p.ty) / p.z;
+    p.tx = sx - z * cx;
+    p.ty = sy - z * cy;
+    p.z = z;
+    for (const r of p.rows) {
+      r.el.style.transform = `translate(${p.tx + (z - 1) * r.x}px, ${p.ty + (z - 1) * r.y}px) scale(${z})`;
     }
   }
 
+  /** The rows scaled by a zoom gesture, and the scaling (see previewScale). */
+  private _preview: {
+    rows: { el: HTMLElement; x: number; y: number }[];
+    marker: HTMLElement;
+    widest: number;
+    tx: number; ty: number; z: number;
+  } | null = null;
+
   private _clearPreview(): void {
-    if (this._previewScale === null) return;
     this._previewScale = null;
-    for (const row of Array.from(this.scrollEl.children) as HTMLElement[]) row.style.zoom = "";
+    const p = this._preview;
+    if (!p) return;
+    this._preview = null;
+    for (const r of p.rows) { r.el.style.transform = ""; r.el.style.transformOrigin = ""; }
+    p.marker.remove();
   }
 
   /** The page under a screen point and where on it (0–1), or the nearest page. */

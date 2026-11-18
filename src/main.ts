@@ -2680,22 +2680,45 @@ document.getElementById("viewer-scroll")!.addEventListener("wheel", async (e: Wh
   // Smooth zoom around the mouse: while the wheel turns, the pages already
   // drawn are only stretched; they are redrawn sharp once it stops.
   const px = e.deltaMode === 1 ? e.deltaY * 40 : e.deltaMode === 2 ? e.deltaY * 400 : e.deltaY;
-  const factor = Math.min(1.25, Math.max(0.8, Math.exp(-px * 0.0015)));
-  const anchor = { x: e.clientX, y: e.clientY };
-  const target = viewer.clampScale(viewer.shownScale * factor);
+  wheelZoom.factor *= Math.min(1.25, Math.max(0.8, Math.exp(-px * 0.0015)));
+  wheelZoom.anchor = { x: e.clientX, y: e.clientY };
+  // A touchpad pinch sends a steady stream of small steps and stops when the
+  // fingers do; a mouse wheel sends big notches with gaps between them.
+  wheelZoom.settleMs = Math.abs(px) < 50 ? WHEEL_ZOOM_SETTLE_SMOOTH_MS : WHEEL_ZOOM_SETTLE_NOTCH_MS;
   if (fitMode !== "none") { fitMode = "none"; toolbar.updateFitMode(fitMode); }
-  viewer.previewScale(target, anchor);
-  toolbar.updateZoom(target);
-  if (wheelZoomTimer) clearTimeout(wheelZoomTimer);
-  wheelZoomTimer = setTimeout(async () => {
-    wheelZoomTimer = null;
-    await viewer.setScale(viewer.shownScale, anchor);
-    toolbar.updateZoom(viewer.scale);
-  }, 200);
+  // Many wheel events can come in one frame: stretch the pages once per frame.
+  if (!wheelZoom.raf) wheelZoom.raf = requestAnimationFrame(applyWheelZoom);
 }, { passive: false });
 
-/** Redraws the pages once the Ctrl+wheel zoom stops. */
-let wheelZoomTimer: ReturnType<typeof setTimeout> | null = null;
+/** Wait after the last pinch step (touchpad) before the pages are redrawn sharp. */
+const WHEEL_ZOOM_SETTLE_SMOOTH_MS = 80;
+/** Wait after the last wheel notch (mouse) before the pages are redrawn sharp. */
+const WHEEL_ZOOM_SETTLE_NOTCH_MS = 130;
+
+/** The Ctrl+wheel zoom in progress: steps not yet shown, and the redraw timer. */
+const wheelZoom = {
+  factor: 1,
+  anchor: { x: 0, y: 0 },
+  settleMs: WHEEL_ZOOM_SETTLE_NOTCH_MS,
+  raf: 0,
+  timer: null as ReturnType<typeof setTimeout> | null,
+};
+
+function applyWheelZoom(): void {
+  wheelZoom.raf = 0;
+  if (!viewer.isLoaded()) { wheelZoom.factor = 1; return; }
+  const anchor = wheelZoom.anchor;
+  const target = viewer.clampScale(viewer.shownScale * wheelZoom.factor);
+  wheelZoom.factor = 1;
+  viewer.previewScale(target, anchor);
+  toolbar.updateZoom(target);
+  if (wheelZoom.timer) clearTimeout(wheelZoom.timer);
+  wheelZoom.timer = setTimeout(async () => {
+    wheelZoom.timer = null;
+    await viewer.setScale(viewer.shownScale, anchor);
+    toolbar.updateZoom(viewer.scale);
+  }, wheelZoom.settleMs);
+}
 
 /** The middle of the page area: buttons and keys zoom around it. */
 function viewerCenter(): { x: number; y: number } {
