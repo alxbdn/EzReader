@@ -4,9 +4,6 @@
     "beforeBuildCommand": "npm run build && npm run build:shell-ext"
   },
   "bundle": {
-    "resources": {
-      "shell-ext/target/release/ezreader_shell.dll": "ezreader_shell.dll"
-    },
     "windows": {
       "nsis": {
         "installerHooks": "windows/installer-hooks.nsh"

@@ -6,6 +6,9 @@
 ; shell-ext/src/lib.rs and AppxManifest.xml.
 
 !define EZ_SHELL_DLL "ezreader_shell.dll"
+; Built by `npm run build:shell-ext` (part of the Windows beforeBuildCommand).
+; Not a Tauri resource: Tauri would then require the DLL for every cargo build.
+!define EZ_SHELL_DLL_SOURCE "${__FILEDIR__}\..\shell-ext\target\release\ezreader_shell.dll"
 !define EZ_THUMB_CLSID "{5AE37068-61BA-478F-9D24-EA58E7C1EBF6}"
 !define EZ_PREVIEW_CLSID "{202348CF-BD0B-4EB3-91B2-C87E74F2FD32}"
 ; Explorer's slots for a file type's thumbnail provider and preview handler.
@@ -31,6 +34,8 @@
 !macroend
 
 !macro NSIS_HOOK_POSTINSTALL
+  SetOutPath $INSTDIR
+  File "${EZ_SHELL_DLL_SOURCE}"
   ${If} ${FileExists} "$INSTDIR\${EZ_SHELL_DLL}"
     ; Class ids live in the 64-bit view (the installer itself is 32-bit).
     SetRegView 64
