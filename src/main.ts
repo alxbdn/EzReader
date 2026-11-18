@@ -659,28 +659,52 @@ settingsModal.onChange(s => {
   } catch {
     // Not running in Tauri (browser preview)
   }
+  // The window shows nothing until it is known whether a document opens
+  // (index.html starts #app as "booting"): the launcher appears only when
+  // there is none, and a document shows once it fits its window.
+  const app = document.getElementById("app")!;
+  const reveal = () => app.classList.remove("booting");
   try {
     const startup = await getStartupArgs();
-    if (startup.filePath) {
-      if (startup.shouldPrint) {
-        autoFitWindow = false;
-        document.getElementById("toolbar-container")!.style.display = "none";
-        document.getElementById("welcome-screen")!.classList.add("hidden");
-        await loadPdf(startup.filePath);
-        const all = Array.from({ length: viewer.pageCount }, (_, i) => i + 1);
-        await printPages(await renderForPrint(all));
-        await appWindow.close();
-      } else if (openKind(startup.filePath) === "pictures") {
-        await openPictures([startup.filePath]);
-      } else {
-        // Pages or a tab dragged out of another window, or a file to open.
-        await openTransferred(startup);
+    if (!startup.filePath) {
+      reveal();
+    } else {
+      setWelcomeVisible(false);
+      // A slow document: the viewer shows while it loads.
+      const slow = setTimeout(reveal, 1500);
+      try {
+        await openStartupFile(startup);
+      } finally {
+        clearTimeout(slow);
+        // The document could not be opened: the launcher, not an empty viewer.
+        if (!session.isOpen) setWelcomeVisible(true);
+        reveal();
       }
     }
   } catch {
     // Not running in Tauri (browser preview) — skip
+    reveal();
   }
 })();
+
+/** Opens the document the app was started with (command line, Finder). */
+async function openStartupFile(startup: StartupArgs): Promise<void> {
+  const file = startup.filePath!;
+  if (startup.shouldPrint) {
+    autoFitWindow = false;
+    document.getElementById("toolbar-container")!.style.display = "none";
+    await loadPdf(file);
+    document.getElementById("app")!.classList.remove("booting"); // the page shows while it prints
+    const all = Array.from({ length: viewer.pageCount }, (_, i) => i + 1);
+    await printPages(await renderForPrint(all));
+    await appWindow.close();
+  } else if (openKind(file) === "pictures") {
+    await openPictures([file]);
+  } else {
+    // Pages or a tab dragged out of another window, or a file to open.
+    await openTransferred(startup);
+  }
+}
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 

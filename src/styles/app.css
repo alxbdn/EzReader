@@ -1919,6 +1919,13 @@ input[type="color"].color-picker.is-off::-webkit-color-swatch {
   display: none;
 }
 
+/* Until the page knows whether it was started with a document (see the
+   startup handling in main.ts), it shows nothing: a PDF opened while the app
+   was closed goes straight to the viewer, never through the launcher. */
+#app.booting {
+  visibility: hidden;
+}
+
 #app:has(#welcome-screen:not(.hidden)) #viewer-scroll {
   display: none;
 }
