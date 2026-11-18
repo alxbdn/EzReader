@@ -215,6 +215,7 @@ export interface Translations {
   ttRealSize?: string;
   ttPages1?: string;
   ttPages2?: string;
+  ttPages2Even?: string;
   ttPages3?: string;
   ttScrollVertical?: string;
   ttScrollHorizontal?: string;
@@ -269,6 +270,8 @@ export interface Translations {
   sbExportHint?: string;
   sbDelete?: string;
   sbDeleteHint?: string;
+  sbOutlineHint?: string;
+  sbOutlineEmpty?: string;
   sbSelectedOne?: string;
   sbSelectedMany?: string;
   msgPagesDeleted?: string;
@@ -801,7 +804,8 @@ const EN: Translations = {
   ttResetZoom:          "Reset zoom to default (Ctrl+0)",
   ttRealSize:           "Actual size (1:1)",
   ttPages1:             "One page per row",
-  ttPages2:             "Two pages per row",
+  ttPages2:             "Two pages (odd on left)",
+  ttPages2Even:         "Two pages (even on left)",
   ttPages3:             "Three pages per row",
   ttScrollVertical:     "Scroll vertically",
   ttScrollHorizontal:   "Scroll horizontally",
@@ -855,6 +859,8 @@ const EN: Translations = {
   sbExportHint: "Save the selected pages as a new PDF",
   sbDelete: "Delete",
   sbDeleteHint: "Delete the selected pages",
+  sbOutlineHint: "Document structure",
+  sbOutlineEmpty: "No document structure",
   sbSelectedOne: "1 page selected",
   sbSelectedMany: "{n} pages selected",
   msgPagesDeleted: "{n} page(s) deleted",
@@ -1380,7 +1386,8 @@ const FR: Translations = {
   ttResetZoom:          "Revenir au zoom par défaut (Ctrl+0)",
   ttRealSize:           "Taille réelle (1:1)",
   ttPages1:             "1 page par ligne",
-  ttPages2:             "2 pages par ligne",
+  ttPages2:             "Doubles pages, impaires à gauche",
+  ttPages2Even:         "Doubles pages, paires à gauche",
   ttPages3:             "3 pages par ligne",
   ttScrollVertical:     "Défilement vertical",
   ttScrollHorizontal:   "Défilement horizontal",
@@ -1434,6 +1441,8 @@ const FR: Translations = {
   sbExportHint: "Enregistrer les pages sélectionnées dans un nouveau PDF",
   sbDelete: "Supprimer",
   sbDeleteHint: "Supprimer les pages sélectionnées",
+  sbOutlineHint: "Structure du document",
+  sbOutlineEmpty: "Aucune structure dans ce document",
   sbSelectedOne: "1 page sélectionnée",
   sbSelectedMany: "{n} pages sélectionnées",
   msgPagesDeleted: "{n} page(s) supprimée(s)",

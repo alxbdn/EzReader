@@ -37,6 +37,7 @@ import { ToolSelection } from "./tool-selection";
 import {
   type Annotation,
   type FormFieldValue,
+  type HighlightAnnotation,
   type TextAnnotation,
   type FontFamilyValue,
   type RgbColor,
@@ -132,8 +133,9 @@ let fitMode: "none" | "fit-width" | "fit-height" | "fit-page" = "none";
 let pendingSignature: string | null = null;
 /** The pen strokes of the pending signature, when it was drawn. */
 let pendingSignatureVector: InkVector | undefined;
-let editingTextAnn:  TextAnnotation | null = null;
-let editingShapeAnn: ShapeAnnotation | null = null;
+let editingTextAnn:      TextAnnotation | null = null;
+let editingShapeAnn:     ShapeAnnotation | null = null;
+let editingHighlightAnn: HighlightAnnotation | null = null;
 /** The selected drawn signature, whose ink the Sign options change. */
 let editingSignatureAnn: SignatureAnnotation | null = null;
 
@@ -163,9 +165,9 @@ const tabStrip = new TabStrip(document.getElementById("menubar-row")!, toolbar.t
   detach: (id, x, y) => void detachTab(id, x, y),
 });
 
-/** Annotations, undo / redo and the ✓ / ✕ gate for redactions. */
+/** Annotations and undo / redo. */
 const annotations: AnnotationSession = new AnnotationSession({
-  gateEnabled: () => toolbar.currentMode !== "read",
+  gateEnabled: () => false,
   isDirty: (): boolean => session.isDirty,
 });
 annotations.onChange(() => { setDirty(true); pageHistory.clearRedo(); });
@@ -263,6 +265,7 @@ function removeAnnotation(ann: Annotation): void {
   if (tools.selected === ann) tools.select(null);
   if (editingTextAnn === ann) { editingTextAnn = null; toolbar.hideTextStyles(); }
   if (editingShapeAnn === ann) { editingShapeAnn = null; toolbar.hideShapeStyles(); }
+  if (editingHighlightAnn === ann) { editingHighlightAnn = null; toolbar.hideHighlightStyles(); }
   annotations.remove(ann);
   viewer.pageViews.find((p) => p.pageNum === ann.page)?.overlay.redrawCommitted();
 }
@@ -520,8 +523,10 @@ function wirePageOverlay(pv: PdfPageView): void {
     editingTextAnn = ann;
     if (ann) {
       editingShapeAnn = null;
+      editingHighlightAnn = null;
       toolbar.showTextStyles(ann);
       toolbar.hideShapeStyles();
+      toolbar.hideHighlightStyles();
     } else {
       toolbar.hideTextStyles();
     }
@@ -531,17 +536,32 @@ function wirePageOverlay(pv: PdfPageView): void {
     editingShapeAnn = ann;
     if (ann) {
       editingTextAnn = null;
+      editingHighlightAnn = null;
       toolbar.showShapeStyles(ann, ann.kind === "ink" && !ann.arrow ? "pencil" : "shapes");
       toolbar.hideTextStyles();
+      toolbar.hideHighlightStyles();
     } else {
       toolbar.hideShapeStyles();
+    }
+  });
+
+  ov.onHighlightAnnotationSelected((ann: HighlightAnnotation | null) => {
+    editingHighlightAnn = ann;
+    if (ann) {
+      editingTextAnn = null;
+      editingShapeAnn = null;
+      toolbar.showHighlightStyles(ann);
+      toolbar.hideTextStyles();
+      toolbar.hideShapeStyles();
+    } else {
+      toolbar.hideHighlightStyles();
     }
   });
 }
 
 const wiredOverlays = new WeakSet<object>();
 viewer.onLayoutChanged((pageViews) => {
-  toolbar.updateLayout(viewer.forcedColumns, viewer.scrollMode, viewer.columnCount);
+  toolbar.updateLayout(viewer.forcedColumns, viewer.scrollMode, viewer.columnCount, viewer.evenSpread);
   for (const pv of pageViews) {
     if (!wiredOverlays.has(pv.overlay)) {
       wirePageOverlay(pv);
@@ -687,8 +707,10 @@ function setDirty(val: boolean): void {
 function dropStaleSelection(): void {
   editingTextAnn = null;
   editingShapeAnn = null;
+  editingHighlightAnn = null;
   toolbar.hideTextStyles();
   toolbar.hideShapeStyles();
+  toolbar.hideHighlightStyles();
 }
 
 /**
@@ -1534,7 +1556,6 @@ function openAdjust(kind: "crop" | "straighten"): void {
   cancelSignaturePlacement();
   toolbar.search.close();
   appEl.classList.add("adjusting");
-  toolbar.setBlocker(() => adjustView.shake());
   adjustView.open(doc, pages, kind, viewer.rotation);
 }
 
@@ -1585,6 +1606,7 @@ async function applyAdjust(settings: PageSetting[]): Promise<boolean> {
 }
 
 pageSidebar.onGoTo((page, instant) => viewer.goToPage(page, instant ? "instant" : "smooth"));
+pageSidebar.onDestination((dest) => void viewer.goToDestination(dest));
 
 pageSidebar.onVisibilityChange((visible) => toolbar.updateSidebar(visible));
 toolbar.updateSidebar(pageSidebar.visible);
@@ -1757,6 +1779,10 @@ document.getElementById("welcome-open-btn")?.addEventListener("click", async () 
 // ── Toolbar events ────────────────────────────────────────────────────────────
 
 toolbar.on(async (e) => {
+  if (adjustView.isOpen) {
+    await adjustView.finish();
+    if (e.type === "adjust") return;
+  }
   switch (e.type) {
     case "open":
       await openFile();
@@ -1845,14 +1871,14 @@ toolbar.on(async (e) => {
       break;
 
     case "columns":
-      viewer.setColumns(e.n);
+      viewer.setColumns(e.n, e.even ?? false);
       if (e.n != null && viewer.scrollMode === "horizontal") viewer.setScrollMode("vertical");
-      toolbar.updateLayout(viewer.forcedColumns, viewer.scrollMode, viewer.columnCount);
+      toolbar.updateLayout(viewer.forcedColumns, viewer.scrollMode, viewer.columnCount, viewer.evenSpread);
       break;
 
     case "scroll-mode":
       viewer.setScrollMode(e.mode);
-      toolbar.updateLayout(viewer.forcedColumns, viewer.scrollMode, viewer.columnCount);
+      toolbar.updateLayout(viewer.forcedColumns, viewer.scrollMode, viewer.columnCount, viewer.evenSpread);
       break;
 
     case "info":
@@ -1911,8 +1937,9 @@ toolbar.on(async (e) => {
       document.getElementById("viewer-scroll")!.classList.toggle("etext-mode", e.tool === "etext");
       updateHandMode();
       for (const pv of viewer.pageViews) pv.overlay.setTool(e.tool);
-      editingTextAnn  = null;
-      editingShapeAnn = null;
+      editingTextAnn      = null;
+      editingShapeAnn     = null;
+      editingHighlightAnn = null;
       if (e.tool !== "signature") cancelSignaturePlacement();
       break;
 
@@ -1926,6 +1953,10 @@ toolbar.on(async (e) => {
       } else if (editingShapeAnn) {
         const pv = viewer.pageViews.find(p => p.pageNum === editingShapeAnn!.page);
         pv?.overlay.applyShapeAnnotationStyle(editingShapeAnn, e.style.shapeColor, e.style.strokeWidth, e.style.fillColor, e.style.opacity);
+        setDirty(true);
+      } else if (editingHighlightAnn) {
+        const pv = viewer.pageViews.find(p => p.pageNum === editingHighlightAnn!.page);
+        pv?.overlay.applyHighlightAnnotationStyle(editingHighlightAnn, e.style.highlightColor, e.style.highlightOpacity);
         setDirty(true);
       } else if (editingSignatureAnn && annotations.has(editingSignatureAnn)) {
         const ann = editingSignatureAnn;

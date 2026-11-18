@@ -1,7 +1,7 @@
 import type { PDFDocumentProxy } from "pdfjs-dist";
 import type { Translations } from "./i18n";
 import { contentBounds, warpToRect, type Pixels, type Point } from "./page-adjustment";
-import { ICON_CHECK, ICON_CROP, ICON_DISCARD, ICON_FLIP_H, ICON_FLIP_V, ICON_STRAIGHTEN } from "./icons";
+import { ICON_CROP, ICON_FLIP_H, ICON_FLIP_V, ICON_STRAIGHTEN } from "./icons";
 
 export type AdjustKind = "crop" | "straighten";
 
@@ -72,7 +72,6 @@ export class AdjustView {
   private flipHBtn: HTMLButtonElement;
   private autoBtn: HTMLButtonElement;
   private warpHint: HTMLElement;
-  private validate: HTMLElement;
   private list: HTMLElement;
   private listNote: HTMLElement;
   private stage: HTMLElement;
@@ -147,22 +146,7 @@ export class AdjustView {
     this.warpHint.className = "adj-hint";
     this.text(this.warpHint, "adjWarpHint", "Click a corner: an offset loupe opens so you can place it to the pixel. Arrow keys nudge it.");
 
-    const right = document.createElement("div");
-    right.className = "adj-right";
-    const vh = document.createElement("span");
-    vh.className = "adj-hint";
-    this.text(vh, "adjValidateHint", "Validate or discard");
-    this.validate = document.createElement("div");
-    this.validate.className = "tb-validate on";
-    const ok = this.button("validate-btn", ICON_CHECK, null, "", "ttValidate", "Validate (Enter)");
-    ok.addEventListener("click", () => void this.apply());
-    const no = this.button("discard-btn", ICON_DISCARD, null, "", "ttDiscard", "Discard (Esc)");
-    no.addEventListener("click", () => this.close());
-    this.validate.append(ok, no);
-    this.validate.addEventListener("animationend", () => this.validate.classList.remove("shake"));
-    right.append(vh, this.validate);
-
-    this.header.append(this.titleEl, seg, this.cropTools, this.warpHint, right);
+    this.header.append(this.titleEl, seg, this.cropTools, this.warpHint);
 
     const body = document.createElement("div");
     body.className = "adj-body";
@@ -220,12 +204,17 @@ export class AdjustView {
     this.onClose();
   }
 
-  /** Shakes ✓ / ✕: validate or discard before doing anything else. */
-  shake(): void {
-    this.validate.classList.remove("shake");
-    void this.validate.offsetWidth;
-    this.validate.classList.add("shake");
+  /** Automatically applies any crop/straighten adjustments and closes the adjust view. */
+  async finish(): Promise<void> {
+    if (!this.doc || this.busy) return;
+    if (this.settings.some(changesPage)) {
+      await this.apply();
+    } else {
+      this.close();
+    }
   }
+
+  shake(): void {}
 
   applyTranslations(t: Translations): void {
     this.t = t;
@@ -239,7 +228,10 @@ export class AdjustView {
   private get current(): PageSetting { return this.settings[this.index]; }
 
   private setMode(kind: AdjustKind): void {
-    if (this.current.mode === kind) return;
+    if (this.current.mode === kind) {
+      void this.finish();
+      return;
+    }
     this.current.mode = kind;
     this.corner = -1;
     this.syncHeader();
@@ -302,10 +294,10 @@ export class AdjustView {
     const a = document.activeElement as HTMLElement | null;
     if (a && (a.tagName === "INPUT" || a.tagName === "TEXTAREA" || a.isContentEditable)) return;
     const stop = () => { e.preventDefault(); e.stopImmediatePropagation(); };
-    if (e.key === "Enter") { stop(); void this.apply(); return; }
+    if (e.key === "Enter") { stop(); void this.finish(); return; }
     if (e.key === "Escape") {
       stop();
-      if (this.corner >= 0) { this.corner = -1; this.syncWarp(); } else this.close();
+      if (this.corner >= 0) { this.corner = -1; this.syncWarp(); } else void this.finish();
       return;
     }
     if (this.corner >= 0 && e.key.startsWith("Arrow")) {

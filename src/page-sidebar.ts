@@ -15,7 +15,8 @@ const svg = (body: string, size = 12, stroke = 2.5): string =>
   `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="${stroke}" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${body}</svg>`;
 /** Rotate a quarter turn anticlockwise: open arc, with the arrowhead set apart from its tail. */
 const ICON_ROTATE_LEFT = `<svg width="15" height="15" viewBox="0 0 24 24" aria-hidden="true"><path d="M9.6 4.4A8 8 0 1 1 4.4 15.2" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/><path d="M2.2 3.6v6.6h6.6z" fill="currentColor"/></svg>`;
-const ICON_TRASH  = svg(`<path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6M10 11v6M14 11v6"/>`, 13, 2);
+const ICON_TRASH   = svg(`<path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6M10 11v6M14 11v6"/>`, 13, 2);
+const ICON_OUTLINE = svg(`<line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><circle cx="4" cy="6" r="1"/><circle cx="4" cy="12" r="1"/><circle cx="4" cy="18" r="1"/>`, 13, 2);
 const ICON_PLUS_LG = svg(`<path d="M12 5v14"/><path d="M5 12h14"/>`, 22, 2);
 const ICON_UP     = svg(`<path d="m18 15-6-6-6 6"/>`, 13, 2.5);
 const ICON_DOWN   = svg(`<path d="m6 9 6 6 6-6"/>`, 13, 2.5);
@@ -85,6 +86,7 @@ export class PageSidebar {
   private i18nText = new Map<HTMLElement, [keyof Translations, string]>();
   private i18nTitle = new Map<HTMLElement, [keyof Translations, string]>();
   private goToHandlers: ((page: number, instant: boolean) => void)[] = [];
+  private destHandlers: ((dest: unknown) => void)[] = [];
   private deleteHandlers: PagesHandler[] = [];
   private exportHandlers: PagesHandler[] = [];
   private rotateHandlers: ((pages: number[], quarterTurns: number) => void)[] = [];
@@ -101,7 +103,11 @@ export class PageSidebar {
   private selectAllBtn!: HTMLButtonElement;
   private selectAllLabel!: HTMLElement;
   private deleteBtn!: HTMLButtonElement;
-  private deleteLabel!: HTMLElement;
+  private outlineBtn!: HTMLButtonElement;
+  private outlineList!: HTMLElement;
+  private hintEl!: HTMLElement;
+  private outlineMode = false;
+  private outlineLoadedFor: PDFDocumentProxy | null = null;
   /** Page the arrows are heading to while held down (the viewer catches up). */
   private navTarget = 0;
   private holdTimer: ReturnType<typeof setTimeout> | null = null;
@@ -136,13 +142,18 @@ export class PageSidebar {
       else this.selectAll();
     });
     this.deleteBtn = document.createElement("button");
-    this.deleteBtn.className = "sb-pill sb-delete";
+    this.deleteBtn.className = "sb-pill sb-icon-pill sb-delete";
     this.deleteBtn.innerHTML = ICON_TRASH;
-    this.deleteLabel = document.createElement("span");
-    this.deleteBtn.append(this.deleteLabel);
     this.title(this.deleteBtn, "sbDeleteHint", "Delete the selected pages");
     this.deleteBtn.addEventListener("click", () => this.emitSelection(this.deleteHandlers));
-    pills.append(this.selectAllBtn, this.deleteBtn);
+
+    this.outlineBtn = document.createElement("button");
+    this.outlineBtn.className = "sb-pill sb-icon-pill sb-outline";
+    this.outlineBtn.innerHTML = ICON_OUTLINE;
+    this.title(this.outlineBtn, "sbOutlineHint", "Document structure");
+    this.outlineBtn.addEventListener("click", () => this.setOutlineMode(!this.outlineMode));
+
+    pills.append(this.selectAllBtn, this.deleteBtn, this.outlineBtn);
     header.append(titleRow, pills);
 
     // Thumbnails
@@ -168,8 +179,14 @@ export class PageSidebar {
     const hint = document.createElement("div");
     hint.className = "page-sidebar-hint";
     this.text(hint, "sbHint", "Drag pages to reorder them.");
+    this.hintEl = hint;
 
-    this.root.append(header, this.list, hint);
+    // Document structure / outline tree
+    this.outlineList = document.createElement("div");
+    this.outlineList.className = "page-sidebar-outline";
+    this.outlineList.hidden = true;
+
+    this.root.append(header, this.list, hint, this.outlineList);
 
     this.observer = new IntersectionObserver((entries) => this.onIntersect(entries), {
       root: this.list,
@@ -187,6 +204,8 @@ export class PageSidebar {
 
   /** Show `page` in the viewer; `instant` while an arrow is held down. */
   onGoTo(cb: (page: number, instant: boolean) => void): void { this.goToHandlers.push(cb); }
+  /** Navigate to a PDF destination from the structure tree. */
+  onDestination(cb: (dest: unknown) => void): void { this.destHandlers.push(cb); }
   /** Pages (1-based, ascending) to delete. */
   onDelete(cb: PagesHandler): void { this.deleteHandlers.push(cb); }
   /** Pages (1-based, ascending) to save as a new PDF. */
@@ -288,6 +307,7 @@ export class PageSidebar {
     for (const t of this.thumbs) this.observer.observe(t.card);
     // A reload of the same document (after an edit) keeps the panel where it was.
     this.list.scrollTop = scrollTop;
+    if (this.outlineMode) void this.ensureOutline();
     this.updateHeader();
   }
 
@@ -301,6 +321,8 @@ export class PageSidebar {
     for (const t of this.thumbs) t.task?.cancel();
     this.thumbs = [];
     this.list.replaceChildren();
+    this.outlineList.replaceChildren();
+    this.outlineLoadedFor = null;
     this.selected.clear();
     this.anchor = null;
     this.current = 0;
@@ -476,10 +498,176 @@ export class PageSidebar {
     this.selectAllLabel.textContent = all ? this.t("sbDeselectAll", "Deselect all") : this.t("sbSelectAll", "Select all");
     this.selectAllBtn.disabled = this.busy || this.thumbs.length === 0;
     const n = this.selected.size;
-    this.deleteLabel.textContent = n > 0
+    this.deleteBtn.title = n > 0
       ? fmt(this.t("sbDeleteCount", "Delete ({n})"), { n })
-      : this.t("sbDelete", "Delete");
+      : this.t("sbDeleteHint", "Delete the selected pages");
     this.deleteBtn.disabled = this.busy || n === 0;
+    this.outlineBtn.disabled = this.thumbs.length === 0;
+  }
+
+  private setOutlineMode(on: boolean): void {
+    this.outlineMode = on;
+    this.outlineBtn.classList.toggle("active", on);
+    this.outlineBtn.setAttribute("aria-pressed", String(on));
+    this.list.hidden = on;
+    this.hintEl.hidden = on;
+    this.outlineList.hidden = !on;
+    if (on) {
+      void this.ensureOutline();
+    } else {
+      this.scrollToCurrent();
+      this.pumpThumbs();
+    }
+  }
+
+  private async ensureOutline(): Promise<void> {
+    const doc = this.doc;
+    if (!doc) {
+      this.outlineList.replaceChildren(this.buildOutlineEmpty());
+      return;
+    }
+    if (this.outlineLoadedFor === doc) return;
+    this.outlineLoadedFor = doc;
+
+    type OutlineItem = { title?: string; dest?: unknown; page?: number; items?: OutlineItem[] };
+    let items: OutlineItem[] | null = null;
+    try {
+      items = (await doc.getOutline()) as OutlineItem[] | null;
+    } catch {
+      items = null;
+    }
+    if (doc !== this.doc) return;
+
+    if (!items || items.length === 0) {
+      items = await this.scanHeadingOutline(doc);
+      if (doc !== this.doc) return;
+    }
+
+    this.outlineList.replaceChildren();
+    if (!items || items.length === 0) {
+      this.outlineList.appendChild(this.buildOutlineEmpty());
+      return;
+    }
+
+    const renderNodes = (nodes: OutlineItem[], container: HTMLElement, depth: number): void => {
+      for (const node of nodes) {
+        const hasChildren = Array.isArray(node.items) && node.items.length > 0;
+        const wrap = document.createElement("div");
+        wrap.className = "sb-outline-node";
+
+        const row = document.createElement("div");
+        row.className = "sb-outline-row";
+        row.style.paddingLeft = `${6 + depth * 12}px`;
+
+        const toggle = document.createElement("button");
+        toggle.type = "button";
+        toggle.className = hasChildren ? "sb-outline-toggle" : "sb-outline-spacer";
+        if (hasChildren) {
+          toggle.textContent = "▾";
+        } else {
+          toggle.disabled = true;
+        }
+
+        const labelBtn = document.createElement("button");
+        labelBtn.type = "button";
+        labelBtn.className = "sb-outline-item";
+        labelBtn.textContent = (node.title ?? "").trim() || "—";
+        labelBtn.title = labelBtn.textContent;
+        labelBtn.addEventListener("click", () => {
+          if (typeof node.page === "number") {
+            for (const cb of this.goToHandlers) cb(node.page, false);
+          } else if (node.dest != null) {
+            for (const cb of this.destHandlers) cb(node.dest);
+          }
+        });
+
+        row.append(toggle, labelBtn);
+        wrap.appendChild(row);
+
+        if (hasChildren) {
+          const childrenEl = document.createElement("div");
+          childrenEl.className = "sb-outline-children";
+          renderNodes(node.items!, childrenEl, depth + 1);
+          wrap.appendChild(childrenEl);
+          toggle.addEventListener("click", (e) => {
+            e.stopPropagation();
+            const collapsed = childrenEl.classList.toggle("collapsed");
+            toggle.textContent = collapsed ? "▸" : "▾";
+          });
+        }
+        container.appendChild(wrap);
+      }
+    };
+
+    const frag = document.createDocumentFragment();
+    const rootWrap = document.createElement("div");
+    renderNodes(items, rootWrap, 0);
+    frag.appendChild(rootWrap);
+    this.outlineList.appendChild(frag);
+  }
+
+  private buildOutlineEmpty(): HTMLElement {
+    const empty = document.createElement("div");
+    empty.className = "sb-outline-empty";
+    empty.textContent = this.t("sbOutlineEmpty", "No structure found in this document");
+    return empty;
+  }
+
+  /** Fallback heading extractor when a PDF has no formal `/Outlines` bookmark tree. */
+  private async scanHeadingOutline(doc: PDFDocumentProxy): Promise<{ title: string; page: number }[]> {
+    const maxPages = Math.min(doc.numPages, 80);
+    const lines: { text: string; size: number; page: number }[] = [];
+    const sizes: number[] = [];
+
+    for (let p = 1; p <= maxPages; p++) {
+      if (doc !== this.doc) return [];
+      try {
+        const page = await doc.getPage(p);
+        const tc = await page.getTextContent();
+        let curY = NaN;
+        let curText = "";
+        let curSize = 0;
+        const flush = () => {
+          const t = curText.replace(/\s+/g, " ").trim();
+          if (t.length >= 3 && t.length <= 90 && /[A-Za-zÀ-ÿ]/.test(t)) {
+            lines.push({ text: t, size: curSize, page: p });
+            sizes.push(curSize);
+          }
+          curText = "";
+          curSize = 0;
+        };
+        for (const raw of tc.items) {
+          if (!("str" in raw) || !raw.str) continue;
+          const tr = raw.transform as number[];
+          const sz = Math.round(Math.hypot(tr[0] || 0, tr[1] || 0) * 10) / 10;
+          const y = Math.round(tr[5] || 0);
+          if (Number.isFinite(curY) && Math.abs(y - curY) > 3) flush();
+          curY = y;
+          curText += (curText && !curText.endsWith(" ") && !raw.str.startsWith(" ") ? " " : "") + raw.str;
+          if (sz > curSize) curSize = sz;
+        }
+        flush();
+      } catch {
+        // ignore page errors
+      }
+    }
+    if (sizes.length < 4) return [];
+    const sorted = [...sizes].sort((a, b) => a - b);
+    const bodySize = sorted[Math.floor(sorted.length * 0.5)] || 10;
+    const minHeading = bodySize * 1.18;
+    const seen = new Set<string>();
+    const result: { title: string; page: number }[] = [];
+    for (const l of lines) {
+      if (l.size >= minHeading) {
+        const key = `${l.page}:${l.text}`;
+        if (!seen.has(key)) {
+          seen.add(key);
+          result.push({ title: l.text, page: l.page });
+          if (result.length >= 120) break;
+        }
+      }
+    }
+    return result;
   }
 
   private allSelected(): boolean {

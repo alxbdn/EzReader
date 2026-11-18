@@ -70,6 +70,13 @@ describe("buildRows", () => {
   it("handles exactly matching page count for column count (4 pages, 2 columns)", () => {
     expect(buildRows(4, 2)).toEqual([[1, 2], [3, 4]]);
   });
+
+  it("places page 1 alone as cover and pairs even-left [2, 3], [4, 5] when evenSpread is true", () => {
+    expect(buildRows(5, 2, true)).toEqual([[1], [2, 3], [4, 5]]);
+    expect(buildRows(4, 2, true)).toEqual([[1], [2, 3], [4]]);
+    expect(buildRows(1, 2, true)).toEqual([[1]]);
+    expect(buildRows(0, 2, true)).toEqual([]);
+  });
 });
 
 describe("focusedPageAt", () => {

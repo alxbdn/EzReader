@@ -48,10 +48,18 @@ export function calculateColumnCount(
 
 /**
  * Group 1-indexed page numbers into rows of `columnCount`.
+ * When `columnCount === 2 && evenSpread`, page 1 sits alone on the first row
+ * (cover) and even pages sit on the left of each subsequent row ([2, 3], [4, 5]…).
  */
-export function buildRows(pageCount: number, columnCount: number): number[][] {
+export function buildRows(pageCount: number, columnCount: number, evenSpread = false): number[][] {
   const rows: number[][] = [];
-  for (let i = 0; i < pageCount; i += columnCount) {
+  if (pageCount <= 0) return rows;
+  let i = 0;
+  if (columnCount === 2 && evenSpread) {
+    rows.push([1]);
+    i = 1;
+  }
+  for (; i < pageCount; i += columnCount) {
     const row: number[] = [];
     for (let j = i; j < Math.min(i + columnCount, pageCount); j++) {
       row.push(j + 1);
@@ -824,6 +832,9 @@ export class PdfViewer {
   columnCount = 1;
   /** Pages per row chosen by the user, or null to fit as many as the width allows. */
   private _forcedColumns: number | null = null;
+  /** In 2-column mode, true puts page 1 alone and even pages on the left (2–3, 4–5). */
+  private _evenSpread = false;
+  private _shownEvenSpread = false;
   /** "horizontal" lays every page out in a single row that scrolls sideways. */
   private _scrollMode: "vertical" | "horizontal" = "vertical";
 
@@ -874,6 +885,7 @@ export class PdfViewer {
   get scale():       number   { return this._scale; }
   get rotation():    number   { return this._rotation; }
   get forcedColumns(): number | null { return this._forcedColumns; }
+  get evenSpread(): boolean { return this._evenSpread; }
   get scrollMode(): "vertical" | "horizontal" { return this._scrollMode; }
 
   /** Number of pages per row for the current settings. */
@@ -884,8 +896,9 @@ export class PdfViewer {
   }
 
   /** Shows `n` pages per row (null: as many as fit), then keeps the current page in view. */
-  setColumns(n: number | null): void {
+  setColumns(n: number | null, evenSpread = false): void {
     this._forcedColumns = n;
+    this._evenSpread = n === 2 && evenSpread;
     if (this.pdfDoc) this.reflow();
   }
 
@@ -1042,7 +1055,8 @@ export class PdfViewer {
     this.columnCount = this._columnsFor(containerWidth, refPageWidthPx);
 
     // Build rows (US2: T019)
-    const rows = buildRows(this._pageCount, this.columnCount);
+    this._shownEvenSpread = this.columnCount === 2 && this._evenSpread;
+    const rows = buildRows(this._pageCount, this.columnCount, this._shownEvenSpread);
     const frag = document.createDocumentFragment();
     for (const row of rows) {
       const rowEl = document.createElement("div");
@@ -1067,7 +1081,8 @@ export class PdfViewer {
 
   /** Re-groups existing `pageViews` into rows of `columnCount` without destroying their canvases. */
   private _regroupRows(columnCount: number): void {
-    const rows = buildRows(this._pageCount, columnCount);
+    this._shownEvenSpread = columnCount === 2 && this._evenSpread;
+    const rows = buildRows(this._pageCount, columnCount, this._shownEvenSpread);
     const frag = document.createDocumentFragment();
     for (const row of rows) {
       const rowEl = document.createElement("div");
@@ -1365,7 +1380,8 @@ export class PdfViewer {
    * scrolling back up to the top of the last page.
    */
   nextPage(): void {
-    const target = this._currentPage + this.columnCount;
+    const step = this.columnCount === 2 && this._shownEvenSpread && this._currentPage === 1 ? 1 : this.columnCount;
+    const target = this._currentPage + step;
     if (target <= this._pageCount) { this.goToPage(target); return; }
     const el = this.scrollEl;
     if (this._scrollMode === "horizontal") el.scrollTo({ left: el.scrollWidth, behavior: "smooth" });
@@ -1486,7 +1502,8 @@ export class PdfViewer {
       const containerWidth = Math.max(1, this.scrollEl.clientWidth - 40);
       const refW           = Math.max(...this.pageDimensions.map(d => swapped ? d.height : d.width)) * this._scale;
       const newCols        = this._columnsFor(containerWidth, refW);
-      const colsChanged    = newCols !== this.columnCount;
+      const nextEven       = newCols === 2 && this._evenSpread;
+      const colsChanged    = newCols !== this.columnCount || nextEven !== this._shownEvenSpread;
 
       if (colsChanged) {
         this.columnCount = newCols;

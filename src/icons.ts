@@ -68,8 +68,9 @@ export const ICON_CLOSE = lucide(`<path d="M18 6 6 18"/><path d="m6 6 12 12"/>`)
 export const ICON_FULLSCREEN = lucide(`<path d="M8 3H5a2 2 0 0 0-2 2v3"/><path d="M21 8V5a2 2 0 0 0-2-2h-3"/><path d="M3 16v3a2 2 0 0 0 2 2h3"/><path d="M16 21h3a2 2 0 0 0 2-2v-3"/>`);
 export const ICON_FULLSCREEN_EXIT = lucide(`<path d="M8 3v3a2 2 0 0 1-2 2H3"/><path d="M21 8h-3a2 2 0 0 1-2-2V3"/><path d="M3 16h3a2 2 0 0 1 2 2v3"/><path d="M16 21v-3a2 2 0 0 1 2-2h3"/>`);
 export const ICON_INFO = lucide(`<circle cx="12" cy="12" r="9"/><path d="M12 16v-4"/><path d="M12 8h.01"/>`);
-export const ICON_PAGES_1 = lucide(`<rect x="7" y="4" width="10" height="16" rx="1.5"/>`);
-export const ICON_PAGES_2 = lucide(`<rect x="2.5" y="5" width="8.5" height="14" rx="1.5"/><rect x="13" y="5" width="8.5" height="14" rx="1.5"/>`);
+export const ICON_PAGES_1 = lucide(`<rect x="6" y="3" width="12" height="18" rx="1.8"/><path d="M10.5 9.5 12 8v8M10 16h4" stroke-width="1.8"/>`);
+export const ICON_PAGES_2 = lucide(`<rect x="1.5" y="4" width="9.5" height="16" rx="1.5"/><rect x="13" y="4" width="9.5" height="16" rx="1.5"/><path d="M5.2 10 6.5 9v6M5.2 15h2.6" stroke-width="1.6"/><path d="M16.2 10.2c0-1 .8-1.5 1.7-1.5s1.6.6 1.6 1.4c0 .9-.7 1.5-3.3 3.9v1h3.5" stroke-width="1.6"/>`);
+export const ICON_PAGES_2_EVEN = lucide(`<rect x="1.5" y="4" width="9.5" height="16" rx="1.5"/><rect x="13" y="4" width="9.5" height="16" rx="1.5"/><path d="M4.6 10.2c0-1 .8-1.5 1.7-1.5s1.6.6 1.6 1.4c0 .9-.7 1.5-3.3 3.9v1H8" stroke-width="1.6"/><path d="M16.2 9.5c.3-.6.9-.8 1.6-.8.9 0 1.6.5 1.6 1.3 0 .7-.5 1.2-1.3 1.3.9.1 1.5.7 1.5 1.5 0 .9-.8 1.5-1.8 1.5-.8 0-1.4-.3-1.7-.9" stroke-width="1.6"/>`);
 export const ICON_PAGES_3 = lucide(`<rect x="1.5" y="6" width="6" height="12" rx="1"/><rect x="9" y="6" width="6" height="12" rx="1"/><rect x="16.5" y="6" width="6" height="12" rx="1"/>`);
 export const ICON_SCROLL_VERTICAL = lucide(`<rect x="7" y="2" width="10" height="8" rx="1"/><rect x="7" y="14" width="10" height="8" rx="1"/><path d="M12 10v4"/>`);
 export const ICON_SCROLL_HORIZONTAL = lucide(`<rect x="2" y="7" width="8" height="10" rx="1"/><rect x="14" y="7" width="8" height="10" rx="1"/><path d="M10 12h4"/>`);

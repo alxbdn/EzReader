@@ -19,6 +19,7 @@ import {
   ICON_EDIT_TEXT,
   ICON_PAGES_1,
   ICON_PAGES_2,
+  ICON_PAGES_2_EVEN,
   ICON_SIDEBAR,
   ICON_SAVE,
   ICON_UNDO,
@@ -57,7 +58,7 @@ export type ToolbarEvent =
   | { type: "zoom-set"; scale: number }
   | { type: "zoom-reset" }
   | { type: "zoom-real" }
-  | { type: "columns"; n: number | null }
+  | { type: "columns"; n: number | null; even?: boolean }
   | { type: "scroll-mode"; mode: "vertical" | "horizontal" }
   | { type: "info" }
   | { type: "fullscreen" }
@@ -152,9 +153,10 @@ export class Toolbar {
   /** Page brightness: a button that opens a slider. */
   readonly brightness = new BrightnessButton();
   private zoomInput!: HTMLInputElement;
-  /** One page / two pages per row: one button that shows the current layout. */
+  /** One page / two pages (odd left / even left): one button that cycles through the 3 layouts. */
   private pagesBtn!: HTMLButtonElement;
   private shownColumns = 1;
+  private shownEvenSpread = false;
   private infoBtn!: HTMLButtonElement;
   private sidebarBtn!: HTMLButtonElement;
   private saveBtn!: HTMLButtonElement;
@@ -278,17 +280,23 @@ export class Toolbar {
 
   /**
    * Shows the layout on the pages button: `columns` is the forced count (null:
-   * as many as fit), `shown` the number of pages per row on screen.
+   * as many as fit), `shown` the number of pages per row on screen, and `even`
+   * whether 2-page mode starts with even pages on the left ([2 | 3]).
    */
-  updateLayout(columns: number | null, mode: "vertical" | "horizontal", shown: number = columns ?? 1): void {
+  updateLayout(columns: number | null, mode: "vertical" | "horizontal", shown: number = columns ?? 1, even = false): void {
     this.shownColumns = mode === "vertical" && shown >= 2 ? 2 : 1;
-    const two = this.shownColumns === 2;
-    this.pagesBtn.innerHTML = two ? ICON_PAGES_2 : ICON_PAGES_1;
-    this.pagesBtn.dataset["cols"] = String(this.shownColumns);
-    // The tooltip says what a click does.
-    this._i18nTitle.set(this.pagesBtn, two ? "ttPages1" : "ttPages2");
-    this.pagesBtn.title = this._lastT?.[two ? "ttPages1" : "ttPages2"] ?? (two ? "One page per row" : "Two pages per row");
-    for (const n of [1, 2, 3]) this.setMark(`cols-${n}`, mode === "vertical" && columns === n);
+    this.shownEvenSpread = this.shownColumns === 2 && even;
+    const state = this.shownColumns === 1 ? "1" : this.shownEvenSpread ? "2-even" : "2-odd";
+    this.pagesBtn.innerHTML = state === "1" ? ICON_PAGES_1 : state === "2-odd" ? ICON_PAGES_2 : ICON_PAGES_2_EVEN;
+    this.pagesBtn.dataset["cols"] = state;
+    // The tooltip says what a click does next in the cycle: [1] -> [1|2] -> [2|3] -> [1].
+    const nextKey: keyof Translations = state === "1" ? "ttPages2" : state === "2-odd" ? "ttPages2Even" : "ttPages1";
+    const nextFb = state === "1" ? "Two pages (odd on left)" : state === "2-odd" ? "Two pages (even on left)" : "One page per row";
+    this._i18nTitle.set(this.pagesBtn, nextKey);
+    this.pagesBtn.title = this._lastT?.[nextKey] ?? nextFb;
+    this.setMark("cols-1", mode === "vertical" && columns === 1);
+    this.setMark("cols-2", mode === "vertical" && columns === 2 && !even);
+    this.setMark("cols-2-even", mode === "vertical" && columns === 2 && even);
     this.setMark("scroll-vertical", mode === "vertical");
     this.setMark("scroll-horizontal", mode === "horizontal");
   }
@@ -365,6 +373,9 @@ export class Toolbar {
 
   showSignatureStyles(color: RgbColor): void { this.tools.showSignatureStyles(color); }
   hideSignatureStyles(): void { this.tools.hideSignatureStyles(); }
+
+  showHighlightStyles(state: { color: RgbColor; opacity: number }): void { this.tools.showHighlightStyles(state); }
+  hideHighlightStyles(): void { this.tools.hideHighlightStyles(); }
 
   /** The options of the chosen tool (or selected annotation), for the studio panel. */
   get toolOptions(): HTMLElement { return this.tools.options; }
@@ -462,9 +473,9 @@ export class Toolbar {
           { label: "menuFitWidth", action: go({ type: "fit-width" }), requiresDoc: true },
           { label: "menuFitHeight", action: go({ type: "fit-height" }), requiresDoc: true },
           null,
-          { label: "ttPages1", action: go({ type: "columns", n: 1 }), requiresDoc: true, mark: { id: "cols-1", kind: "radio" } },
-          { label: "ttPages2", action: go({ type: "columns", n: 2 }), requiresDoc: true, mark: { id: "cols-2", kind: "radio" } },
-          { label: "menuPages3", action: go({ type: "columns", n: 3 }), requiresDoc: true, mark: { id: "cols-3", kind: "radio" } },
+          { label: "ttPages1", action: go({ type: "columns", n: 1, even: false }), requiresDoc: true, mark: { id: "cols-1", kind: "radio" } },
+          { label: "ttPages2", action: go({ type: "columns", n: 2, even: false }), requiresDoc: true, mark: { id: "cols-2", kind: "radio" } },
+          { label: "ttPages2Even", action: go({ type: "columns", n: 2, even: true }), requiresDoc: true, mark: { id: "cols-2-even", kind: "radio" } },
           null,
           { label: "ttScrollVertical", action: go({ type: "scroll-mode", mode: "vertical" }), requiresDoc: true, mark: { id: "scroll-vertical", kind: "radio" } },
           { label: "menuScrollHorizontal", action: go({ type: "scroll-mode", mode: "horizontal" }), requiresDoc: true, mark: { id: "scroll-horizontal", kind: "radio" } },
@@ -808,11 +819,19 @@ export class Toolbar {
     const brightnessSeg = this.segment(this.brightness.el);
     brightnessSeg.classList.add("tb-brightness");
 
-    // One button for one page / two pages per row: it shows the current
-    // layout, and a click switches to the other one.
-    this.pagesBtn = this.btn(ICON_PAGES_1, "Two pages per row", "icon-btn tb-pages");
+    // One button for [1] / [1 | 2] / [2 | 3]: shows the current layout icon
+    // and cycles to the next one on click.
+    this.pagesBtn = this.btn(ICON_PAGES_1, "Two pages (odd on left)", "icon-btn tb-pages");
     this.reg(this.pagesBtn, undefined, "ttPages2");
-    this.pagesBtn.addEventListener("click", () => this.emit({ type: "columns", n: this.shownColumns === 2 ? 1 : 2 }));
+    this.pagesBtn.addEventListener("click", () => {
+      if (this.shownColumns === 1) {
+        this.emit({ type: "columns", n: 2, even: false });
+      } else if (!this.shownEvenSpread) {
+        this.emit({ type: "columns", n: 2, even: true });
+      } else {
+        this.emit({ type: "columns", n: 1, even: false });
+      }
+    });
 
     // Read / Annotate / Edit
     // On a narrow window the names give way to icons (see fitMainRow).
@@ -924,7 +943,8 @@ export class Toolbar {
 
   /** Switches between reading, annotating and editing; any active tool is dropped. */
   setMode(mode: AppMode): void {
-    if (mode === this.mode || this.refusedReadOnly({ type: "mode-change", mode }) || !this.allowed()) return;
+    const adjusting = document.getElementById("app")?.classList.contains("adjusting") ?? false;
+    if ((mode === this.mode && !adjusting) || this.refusedReadOnly({ type: "mode-change", mode }) || !this.allowed()) return;
     this.mode = mode;
     this.tools.setMode(mode);
     this.syncModeBtns();
