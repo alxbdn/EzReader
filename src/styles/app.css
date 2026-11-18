@@ -3314,6 +3314,11 @@ body.fullscreen .window-controls { display: none; }
   justify-content: center;
 }
 .presentation-stage canvas { display: block; background: #fff; }
+/* Going full screen: plain black until the window has its final size, then
+   the page fades in once (src/presentation.ts, reveal()). */
+.presentation-stage { transition: opacity 0.18s ease-out; }
+.presentation.holding .presentation-stage { opacity: 0; transition: none; }
+.presentation.holding .presentation-bar { visibility: hidden; }
 .presentation-bar {
   position: absolute;
   left: 50%;
@@ -3356,7 +3361,7 @@ body.fullscreen .window-controls { display: none; }
 .presentation-btn:hover { background: #3f3f46; color: #fafafa; }
 .presentation-btn:disabled { opacity: 0.35; pointer-events: none; }
 @media (prefers-reduced-motion: reduce) {
-  .presentation-bar { transition: none; }
+  .presentation-bar, .presentation-stage { transition: none; }
 }
 
 /* ══ Studio panel (src/studio-panel.ts): tool options and annotations ═════ */

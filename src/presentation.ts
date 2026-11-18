@@ -49,6 +49,37 @@ const IDLE_MS = 2000;
 /** Wheel travel that turns one page, and the pause before the next turn. */
 const WHEEL_STEP = 40;
 const WHEEL_PAUSE_MS = 350;
+/**
+ * While the window goes full screen it can pass through several sizes
+ * (restored from maximized, then full screen, then stretched by hand on
+ * Windows 10). The first page is shown only once the size has held still
+ * this long, and never later than SETTLE_MAX_MS after the hold began.
+ */
+const SETTLE_QUIET_MS = 120;
+const SETTLE_MAX_MS = 1200;
+const SETTLE_POLL_MS = 30;
+
+/** Resolves once `measure()` has returned the same size for `quietMs` (or after `maxMs`). */
+export function waitForStableSize(
+  measure: () => { w: number; h: number },
+  quietMs = SETTLE_QUIET_MS,
+  maxMs = SETTLE_MAX_MS,
+  pollMs = SETTLE_POLL_MS,
+): Promise<{ w: number; h: number }> {
+  return new Promise((resolve) => {
+    const start = Date.now();
+    let last = measure();
+    let since = start;
+    const tick = () => {
+      const now = Date.now();
+      const cur = measure();
+      if (cur.w !== last.w || cur.h !== last.h) { last = cur; since = now; }
+      if (now - since >= quietMs || now - start >= maxMs) { resolve(cur); return; }
+      setTimeout(tick, pollMs);
+    };
+    setTimeout(tick, pollMs);
+  });
+}
 
 export class Presentation {
   readonly el: HTMLElement;
@@ -67,6 +98,8 @@ export class Presentation {
   private closed = false;
   /** Bumped on every page change so a slow render never replaces a newer page. */
   private showToken = 0;
+  /** True between open({ hold: true }) and reveal(): nothing is drawn yet. */
+  private holding = false;
 
   constructor(private host: PresentationHost, startPage: number, labels: PresentationLabels) {
     this.page = Math.min(Math.max(1, startPage), Math.max(1, host.pageCount));
@@ -116,12 +149,50 @@ export class Presentation {
 
   get currentPage(): number { return this.page; }
 
-  /** Puts the presentation on screen and shows the start page. */
-  open(): void {
+  /**
+   * Puts the presentation on screen and shows the start page. With `hold`,
+   * the screen stays plain black until reveal(): the caller is about to
+   * resize the window (full screen) and the page should appear once, at its
+   * final size, instead of jumping through every size on the way.
+   */
+  open(opts: { hold?: boolean } = {}): void {
+    this.holding = !!opts.hold;
+    this.el.classList.toggle("holding", this.holding);
     document.body.append(this.el);
     this.el.focus();
     this.wake();
-    void this.show();
+    if (!this.holding) void this.show();
+  }
+
+  /**
+   * Starts drawing the page at `w` × `h` before reveal() so it is ready
+   * when the window gets there (the screen size the window is heading to).
+   */
+  prefetch(w: number, h: number): void {
+    if (this.closed || w <= 0 || h <= 0) return;
+    void this.renderCached(this.page, Math.round(w), Math.round(h));
+  }
+
+  /**
+   * Ends the hold: waits for the window size to settle, draws the page once
+   * at that size, then fades it in.
+   */
+  async reveal(): Promise<void> {
+    if (!this.holding || this.closed) return;
+    await waitForStableSize(() => this.size());
+    if (this.closed) return;
+    await this.show();
+    if (this.closed) return;
+    this.holding = false;
+    // Next frame, so the canvas is laid out before the fade starts.
+    requestAnimationFrame(() => this.el.classList.remove("holding"));
+  }
+
+  private size(): { w: number; h: number } {
+    return {
+      w: this.el.clientWidth || window.innerWidth,
+      h: this.el.clientHeight || window.innerHeight,
+    };
   }
 
   /** Ends presenting; the host hears about it once. */
@@ -143,6 +214,8 @@ export class Presentation {
     const target = stepPage(this.page, this.host.pageCount, action);
     if (target === this.page) return;
     this.page = target;
+    // While holding, only the counter moves; reveal() draws the page.
+    if (this.holding) { this.counter.textContent = `${target} / ${this.host.pageCount}`; return; }
     void this.show();
   }
 
@@ -165,8 +238,7 @@ export class Presentation {
     this.prevBtn.disabled = n <= 1;
     this.nextBtn.disabled = n >= count;
 
-    const w = this.el.clientWidth || window.innerWidth;
-    const h = this.el.clientHeight || window.innerHeight;
+    const { w, h } = this.size();
     const canvas = await this.renderCached(n, w, h);
     if (token !== this.showToken || this.closed) return;
     if (canvas) this.stage.replaceChildren(canvas);
@@ -233,6 +305,8 @@ export class Presentation {
   };
 
   private onResize = (): void => {
+    // reveal() waits for the size to settle itself.
+    if (this.holding) return;
     if (this.resizeTimer) clearTimeout(this.resizeTimer);
     this.resizeTimer = setTimeout(() => { void this.show(); }, 120);
   };

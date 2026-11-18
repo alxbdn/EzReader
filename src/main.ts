@@ -2161,8 +2161,24 @@ async function startPresentation(): Promise<void> {
     next: t.ttPageNext,
     exit: t.ttPresentExit ?? "Stop presenting (Esc)",
   });
-  presentation.open();
-  if (!wasFullscreen) await toggleFullscreen(true);
+  const p = presentation;
+  if (wasFullscreen) { p.open(); return; }
+  // Black screen first, page later: going full screen moves and resizes the
+  // window a few times, and a page drawn at each step jumped around.
+  p.open({ hold: true });
+  try {
+    // Start drawing at the size the window is heading to (the monitor).
+    const monitor = await currentMonitor();
+    if (monitor) {
+      const s = monitor.scaleFactor || window.devicePixelRatio || 1;
+      p.prefetch(monitor.size.width / s, monitor.size.height / s);
+    }
+  } catch { /* browser preview: no monitor */ }
+  try {
+    await toggleFullscreen(true);
+  } finally {
+    await p.reveal();
+  }
 }
 
 // ── Keyboard shortcuts ────────────────────────────────────────────────────────
