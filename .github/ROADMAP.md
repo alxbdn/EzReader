@@ -4,7 +4,7 @@ What EzReader plans for the next twelve months, in rough order. Plans change; th
 
 ## Trust and security
 
-- **Signed Windows downloads**: Authenticode signing of the installer and portable app (SignPath Foundation), so Windows SmartScreen stops warning.
+- **Signed Windows downloads**: Authenticode signing of the installer and portable app, so Windows SmartScreen stops warning.
 - **Notarized macOS app**, so Gatekeeper opens it without a warning.
 - **Saved signatures in the system keychain** (Windows Credential Manager, macOS Keychain, Secret Service) instead of the webview's storage.
 - **Reproducible builds**: the same source gives the same bits, checked in CI.
