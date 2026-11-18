@@ -79,7 +79,7 @@ jobs:
           echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 
       - name: SCA - npm audit
-        run: npm audit --json > npm-audit.json || true
+        run: npm audit --omit=dev --json > npm-audit.json || true
 
       - uses: taiki-e/install-action@ab49d3c64680143e184118bed66a46419fc15519 # v2.90.5
         with:

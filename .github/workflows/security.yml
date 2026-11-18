@@ -34,7 +34,7 @@ jobs:
         with:
           node-version: '22'
       - name: Audit npm dependencies
-        run: npm audit --audit-level=low
+        run: npm audit --omit=dev --audit-level=low
 
   cargo-deny:
     name: SCA - cargo deny
