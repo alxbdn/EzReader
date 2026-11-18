@@ -2015,6 +2015,7 @@ kbd,
   cursor: pointer;
   transition: background-color 120ms ease, color 120ms ease;
 }
+.welcome-toggles { display: flex; align-items: center; gap: 4px; min-width: 0; }
 .welcome-default[hidden] { display: none; }
 .welcome-default:hover { background: var(--accent); color: var(--foreground); }
 .welcome-default:disabled { opacity: .5; pointer-events: none; }
@@ -2325,6 +2326,10 @@ kbd,
   flex-direction: column;
   gap: 10px;
 }
+
+.settings-section.hidden { display: none; }
+
+label.settings-row { cursor: pointer; }
 
 .settings-section + .settings-section {
   padding-top: 16px;

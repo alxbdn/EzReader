@@ -1,11 +1,15 @@
 pub mod layout;
 
 #[cfg(windows)]
-mod pdf;
+pub mod pdf;
 #[cfg(windows)]
 mod preview;
 #[cfg(windows)]
+pub mod quicklook;
+#[cfg(windows)]
 mod thumbnail;
+#[cfg(windows)]
+pub mod viewer;
 
 #[cfg(windows)]
 pub use com::*;
@@ -30,7 +34,12 @@ mod com {
     static LOCKS: AtomicUsize = AtomicUsize::new(0);
 
     pub(crate) fn module() -> HINSTANCE {
-        HINSTANCE(MODULE.load(Ordering::Relaxed) as *mut c_void)
+        match MODULE.load(Ordering::Relaxed) {
+            0 => unsafe { windows::Win32::System::LibraryLoader::GetModuleHandleW(None) }
+                .map(|m| HINSTANCE(m.0))
+                .unwrap_or_default(),
+            m => HINSTANCE(m as *mut c_void),
+        }
     }
 
     pub(crate) struct Alive;
@@ -117,7 +126,7 @@ mod com {
     #[no_mangle]
     extern "system" fn DllCanUnloadNow() -> HRESULT {
         if OBJECTS.load(Ordering::SeqCst) == 0 && LOCKS.load(Ordering::SeqCst) == 0 {
-            crate::preview::unregister_class();
+            crate::viewer::unregister_class();
             S_OK
         } else {
             S_FALSE

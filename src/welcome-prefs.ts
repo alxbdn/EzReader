@@ -9,6 +9,63 @@ export interface WelcomePrefsDeps {
   t(): Translations;
   isDefault(): Promise<boolean>;
   setDefault(on: boolean): Promise<void>;
+  quickLook?(): Promise<{ available: boolean; enabled: boolean }>;
+  setQuickLook?(on: boolean): Promise<void>;
+}
+
+class LauncherToggle {
+  readonly el: HTMLButtonElement;
+  private on = false;
+  private busy = false;
+
+  constructor(
+    private readonly read: () => Promise<boolean | null>,
+    private readonly write: (on: boolean) => Promise<void>,
+  ) {
+    this.el = document.createElement("button");
+    this.el.type = "button";
+    this.el.className = "welcome-default";
+    this.el.setAttribute("role", "checkbox");
+    this.el.setAttribute("aria-checked", "false");
+    this.el.hidden = true;
+    this.el.innerHTML = `<span class="welcome-default-box" aria-hidden="true">${ICON_CHECK}</span><span class="welcome-default-label"></span>`;
+    this.el.addEventListener("click", () => void this.toggle());
+  }
+
+  label(text: string, hint: string): void {
+    this.el.querySelector(".welcome-default-label")!.textContent = text;
+    this.el.title = hint;
+  }
+
+  async refresh(): Promise<void> {
+    try {
+      const on = await this.read();
+      if (on === null) {
+        this.el.hidden = true;
+        return;
+      }
+      this.on = on;
+      this.el.classList.toggle("on", on);
+      this.el.setAttribute("aria-checked", String(on));
+      this.el.hidden = false;
+    } catch {
+      this.el.hidden = true;
+    }
+  }
+
+  private async toggle(): Promise<void> {
+    if (this.busy) return;
+    this.busy = true;
+    this.el.disabled = true;
+    try {
+      await this.write(!this.on);
+    } catch {
+    } finally {
+      this.busy = false;
+      this.el.disabled = false;
+      await this.refresh();
+    }
+  }
 }
 
 export function menuLanguages(): { code: string; native: string }[] {
@@ -20,24 +77,24 @@ export function menuLanguages(): { code: string; native: string }[] {
 
 export class WelcomePrefs {
   readonly root: HTMLElement;
-  private readonly check: HTMLButtonElement;
+  private readonly check: LauncherToggle;
+  private readonly quick: LauncherToggle | null;
   private readonly langBtn: HTMLButtonElement;
   private readonly menu: HTMLElement;
-  private isDefault = false;
-  private busy = false;
 
   constructor(host: HTMLElement, private readonly deps: WelcomePrefsDeps) {
     this.root = document.createElement("div");
     this.root.className = "welcome-footer";
 
-    this.check = document.createElement("button");
-    this.check.type = "button";
-    this.check.className = "welcome-default";
-    this.check.setAttribute("role", "checkbox");
-    this.check.setAttribute("aria-checked", "false");
-    this.check.hidden = true;
-    this.check.innerHTML = `<span class="welcome-default-box" aria-hidden="true">${ICON_CHECK}</span><span class="welcome-default-label"></span>`;
-    this.check.addEventListener("click", () => void this.toggleDefault());
+    this.check = new LauncherToggle(() => deps.isDefault(), (on) => deps.setDefault(on));
+    const { quickLook, setQuickLook } = deps;
+    this.quick = quickLook && setQuickLook
+      ? new LauncherToggle(async () => {
+          const s = await quickLook();
+          return s.available ? s.enabled : null;
+        }, (on) => setQuickLook(on))
+      : null;
+    this.quick?.el.classList.add("welcome-quick-look");
 
     const wrap = document.createElement("div");
     wrap.className = "lang-picker";
@@ -55,7 +112,10 @@ export class WelcomePrefs {
     this.menu.addEventListener("keydown", (e) => this.onMenuKey(e));
 
     wrap.append(this.langBtn, this.menu);
-    this.root.append(this.check, wrap);
+    const toggles = document.createElement("div");
+    toggles.className = "welcome-toggles";
+    toggles.append(this.check.el, ...(this.quick ? [this.quick.el] : []));
+    this.root.append(toggles, wrap);
     host.appendChild(this.root);
 
     document.addEventListener("pointerdown", (e) => {
@@ -70,9 +130,11 @@ export class WelcomePrefs {
     const lang = this.deps.language();
     const current = LANGUAGES.find((l) => l.code === lang) ?? LANGUAGES[0]!;
 
-    const label = this.check.querySelector(".welcome-default-label")!;
-    label.textContent = t.welcomeDefaultReader ?? "Default PDF reader";
-    this.check.title = t.welcomeDefaultReaderHint ?? "Open PDF files with EzReader";
+    this.check.label(t.welcomeDefaultReader ?? "Default PDF reader", t.welcomeDefaultReaderHint ?? "Open PDF files with EzReader");
+    this.quick?.label(
+      t.welcomeQuickLook ?? "Quick look",
+      t.settingsQuickLookHint ?? "Select a PDF in File Explorer and press Space to preview it.",
+    );
 
     this.langBtn.innerHTML =
       `${flagMarkup(current.code)}<span class="lang-btn-name">${escapeHtml(current.native)}</span>` +
@@ -103,32 +165,7 @@ export class WelcomePrefs {
   }
 
   async refresh(): Promise<void> {
-    try {
-      this.setChecked(await this.deps.isDefault());
-      this.check.hidden = false;
-    } catch {
-      this.check.hidden = true;
-    }
-  }
-
-  private setChecked(on: boolean): void {
-    this.isDefault = on;
-    this.check.classList.toggle("on", on);
-    this.check.setAttribute("aria-checked", String(on));
-  }
-
-  private async toggleDefault(): Promise<void> {
-    if (this.busy) return;
-    this.busy = true;
-    this.check.disabled = true;
-    try {
-      await this.deps.setDefault(!this.isDefault);
-    } catch {
-    } finally {
-      this.busy = false;
-      this.check.disabled = false;
-      await this.refresh();
-    }
+    await Promise.all([this.check.refresh(), this.quick?.refresh()]);
   }
 
   private toggleMenu(): void {

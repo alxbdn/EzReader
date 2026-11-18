@@ -169,7 +169,8 @@ Extracted, split and rearranged files contain nothing from the pages you left ou
 - Page brightness, remembered between sessions
 - 20 interface languages, switched instantly: English, Français, 中文, हिन्दी, Español, العربية, বাংলা, Русский, Português, اردو, Bahasa Indonesia, Deutsch, 日本語, Kiswahili, मराठी, తెలుగు, Türkçe, தமிழ், Tiếng Việt, 한국어
 - On Windows, set EzReader as the default PDF viewer from Settings, no administrator rights needed
-- On Windows (setup and Store versions), File Explorer shows page 1 of each PDF as its icon, and the pages in the preview pane (Alt+P). [PowerToys Peek](https://learn.microsoft.com/windows/powertoys/peek) (Ctrl+Space) uses the same preview for a quick look, like Quick Look on macOS
+- On Windows (setup and Store versions), File Explorer shows page 1 of each PDF as its icon, and the pages in the preview pane (Alt+P)
+- Quick look, like on macOS: turn it on in Settings, then select a PDF in File Explorer and press Space to preview it (Windows setup and Store versions)
 - Print from the command line: `ezreader-portable.exe --print file.pdf`
 
 ---
@@ -208,7 +209,7 @@ npm run tauri dev      # run in development
 npm run tauri build    # build the release app
 ```
 
-The frontend lives in `src/`, the Rust backend in `src-tauri/`, and the Windows Explorer add-in (PDF thumbnails and preview pane) in `src-tauri/shell-ext/`. Before opening a pull request, run the checks that CI runs:
+The frontend lives in `src/`, the Rust backend in `src-tauri/`, and the Windows Explorer add-in (PDF thumbnails, preview pane and quick look) in `src-tauri/shell-ext/`. Before opening a pull request, run the checks that CI runs:
 
 ```bash
 npm run build

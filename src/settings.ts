@@ -4,6 +4,8 @@ import {
   unregisterPdfHandler,
   registerPrintVerb,
   openDefaultAppsSettings,
+  quickLookState,
+  setQuickLook,
 } from "./tauri-bridge";
 import { getTranslations } from "./i18n";
 import { LANGUAGES } from "./languages";
@@ -80,6 +82,7 @@ export class SettingsModal {
   open(): void {
     this.backdrop.classList.remove("hidden");
     void this.refreshDefaultBtn();
+    void this.refreshQuickLook();
   }
   close(): void { this.backdrop.classList.add("hidden"); }
 
@@ -138,6 +141,35 @@ export class SettingsModal {
     }
   }
 
+  private async refreshQuickLook(): Promise<void> {
+    const section = document.getElementById("settings-quick-look-section");
+    const box = document.getElementById("settings-quick-look") as HTMLInputElement | null;
+    if (!section || !box) return;
+    try {
+      const state = await quickLookState();
+      section.classList.toggle("hidden", !state.available);
+      box.checked = state.enabled;
+    } catch {
+      section.classList.add("hidden");
+    }
+  }
+
+  private async handleQuickLook(box: HTMLInputElement): Promise<void> {
+    const hint = document.getElementById("settings-quick-look-hint");
+    const t = getTranslations(this.settings.language);
+    box.disabled = true;
+    try {
+      await setQuickLook(box.checked);
+      if (hint) hint.textContent = t.settingsQuickLookHint ?? hint.textContent;
+    } catch (e) {
+      box.checked = !box.checked;
+      const blocked = e instanceof Error && e.message === "startup-blocked";
+      if (hint && blocked) hint.textContent = t.settingsQuickLookBlocked ?? hint.textContent;
+    } finally {
+      box.disabled = false;
+    }
+  }
+
   private bind(): void {
     document.getElementById("settings-close-btn")!
       .addEventListener("click", () => this.close());
@@ -183,6 +215,9 @@ export class SettingsModal {
       brightInput.addEventListener("input", () => this.showBrightness(Number(brightInput.value)));
       brightInput.addEventListener("change", () => this.set("pageBrightness", Number(brightInput.value)));
     }
+
+    const quickLook = document.getElementById("settings-quick-look") as HTMLInputElement | null;
+    quickLook?.addEventListener("change", () => void this.handleQuickLook(quickLook));
 
     const defaultBtn = document.getElementById("settings-default-btn") as HTMLButtonElement;
     defaultBtn?.addEventListener("click", () => void this.handleDefaultBtn());

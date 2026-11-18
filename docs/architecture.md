@@ -40,6 +40,8 @@ flowchart LR
 
 A separate DLL (`ezreader_shell.dll`) that Explorer loads: a thumbnail provider (page 1 of a PDF as its icon) and a preview handler (the pages in the preview pane, also used by PowerToys Peek). It draws pages with the PDF engine built into Windows (`Windows.Data.Pdf`), so nothing is bundled. `npm run build:shell-ext` builds it as part of the Windows build (`tauri.windows.conf.json`). The setup .exe registers it (`src-tauri/windows/installer-hooks.nsh`) and the Store package declares it (`AppxManifest.xml`); the portable .exe has no add-in.
 
+The same crate builds `ezreader-quicklook.exe`, the quick-look helper. Once turned on in Settings, it starts with Windows (a `Run` value for the setup version, a startup task for the Store version). A low-level keyboard hook on its own thread watches for Space only while File Explorer's file list has focus; the main thread then reads Explorer's selection (`IShellWindows`) and, for a PDF, opens a window that reuses the preview pane's page column. Any other selection gets its Space back. `ezreader-quicklook.exe --preview <file>` opens the window for one file, for testing.
+
 ## Data flow
 
 1. The user opens a file (dialog, drag and drop, command line). The back end records it in the grants and returns its bytes; PDF.js renders it.

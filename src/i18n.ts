@@ -51,6 +51,10 @@ export interface Translations {
   settingsDefaultApp?: string;
   settingsSetDefault?: string;
   settingsRemoveDefault?: string;
+  settingsExplorer?: string;
+  settingsQuickLook?: string;
+  settingsQuickLookHint?: string;
+  settingsQuickLookBlocked?: string;
   btnCompress: string;
   ttCompress: string;
   compressTitle: string;
@@ -142,6 +146,7 @@ export interface Translations {
   welcomeDropHint?: string;
   welcomeDefaultReader?: string;
   welcomeDefaultReaderHint?: string;
+  welcomeQuickLook?: string;
   updateUpToDateHint?: string;
   updateAvailable?: string;
   updateAvailableHint?: string;
@@ -679,6 +684,10 @@ const EN: Translations = {
   settingsDefaultApp:  "Default App",
   settingsSetDefault:  "Set as default PDF viewer",
   settingsRemoveDefault: "Remove as default",
+  settingsExplorer:    "File Explorer",
+  settingsQuickLook:   "Quick look with Space",
+  settingsQuickLookHint: "Select a PDF in File Explorer and press Space to preview it. A small helper starts with Windows.",
+  settingsQuickLookBlocked: "Windows blocked it. Turn on EzReader Quick Look in Task Manager \u203a Startup apps.",
   printTitle:          "Print",
   printCancel:         "Cancel",
   printPrinter:        "Printer",
@@ -722,6 +731,7 @@ const EN: Translations = {
   welcomeDropHint:          "Drop a file to begin",
   welcomeDefaultReader:     "Default PDF reader",
   welcomeDefaultReaderHint: "Open PDF files with EzReader",
+  welcomeQuickLook:         "Quick look with Space",
   updateUpToDateHint:  "Up to date: {v} is the latest version",
   updateAvailable:     "Update to {v}",
   updateAvailableHint: "Version {v} is out (you have {cur}). Click to install it.",
@@ -1259,6 +1269,10 @@ const FR: Translations = {
   settingsDefaultApp:  "Application par d\u00e9faut",
   settingsSetDefault:  "D\u00e9finir comme visionneuse PDF par d\u00e9faut",
   settingsRemoveDefault: "Retirer l\u2019association PDF",
+  settingsExplorer:    "Explorateur de fichiers",
+  settingsQuickLook:   "Aper\u00e7u rapide avec Espace",
+  settingsQuickLookHint: "S\u00e9lectionnez un PDF dans l\u2019Explorateur de fichiers et appuyez sur Espace pour l\u2019afficher. Un petit assistant d\u00e9marre avec Windows.",
+  settingsQuickLookBlocked: "Windows l\u2019a bloqu\u00e9. Activez EzReader Quick Look dans le Gestionnaire des t\u00e2ches \u203a Applications de d\u00e9marrage.",
   printTitle:          "Imprimer",
   printCancel:         "Annuler",
   printPrinter:        "Imprimante",
@@ -1302,6 +1316,7 @@ const FR: Translations = {
   welcomeDropHint:          "D\u00e9posez un fichier pour commencer",
   welcomeDefaultReader:     "Lecteur PDF par d\u00e9faut",
   welcomeDefaultReaderHint: "Ouvrir les fichiers PDF avec EzReader",
+  welcomeQuickLook:         "Aper\u00e7u avec Espace",
   updateUpToDateHint:  "\u00c0 jour : {v} est la derni\u00e8re version",
   updateAvailable:     "Mettre \u00e0 jour vers {v}",
   updateAvailableHint: "La version {v} est sortie (vous avez {cur}). Cliquez pour l'installer.",
