@@ -52,7 +52,7 @@ describe("planDelete", () => {
   it("drops the pages and stays on the page shown", () => {
     const plan = planDelete(5, [1, 2], 4)!;
     expect(pagesOf(plan.slots)).toEqual([3, 4, 5]);
-    expect(plan.keepPage).toBe(2); // page 4 is now page 2
+    expect(plan.keepPage).toBe(2);
     expect(plan.select).toEqual([]);
   });
 

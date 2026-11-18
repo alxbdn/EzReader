@@ -1,13 +1,10 @@
 ﻿import { isMac, macShortcuts } from "./platform";
-// ── Types ─────────────────────────────────────────────────────────────────────
 
 export interface Translations {
-  // Toolbar button labels
   btnOpen: string;
   btnSave: string;
   btnSaveAs: string;
   btnAnnotate: string;
-  // Toolbar tooltips
   ttOpen: string;
   ttSave: string;
   ttSaveAs: string;
@@ -36,7 +33,6 @@ export interface Translations {
   ttSendBack: string;
   ttTextColor: string;
   ttStrokeColor: string;
-  // Signature modal
   sigTitle: string;
   sigCancel: string;
   sigInsertImage: string;
@@ -44,7 +40,6 @@ export interface Translations {
   sigPlace: string;
   sigSaved: string;
   sigDelete: string;
-  // Settings modal
   settingsTitle: string;
   settingsClose: string;
   settingsInterface: string;
@@ -56,7 +51,6 @@ export interface Translations {
   settingsDefaultApp?: string;
   settingsSetDefault?: string;
   settingsRemoveDefault?: string;
-  // Compress modal
   btnCompress: string;
   ttCompress: string;
   compressTitle: string;
@@ -70,7 +64,6 @@ export interface Translations {
   compressApply: string;
   compressFlattenDesc: string;
   compressFlatten: string;
-  // Page manager
   ttPages: string;
   pmTitle: string;
   pmCancel: string;
@@ -88,7 +81,6 @@ export interface Translations {
   pmDragHint?: string;
   pmInsertFailed?: string;
   pmInsertEncrypted?: string;
-  // Split modal
   menuSplit?: string;
   splitTitle?: string;
   splitClose?: string;
@@ -106,7 +98,6 @@ export interface Translations {
   splitChooseFolder?: string;
   splitDoneToast?: string;
   splitFailedToast?: string;
-  // Print modal
   printTitle: string;
   printCancel: string;
   printPrinter: string;
@@ -124,9 +115,7 @@ export interface Translations {
   printActualSize: string;
   printCancelBtn: string;
   printConfirmBtn: string;
-  // Context menu
   ctxCopy: string;
-  // Menu bar
   menuFile: string;
   menuEdit: string;
   menuView: string;
@@ -148,7 +137,6 @@ export interface Translations {
   menuSignature: string;
   menuPrint: string;
   menuSettings: string;
-  // Welcome screen (optional — HTML carries English fallback)
   welcomeTagline?: string;
   welcomeOpen?: string;
   welcomeDropHint?: string;
@@ -172,7 +160,6 @@ export interface Translations {
   welcomeFeatProtect?: string;
   welcomeFeatResize?: string;
   welcomeFeatMerge?: string;
-  // Messages (toasts and dialogs; optional, English fallback)
   msgUnsavedTitle?: string;
   msgSaveBeforeClose?: string;
   msgSaveBeforeOpen?: string;
@@ -206,7 +193,6 @@ export interface Translations {
   msgPrintFailed?: string;
   msgPlaceSignature?: string;
   msgSignatureCancelled?: string;
-  // Toolbar shortcuts, redaction and default zoom (optional, English fallback)
   btnSign?: string;
   btnCompressShort?: string;
   btnRedact?: string;
@@ -259,7 +245,6 @@ export interface Translations {
   settingsZoomFitPage?: string;
   msgRedactTitle?: string;
   msgRedactConfirm?: string;
-  // Page thumbnails sidebar (optional, English fallback)
   menuPageSidebar?: string;
   ttPageSidebar?: string;
   sbTitle?: string;
@@ -297,7 +282,6 @@ export interface Translations {
   sbSearchNext?: string;
   sbSearchNone?: string;
   sbSearching?: string;
-  // Redesigned toolbar and pages panel (optional, English fallback)
   sbHint?: string;
   ttPageInput?: string;
   sbDeselectAll?: string;
@@ -323,9 +307,7 @@ export interface Translations {
   menuExtractPages?: string;
   menuSelectAllPages?: string;
   menuPages3?: string;
-  // Menu bar (reorganized)
   menuTools?: string;
-  /** The macOS Window menu. */
   menuWindow?: string;
   menuOpen?: string;
   menuSaveAs?: string;
@@ -345,7 +327,6 @@ export interface Translations {
   msgRenameFailed?: string;
   msgRenameExists?: string;
   msgRenameInvalid?: string;
-  // Annotate tools (optional, English fallback)
   toolText?: string;
   toolPencil?: string;
   toolShapes?: string;
@@ -426,7 +407,6 @@ export interface Translations {
   hintRedact?: string;
   hintPending?: string;
   hintPick?: string;
-  // Edit tools (optional, English fallback)
   colInkBlue?: string;
   toolEditText?: string;
   toolImage?: string;
@@ -447,7 +427,6 @@ export interface Translations {
   hintStamp?: string;
   msgImageFailed?: string;
   msgDropImageOnPage?: string;
-  // Crop / Straighten (optional, English fallback)
   toolCrop?: string;
   toolStraighten?: string;
   ttCropOff?: string;
@@ -478,7 +457,6 @@ export interface Translations {
   msgPageAdjusted?: string;
   msgPagesAdjusted?: string;
   msgAdjustFailed?: string;
-  // Export / Compress / Password (optional, English fallback)
   dlgClose?: string;
   dlgCancel?: string;
   expTitle?: string;
@@ -601,8 +579,6 @@ export interface Translations {
   ocrPageOf?: string;
   msgErrNoOcrLanguage?: string;
 }
-
-// ── English ───────────────────────────────────────────────────────────────────
 
 const EN: Translations = {
   btnOpen:           "Open",
@@ -1184,8 +1160,6 @@ const EN: Translations = {
   msgErrNoOcrLanguage: "Windows has no text recognition for this language. Add the language in Windows Settings › Time & language › Language & region.",
 };
 
-// ── French ────────────────────────────────────────────────────────────────────
-
 const FR: Translations = {
   btnOpen:           "Ouvrir",
   btnSave:           "Enregistrer",
@@ -1766,8 +1740,6 @@ const FR: Translations = {
   msgErrNoOcrLanguage: "Windows n'a pas de reconnaissance de texte pour cette langue. Ajoutez la langue dans Paramètres Windows › Heure et langue › Langue et région.",
 };
 
-// ── Chinese (Mandarin) ────────────────────────────────────────────────────────
-
 const ZH: Translations = {
   btnOpen:           "\u6253\u5f00",
   btnSave:           "\u4fdd\u5b58",
@@ -1876,8 +1848,6 @@ const ZH: Translations = {
   menuPrint:         "\u6253\u5370",
   menuSettings:      "\u8bbe\u7f6e",
 };
-
-// ── Hindi ─────────────────────────────────────────────────────────────────────
 
 const HI: Translations = {
   btnOpen:           "\u062e\u094b\u0932\u0947\u0902",
@@ -1988,8 +1958,6 @@ const HI: Translations = {
   menuSettings:      "\u0938\u0947\u091f\u093f\u0902\u0917\u094d\u0938",
 };
 
-// ── Spanish ───────────────────────────────────────────────────────────────────
-
 const ES: Translations = {
   btnOpen:           "Abrir",
   btnSave:           "Guardar",
@@ -2098,8 +2066,6 @@ const ES: Translations = {
   menuPrint:         "Imprimir",
   menuSettings:      "Configuraci\u00f3n",
 };
-
-// ── Arabic ────────────────────────────────────────────────────────────────────
 
 const AR: Translations = {
   btnOpen:           "\u0641\u062a\u062d",
@@ -2210,8 +2176,6 @@ const AR: Translations = {
   menuSettings:      "\u0627\u0644\u0625\u0639\u062f\u0627\u062f\u0627\u062a",
 };
 
-// ── Bengali ───────────────────────────────────────────────────────────────────
-
 const BN: Translations = {
   btnOpen:           "\u0996\u09c1\u09b2\u09c1\u09a8",
   btnSave:           "\u09b8\u0982\u09b0\u0995\u09cd\u09b7\u09a3 \u0995\u09b0\u09c1\u09a8",
@@ -2320,8 +2284,6 @@ const BN: Translations = {
   menuPrint:         "\u09ae\u09c1\u09a6\u09cd\u09b0\u09a3",
   menuSettings:      "\u09b8\u09c7\u099f\u09bf\u0982\u09b8",
 };
-
-// ── Russian ───────────────────────────────────────────────────────────────────
 
 const RU: Translations = {
   btnOpen:           "\u041e\u0442\u043a\u0440\u044b\u0442\u044c",
@@ -2432,8 +2394,6 @@ const RU: Translations = {
   menuSettings:      "\u041d\u0430\u0441\u0442\u0440\u043e\u0439\u043a\u0438",
 };
 
-// ── Portuguese ────────────────────────────────────────────────────────────────
-
 const PT: Translations = {
   btnOpen:           "Abrir",
   btnSave:           "Guardar",
@@ -2542,8 +2502,6 @@ const PT: Translations = {
   menuPrint:         "Imprimir",
   menuSettings:      "Defini\u00e7\u00f5es",
 };
-
-// ── Urdu ──────────────────────────────────────────────────────────────────────
 
 const UR: Translations = {
   btnOpen:           "\u06a9\u06be\u0648\u0644\u06cc\u06ba",
@@ -2654,8 +2612,6 @@ const UR: Translations = {
   menuSettings:      "\u062a\u0631\u062a\u06cc\u0628\u0627\u062a",
 };
 
-// ── Indonesian ────────────────────────────────────────────────────────────────
-
 const ID: Translations = {
   btnOpen:           "Buka",
   btnSave:           "Simpan",
@@ -2764,8 +2720,6 @@ const ID: Translations = {
   menuPrint:         "Cetak",
   menuSettings:      "Pengaturan",
 };
-
-// ── German ────────────────────────────────────────────────────────────────────
 
 const DE: Translations = {
   btnOpen:           "\u00d6ffnen",
@@ -2876,8 +2830,6 @@ const DE: Translations = {
   menuSettings:      "Einstellungen",
 };
 
-// ── Japanese ──────────────────────────────────────────────────────────────────
-
 const JA: Translations = {
   btnOpen:           "\u958b\u304f",
   btnSave:           "\u4fdd\u5b58",
@@ -2986,8 +2938,6 @@ const JA: Translations = {
   menuPrint:         "\u5370\u5237",
   menuSettings:      "\u8a2d\u5b9a",
 };
-
-// ── Swahili ───────────────────────────────────────────────────────────────────
 
 const SW: Translations = {
   btnOpen:           "Fungua",
@@ -3098,8 +3048,6 @@ const SW: Translations = {
   menuSettings:      "Mipangilio",
 };
 
-// ── Marathi ───────────────────────────────────────────────────────────────────
-
 const MR: Translations = {
   btnOpen:           "\u0909\u0918\u0921\u093e",
   btnSave:           "\u091c\u0924\u0928 \u0915\u0930\u093e",
@@ -3208,8 +3156,6 @@ const MR: Translations = {
   menuPrint:         "\u092e\u0941\u0926\u094d\u0930\u0923",
   menuSettings:      "\u0938\u0947\u091f\u093f\u0902\u0917\u094d\u091c",
 };
-
-// ── Telugu ────────────────────────────────────────────────────────────────────
 
 const TE: Translations = {
   btnOpen:           "\u0c24\u0c46\u0c30\u0c35\u0c02\u0c21\u0c3f",
@@ -3320,8 +3266,6 @@ const TE: Translations = {
   menuSettings:      "\u0c38\u0c46\u0c1f\u0c4d\u0c1f\u0c3f\u0c02\u0c17\u0c4d\u200c\u0c32\u0c41",
 };
 
-// ── Turkish ───────────────────────────────────────────────────────────────────
-
 const TR: Translations = {
   btnOpen:           "A\u00e7",
   btnSave:           "Kaydet",
@@ -3430,8 +3374,6 @@ const TR: Translations = {
   menuPrint:         "Yazd\u0131r",
   menuSettings:      "Ayarlar",
 };
-
-// ── Tamil ─────────────────────────────────────────────────────────────────────
 
 const TA: Translations = {
   btnOpen:           "\u0ba4\u0bbf\u0bb1",
@@ -3542,8 +3484,6 @@ const TA: Translations = {
   menuSettings:      "\u0b85\u0bae\u0bc8\u0baa\u0bcd\u0baa\u0bc1\u0b95\u0bb3\u0bcd",
 };
 
-// ── Vietnamese ────────────────────────────────────────────────────────────────
-
 const VI: Translations = {
   btnOpen:           "M\u1edf",
   btnSave:           "L\u01b0u",
@@ -3652,8 +3592,6 @@ const VI: Translations = {
   menuPrint:         "In",
   menuSettings:      "C\u00e0i \u0111\u1eb7t",
 };
-
-// ── Korean ────────────────────────────────────────────────────────────────────
 
 const KO: Translations = {
   btnOpen:           "\uc5f4\uae30",
@@ -3764,8 +3702,6 @@ const KO: Translations = {
   menuSettings:      "\uc124\uc815",
 };
 
-// ── Registry ──────────────────────────────────────────────────────────────────
-
 const TRANSLATIONS: Record<string, Translations> = {
   en: EN, fr: FR, zh: ZH, hi: HI, es: ES,
   ar: AR, bn: BN, ru: RU, pt: PT, ur: UR,
@@ -3776,7 +3712,6 @@ const TRANSLATIONS: Record<string, Translations> = {
 export function getTranslations(lang: string): Translations {
   const base = withFallback(lang);
   if (!isMac) return base;
-  // macOS: "⌘Z" where the texts say "Ctrl+Z".
   let mac = MAC_TEXTS.get(lang);
   if (!mac) {
     mac = Object.fromEntries(
@@ -3792,14 +3727,9 @@ const MAC_TEXTS = new Map<string, Translations>();
 function withFallback(lang: string): Translations {
   const t = TRANSLATIONS[lang];
   if (!t || t === EN) return EN;
-  // Fill optional keys that the chosen language hasn't translated with the
-  // English originals so UI elements never come up blank.
   return { ...EN, ...t };
 }
 
-// ── DOM walker ────────────────────────────────────────────────────────────────
-
-/** Updates all elements with data-i18n / data-i18n-title attributes. */
 export function applyTranslationsToDOM(t: Translations): void {
   document.querySelectorAll<HTMLElement>("[data-i18n]").forEach(el => {
     const key = el.dataset["i18n"] as keyof Translations;
@@ -3813,7 +3743,6 @@ export function applyTranslationsToDOM(t: Translations): void {
   });
 }
 
-/** Fills `{name}` placeholders in a translated message. */
 export function fmt(template: string, vars: Record<string, string | number>): string {
   return template.replace(/\{(\w+)\}/g, (m, k: string) => (k in vars ? String(vars[k]) : m));
 }

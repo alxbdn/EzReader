@@ -1,14 +1,3 @@
-// Quick load test of the viewer: opens a very large PDF in the built app,
-// then scrolls, jumps and zooms in a loop while it measures memory, CPU and
-// response times, and fails when a figure goes past tests/perf/thresholds.json.
-//
-// It runs the real front end (dist/, pdf.js and all) in headless Chromium,
-// the engine of WebView2 on Windows, with the Rust side replaced by a few
-// canned answers: the app's own commands are tested by `cargo test`.
-// Process memory and CPU are read from /proc, so they are Linux only.
-//
-// Usage: node tests/perf/stress.mjs <big.pdf> [--out results.json] [--seconds N]
-
 import { createServer } from "node:http";
 import { createReadStream, readFileSync, statSync, existsSync, readdirSync, writeFileSync, appendFileSync } from "node:fs";
 import { extname, join, resolve, dirname } from "node:path";
@@ -26,7 +15,6 @@ const thresholds = JSON.parse(readFileSync(join(here, "thresholds.json"), "utf8"
 const dist = resolve(here, "..", "..", "dist");
 if (!existsSync(join(dist, "index.html"))) throw new Error("dist/ is missing: run `npm run build` first");
 
-// ── Static server for dist/ and the PDF (with byte ranges, like the asset protocol) ──
 const TYPES = { ".html": "text/html", ".js": "text/javascript", ".mjs": "text/javascript", ".css": "text/css", ".svg": "image/svg+xml", ".png": "image/png", ".pdf": "application/pdf", ".woff2": "font/woff2" };
 const server = createServer((req, res) => {
   const url = new URL(req.url, "http://x");
@@ -49,7 +37,6 @@ const server = createServer((req, res) => {
 await new Promise((r) => server.listen(0, "127.0.0.1", r));
 const origin = `http://127.0.0.1:${server.address().port}`;
 
-// ── Tauri stand-in: the commands the viewer calls while a PDF is open ──
 const tauriStub = ({ origin, pdfPath }) => {
   let next = 1;
   const callbacks = new Map();
@@ -64,8 +51,6 @@ const tauriStub = ({ origin, pdfPath }) => {
     "plugin:path|basename": "big.pdf",
   };
   window.__perfUnknown = new Set();
-  // Scanned pages go to the system OCR engine; here a stand-in that takes
-  // as long as Windows OCR on a page and answers 40 lines of 10 words.
   window.__perfOcr = 0;
   const ocrResult = {
     text: "", language: "en",
@@ -88,8 +73,7 @@ const tauriStub = ({ origin, pdfPath }) => {
   };
 };
 
-// ── Process tree of the browser: memory (PSS) and CPU time, from /proc ──
-const TICK = 100; // USER_HZ on Linux
+const TICK = 100;
 function descendants(root) {
   const kids = new Map();
   for (const d of readdirSync("/proc")) {
@@ -99,7 +83,7 @@ function descendants(root) {
       const ppid = Number(stat.slice(stat.lastIndexOf(")") + 2).split(" ")[1]);
       if (!kids.has(ppid)) kids.set(ppid, []);
       kids.get(ppid).push(Number(d));
-    } catch { /* gone */ }
+    } catch {}
   }
   const out = [];
   const walk = (p) => { for (const k of kids.get(p) ?? []) { out.push(k); walk(k); } };
@@ -112,18 +96,17 @@ function treeUsage(detail = false) {
   for (const pid of descendants(process.pid)) {
     try {
       const stat = readFileSync(`/proc/${pid}/stat`, "utf8").slice(0).split(") ")[1].split(" ");
-      ticks += Number(stat[11]) + Number(stat[12]); // utime + stime
+      ticks += Number(stat[11]) + Number(stat[12]);
       const m = /Pss:\s+(\d+)/.exec(readFileSync(`/proc/${pid}/smaps_rollup`, "utf8"));
       if (m) pssKb += Number(m[1]);
       if (detail && m) parts.push(`${(/--type=([\w-]+)/.exec(readFileSync(`/proc/${pid}/cmdline`, "utf8")) ?? [, "main"])[1]}:${(Number(m[1]) / 1024).toFixed(0)}`);
-    } catch { /* gone */ }
+    } catch {}
   }
   if (detail) console.log("    processes (MB): " + parts.join(" "));
   return { mb: pssKb / 1024, cpuSec: ticks / TICK, at: performance.now() };
 }
 const cpuPercent = (a, b) => (100 * (b.cpuSec - a.cpuSec)) / ((b.at - a.at) / 1000);
 
-// ── Run ──
 const browser = await chromium.launch({ args: ["--js-flags=--expose-gc"] });
 const context = await browser.newContext({ viewport: { width: 1280, height: 800 }, deviceScaleFactor: 1.5 });
 await context.addInitScript(tauriStub, { origin, pdfPath });
@@ -144,7 +127,6 @@ const metrics = async () => {
   });
   return { heapMb: m.JSHeapUsedSize / 1048576, nodes: m.Nodes, listeners: m.JSEventListeners, canvasMb, ...treeUsage() };
 };
-// The pdf.js worker (parsing, fonts, pictures) has a heap of its own.
 async function pdfWorkerHeapMb() {
   const bcdp = await browser.newBrowserCDPSession();
   const { targetInfos } = await bcdp.send("Target.getTargets");
@@ -164,8 +146,6 @@ async function pdfWorkerHeapMb() {
 }
 const gc = async () => { await cdp.send("HeapProfiler.collectGarbage"); await page.waitForTimeout(300); await cdp.send("HeapProfiler.collectGarbage"); };
 
-// Resolves once #viewer-scroll has had no DOM change for `quiet` ms; returns
-// the time until the last change (how long the app took to settle).
 const settle = (quiet = 250, timeout = 15000) => page.evaluate(([quiet, timeout]) => new Promise((done) => {
   const root = document.getElementById("viewer-scroll");
   const t0 = performance.now();
@@ -177,7 +157,6 @@ const settle = (quiet = 250, timeout = 15000) => page.evaluate(([quiet, timeout]
   const cap = setTimeout(() => { obs.disconnect(); done(timeout); }, timeout);
 }), [quiet, timeout]);
 
-// Time until page `n` is drawn again (a cleared page's canvas has no pixels).
 const pageReady = (n, timeout = 15000) => page.evaluate(([n, timeout]) => new Promise((done) => {
   const t0 = performance.now();
   const check = () => {
@@ -219,9 +198,7 @@ const zoomMs = [];
 const rnd = (() => { let s = 42; return () => (s = (s * 1103515245 + 12345) % 2 ** 31) / 2 ** 31; })();
 const goTo = (n) => page.evaluate((n) => document.querySelector(`.page-wrapper[data-page="${n}"]`).scrollIntoView({ block: "start" }), n);
 
-/** One round of use: fast reading, jumps, zooms, reading back up. */
 async function round(r) {
-  // 1. Continuous wheel scrolling, like reading fast (~100 pages).
   await goTo(1 + Math.floor(rnd() * (pageCount - 200)));
   for (let i = 0; i < 250; i++) {
     await page.mouse.wheel(0, 500);
@@ -229,7 +206,6 @@ async function round(r) {
     if (i % 50 === 0) await sample(`r${r} scroll`);
   }
   await settle();
-  // 2. Random jumps through the document (scroll bar drags, Go to page).
   for (let i = 0; i < 30; i++) {
     const target = 1 + Math.floor(rnd() * pageCount);
     await goTo(target);
@@ -237,7 +213,6 @@ async function round(r) {
     if (i % 10 === 0) await sample(`r${r} jump`);
   }
   await settle();
-  // 3. Zoom in and out with the keyboard, down to several pages per row and back.
   await goTo(Math.floor(pageCount / 2));
   await settle();
   for (let cycle = 0; cycle < 3; cycle++) {
@@ -247,7 +222,6 @@ async function round(r) {
     }
     await sample(`r${r} zoom`);
   }
-  // 4. Reading back up.
   for (let i = 0; i < 120; i++) {
     await page.mouse.wheel(0, -700);
     await page.waitForTimeout(16);
@@ -256,8 +230,6 @@ async function round(r) {
   await settle();
 }
 
-// The first round fills the caches that are meant to stay (fonts, pdf.js
-// worker); the leak check compares the later rounds with it.
 const busyStart = treeUsage();
 await round(1);
 await gc();
@@ -267,7 +239,6 @@ const busyEnd = treeUsage();
 const peakMb = Math.max(...samples.map((s) => s.mb));
 const peakCanvasMb = Math.max(...samples.map((s) => s.canvasMb));
 
-// 5. Idle: with nothing happening the app must not keep the CPU busy.
 await gc();
 const end = await sample("end");
 if (process.env.PERF_VERBOSE) treeUsage(true);
@@ -310,7 +281,6 @@ const results = {
   test_seconds: (busyEnd.at - busyStart.at) / 1000,
 };
 
-// ── Verdict ──
 const rows = [];
 let failed = false;
 for (const [key, value] of Object.entries(results)) {

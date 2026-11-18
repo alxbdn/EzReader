@@ -20,8 +20,6 @@ function fakeSession(over: Partial<{ isOpen: boolean; sourcePath: string | null;
   };
 }
 
-// ── Compress ──────────────────────────────────────────────────────────────────
-
 function compressModal(wontShrink = false) {
   let confirm: ((level: CompressLevel, target?: number) => Promise<void>) | null = null;
   const modal = {
@@ -87,8 +85,6 @@ describe("Compress flow", () => {
   });
 });
 
-// ── Export ────────────────────────────────────────────────────────────────────
-
 function exportModal() {
   let run: ((req: ExportRequest) => void) | null = null;
   const modal = {
@@ -107,7 +103,6 @@ const viewer = {
   }),
 };
 
-/** Lets the flow's fire-and-forget run finish. */
 const settle = () => new Promise((r) => setTimeout(r, 0));
 
 describe("Export flow", () => {

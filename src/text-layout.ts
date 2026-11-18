@@ -1,11 +1,3 @@
-/**
- * Turns the text runs of a page (as pdf.js gives them: a string, where it
- * starts and how big it is) into lines and cells for "Convert" (Word,
- * Excel, RTF, HTML, text, XML). The writers in Rust group the lines into
- * paragraphs and tables.
- */
-
-/** One run of text, in points, `y` being its baseline from the top of the page. */
 export interface TextRun {
   str: string;
   x: number;
@@ -28,22 +20,13 @@ export interface TextPage { number: number; width: number; height: number; lines
 
 export interface TextDoc { title: string; pages: TextPage[] }
 
-/** Lines of a page before the document-wide parts (titles) are known. */
 interface RawLine { cells: TextCell[]; size: number; y: number; right: number }
 
-/** A gap this wide (in font sizes) between two runs splits them into cells. */
 const CELL_GAP = 2.2;
-/** Cells starting within this many points of each other are one column. */
 const COLUMN_TOLERANCE = 12;
 
-/** Rounds a left edge so that runs starting within ~1.5 pt compare equal. */
 const bucket = (x: number): number => Math.round(x / 1.5);
 
-/**
- * Groups `runs` into lines (top to bottom), and each line into cells: runs
- * split on a wide gap, or on a narrower one where at least 3 lines have a
- * run starting at the same place (the columns of a tight table).
- */
 function toLines(runs: TextRun[]): RawLine[] {
   const sorted = runs
     .filter((r) => r.str.trim() !== "" && Number.isFinite(r.x) && Number.isFinite(r.y) && r.size > 0)
@@ -57,7 +40,6 @@ function toLines(runs: TextRun[]): RawLine[] {
   }
   for (const g of groups) g.sort((a, b) => a.x - b.x);
 
-  // Left edges of runs that follow a visible gap, and how many lines have one there.
   const gapAfter = (g: TextRun[], i: number): number =>
     g[i].x - Math.max(...g.slice(0, i).map((r) => r.x + r.width));
   const starts = new Map<number, number>();
@@ -91,7 +73,6 @@ function toLines(runs: TextRun[]): RawLine[] {
   }).filter((l) => l.cells.length > 0);
 }
 
-/** Left edges the multi-cell lines (table rows) of a page line up on. */
 function columnAnchors(lines: RawLine[]): number[] {
   const xs = lines.filter((l) => l.cells.length > 1).flatMap((l) => l.cells.map((c) => c.x)).sort((a, b) => a - b);
   const anchors: number[] = [];
@@ -107,17 +88,12 @@ function columnOf(x: number, anchors: number[]): number {
   return col;
 }
 
-/**
- * Lays out one page. `bodySize` is the usual text size of the document:
- * lines clearly bigger are titles (1 = big, 2 = a bit bigger).
- */
 export function layoutPage(runs: TextRun[], number: number, width: number, height: number, bodySize: number): TextPage {
   const raw = toLines(runs);
   const anchors = columnAnchors(raw);
   const rightEdge = Math.max(0, ...raw.map((l) => l.right));
   const leftEdge = Math.min(Infinity, ...raw.map((l) => l.cells[0].x));
 
-  // Usual distance between two lines of the same paragraph.
   const steps = raw.slice(1).map((l, i) => l.y - raw[i].y).filter((d) => d > 0).sort((a, b) => a - b);
   const step = steps.length ? steps[Math.floor(steps.length / 2)] : bodySize * 1.2;
 
@@ -155,10 +131,6 @@ function headingLevel(size: number, body: number, cells: TextCell[]): number {
   return 0;
 }
 
-/**
- * Makes title levels consistent across the document: the largest titles
- * are level 1, every smaller title level 2.
- */
 export function normalizeHeadings(pages: TextPage[]): void {
   const sizes = pages.flatMap((p) => p.lines.filter((l) => l.heading > 0).map((l) => l.size));
   if (sizes.length === 0) return;
@@ -168,7 +140,6 @@ export function normalizeHeadings(pages: TextPage[]): void {
   }
 }
 
-/** The size most of the text is written in (weighted by characters). */
 export function bodySize(runs: TextRun[]): number {
   const weight = new Map<number, number>();
   for (const r of runs) {
@@ -181,7 +152,6 @@ export function bodySize(runs: TextRun[]): number {
   return best || 11;
 }
 
-/** Number of characters of text in `doc` (0 for a scan without text). */
 export function textLength(doc: TextDoc): number {
   return doc.pages.reduce((n, p) => n + p.lines.reduce((m, l) => m + l.cells.reduce((k, c) => k + c.text.length, 0), 0), 0);
 }

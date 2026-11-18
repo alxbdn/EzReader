@@ -1,11 +1,3 @@
-//! Crash-safe file output.
-//!
-//! Every command that writes a PDF goes through [`write_atomic`]: the bytes
-//! are written to a temporary file next to the target, then renamed over it.
-//! A crash or error mid-write leaves the original file untouched instead of
-//! half-written — which matters because "Save" overwrites the file the user
-//! opened.
-
 use std::path::{Path, PathBuf};
 
 use lopdf::{Document, IncrementalDocument};
@@ -17,30 +9,19 @@ fn temp_path_for(target: &Path) -> PathBuf {
     target.with_file_name(format!(".{name}.{}-{nanos}.tmp", std::process::id()))
 }
 
-/// Calls `write` with a temporary path in the target's directory, then
-/// renames the result over `target`. The temporary file is removed on error.
 pub fn write_atomic<F>(target: impl AsRef<Path>, write: F) -> Result<(), String>
 where
     F: FnOnce(&Path) -> Result<(), String>,
 {
     let target = target.as_ref();
     let tmp = temp_path_for(target);
-    let result = write(&tmp).and_then(|()| {
-        // std::fs::rename replaces an existing destination on both Windows
-        // (MoveFileExW + MOVEFILE_REPLACE_EXISTING) and Unix.
-        std::fs::rename(&tmp, target).map_err(|e| e.to_string())
-    });
+    let result = write(&tmp).and_then(|()| std::fs::rename(&tmp, target).map_err(|e| e.to_string()));
     if result.is_err() {
         let _ = std::fs::remove_file(&tmp);
     }
     result
 }
 
-/// Opens `path` to be saved as an incremental update (its bytes kept as they
-/// are, the changes appended). A file whose cross-reference table is wrong
-/// (lopdf had to repair it to read it) is first rewritten whole: appended to
-/// as it is, the result would keep pointing other readers at the wrong
-/// offsets of the old table, and they would lose objects.
 pub fn load_incremental(path: impl AsRef<Path>) -> Result<IncrementalDocument, String> {
     let inc = IncrementalDocument::load(path.as_ref()).map_err(|e| e.to_string())?;
     if inc.get_prev_documents().xref_recovery.is_none() {
@@ -53,30 +34,20 @@ pub fn load_incremental(path: impl AsRef<Path>) -> Result<IncrementalDocument, S
     Ok(IncrementalDocument::create_from(bytes, prev))
 }
 
-/// Byte-for-byte copy of `src` to `dst`, atomically.
 pub fn copy_atomic(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> Result<(), String> {
     let src = src.as_ref();
     write_atomic(dst, |tmp| std::fs::copy(src, tmp).map(|_| ()).map_err(|e| e.to_string()))
 }
 
-/// Saves a full document rewrite to `dst`, atomically.
 pub fn save_document(doc: &mut Document, dst: impl AsRef<Path>) -> Result<(), String> {
     write_atomic(dst, |tmp| doc.save(tmp).map(|_| ()).map_err(|e| e.to_string()))
 }
 
-/// Saves `inc` to `dst` as one self-contained file: the update is merged
-/// into the original, every object nothing points at any more is dropped,
-/// and the result is written as a full rewrite.
-///
-/// Use this whenever the update leaves content out (deleted or unselected
-/// pages): an incremental save keeps the left-out objects in the original
-/// bytes, where anyone with a text editor can still read them.
 pub fn save_compacted(inc: &mut IncrementalDocument, dst: impl AsRef<Path>) -> Result<(), String> {
     let mut doc = compacted(inc)?;
     save_document(&mut doc, dst)
 }
 
-/// `inc` merged into one document, without the objects nothing points at.
 pub fn compacted(inc: &mut IncrementalDocument) -> Result<Document, String> {
     let mut merged = Vec::new();
     inc.save_to(&mut merged).map_err(|e| e.to_string())?;
@@ -85,7 +56,6 @@ pub fn compacted(inc: &mut IncrementalDocument) -> Result<Document, String> {
     Ok(doc)
 }
 
-/// Saves an incremental update to `dst`, atomically.
 pub fn save_incremental(inc: &mut IncrementalDocument, dst: impl AsRef<Path>) -> Result<(), String> {
     write_atomic(dst, |tmp| inc.save(tmp).map(|_| ()).map_err(|e| e.to_string()))
 }

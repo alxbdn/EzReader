@@ -36,12 +36,10 @@ describe("calculateColumnCount", () => {
   });
 
   it("returns 1 when container equals page width plus gap minus 1", () => {
-    // 600 + 12 - 1 = 611 container; floor(623/612) = 1
     expect(calculateColumnCount(611, 600, 12)).toBe(1);
   });
 
   it("returns 2 when container exactly fits two pages with one gap", () => {
-    // 2 pages: (2 * 600) + (1 * 12) = 1212
     expect(calculateColumnCount(1212, 600, 12)).toBe(2);
   });
 });
@@ -80,14 +78,12 @@ describe("buildRows", () => {
 });
 
 describe("focusedPageAt", () => {
-  // Three landscape pages, 400 px tall with 20 px gaps, in a 1000 px view.
   const pages = [{ start: 20, size: 400 }, { start: 440, size: 400 }, { start: 860, size: 400 }];
   it("picks the page nearest a third of the way down", () => {
     expect(focusedPageAt(0, 1000, 280, pages)).toBe(1);
     expect(focusedPageAt(200, 1000, 280, pages)).toBe(2);
   });
   it("is the last page once scrolled to the very end", () => {
-    // At the end the third line (280 + 333) is nearer page 2's middle.
     expect(focusedPageAt(280, 1000, 280, pages)).toBe(3);
   });
   it("stays on page 1 when nothing scrolls", () => {
@@ -214,11 +210,9 @@ describe("PdfPageView internal link layer", () => {
     await view.render(fakeDoc, 1, 0, new Map(), () => {}, handler);
 
     const links = Array.from(view.wrapper.querySelectorAll<HTMLAnchorElement>(".page-link-layer a"));
-    // 3 single-rect links + 1 hash link + 2 quadPoints rects = 6 anchors
     expect(links).toHaveLength(6);
     expect(links.every((a) => a.dataset.internalLink === "true")).toBe(true);
 
-    // Multi-line quadPoints rendered as two separate line rectangles
     expect(links[4].style.width).toBe("200px");
     expect(links[5].style.width).toBe("130px");
 
@@ -279,20 +273,18 @@ describe("PdfPageView internal link layer", () => {
     expect(view.isRenderedAt(1.5, 0, 1)).toBe(false);
     expect(view.isRenderedAt(1, 90, 1)).toBe(false);
 
-    // Stretching placeholder during zoom keeps existing canvas pixels and updates CSS size
     view.setPlaceholderSize(900, 1200, true);
     const canvas = view.wrapper.querySelector<HTMLCanvasElement>(".page-canvas")!;
     expect(view.hasPixels).toBe(true);
     expect(canvas.style.width).toBe("900px");
     expect(canvas.style.height).toBe("1200px");
 
-    // Start an in-flight render that hangs until cancelled, then cancel it and render at scale 2
     pendingResolve = () => {};
     const slowRender = view.render(fakeDoc, 1.5, 0, new Map(), () => {});
     await Promise.resolve();
     view.cancelRender();
     expect(cancelCalls).toBe(1);
-    expect(view.hasPixels).toBe(true); // previous bitmap kept on screen
+    expect(view.hasPixels).toBe(true);
     await slowRender;
 
     pendingResolve = null;
@@ -306,7 +298,6 @@ describe("PdfPageView internal link layer", () => {
 
 describe("toViewportRect", () => {
   it("maps both corners through the viewport, without normalising", () => {
-    // 90° rotation at scale 2 on a 100×200 page: (x, y) → (2y, 2x).
     const viewport = { convertToViewportPoint: (x: number, y: number) => [2 * y, 2 * x] };
     expect(toViewportRect(viewport, [10, 20, 30, 40])).toEqual([40, 20, 80, 60]);
     expect(toViewportRect(viewport, new Float32Array([30, 40, 10, 20]))).toEqual([80, 60, 40, 20]);

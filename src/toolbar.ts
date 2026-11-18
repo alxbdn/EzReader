@@ -38,9 +38,7 @@ import { BrightnessButton } from "./brightness-button";
 import { blockedWhileProtected } from "./read-only";
 import { splitFileName } from "./file-paths";
 
-/** What the main toolbar is set up for: reading, annotating or editing. */
 export type AppMode = "read" | "annotate" | "edit";
-/** What a plain drag does on the page: move around (hand) or select text. */
 export type PointerMode = "hand" | "select";
 
 export type ToolbarEvent =
@@ -97,22 +95,19 @@ type EventHandler = (e: ToolbarEvent) => void;
 
 interface MenuItemDef {
   label: keyof Translations;
-  /** macOS: in the app menu (EzReader ▸ Settings…). */
   appMenu?: boolean;
   shortcut?: string;
   action: () => void;
   requiresDoc?: boolean;
-  /** Shows a mark while on: a dot for one-of-several choices, a tick for a toggle. */
   mark?: { id: string; kind: "radio" | "check" };
 }
 
 interface MenuDef {
   id: string;
   label: keyof Translations;
-  items: (MenuItemDef | null)[]; // null = separator
+  items: (MenuItemDef | null)[];
 }
 
-/** Actions that must wait until pending changes are validated or discarded. */
 const GUARDED = new Set<ToolbarEvent["type"]>([
   "open", "save", "save-as", "export", "compress", "password", "images-to-pdf", "ocr", "print", "settings", "split", "rotate",
   "insert-blank", "insert-pdf", "insert-image", "insert-image-page", "extract-pages", "present",
@@ -125,17 +120,13 @@ export class Toolbar {
   private contextEl: HTMLElement;
   readonly search: SearchPill;
   private readonly tools: ToolRow;
-  /** Changes wait for ✓ / ✕ before anything else can be done. */
   private pending = false;
 
-  // Menu bar state
   private activeMenuId: string | null = null;
   private dropdowns = new Map<string, HTMLElement>();
   private menuButtons = new Map<string, HTMLButtonElement>();
   private docMenuEntries: HTMLButtonElement[] = [];
-  /** Menu entries that show a state (layout, thumbnails), by mark id. */
   private markEntries = new Map<string, HTMLButtonElement>();
-  /** Shortcut labels, kept raw so "Shift" can be translated. */
   private shortcutEls: [HTMLElement, string][] = [];
   private docTitleEl!: HTMLElement;
   private docTitleName!: HTMLButtonElement;
@@ -144,16 +135,13 @@ export class Toolbar {
   private docName: string | null = null;
   private renameTitle = "Click to rename";
 
-  // Main toolbar
   private mode: AppMode = "read";
   private pointer: PointerMode = "select";
   private modeBtns: HTMLButtonElement[] = [];
   private pointerBtns: HTMLButtonElement[] = [];
   private zoomLabel!: HTMLButtonElement;
-  /** Page brightness: a button that opens a slider. */
   readonly brightness = new BrightnessButton();
   private zoomInput!: HTMLInputElement;
-  /** One page / two pages (odd left / even left): one button that cycles through the 3 layouts. */
   private pagesBtn!: HTMLButtonElement;
   private shownColumns = 1;
   private shownEvenSpread = false;
@@ -165,7 +153,6 @@ export class Toolbar {
   private locked = false;
   private _lastScale = CSS_UNITS;
 
-  /** macOS: the same menus, at the top of the screen. */
   private macMenu: MacMenu | null = null;
 
   private _i18nText  = new Map<HTMLElement, keyof Translations>();
@@ -219,16 +206,13 @@ export class Toolbar {
     this.handlers.forEach((h) => h(e));
   }
 
-  /** True while the open document is protected: only reading is allowed. */
   private readOnly = false;
   private readOnlyRefused: (() => void) | null = null;
 
-  /** Called when an action is refused because the document is protected. */
   onReadOnlyRefused(cb: () => void): void { this.readOnlyRefused = cb; }
 
   get isReadOnly(): boolean { return this.readOnly; }
 
-  /** Makes the toolbar read-only (back to Read mode) or editable again. */
   setReadOnly(on: boolean): void {
     this.readOnly = on;
     document.body.classList.toggle("read-only", on);
@@ -246,13 +230,10 @@ export class Toolbar {
     return true;
   }
 
-  /** Set while another view (Crop / Straighten) holds its own ✓ / ✕. */
   private blocker: (() => void) | null = null;
 
-  /** While `shake` is set, every guarded action calls it and is refused. */
   setBlocker(shake: (() => void) | null): void { this.blocker = shake; }
 
-  /** While changes wait for validation, shakes ✓ / ✕ and says no. */
   allowed(): boolean {
     if (this.blocker) { this.blocker(); return false; }
     if (!this.pending) return true;
@@ -275,21 +256,14 @@ export class Toolbar {
     this.zoomLabel.textContent = `${Math.round(scale / CSS_UNITS * 100)} %`;
   }
 
-  /** Fit modes are menu-only now; kept so callers need not care. */
   updateFitMode(_mode: "none" | "fit-width" | "fit-height" | "fit-page"): void {}
 
-  /**
-   * Shows the layout on the pages button: `columns` is the forced count (null:
-   * as many as fit), `shown` the number of pages per row on screen, and `even`
-   * whether 2-page mode starts with even pages on the left ([2 | 3]).
-   */
   updateLayout(columns: number | null, mode: "vertical" | "horizontal", shown: number = columns ?? 1, even = false): void {
     this.shownColumns = mode === "vertical" && shown >= 2 ? 2 : 1;
     this.shownEvenSpread = this.shownColumns === 2 && even;
     const state = this.shownColumns === 1 ? "1" : this.shownEvenSpread ? "2-even" : "2-odd";
     this.pagesBtn.innerHTML = state === "1" ? ICON_PAGES_1 : state === "2-odd" ? ICON_PAGES_2 : ICON_PAGES_2_EVEN;
     this.pagesBtn.dataset["cols"] = state;
-    // The tooltip says what a click does next in the cycle: [1] -> [1|2] -> [2|3] -> [1].
     const nextKey: keyof Translations = state === "1" ? "ttPages2" : state === "2-odd" ? "ttPages2Even" : "ttPages1";
     const nextFb = state === "1" ? "Two pages (odd on left)" : state === "2-odd" ? "Two pages (even on left)" : "One page per row";
     this._i18nTitle.set(this.pagesBtn, nextKey);
@@ -313,10 +287,8 @@ export class Toolbar {
     this.infoBtn.classList.toggle("active", open);
   }
 
-  /** The file name in the title bar (the tab strip holds it in the active tab). */
   get titleElement(): HTMLElement { return this.docTitleEl; }
 
-  /** Shows the open file's name in the title bar, with a dot while it has unsaved changes. */
   setDocTitle(name: string | null, dirty: boolean): void {
     this.docName = name;
     if (!this.docTitleEl.classList.contains("renaming")) this.docTitleName.textContent = name ?? "";
@@ -327,7 +299,6 @@ export class Toolbar {
     document.title = name ? `${dirty ? "• " : ""}${name} – EzReader` : "EzReader";
   }
 
-  /** Closed padlock (green) while the document is, or will be saved, with a password. */
   setProtected(on: boolean): void {
     this.locked = on;
     if (!this.lockBtn) return;
@@ -338,7 +309,6 @@ export class Toolbar {
     this.lockBtn.setAttribute("aria-pressed", String(on));
   }
 
-  /** Shows the sidebar toggle as pressed while the thumbnails are visible. */
   updateSidebar(visible: boolean): void {
     this.sidebarBtn.classList.toggle("active", visible);
     this.sidebarBtn.setAttribute("aria-pressed", String(visible));
@@ -368,7 +338,6 @@ export class Toolbar {
 
   hideShapeStyles(): void { this.tools.hideShapeStyles(); }
 
-  /** The common fonts installed on this computer, offered for text. */
   setSystemFonts(names: string[]): void { this.tools.setSystemFonts(names); }
 
   showSignatureStyles(color: RgbColor): void { this.tools.showSignatureStyles(color); }
@@ -377,22 +346,18 @@ export class Toolbar {
   showHighlightStyles(state: { color: RgbColor; opacity: number }): void { this.tools.showHighlightStyles(state); }
   hideHighlightStyles(): void { this.tools.hideHighlightStyles(); }
 
-  /** The options of the chosen tool (or selected annotation), for the studio panel. */
   get toolOptions(): HTMLElement { return this.tools.options; }
 
-  /** Told when the options on show change: their title (null: none), and the mode. */
   onToolOptions(h: (title: string | null, mode: AppMode) => void): void { this.tools.onSync = h; }
 
-  /** While a save runs: the Save button pulses. */
   setSaving(on: boolean): void {
     this.saveBtn.classList.toggle("saving", on);
   }
 
-  /** After a save: a green ring (saved) or a red shake (failed) around Save. */
   flashSave(result: "ok" | "error"): void {
     const cls = result === "ok" ? "save-ok" : "save-error";
     this.saveBtn.classList.remove("save-ok", "save-error");
-    void this.saveBtn.offsetWidth; // restart the animation
+    void this.saveBtn.offsetWidth;
     this.saveBtn.classList.add(cls);
     window.setTimeout(() => this.saveBtn.classList.remove(cls), 1200);
   }
@@ -421,8 +386,6 @@ export class Toolbar {
     b.title = title;
     return b;
   }
-
-  // ── Menu Bar ────────────────────────────────────────────────────────────────
 
   private getMenuDefs(): MenuDef[] {
     const go = (e: ToolbarEvent) => () => this.emit(e);
@@ -508,17 +471,14 @@ export class Toolbar {
       wrapper.style.position = "relative";
       wrapper.style.display = "inline-block";
 
-      // Top-level menu button
       const menuBtn = document.createElement("button");
       menuBtn.className = "menubar-item";
       menuBtn.dataset["menuId"] = menu.id;
       this.reg(menuBtn, menu.label);
       this.menuButtons.set(menu.id, menuBtn);
 
-      // Dropdown panel
       const dropdown = document.createElement("div");
       dropdown.className = "menu-dropdown";
-      // Room on the left for the dots and ticks, so every label lines up.
       if (menu.items.some((i) => i?.mark)) dropdown.classList.add("has-marks");
 
       for (const item of menu.items) {
@@ -560,7 +520,7 @@ export class Toolbar {
         });
 
         if (item.requiresDoc) {
-          entry.disabled = true; // disabled until setLoaded(true)
+          entry.disabled = true;
           this.docMenuEntries.push(entry);
         }
 
@@ -574,8 +534,6 @@ export class Toolbar {
 
     this.buildDocTitle();
   }
-
-  // ── File name (click to rename) ─────────────────────────────────────────────
 
   private buildDocTitle(): void {
     this.docTitleEl = document.createElement("div");
@@ -633,7 +591,6 @@ export class Toolbar {
 
   private measureCtx: CanvasRenderingContext2D | null = null;
 
-  /** Fits the rename field to its text, so the extension sits right after it. */
   private sizeTitleInput(): void {
     this.measureCtx ??= document.createElement("canvas").getContext("2d");
     const ctx = this.measureCtx;
@@ -644,7 +601,6 @@ export class Toolbar {
   }
 
   private setupMenuInteraction(): void {
-    // Click on menu button: toggle
     this.menuBarEl.addEventListener("click", (e) => {
       const btn = (e.target as HTMLElement).closest(".menubar-item") as HTMLButtonElement | null;
       if (!btn) return;
@@ -656,7 +612,6 @@ export class Toolbar {
       }
     });
 
-    // Hover: switch when another menu is already open
     this.menuBarEl.addEventListener("mouseover", (e) => {
       if (!this.activeMenuId) return;
       const btn = (e.target as HTMLElement).closest(".menubar-item") as HTMLButtonElement | null;
@@ -667,14 +622,12 @@ export class Toolbar {
       }
     });
 
-    // Click outside: close
     document.addEventListener("mousedown", (e) => {
       if (!this.activeMenuId) return;
       if (this.menuBarEl.contains(e.target as Node)) return;
       this.closeAllMenus();
     });
 
-    // Keyboard navigation
     document.addEventListener("keydown", (e) => {
       if (!this.activeMenuId) return;
 
@@ -710,7 +663,6 @@ export class Toolbar {
   }
 
   private openMenu(id: string): void {
-    // Close previous
     if (this.activeMenuId && this.activeMenuId !== id) {
       this.dropdowns.get(this.activeMenuId)?.classList.remove("open");
       this.menuButtons.get(this.activeMenuId)?.classList.remove("open");
@@ -722,7 +674,6 @@ export class Toolbar {
     dropdown.classList.add("open");
     btn.classList.add("open");
 
-    // Check if dropdown overflows right edge
     requestAnimationFrame(() => {
       const rect = dropdown.getBoundingClientRect();
       if (rect.right > window.innerWidth) {
@@ -734,7 +685,6 @@ export class Toolbar {
       }
     });
 
-    // Focus first enabled entry
     const first = dropdown.querySelector<HTMLButtonElement>(".menu-entry:not(:disabled)");
     first?.focus();
   }
@@ -746,21 +696,15 @@ export class Toolbar {
     this.activeMenuId = null;
   }
 
-
-  // ── Main toolbar ────────────────────────────────────────────────────────────
-
   private buildContextToolbar(): void {
     const main = document.createElement("div");
     main.className = "tb-row tb-main";
-    // The options of the tools live in the studio panel (see StudioPanel).
     this.contextEl.append(main, this.tools.row);
 
-    // Page thumbnails sidebar toggle
     this.sidebarBtn = this.btn(ICON_SIDEBAR, "Show or hide the page thumbnails", "icon-btn");
     this.reg(this.sidebarBtn, undefined, "ttPageSidebar");
     this.sidebarBtn.addEventListener("click", () => this.emit({ type: "toggle-sidebar" }));
 
-    // Save, then undo / redo
     this.saveBtn = this.btn(ICON_SAVE, "Save (Ctrl+S)", "icon-btn tb-square tb-save");
     this.reg(this.saveBtn, undefined, "ttSave");
     this.saveBtn.addEventListener("click", () => this.emit({ type: "save" }));
@@ -772,7 +716,6 @@ export class Toolbar {
     this.reg(redo, undefined, "ttRedo");
     redo.addEventListener("click", () => this.emit({ type: "redo" }));
 
-    // Hand / select
     const pointerDefs: [PointerMode, string, keyof Translations, string][] = [
       ["hand", ICON_HAND, "ttHand", "Hand: drag to move around"],
       ["select", ICON_POINTER, "ttSelectText", "Select text"],
@@ -786,7 +729,6 @@ export class Toolbar {
     });
     this.syncPointerBtns();
 
-    // Zoom: − / 100 % / + / 1:1
     const zoomOut = this.btn(ICON_MINUS, "Zoom out (Ctrl+−)", "icon-btn");
     this.reg(zoomOut, undefined, "ttZoomOut");
     zoomOut.addEventListener("click", () => this.emit({ type: "zoom-out" }));
@@ -794,7 +736,6 @@ export class Toolbar {
     this.reg(zoomIn, undefined, "ttZoomIn");
     zoomIn.addEventListener("click", () => this.emit({ type: "zoom-in" }));
 
-    // Clicking the percentage lets you type a value (Ctrl+0 resets the zoom).
     this.zoomLabel = this.btn("100 %", "Click to type a zoom level (Ctrl+0 resets it)", "zoom-label");
     this.reg(this.zoomLabel, undefined, "ttZoomLabel");
     this.zoomLabel.addEventListener("click", () => this.startZoomEdit());
@@ -819,8 +760,6 @@ export class Toolbar {
     const brightnessSeg = this.segment(this.brightness.el);
     brightnessSeg.classList.add("tb-brightness");
 
-    // One button for [1] / [1 | 2] / [2 | 3]: shows the current layout icon
-    // and cycles to the next one on click.
     this.pagesBtn = this.btn(ICON_PAGES_1, "Two pages (odd on left)", "icon-btn tb-pages");
     this.reg(this.pagesBtn, undefined, "ttPages2");
     this.pagesBtn.addEventListener("click", () => {
@@ -833,8 +772,6 @@ export class Toolbar {
       }
     });
 
-    // Read / Annotate / Edit
-    // On a narrow window the names give way to icons (see fitMainRow).
     const modeDefs: [AppMode, keyof Translations, string, string][] = [
       ["read", "modeRead", "Read", ICON_EYE], ["annotate", "modeAnnotate", "Annotate", ICON_PEN], ["edit", "modeEdit", "Edit", ICON_EDIT_TEXT],
     ];
@@ -861,7 +798,6 @@ export class Toolbar {
     columnsSeg.classList.add("tb-columns");
     modeSeg.classList.add("mode-segment");
 
-    // Right side: export, compress, info, then the search pill
     const exportBtn = this.btn(ICON_EXPORT, "Export a copy", "icon-btn tb-square");
     this.reg(exportBtn, undefined, "ttExport");
     exportBtn.addEventListener("click", () => this.emit({ type: "export" }));
@@ -880,7 +816,6 @@ export class Toolbar {
     right.className = "toolbar-group tb-right";
     right.append(exportBtn, compressBtn, this.lockBtn, this.infoBtn, presentBtn, this.sep(), this.search.el);
 
-    // Left group (side panel, then Read / Annotate / Edit), right group.
     const left = document.createElement("div");
     left.className = "toolbar-group tb-left";
     left.append(
@@ -894,7 +829,6 @@ export class Toolbar {
     this.updateLayout(null, "vertical");
     this.syncModeBtns();
 
-    // Keep the main row on one line: compact it when it would wrap.
     if (typeof ResizeObserver !== "undefined") {
       const ro = new ResizeObserver(() => this.fitMainRow(main));
       ro.observe(main);
@@ -902,21 +836,11 @@ export class Toolbar {
     }
   }
 
-  /**
-   * Compacts the main row step by step (mode names become icons, the open
-   * search box narrows, then less used bits hide) only when it would
-   * otherwise take two lines. The search box's final width is used, not the
-   * one mid-animation, so the result doesn't flicker while it opens.
-   */
   private fitMainRow(main: HTMLElement): void {
     const levels = ["tb-compact", "tb-compact-2", "tb-compact-3"];
-    // Width of the open search box at each level.
     const searchOpen = [250, 190, 160, 120];
     const pill = this.search.el;
     const open = pill.classList.contains("open");
-    // Laid out on one line, how much wider than the row the content is, with
-    // the search box at its final width (not the one mid-animation). The side
-    // groups stretch to fill the row, so add up what they hold.
     const [left, right] = Array.from(main.children) as HTMLElement[];
     const gapOf = (el: HTMLElement) => parseFloat(getComputedStyle(el).columnGap) || 0;
     const held = (group: HTMLElement): number => {
@@ -927,7 +851,6 @@ export class Toolbar {
       const style = getComputedStyle(main);
       const room = main.clientWidth - (parseFloat(style.paddingLeft) || 0) - (parseFloat(style.paddingRight) || 0);
       const rightW = held(right) - pill.offsetWidth + (open ? searchOpen[level] : 34);
-      // Only a row too full for everything gets compacted.
       return held(left) + rightW + gapOf(main) - room;
     };
     main.style.flexWrap = "nowrap";
@@ -939,9 +862,6 @@ export class Toolbar {
     if (pill.style.getPropertyValue("--search-open-w") !== w) pill.style.setProperty("--search-open-w", w);
   }
 
-
-
-  /** Switches between reading, annotating and editing; any active tool is dropped. */
   setMode(mode: AppMode): void {
     const adjusting = document.getElementById("app")?.classList.contains("adjusting") ?? false;
     if ((mode === this.mode && !adjusting) || this.refusedReadOnly({ type: "mode-change", mode }) || !this.allowed()) return;
@@ -989,8 +909,6 @@ export class Toolbar {
     this.zoomLabel.hidden = false;
   }
 
-  // ── Shared logic ────────────────────────────────────────────────────────────
-
   private commitZoomInput(): void {
     const raw = this.zoomInput.value.replace("%", "").trim();
     const pct = parseFloat(raw);
@@ -1001,9 +919,7 @@ export class Toolbar {
     }
   }
 
-  /** Back to selecting and moving annotations. */
   clearActiveTool(): void { this.tools.clearTool(); }
 
-  /** How many pages are checked in the side panel (page tools apply to them). */
   setPageSelection(count: number): void { this.tools.setPageSelection(count); }
 }

@@ -3,7 +3,6 @@ import { parsePageRange } from "./page-range";
 import { ICON_EXPORT } from "./icons";
 import type { Key } from "./modal";
 
-/** Formats that carry the text of the PDF (see "Convert" in Rust). */
 export type DocFormat = "docx" | "xlsx" | "rtf" | "html" | "txt" | "xml";
 export type ExportFormat = "png" | "jpeg" | "pdf" | DocFormat;
 
@@ -13,7 +12,6 @@ export function isDocFormat(f: ExportFormat): f is DocFormat {
   return (DOC_FORMATS as readonly string[]).includes(f);
 }
 
-/** File name of the converted file: report.docx. */
 export function docFileName(stem: string, format: DocFormat): string {
   return `${stem}.${format}`;
 }
@@ -30,16 +28,11 @@ const DPIS: [number, "expDpiLight" | "expDpiScreen" | "expDpiPrint", string][] =
   [300, "expDpiPrint", "300 dpi · print"],
 ];
 
-/** File name of page `n` of `count` exported from `stem`: report-p01.png. */
 export function pageFileName(stem: string, n: number, count: number, format: "png" | "jpeg"): string {
   const width = Math.max(2, String(count).length);
   return `${stem}-p${String(n).padStart(width, "0")}.${format === "jpeg" ? "jpg" : "png"}`;
 }
 
-/**
- * Export: this PDF to pictures (PNG / JPEG, one per page) or to a PDF copy,
- * with or without annotations; or pictures to a new PDF.
- */
 export class ExportModal extends Modal {
   private tab: "pdf" | "images" = "pdf";
   private format: ExportFormat = "png";
@@ -74,7 +67,6 @@ export class ExportModal extends Modal {
       tabs.append(b);
     }
 
-    // This PDF to…
     this.pdfPane = this.el("div", "ez-pane");
     const fmtLabel = this.el("span", "ez-label", "expPictures", "Pictures & PDF");
     const grid = this.el("div", "ez-grid3");
@@ -129,7 +121,6 @@ export class ExportModal extends Modal {
     this.keepRow = keep.row;
     this.pdfPane.append(fmtLabel, grid, docLabel, docGrid, row, keep.row);
 
-    // Images to PDF
     this.imagesPane = this.el("div", "ez-pane");
     const pick = this.el("button", "btn", "expPickImages", "Choose pictures…");
     pick.type = "button";
@@ -146,10 +137,8 @@ export class ExportModal extends Modal {
   }
 
   onExport(cb: (r: ExportRequest) => void): void { this.handlers.push(cb); }
-  /** How pictures are picked (the native dialog). */
   onPickImages(cb: () => Promise<string[]>): void { this.pickHandlers.push(cb); }
 
-  /** Opens on `tab` ("This PDF to…" needs an open document of `pageCount` pages). */
   open(pageCount: number, stem: string, tab: "pdf" | "images"): void {
     this.pageCount = pageCount;
     this.stem = stem;

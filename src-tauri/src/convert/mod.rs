@@ -1,25 +1,12 @@
-//! "Convert": the text of a PDF written as Word, Excel, RTF, HTML, plain
-//! text or XML.
-//!
-//! The frontend reads the text with pdf.js (it knows the fonts and their
-//! encodings) and sends it here already split into lines and cells, with
-//! the page geometry. This module groups the lines into paragraphs,
-//! headings and tables ([`blocks`]) and writes the chosen format.
-//!
-//! The result is a simplified, editable copy of the text: no pictures,
-//! drawings or exact positions.
-
 mod office;
 mod text;
 pub mod zip;
 
 use serde::Deserialize;
 
-/// The text of a document, as the frontend extracted it.
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TextDoc {
-    /// Shown as the title of HTML / Word files.
     #[serde(default)]
     pub title: String,
     pub pages: Vec<TextPage>,
@@ -29,25 +16,18 @@ pub struct TextDoc {
 #[serde(rename_all = "camelCase")]
 pub struct TextPage {
     pub number: u32,
-    /// Page size in points.
     pub width: f32,
     pub height: f32,
     pub lines: Vec<TextLine>,
 }
 
-/// One line of text, top to bottom (other fields the frontend sends, such
-/// as positions, are ignored). A line with several cells is a row of
-/// a table (text separated by wide gaps).
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TextLine {
     pub cells: Vec<TextCell>,
-    /// Font size in points.
     pub size: f32,
-    /// True when the line starts a new paragraph (a wider gap above it).
     #[serde(default)]
     pub para_start: bool,
-    /// 1 or 2 for a title (larger text), 0 for body text.
     #[serde(default)]
     pub heading: u8,
 }
@@ -56,19 +36,16 @@ pub struct TextLine {
 #[serde(rename_all = "camelCase")]
 pub struct TextCell {
     pub text: String,
-    /// Column of the page the cell lines up with (0 = leftmost).
     #[serde(default)]
     pub col: u32,
 }
 
-/// What a page is made of once its lines are grouped.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Block {
     Para { text: String, size: f32, heading: u8 },
     Table { rows: Vec<Vec<String>> },
 }
 
-/// The formats [`convert`] writes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Format {
     Docx,
@@ -104,7 +81,6 @@ impl Format {
     }
 }
 
-/// The file contents of `doc` in `format`.
 pub fn convert(doc: &TextDoc, format: Format) -> Vec<u8> {
     match format {
         Format::Docx => office::docx(doc),
@@ -116,8 +92,6 @@ pub fn convert(doc: &TextDoc, format: Format) -> Vec<u8> {
     }
 }
 
-/// Joins two lines of the same paragraph: "inter-" + "national" gives
-/// "international", anything else is joined with a space.
 fn join_line(para: &mut String, next: &str) {
     let next = next.trim();
     if next.is_empty() {
@@ -139,11 +113,6 @@ fn join_line(para: &mut String, next: &str) {
     para.push_str(next);
 }
 
-/// Groups the lines of `page` into paragraphs, titles and tables.
-///
-/// Consecutive lines with several cells form a table; its columns are the
-/// page columns the cells line up with. Other lines are joined into
-/// paragraphs until a line starts a new one or the title level changes.
 pub fn blocks(page: &TextPage) -> Vec<Block> {
     let mut out: Vec<Block> = Vec::new();
     let mut table: Vec<&TextLine> = Vec::new();
@@ -198,7 +167,6 @@ pub fn blocks(page: &TextPage) -> Vec<Block> {
     out
 }
 
-/// Characters XML 1.0 cannot hold (control characters) are dropped.
 fn xml_escape(s: &str) -> String {
     let mut out = String::with_capacity(s.len());
     for c in s.chars() {

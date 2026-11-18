@@ -5,7 +5,6 @@ import {
   imagesToPdf, onCompressProgress, openImagesDialog, pickDirectoryDialog, saveAsDialog, savePdfDialog, writeImageFile,
 } from "./tauri-bridge";
 
-/** The app's `Backend`: Tauri commands and dialogs, and pdf.js for text. */
 export const tauriBackend: Backend = {
   savePdfDialog,
   saveAsDialog,

@@ -1,6 +1,3 @@
-//! Word (.docx) and Excel (.xlsx): Office Open XML packages, written
-//! directly (a handful of XML parts in a ZIP).
-
 use super::text::half_points;
 use super::{blocks, xml_escape, zip::zip, Block, TextDoc};
 use std::fmt::Write;
@@ -36,11 +33,8 @@ fn run(text: &str, half_pt: u32, bold: bool) -> String {
     )
 }
 
-/// A Word document: titles in bold (and in Word's navigation pane), tables
-/// with borders, one page break between PDF pages. The page size is the
-/// first PDF page's.
 pub fn docx(doc: &TextDoc) -> Vec<u8> {
-    const TEXT_WIDTH: u32 = 9000; // twips, about 16 cm
+    const TEXT_WIDTH: u32 = 9000;
     let mut body = String::new();
     for (i, page) in doc.pages.iter().enumerate() {
         if i > 0 {
@@ -86,7 +80,6 @@ pub fn docx(doc: &TextDoc) -> Vec<u8> {
                         }
                         body.push_str("</w:tr>");
                     }
-                    // Word needs a paragraph between two tables.
                     body.push_str("</w:tbl><w:p/>");
                 }
             }
@@ -97,8 +90,8 @@ pub fn docx(doc: &TextDoc) -> Vec<u8> {
         .first()
         .filter(|p| p.width > 72.0 && p.height > 72.0 && p.width < 14400.0 && p.height < 14400.0)
         .map(|p| ((p.width * 20.0).round() as u32, (p.height * 20.0).round() as u32))
-        .unwrap_or((11906, 16838)); // A4
-    let margin = 1134; // 2 cm
+        .unwrap_or((11906, 16838));
+    let margin = 1134;
     let document = format!(
         "{XML_HEAD}<w:document xmlns:w=\"http://schemas.openxmlformats.org/wordprocessingml/2006/main\"><w:body>{body}\
          <w:sectPr><w:pgSz w:w=\"{w}\" w:h=\"{h}\"/><w:pgMar w:top=\"{margin}\" w:right=\"{margin}\" w:bottom=\"{margin}\" \
@@ -135,7 +128,6 @@ fn core_props(title: &str) -> String {
     )
 }
 
-/// "A", "B", … "Z", "AA", … for column `i` (0-based).
 fn column_name(mut i: usize) -> String {
     let mut s = Vec::new();
     loop {
@@ -149,23 +141,18 @@ fn column_name(mut i: usize) -> String {
     String::from_utf8(s).unwrap()
 }
 
-/// A number Excel can compute with: "12", "-3.5", "1,234.50" (US) or
-/// "1 234,50" (European). Anything else stays text.
 fn as_number(s: &str) -> Option<f64> {
     let t: String = s.trim().chars().filter(|c| !matches!(c, ' ' | '\u{a0}' | '\u{202f}')).collect();
     if t.is_empty() || t.len() > 18 || !t.chars().all(|c| c.is_ascii_digit() || matches!(c, '-' | '.' | ',')) {
         return None;
     }
     if t.starts_with('0') && t.len() > 1 && !t.starts_with("0.") && !t.starts_with("0,") {
-        return None; // codes such as 0612 keep their zero
+        return None;
     }
     let normalized = match (t.rfind('.'), t.rfind(',')) {
         (Some(d), Some(c)) if c > d => t.replace('.', "").replacen(',', ".", 1),
         (Some(_), Some(_)) => t.replace(',', ""),
-        (None, Some(c)) if t.len() - c - 1 == 3 && !matches!(&t[..c], "" | "0" | "-0" | "-") => {
-            // "1,234" thousands separator; "1,5" decimal comma
-            t.replace(',', "")
-        }
+        (None, Some(c)) if t.len() - c - 1 == 3 && !matches!(&t[..c], "" | "0" | "-0" | "-") => t.replace(',', ""),
         (None, Some(_)) => {
             if t.matches(',').count() > 1 {
                 return None;
@@ -180,10 +167,8 @@ fn as_number(s: &str) -> Option<f64> {
     normalized.parse::<f64>().ok().filter(|v| v.is_finite())
 }
 
-/// An Excel workbook: one sheet per page, one row per line, the cells in
-/// the page columns they line up with. Numbers are stored as numbers.
 pub fn xlsx(doc: &TextDoc) -> Vec<u8> {
-    let mut sheets: Vec<(String, String)> = Vec::new(); // (name, xml)
+    let mut sheets: Vec<(String, String)> = Vec::new();
     for page in &doc.pages {
         let mut rows = String::new();
         let mut widths: Vec<usize> = Vec::new();

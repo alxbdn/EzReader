@@ -7,21 +7,15 @@ import type { Messages } from "./messages";
 export interface CompressDeps {
   session: Pick<DocumentSession, "isOpen" | "sourcePath" | "materialize">;
   modal: CompressModal;
-  /** True when the document is protected (and says so): compressing would copy it. */
   refuse(): boolean;
   messages: Messages;
   ui: Feedback;
   backend: Pick<Backend, "savePdfDialog" | "estimateCompression" | "compress" | "cancelCompression" | "onCompressProgress">;
 }
 
-/**
- * Compress: opens the dialog with the estimates, then runs the chosen level
- * with progress and Cancel, and says how it went. Returns the opener.
- */
 export function setUpCompress(d: CompressDeps): () => Promise<void> {
   const { msg, errText } = d.messages;
   const { backend, ui } = d;
-  /** The file the dialog works on (what is shown, edits included). */
   let input: Promise<string> | null = null;
 
   d.modal.onConfirm(async (level, targetBytes) => {

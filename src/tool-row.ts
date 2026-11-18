@@ -42,7 +42,6 @@ import {
   ICON_STRAIGHTEN,
 } from "./icons";
 
-/** A button of the tool row; pencil and shapes each cover several tools. */
 export type ToolGroup = "text" | "pencil" | "shapes" | "note" | "highlight" | "sign"
   | "etext" | "image" | "redact-text" | "redact" | "check" | "cross";
 type PencilStyle = "ink" | "line";
@@ -67,12 +66,10 @@ const COLOR_KEYS: Record<string, Key> = {
   White: "colWhite", Pink: "colPink", Orange: "colOrange", "Ink blue": "colInkBlue",
 };
 const FONT_SIZES = [8, 9, 10, 11, 12, 14, 16, 18, 20, 24, 28, 32, 36, 48, 60, 72];
-/** Classic pen inks for drawn signatures. */
 const SIGNATURE_INKS: [string, string][] = [
   ["#18181b", "Black"], ["#1d4ed8", "Blue"], ["#dc2626", "Red"], ["#15803d", "Green"],
 ];
 
-/** Pencil brushes: each one is a thickness and an opacity, saved as such in the PDF. */
 export const BRUSHES: { id: string; key: Key; fb: string; width: number; opacity: number }[] = [
   { id: "ballpoint", key: "brushBallpoint", fb: "Ballpoint pen", width: 1, opacity: 1 },
   { id: "fineliner", key: "brushFineliner", fb: "Fineliner", width: 2, opacity: 1 },
@@ -86,18 +83,12 @@ export const BRUSHES: { id: string; key: Key; fb: string; width: number; opacity
   { id: "watercolor", key: "brushWatercolor", fb: "Watercolor", width: 8, opacity: 0.4 },
 ];
 
-/** The brush with this thickness and opacity, if one has them. */
 export function brushOf(width: number, opacity: number): string | null {
   return BRUSHES.find((b) => b.width === width && Math.abs(b.opacity - opacity) < 0.005)?.id ?? null;
 }
 
 export interface SignatureChip { id: string; dataUrl: string }
 
-/**
- * The tools of the Annotate and Edit modes (second toolbar row), the options
- * of the chosen tool (third row, unfolded under it), and the round
- * validate / discard buttons that every change has to go through.
- */
 export class ToolRow {
   readonly row: HTMLElement;
   readonly options: HTMLElement;
@@ -105,7 +96,6 @@ export class ToolRow {
   private state: ActiveToolState = defaultToolState();
   private mode: AppMode = "read";
   private group: ToolGroup | null = null;
-  /** Options panel on show: the chosen tool's, or the selected annotation's. */
   private panel: ToolGroup | null = null;
   private pencilStyle: PencilStyle = "ink";
   private shapeStyle: ShapeStyle = "rect";
@@ -117,7 +107,6 @@ export class ToolRow {
   private hint: HTMLElement;
   private validate: HTMLElement;
   private pending = false;
-  /** Pages selected in the side panel: Crop and Straighten need some. */
   private selectedPages = 0;
   private pageBtns: [HTMLButtonElement, Key, string, Key, string][] = [];
 
@@ -128,7 +117,6 @@ export class ToolRow {
   private sliders: [SliderRow, Key, string][] = [];
   private fontGroups: [HTMLOptGroupElement, Key, string][] = [];
 
-  // Text options
   private fontSelect!: HTMLSelectElement;
   private stdFonts!: HTMLOptGroupElement;
   private sysFonts!: HTMLOptGroupElement;
@@ -136,7 +124,6 @@ export class ToolRow {
   private biuBtns: HTMLButtonElement[] = [];
   private textColor!: ColorRow;
   private textBg!: ColorRow;
-  // Pencil / shapes options (they share their style values)
   private styleBtns = new Map<string, HTMLButtonElement>();
   private outline: ColorRow[] = [];
   private fill: ColorRow[] = [];
@@ -144,15 +131,12 @@ export class ToolRow {
   private pencilFillWrap!: HTMLElement;
   private thickness: SliderRow[] = [];
   private opacity: SliderRow[] = [];
-  // Sticky note / highlighter
   private noteColor!: ColorRow;
   private hlColor!: ColorRow;
   private hlOpacity!: SliderRow;
-  // Edit mode
   private textTitle!: HTMLElement;
   private textBgWrap!: HTMLElement;
   private stampColor!: ColorRow;
-  // Signatures
   private sigList!: HTMLElement;
   private sigNew!: HTMLButtonElement;
   private sigCount!: HTMLElement;
@@ -160,7 +144,6 @@ export class ToolRow {
   private signatures: SignatureChip[] = [];
   private brushBtns = new Map<string, HTMLButtonElement>();
   private brushWrap!: HTMLElement;
-  /** Told after every sync: the title of the options on show, or null when none are. */
   onSync: ((title: string | null, mode: AppMode) => void) | null = null;
 
   constructor(private emit: (e: ToolbarEvent) => void, private canSwitch: () => boolean) {
@@ -181,7 +164,6 @@ export class ToolRow {
     ];
     this.annotateSeg = this.segment("tool-seg");
     for (const [g, icon, key, fb] of defs) this.annotateSeg.append(this.groupButton(g, icon, key, fb));
-    // Edit tools are icons only, in three groups: page content, redaction, stamps.
     this.editSeg = document.createElement("div");
     this.editSeg.className = "tool-seg edit-tools";
     const contentSeg = this.segment("");
@@ -232,8 +214,6 @@ export class ToolRow {
     this.syncAll();
   }
 
-  // ── Public API ──────────────────────────────────────────────────────────────
-
   getStyle(): ActiveToolState { return { ...this.state }; }
   get activeGroup(): ToolGroup | null { return this.group; }
 
@@ -244,22 +224,19 @@ export class ToolRow {
     this.syncAll();
   }
 
-  /** Shows the round ✓ / ✕ buttons while changes wait for validation. */
   setPending(pending: boolean): void {
     this.pending = pending;
     this.validate.classList.toggle("on", pending);
     this.syncHint();
   }
 
-  /** Shakes ✓ / ✕: validate or discard before doing anything else. */
   shake(): void {
     this.validate.classList.remove("shake");
-    void this.validate.offsetWidth; // restart the animation
+    void this.validate.offsetWidth;
     this.validate.classList.add("shake");
     this.syncHint();
   }
 
-  /** Drops the active tool (back to selecting and moving annotations). */
   clearTool(): void {
     this.group = null;
     this.state.tool = "select";
@@ -268,7 +245,6 @@ export class ToolRow {
     this.emit({ type: "tool-change", tool: "select" });
   }
 
-  /** Options of the selected text annotation (or of new text). */
   showTextStyles(st: Pick<ActiveToolState, "color" | "fontSize" | "bold" | "italic" | "underline"> & { fontFamily?: FontFamilyValue; fontName?: string | null; backgroundColor?: RgbColor | null }): void {
     this.state.color = { ...st.color };
     this.state.fontFamily = st.fontFamily ?? "helvetica";
@@ -288,7 +264,6 @@ export class ToolRow {
     this.hideSelectionPanel("etext");
   }
 
-  /** Options of the selected shape or pencil stroke. */
   showShapeStyles(st: { color: RgbColor; strokeWidth: number; fillColor?: RgbColor | null; opacity?: number }, panel: "pencil" | "shapes" = "shapes"): void {
     this.state.shapeColor = { ...st.color };
     this.state.strokeWidth = st.strokeWidth;
@@ -304,7 +279,6 @@ export class ToolRow {
     this.hideSelectionPanel("shapes");
   }
 
-  /** Ink of the selected drawn signature. */
   showSignatureStyles(color: RgbColor): void {
     this.state.signatureColor = { ...color };
     this.selectionPanel = "sign";
@@ -314,7 +288,6 @@ export class ToolRow {
 
   hideSignatureStyles(): void { this.hideSelectionPanel("sign"); }
 
-  /** Colour and opacity of the selected highlight annotation. */
   showHighlightStyles(st: { color: RgbColor; opacity: number }): void {
     this.state.highlightColor = { ...st.color };
     this.state.highlightOpacity = st.opacity;
@@ -325,14 +298,12 @@ export class ToolRow {
 
   hideHighlightStyles(): void { this.hideSelectionPanel("highlight"); }
 
-  /** Number of pages selected in the side panel (Crop and Straighten need some). */
   setPageSelection(count: number): void {
     this.selectedPages = count;
     this.syncPageBtns();
     this.syncHint();
   }
 
-  /** The fonts of SYSTEM_FONTS installed on this computer. */
   setSystemFonts(names: string[]): void {
     this.sysFonts.replaceChildren(...SYSTEM_FONTS.filter((f) => names.includes(f.name)).map((f) => {
       const o = document.createElement("option");
@@ -350,7 +321,6 @@ export class ToolRow {
     this.renderSignatures();
   }
 
-  /** The saved signature being placed (outlined in red), or null. */
   private activeSignature: string | null = null;
   setActiveSignature(id: string | null): void {
     this.activeSignature = id;
@@ -375,8 +345,6 @@ export class ToolRow {
     this.syncPageBtns();
     this.syncHint();
   }
-
-  // ── Tools ───────────────────────────────────────────────────────────────────
 
   private selectionPanel: ToolGroup | null = null;
   private get isSelectionPanel(): boolean { return this.panel !== null && this.panel === this.selectionPanel && this.group !== this.panel; }
@@ -415,11 +383,9 @@ export class ToolRow {
     if (g === "check" || g === "cross") this.state.stampMark = g;
     this.syncAll();
     this.emit({ type: "tool-change", tool: this.state.tool });
-    // The pages draw a check or a cross from the style.
     if (g === "check" || g === "cross") this.emit({ type: "style-change", style: this.getStyle() });
   }
 
-  /** Freeform / straight, or rectangle / ellipse / arrow: same tool button, another drawing. */
   private pickStyle(group: "pencil" | "shapes", style: PencilStyle | ShapeStyle): void {
     if (group === "pencil") this.pencilStyle = style as PencilStyle;
     else this.shapeStyle = style as ShapeStyle;
@@ -435,17 +401,13 @@ export class ToolRow {
     this.emit({ type: "style-change", style: this.getStyle() });
   }
 
-  // ── Panels ──────────────────────────────────────────────────────────────────
-
   private buildTextPanel(): void {
     const p = this.panelEl("text", "toolText", "Text");
-    // Edit text shows the same options, without the background.
     this.panels.set("etext", p);
     this.textTitle = p.querySelector(".opt-title")!;
     this.fontSelect = document.createElement("select");
     this.fontSelect.className = "opt-select";
     this.title(this.fontSelect, "optFont", "Font");
-    // The standard fonts, then the common fonts installed on this computer.
     this.stdFonts = document.createElement("optgroup");
     this.fontGroups.push([this.stdFonts, "optFontsStandard", "Standard"]);
     for (const f of FONT_FAMILIES) {
@@ -513,7 +475,6 @@ export class ToolRow {
     p.append(this.fontSelect, line, this.divider(), this.textColor.el, this.textBgWrap);
   }
 
-  /** Pencil and shapes: drawing style, outline, background, thickness, opacity. */
   private buildStrokePanel(group: "pencil" | "shapes"): void {
     const p = this.panelEl(group, group === "pencil" ? "toolPencil" : "toolShapes", group === "pencil" ? "Pencil" : "Shapes");
     const styles: [string, string, Key, string][] = group === "pencil"
@@ -565,7 +526,6 @@ export class ToolRow {
     }
   }
 
-  /** The brush list of the pencil: a name and a sample stroke each. */
   private buildBrushes(): HTMLElement {
     this.brushWrap = document.createElement("div");
     this.brushWrap.className = "opt-brushes";
@@ -650,7 +610,6 @@ export class ToolRow {
     p.append(browse, note);
   }
 
-  /** Redaction areas: rectangle, ellipse, freeform or stretchable. */
   private buildRedactPanel(): void {
     const p = this.panelEl("redact", "optAreaShape", "Area shape");
     const shapes: [RedactShape, string, Key, string][] = [
@@ -715,8 +674,6 @@ export class ToolRow {
     this.sigCount.textContent = this.tr("sigSavedCount", "{n}/3 saved").replace("{n}", String(this.signatures.length));
   }
 
-  // ── Sync ────────────────────────────────────────────────────────────────────
-
   private syncAll(): void {
     this.row.hidden = this.mode === "read";
     this.annotateSeg.hidden = this.mode !== "annotate";
@@ -737,7 +694,6 @@ export class ToolRow {
     const st = this.state;
     this.fontSelect.value = st.fontName ? `sys:${st.fontName}` : st.fontFamily;
     if (st.fontName && this.fontSelect.value !== `sys:${st.fontName}`) {
-      // A font of another computer (from an opened file): shown, kept as is.
       const o = document.createElement("option");
       o.value = `sys:${st.fontName}`;
       o.textContent = st.fontName;
@@ -747,7 +703,6 @@ export class ToolRow {
     }
     this.sizeSelect.value = String(st.fontSize);
     if (this.sizeSelect.value !== String(st.fontSize)) {
-      // A size not in the list (from an existing annotation): show it anyway.
       const o = document.createElement("option");
       o.value = o.textContent = String(st.fontSize);
       this.sizeSelect.append(o);
@@ -776,17 +731,14 @@ export class ToolRow {
       b.classList.toggle("active", on);
       b.setAttribute("aria-selected", String(on));
     }
-    // Straight lines and arrows have no inside to fill.
     this.pencilFillWrap.hidden = this.pencilStyle !== "ink" && this.selectionPanel !== "pencil";
     this.shapeFillWrap.hidden = this.shapeStyle === "arrow" && this.selectionPanel !== "shapes";
-    // Brushes are for free drawing.
     this.brushWrap.hidden = this.pencilStyle !== "ink" && this.selectionPanel !== "pencil";
     this.syncHint();
     const title = show && shown ? shown.querySelector(".opt-title")?.textContent ?? null : null;
     this.onSync?.(title, this.mode);
   }
 
-  /** The tool hint of the moment (shown when no options are). */
   get hintText(): string { return this.hint.textContent ?? ""; }
 
   private syncHint(): void {
@@ -814,8 +766,6 @@ export class ToolRow {
       : this.group ? hints[this.group] : ["hintPick", "Pick a tool."] as [Key, string];
     this.hint.textContent = this.tr(key, fb);
   }
-
-  // ── DOM helpers ─────────────────────────────────────────────────────────────
 
   private tr(key: Key, fb: string): string {
     const v = this.t[key];
@@ -867,7 +817,6 @@ export class ToolRow {
     return b;
   }
 
-  /** Crop / Straighten: they open the adjust view on the selected pages. */
   private pageButton(kind: "crop" | "straighten", icon: string, key: Key, fb: string, offKey: Key, offFb: string): HTMLButtonElement {
     const b = document.createElement("button");
     b.type = "button";

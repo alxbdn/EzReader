@@ -6,7 +6,6 @@ const root = join(import.meta.dirname, "..", "..");
 const stub = readFileSync(join(import.meta.dirname, "tauri-stub.js"), "utf8");
 const DOC = "pdf14-mixed-sizes-rotated.pdf";
 
-/** Starts the app, on the launcher or with the corpus document open. */
 async function start(page: Page, { doc = false } = {}) {
   await page.route("**/__fixtures__/*", (route) =>
     route.fulfill({ body: readFileSync(join(root, "src-tauri", "tests", "corpus", DOC)), contentType: "application/pdf" }));
@@ -17,7 +16,6 @@ async function start(page: Page, { doc = false } = {}) {
   if (doc) {
     await expect(page.locator("#welcome-screen")).toHaveClass(/hidden/);
     await expect(page.locator("#viewer-scroll .page-wrapper")).toHaveCount(4);
-    // Every visible page and thumbnail drawn before the shot.
     await page.waitForFunction(() => {
       const shown = [...document.querySelectorAll<HTMLCanvasElement>("#viewer-scroll .page-canvas, #page-sidebar canvas")]
         .filter((c) => { const r = c.getBoundingClientRect(); return r.bottom > 0 && r.top < innerHeight && r.width > 0; });
@@ -34,7 +32,6 @@ for (const scheme of ["light", "dark"] as const) {
 
     test("launcher", async ({ page }) => {
       await start(page);
-      // The mouse never moves here, so the dot grid stays still.
       await expect(page).toHaveScreenshot(`launcher-${scheme}.png`);
     });
 

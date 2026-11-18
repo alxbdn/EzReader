@@ -9,7 +9,6 @@ fn to_error(e: String) -> PdfError {
     }
 }
 
-/// The languages Windows can recognize (its installed OCR packs).
 #[tauri::command]
 pub async fn ocr_languages() -> CmdResult<Vec<OcrLanguage>> {
     tauri::async_runtime::spawn_blocking(crate::ocr::languages)
@@ -18,8 +17,6 @@ pub async fn ocr_languages() -> CmdResult<Vec<OcrLanguage>> {
         .map_err(to_error)
 }
 
-/// Recognizes the text of a picture (`data`: base64 PNG / JPEG, or a data:
-/// URL) in `language` (a BCP-47 tag; the user's languages when empty).
 #[tauri::command]
 pub async fn ocr_image(data: String, language: Option<String>) -> CmdResult<OcrResult> {
     use base64::Engine;

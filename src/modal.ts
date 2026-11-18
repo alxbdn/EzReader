@@ -2,11 +2,6 @@ import type { Translations } from "./i18n";
 
 export type Key = keyof Translations;
 
-/**
- * A dialog built in code: title, body, Cancel and a main button. Escape or
- * a click outside closes it. Texts are registered once and follow the
- * interface language.
- */
 export class Modal {
   readonly backdrop: HTMLElement;
   readonly box: HTMLElement;
@@ -92,7 +87,6 @@ export class Modal {
     this.refresh();
   }
 
-  /** Redraws what depends on the state (and the language). */
   protected refresh(): void {}
 
   protected tr(key: Key, fb: string): string {
@@ -119,7 +113,6 @@ export class Modal {
     return e;
   }
 
-  /** A selectable card: bold label, small line under it, optional right part. */
   protected card(labelKey: Key, labelFb: string, subKey: Key | null, subFb: string, onPick: () => void): HTMLButtonElement {
     const b = this.el("button", "ez-card");
     b.type = "button";
@@ -131,7 +124,6 @@ export class Modal {
     return b;
   }
 
-  /** A checkbox row with a label and a line under it. */
   protected check(labelKey: Key, labelFb: string, subKey: Key, subFb: string): { row: HTMLLabelElement; input: HTMLInputElement } {
     const row = this.el("label", "ez-check");
     const input = this.el("input");

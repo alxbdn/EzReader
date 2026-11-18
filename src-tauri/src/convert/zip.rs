@@ -1,13 +1,8 @@
-//! A minimal ZIP writer (deflate, no encryption, no ZIP64): enough for the
-//! .docx and .xlsx packages, which are ZIP files of XML parts.
-
 use flate2::{write::DeflateEncoder, Compression};
 use std::io::Write;
 
-/// DOS date of 1 January 1980, the earliest a ZIP entry can carry.
 const DOS_DATE: u16 = (1 << 5) | 1;
 
-/// Packs `(name, contents)` entries, in order, into a ZIP archive.
 pub fn zip(entries: &[(&str, &[u8])]) -> Vec<u8> {
     let mut out = Vec::new();
     let mut central = Vec::new();
@@ -20,22 +15,22 @@ pub fn zip(entries: &[(&str, &[u8])]) -> Vec<u8> {
         let name = name.as_bytes();
 
         out.extend_from_slice(&0x0403_4b50u32.to_le_bytes());
-        out.extend_from_slice(&20u16.to_le_bytes()); // version needed
-        out.extend_from_slice(&0u16.to_le_bytes()); // flags
-        out.extend_from_slice(&8u16.to_le_bytes()); // deflate
-        out.extend_from_slice(&0u16.to_le_bytes()); // time
+        out.extend_from_slice(&20u16.to_le_bytes());
+        out.extend_from_slice(&0u16.to_le_bytes());
+        out.extend_from_slice(&8u16.to_le_bytes());
+        out.extend_from_slice(&0u16.to_le_bytes());
         out.extend_from_slice(&DOS_DATE.to_le_bytes());
         out.extend_from_slice(&crc.to_le_bytes());
         out.extend_from_slice(&(packed.len() as u32).to_le_bytes());
         out.extend_from_slice(&(data.len() as u32).to_le_bytes());
         out.extend_from_slice(&(name.len() as u16).to_le_bytes());
-        out.extend_from_slice(&0u16.to_le_bytes()); // extra
+        out.extend_from_slice(&0u16.to_le_bytes());
         out.extend_from_slice(name);
         out.extend_from_slice(&packed);
 
         central.extend_from_slice(&0x0201_4b50u32.to_le_bytes());
-        central.extend_from_slice(&20u16.to_le_bytes()); // made by
-        central.extend_from_slice(&20u16.to_le_bytes()); // needed
+        central.extend_from_slice(&20u16.to_le_bytes());
+        central.extend_from_slice(&20u16.to_le_bytes());
         central.extend_from_slice(&0u16.to_le_bytes());
         central.extend_from_slice(&8u16.to_le_bytes());
         central.extend_from_slice(&0u16.to_le_bytes());
@@ -44,23 +39,22 @@ pub fn zip(entries: &[(&str, &[u8])]) -> Vec<u8> {
         central.extend_from_slice(&(packed.len() as u32).to_le_bytes());
         central.extend_from_slice(&(data.len() as u32).to_le_bytes());
         central.extend_from_slice(&(name.len() as u16).to_le_bytes());
-        central.extend_from_slice(&[0; 12]); // extra, comment, disk, internal & external attributes
+        central.extend_from_slice(&[0; 12]);
         central.extend_from_slice(&offset.to_le_bytes());
         central.extend_from_slice(name);
     }
     let central_offset = out.len() as u32;
     out.extend_from_slice(&central);
     out.extend_from_slice(&0x0605_4b50u32.to_le_bytes());
-    out.extend_from_slice(&[0; 4]); // disk numbers
+    out.extend_from_slice(&[0; 4]);
     out.extend_from_slice(&(entries.len() as u16).to_le_bytes());
     out.extend_from_slice(&(entries.len() as u16).to_le_bytes());
     out.extend_from_slice(&(central.len() as u32).to_le_bytes());
     out.extend_from_slice(&central_offset.to_le_bytes());
-    out.extend_from_slice(&0u16.to_le_bytes()); // comment
+    out.extend_from_slice(&0u16.to_le_bytes());
     out
 }
 
-/// Reads back an archive written by [`zip`] (for tests).
 #[cfg(test)]
 pub fn unzip(bytes: &[u8]) -> Vec<(String, Vec<u8>)> {
     use std::io::Read;

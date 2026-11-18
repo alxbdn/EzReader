@@ -15,10 +15,6 @@ const TIME: Record<ReturnType<typeof crackTime>, [Key, string]> = {
   centuries: ["pwTimeCenturies", "≈ centuries to guess"],
 };
 
-/**
- * The PDF's password: protect it (with a strength meter), remove the
- * protection (with the current password), or unlock a protected file to open it.
- */
 export class PasswordModal extends Modal {
   private mode: Mode = "protect";
   private resolve: ((v: string | null) => void) | null = null;
@@ -116,17 +112,14 @@ export class PasswordModal extends Modal {
     this.okBtn.addEventListener("click", () => void this.confirm());
   }
 
-  /** Asks for a new password; resolves with it, or null if cancelled. */
   askNew(): Promise<string | null> {
     return this.start("protect", null);
   }
 
-  /** Asks for the current password; `check` says whether it is the right one. */
   askCurrent(check: (pw: string) => boolean): Promise<boolean> {
     return this.start("remove", check).then((v) => v !== null);
   }
 
-  /** Asks for the password of a protected file until `tryOpen` accepts it. */
   askToOpen(fileName: string, tryOpen: (pw: string) => Promise<boolean>): Promise<boolean> {
     this.fileName = fileName;
     return this.start("unlock", tryOpen).then((v) => v !== null);
@@ -214,7 +207,6 @@ export class PasswordModal extends Modal {
       strong.textContent = this.tr("pwPassphrase", "passphrase");
       const ex = this.el("code");
       ex.textContent = this.tr("pwExample", "turtle-orange-jumps-7-times");
-      // "For example …" goes on its own line, after the first sentence.
       const cut = (b1 ?? "").search(/[.。!！](?=[^.。!！]*$)/);
       const [first, rest] = cut >= 0 ? [(b1 ?? "").slice(0, cut + 1), (b1 ?? "").slice(cut + 1).trimStart()] : [b1 ?? "", ""];
       this.tip.append(a, strong, first, this.el("br"), rest, ex, b2 ?? "");

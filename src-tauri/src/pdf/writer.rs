@@ -9,19 +9,13 @@ use super::models::{
     RectAnnotation, RgbColor, SignatureAnnotation, StampAnnotation, StampMark, TextAlignment, TextAnnotation,
 };
 
-// ── Annotation metadata (JSON + stream-ID tracking) ──────────────────────────
-
 use serde::{Deserialize, Serialize};
 
 use super::sysfont;
 
-/// Stored in the PDF catalog under `CCAnnot`.
-/// Holds the editable annotation data AND the object IDs of the burned content
-/// streams so they can be updated in-place on re-save (preventing accumulation).
 #[derive(Serialize, Deserialize, Clone, Default)]
 pub struct AnnotationMeta {
     pub annotations: Vec<Annotation>,
-    /// Per-page annotation stream object IDs: page_num → [object_id, generation].
     pub stream_ids: HashMap<u32, [u32; 2]>,
 }
 
@@ -33,8 +27,6 @@ fn catalog_id(doc: &Document) -> Result<ObjectId, String> {
         .map_err(|_| "Root is not a reference".to_string())
 }
 
-/// Read annotation metadata from the `CCAnnot` catalog entry.
-/// Returns a default (empty) meta if the entry is absent or unreadable.
 pub fn load_meta(doc: &Document) -> AnnotationMeta {
     let Ok(cat_id) = catalog_id(doc) else { return AnnotationMeta::default() };
     let Ok(cat) = doc.get_object(cat_id) else { return AnnotationMeta::default() };
@@ -51,7 +43,6 @@ pub fn load_meta(doc: &Document) -> AnnotationMeta {
     serde_json::from_str(&json).unwrap_or_default()
 }
 
-/// Serialize `meta` and store it in the PDF catalog under `CCAnnot`.
 pub fn save_meta(doc: &mut Document, meta: &AnnotationMeta) -> Result<(), String> {
     let json = serde_json::to_string(meta).map_err(|e| e.to_string())?;
     let stream = Stream::new(dictionary! {}, json.into_bytes());
@@ -65,14 +56,9 @@ pub fn save_meta(doc: &mut Document, meta: &AnnotationMeta) -> Result<(), String
     Ok(())
 }
 
-// ── PDF operator builders ─────────────────────────────────────────────────────
-
-/// Transparency an annotation needs: an ExtGState resource on its page.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Alpha {
-    /// Opacity in percent (0–100).
     pct: u32,
-    /// Multiply blending, so highlighted text stays readable.
     multiply: bool,
 }
 
@@ -82,7 +68,6 @@ impl Alpha {
     }
 }
 
-/// `None` when the drawing is opaque and plainly painted.
 fn alpha(opacity: Option<f64>, multiply: bool) -> Option<Alpha> {
     let o = opacity.unwrap_or(1.0);
     let o = if o.is_finite() { o.clamp(0.0, 1.0) } else { 1.0 };
@@ -106,8 +91,6 @@ fn rgb_stroke(c: &RgbColor) -> String {
     format!("{:.4} {:.4} {:.4} RG\n", c.r_f(), c.g_f(), c.b_f())
 }
 
-/// Fill colour operator and the path-painting operator for a shape:
-/// `B` fill + outline, `f` fill only, `S` outline only, `n` nothing.
 fn shape_paint(fill: Option<&RgbColor>, stroke_width: f64) -> (String, &'static str) {
     let fill_op = fill.map(|c| format!("{:.4} {:.4} {:.4} rg\n", c.r_f(), c.g_f(), c.b_f())).unwrap_or_default();
     let paint = match (fill.is_some(), stroke_width > 0.0) {
@@ -119,8 +102,6 @@ fn shape_paint(fill: Option<&RgbColor>, stroke_width: f64) -> (String, &'static 
     (fill_op, paint)
 }
 
-/// Append rect operators (outline and optional fill) to `buf`.
-/// Returns the transparency to register, if any.
 pub fn write_rect(buf: &mut Vec<u8>, ann: &RectAnnotation) -> Option<Alpha> {
     let (fill_op, paint) = shape_paint(ann.fill_color.as_ref(), ann.stroke_width);
     let a = alpha(ann.opacity, false);
@@ -142,12 +123,9 @@ pub fn write_rect(buf: &mut Vec<u8>, ann: &RectAnnotation) -> Option<Alpha> {
     a
 }
 
-/// Append ellipse operators (4-arc Bézier, outline and optional fill) to `buf`.
-/// Returns the transparency to register, if any.
 pub fn write_circle(buf: &mut Vec<u8>, ann: &CircleAnnotation) -> Option<Alpha> {
     let (fill_op, paint) = shape_paint(ann.fill_color.as_ref(), ann.stroke_width);
     let a = alpha(ann.opacity, false);
-    // Bézier approximation constant κ ≈ 0.5523
     const K: f64 = 0.5523;
     let cx = ann.x + ann.width / 2.0;
     let cy = ann.y + ann.height / 2.0;
@@ -160,15 +138,10 @@ pub fn write_circle(buf: &mut Vec<u8>, ann: &CircleAnnotation) -> Option<Alpha> 
             "{}{}",
             "{:.4} {:.4} {:.4} RG\n",
             "{:.4} w\n",
-            // Move to top centre
             "{:.4} {:.4} m\n",
-            // Arc 1: top → right
             "{:.4} {:.4} {:.4} {:.4} {:.4} {:.4} c\n",
-            // Arc 2: right → bottom
             "{:.4} {:.4} {:.4} {:.4} {:.4} {:.4} c\n",
-            // Arc 3: bottom → left
             "{:.4} {:.4} {:.4} {:.4} {:.4} {:.4} c\n",
-            // Arc 4: left → top
             "{:.4} {:.4} {:.4} {:.4} {:.4} {:.4} c\n",
             "{}\nQ\n"
         ),
@@ -178,31 +151,26 @@ pub fn write_circle(buf: &mut Vec<u8>, ann: &CircleAnnotation) -> Option<Alpha> 
         ann.color.g_f(),
         ann.color.b_f(),
         ann.stroke_width,
-        // Move to top
         cx,
         cy + ry,
-        // Arc 1
         cx + K * rx,
         cy + ry,
         cx + rx,
         cy + K * ry,
         cx + rx,
         cy,
-        // Arc 2
         cx + rx,
         cy - K * ry,
         cx + K * rx,
         cy - ry,
         cx,
         cy - ry,
-        // Arc 3
         cx - K * rx,
         cy - ry,
         cx - rx,
         cy - K * ry,
         cx - rx,
         cy,
-        // Arc 4
         cx - rx,
         cy + K * ry,
         cx - K * rx,
@@ -215,8 +183,6 @@ pub fn write_circle(buf: &mut Vec<u8>, ann: &CircleAnnotation) -> Option<Alpha> 
     a
 }
 
-/// Append a pencil stroke, straight line or arrow to `buf`.
-/// Returns the transparency to register, if any.
 pub fn write_ink(buf: &mut Vec<u8>, ann: &InkAnnotation) -> Option<Alpha> {
     let mut pts: Vec<(f64, f64)> = ann
         .points
@@ -230,7 +196,6 @@ pub fn write_ink(buf: &mut Vec<u8>, ann: &InkAnnotation) -> Option<Alpha> {
     let a = alpha(ann.opacity, false);
     let mut ops = format!("q\n{}{}{:.4} w\n1 J\n1 j\n", gs_op(a), rgb_stroke(&ann.color), ann.stroke_width,);
 
-    // Arrowhead at the last point; the shaft stops at its base.
     let mut head = String::new();
     if ann.arrow {
         let (tx, ty) = pts[pts.len() - 1];
@@ -277,7 +242,6 @@ pub fn write_ink(buf: &mut Vec<u8>, ann: &InkAnnotation) -> Option<Alpha> {
     a
 }
 
-/// Append highlighted-text rectangles (multiplied, so the text shows through).
 pub fn write_highlight(buf: &mut Vec<u8>, ann: &HighlightAnnotation) -> Option<Alpha> {
     if ann.rects.is_empty() {
         return None;
@@ -292,12 +256,9 @@ pub fn write_highlight(buf: &mut Vec<u8>, ann: &HighlightAnnotation) -> Option<A
     a
 }
 
-/// Font size of sticky-note text, in points.
 const NOTE_FONT_SIZE: f64 = 10.0;
 const NOTE_PADDING: f64 = 6.0;
 
-/// Append a sticky note: a coloured square with its text, clipped to the square.
-/// Returns the font to register.
 pub fn write_note(buf: &mut Vec<u8>, ann: &NoteAnnotation) -> (&'static str, &'static str) {
     let border = RgbColor {
         r: (ann.color.r as f64 * 0.8) as u8,
@@ -340,7 +301,6 @@ pub fn write_note(buf: &mut Vec<u8>, ann: &NoteAnnotation) -> (&'static str, &'s
     font
 }
 
-/// Select the PDF standard Type1 font name for the given style flags.
 fn font_name(family: FontFamily, bold: bool, italic: bool) -> &'static str {
     match (family, bold, italic) {
         (FontFamily::Helvetica, true, true) => "Helvetica-BoldOblique",
@@ -358,7 +318,6 @@ fn font_name(family: FontFamily, bold: bool, italic: bool) -> &'static str {
     }
 }
 
-/// Short resource key for a font name (no hyphens, fits in name dict).
 fn font_key(family: FontFamily, bold: bool, italic: bool) -> &'static str {
     match (family, bold, italic) {
         (FontFamily::Helvetica, true, true) => "HelvBO",
@@ -376,7 +335,6 @@ fn font_key(family: FontFamily, bold: bool, italic: bool) -> &'static str {
     }
 }
 
-/// Average glyph width as a fraction of the font size, for wrapping and alignment.
 fn avg_char_width(family: FontFamily) -> f64 {
     match family {
         FontFamily::Helvetica => 0.5,
@@ -385,7 +343,6 @@ fn avg_char_width(family: FontFamily) -> f64 {
     }
 }
 
-/// Escape a string for use inside PDF literal string parentheses.
 fn pdf_escape(s: &str) -> String {
     let mut out = String::with_capacity(s.len());
     for ch in s.chars() {
@@ -399,8 +356,6 @@ fn pdf_escape(s: &str) -> String {
     out
 }
 
-/// Split `text` on explicit `\n` then word-wrap each paragraph to `max_width`,
-/// measuring with `width`.
 fn wrap_text_by(text: &str, max_width: f64, width: &dyn Fn(&str) -> f64) -> Vec<String> {
     let space_w = width(" ");
     let mut result = Vec::new();
@@ -413,7 +368,6 @@ fn wrap_text_by(text: &str, max_width: f64, width: &dyn Fn(&str) -> f64) -> Vec<
         let mut line_w = 0.0_f64;
         for word in para.split(' ') {
             let word_w = width(word);
-            // Width if we append this word (with a leading space if line is non-empty)
             let candidate_w = if line.is_empty() { word_w } else { line_w + space_w + word_w };
             if !line.is_empty() && candidate_w > max_width {
                 result.push(line.clone());
@@ -433,8 +387,6 @@ fn wrap_text_by(text: &str, max_width: f64, width: &dyn Fn(&str) -> f64) -> Vec<
     result
 }
 
-/// Append text operators to `buf`.
-/// Returns the resource key and base font name so the caller can register it.
 pub fn write_text(buf: &mut Vec<u8>, ann: &TextAnnotation) -> (&'static str, &'static str) {
     let fkey = font_key(ann.font_family, ann.bold, ann.italic);
     let fname = font_name(ann.font_family, ann.bold, ann.italic);
@@ -442,7 +394,6 @@ pub fn write_text(buf: &mut Vec<u8>, ann: &TextAnnotation) -> (&'static str, &'s
     (fkey, fname)
 }
 
-/// The font text is written in: a standard one, or one embedded from the computer.
 pub enum TextFace<'a> {
     Standard(FontFamily),
     Embedded(&'a sysfont::EmbeddedFont),
@@ -464,7 +415,6 @@ impl TextFace<'_> {
     }
 }
 
-/// Appends the text operators of `ann` in `face`, its resource being `fkey`.
 pub fn write_text_in(buf: &mut Vec<u8>, ann: &TextAnnotation, fkey: &str, face: &TextFace) {
     let line_h = ann.font_size * 1.2;
     let measure = |s: &str| face.width(s, ann.font_size);
@@ -475,7 +425,6 @@ pub fn write_text_in(buf: &mut Vec<u8>, ann: &TextAnnotation, fkey: &str, face: 
         ops.push_str(&format!("{}{:.4} {:.4} {:.4} {:.4} re\nf\n", rgb_fill(&c.color), c.x, c.y, c.width, c.height,));
     }
     if let Some(bg) = &ann.background_color {
-        // Box behind all lines, from the first line's ascent to the last one's descent.
         let n = lines.len().max(1) as f64;
         let bottom = ann.y - (n - 1.0) * line_h - ann.font_size * 0.3 - 2.0;
         let height = (n - 1.0) * line_h + ann.font_size * 1.25 + 4.0;
@@ -497,7 +446,6 @@ pub fn write_text_in(buf: &mut Vec<u8>, ann: &TextAnnotation, fkey: &str, face: 
         ann.font_size,
     ));
 
-    // Collect underline segments to draw after ET (outside text object)
     let mut underlines: Vec<(f64, f64, f64)> = Vec::new();
 
     for (i, line) in lines.iter().enumerate() {
@@ -510,7 +458,6 @@ pub fn write_text_in(buf: &mut Vec<u8>, ann: &TextAnnotation, fkey: &str, face: 
         let x = ann.x + x_off;
         let y = ann.y - i as f64 * line_h;
 
-        // 1 0 0 1 x y Tm = absolute text position
         ops.push_str(&format!("1 0 0 1 {:.4} {:.4} Tm\n{} Tj\n", x, y, face.show(line)));
 
         if ann.underline {
@@ -537,29 +484,21 @@ pub fn write_text_in(buf: &mut Vec<u8>, ann: &TextAnnotation, fkey: &str, face: 
     buf.extend_from_slice(ops.as_bytes());
 }
 
-/// Decode a base64 picture (PNG, JPEG, …), embed it as an image XObject and
-/// append the `Do` operators that draw it in `ann`'s box to `buf`.
-/// An opaque JPEG is embedded as is; anything else is decoded, with its
-/// transparency as an SMask, and Flate-compressed.
-/// Returns `(xobj_name, xobj_id, smask_id)` so the caller can add page resources.
 pub fn write_image(
     buf: &mut Vec<u8>,
     ann: &SignatureAnnotation,
     doc: &mut Document,
 ) -> Result<(String, ObjectId, Option<ObjectId>), String> {
-    // Decode base64 (strip data URI prefix if present)
     let b64 = ann.image_data.split_once(',').map_or(ann.image_data.as_str(), |(_, data)| data);
     let bytes =
         base64::engine::general_purpose::STANDARD.decode(b64).map_err(|e| format!("base64 decode error: {e}"))?;
 
     let (img_id, smask_id) = embed_image(doc, &bytes)?;
 
-    // A unique resource name for this image
     static IMG_COUNTER: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
     let n = IMG_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     let xobj_name = format!("Sig{n}");
 
-    // Build transformation matrix: scale to (width, height), translate to (x, y)
     let ops =
         format!("q\n{:.4} 0 0 {:.4} {:.4} {:.4} cm\n/{} Do\nQ\n", ann.width, ann.height, ann.x, ann.y, xobj_name,);
     buf.extend_from_slice(ops.as_bytes());
@@ -567,7 +506,6 @@ pub fn write_image(
     Ok((xobj_name, img_id, smask_id))
 }
 
-/// A vector that can be drawn: a non-empty box and whole, finite segments.
 fn write_vector_ok(v: &InkVector) -> bool {
     v.w > 0.0
         && v.h > 0.0
@@ -576,8 +514,6 @@ fn write_vector_ok(v: &InkVector) -> bool {
         && v.segs.iter().all(|n| n.is_finite())
 }
 
-/// A drawn signature as curves: each segment stroked with its own width,
-/// round caps, the box mapped onto the annotation (y flipped), like the canvas.
 pub fn write_signature_vector(buf: &mut Vec<u8>, ann: &SignatureAnnotation) {
     let Some(v) = ann.vector.as_ref() else { return };
     let ink = match &ann.color {
@@ -601,12 +537,9 @@ pub fn write_signature_vector(buf: &mut Vec<u8>, ann: &SignatureAnnotation) {
     buf.extend_from_slice(ops.as_bytes());
 }
 
-/// Adds the picture in `bytes` to `doc` as an image XObject (and its SMask).
 pub fn embed_image(doc: &mut Document, bytes: &[u8]) -> Result<(ObjectId, Option<ObjectId>), String> {
     let reader = ImageReader::new(std::io::Cursor::new(bytes)).with_guessed_format().map_err(|e| e.to_string())?;
     if reader.format() == Some(image::ImageFormat::Jpeg) {
-        // Photos stay as they are: no re-encoding, no loss, no growth.
-        // CMYK and grey JPEGs are converted to RGB below; plain RGB passes through.
         use image::ImageDecoder;
         let dec = image::codecs::jpeg::JpegDecoder::new(std::io::Cursor::new(bytes)).map_err(|e| e.to_string())?;
         let (w, h) = dec.dimensions();
@@ -678,7 +611,6 @@ pub fn embed_image(doc: &mut Document, bytes: &[u8]) -> Result<(ObjectId, Option
     Ok((doc.add_object(stream), smask_id))
 }
 
-/// Append a check mark or a cross, drawn with round strokes in its box.
 pub fn write_stamp(buf: &mut Vec<u8>, ann: &StampAnnotation) {
     let (x, y, w, h) = (ann.x, ann.y, ann.width, ann.height);
     let lw = (w.min(h) * 0.14).max(0.5);
@@ -693,12 +625,7 @@ pub fn write_stamp(buf: &mut Vec<u8>, ann: &StampAnnotation) {
     buf.extend_from_slice(ops.as_bytes());
 }
 
-// ── Resource helpers ──────────────────────────────────────────────────────────
-
-/// Add a standard Type1 font resource to a page (or its Resources dict).
-/// `fkey` is the resource alias (e.g. "Helv"), `base_font` is the PDF font name.
 fn add_font_to_page(doc: &mut Document, page_id: ObjectId, fkey: &str, base_font: &str) -> Result<(), String> {
-    // Build a minimal font dict object
     let font_obj = dictionary! {
         "Type" => Object::Name(b"Font".to_vec()),
         "Subtype" => Object::Name(b"Type1".to_vec()),
@@ -708,21 +635,17 @@ fn add_font_to_page(doc: &mut Document, page_id: ObjectId, fkey: &str, base_font
     add_font_ref_to_page(doc, page_id, fkey, font_id)
 }
 
-/// Adds the font object `font_id` to the page's Resources.Font dict as `fkey`.
 fn add_font_ref_to_page(doc: &mut Document, page_id: ObjectId, fkey: &str, font_id: ObjectId) -> Result<(), String> {
-    // Mutably access the page dict
     let page = doc.get_object_mut(page_id).map_err(|e| e.to_string())?;
     let page_dict = match page {
         Object::Dictionary(d) => d,
         _ => return Err("page is not a dictionary".into()),
     };
 
-    // Ensure Resources entry exists as an inline dict
     if !page_dict.has(b"Resources") {
         page_dict.set("Resources", Object::Dictionary(lopdf::Dictionary::new()));
     }
 
-    // Navigate into Resources.Font
     let resources = page_dict.get_mut(b"Resources").map_err(|e| e.to_string())?;
     let res_dict = match resources {
         Object::Dictionary(d) => d,
@@ -741,7 +664,6 @@ fn add_font_ref_to_page(doc: &mut Document, page_id: ObjectId, fkey: &str, font_
     Ok(())
 }
 
-/// Add an image XObject reference to the page's Resources.XObject dict.
 fn add_xobject_to_page(doc: &mut Document, page_id: ObjectId, name: &str, xobj_id: ObjectId) -> Result<(), String> {
     let page = doc.get_object_mut(page_id).map_err(|e| e.to_string())?;
     let page_dict = match page {
@@ -771,7 +693,6 @@ fn add_xobject_to_page(doc: &mut Document, page_id: ObjectId, name: &str, xobj_i
     Ok(())
 }
 
-/// Add a transparency graphics state to the page's Resources.ExtGState dict.
 fn add_extgstate_to_page(doc: &mut Document, page_id: ObjectId, a: Alpha) -> Result<(), String> {
     let o = a.pct as f32 / 100.0;
     let mut gs = dictionary! {
@@ -805,13 +726,10 @@ fn add_extgstate_to_page(doc: &mut Document, page_id: ObjectId, a: Alpha) -> Res
     Ok(())
 }
 
-/// Append `new_ops` as an additional content stream to the page.
-/// Returns the `ObjectId` of the newly created stream.
 fn append_content_stream(doc: &mut Document, page_id: ObjectId, new_ops: Vec<u8>) -> Result<ObjectId, String> {
     let new_stream = Stream::new(dictionary! {}, new_ops);
     let new_id = doc.add_object(Object::Stream(new_stream));
 
-    // Read the current Contents value (clone to avoid borrow conflict)
     let existing: Vec<Object> = {
         let page = doc.get_object(page_id).map_err(|e| e.to_string())?;
         let dict = page.as_dict().map_err(|e| e.to_string())?;
@@ -833,16 +751,6 @@ fn append_content_stream(doc: &mut Document, page_id: ObjectId, new_ops: Vec<u8>
     Ok(new_id)
 }
 
-// ── Public entry point ────────────────────────────────────────────────────────
-
-/// Write all annotations for a single page into the document.
-///
-/// If `existing_stream_id` is `Some`, the operators are written into that
-/// existing stream object in-place (prevents cumulative burn layers on re-save).
-/// Otherwise a new content stream is appended.
-///
-/// Returns the `ObjectId` of the stream that was written, or `None` if there
-/// were no annotations and no existing stream to clear.
 pub fn write_annotations_for_page(
     doc: &mut Document,
     page_id: ObjectId,
@@ -867,7 +775,6 @@ pub fn write_annotations_for_page(
                 None
             }
             Annotation::Text(t) => {
-                // A font of the computer, embedded; the standard one when it is not installed.
                 let font = t
                     .font_name
                     .as_deref()
@@ -905,7 +812,6 @@ pub fn write_annotations_for_page(
     }
 
     if ops.is_empty() {
-        // If we had a previous stream, empty it so stale operators are gone
         if let Some(sid) = existing_stream_id {
             let obj = doc.get_object_mut(sid).map_err(|e| e.to_string())?;
             if let Object::Stream(s) = obj {
@@ -916,7 +822,6 @@ pub fn write_annotations_for_page(
         return Ok(None);
     }
 
-    // Register font resources
     for (fkey, fname) in &fonts_needed {
         add_font_to_page(doc, page_id, fkey, fname)?;
     }
@@ -925,17 +830,14 @@ pub fn write_annotations_for_page(
         add_font_ref_to_page(doc, page_id, fkey, font_id)?;
     }
 
-    // Register image XObject resources
     for (name, xobj_id) in xobjects {
         add_xobject_to_page(doc, page_id, &name, xobj_id)?;
     }
 
-    // Register transparency
     for a in alphas {
         add_extgstate_to_page(doc, page_id, a)?;
     }
 
-    // Update existing stream in-place, or append a new one
     if let Some(sid) = existing_stream_id {
         let obj = doc.get_object_mut(sid).map_err(|e| e.to_string())?;
         if let Object::Stream(s) = obj {
@@ -947,18 +849,8 @@ pub fn write_annotations_for_page(
     Ok(Some(new_id))
 }
 
-// ── AcroForm field writing ────────────────────────────────────────────────────
-
 pub use super::forms::{write_form_fields, FormFieldValue};
 
-/// Clear the content streams referenced by `meta.stream_ids` directly on a
-/// loaded `Document`. Production code uses `IncrementalDocument` paths (see
-/// `commands::pdf::strip_annotation_streams`) — this helper remains only as a
-/// building block for the round-trip tests below.
-/// Replaces a stream's bytes with uncompressed `content`, keeping `/Length` in
-/// sync and dropping any `/Filter` left over from a previous encoding (for
-/// example after the compress command flate-encoded every stream). Assigning
-/// `stream.content` directly leaves a stale `/Length`, which corrupts the file.
 pub(crate) fn set_raw_content(s: &mut lopdf::Stream, content: Vec<u8>) {
     s.dict.remove(b"Filter");
     s.dict.remove(b"DecodeParms");
@@ -975,8 +867,6 @@ fn clear_annotation_streams(doc: &mut Document, meta: &AnnotationMeta) -> Result
     }
     Ok(())
 }
-
-// ── Tests (TDD — must fail before implementation) ────────────────────────────
 
 #[cfg(test)]
 mod tests {
@@ -1112,7 +1002,6 @@ mod tests {
         assert!(s.contains("re"), "missing rect operator");
         assert!(s.contains("\nS\n"), "missing stroke operator");
         assert!(s.contains("RG"), "missing stroke colour");
-        // Red component should be 1.0000
         assert!(s.contains("1.0000"), "red channel not 1.0");
     }
 
@@ -1411,7 +1300,6 @@ mod tests {
 
     #[test]
     fn test_write_image_embeds_xobject() {
-        // Create a 2×2 solid red PNG in memory
         use image::{DynamicImage, ImageBuffer, Rgba};
         let mut img: ImageBuffer<Rgba<u8>, Vec<u8>> = ImageBuffer::new(2, 2);
         for p in img.pixels_mut() {
@@ -1460,7 +1348,6 @@ mod tests {
         let mut buf = Vec::new();
         write_signature_vector(&mut buf, &ann);
         let s = String::from_utf8(buf).unwrap();
-        // Box 50 × 20 onto 100 × 40 at (10, 20), y flipped from the top edge.
         assert!(s.contains("2.000000 0 0 -2.000000 10.0000 60.0000 cm"), "{s}");
         assert!(s.contains("2.500 w\n1.00 2.00 m\n3.00 4.00 5.00 6.00 7.00 8.00 c\nS"), "{s}");
         assert!(s.contains("1 J"));
@@ -1484,8 +1371,6 @@ mod tests {
         assert!(!serde_json::to_string(&ann).unwrap().contains("vector"));
     }
 
-    /// Helper: create a minimal valid PDF document with a catalog that has a Root
-    /// entry in the trailer.
     fn make_doc_with_catalog() -> (Document, ObjectId) {
         use lopdf::dictionary;
         let mut doc = Document::new();
@@ -1502,8 +1387,6 @@ mod tests {
         (doc, cat_id)
     }
 
-    /// Build a minimal PDF with an AcroForm containing one text field and one checkbox,
-    /// then verify that write_form_fields persists the values through save/load.
     #[test]
     fn test_write_form_fields_persists_values() {
         use lopdf::dictionary;
@@ -1562,7 +1445,6 @@ mod tests {
         }
     }
 
-    /// Same as above but with AcroForm as an inline dictionary (not a reference).
     #[test]
     fn test_write_form_fields_inline_acroform() {
         use lopdf::dictionary;
@@ -1593,7 +1475,6 @@ mod tests {
         }
     }
 
-    /// Verify that values survive a save-to-bytes/reload round-trip.
     #[test]
     fn test_write_form_fields_roundtrip() {
         use lopdf::dictionary;
@@ -1616,12 +1497,10 @@ mod tests {
         let fields = vec![FormFieldValue { name: "Name1".into(), value: "Hello World".into() }];
         write_form_fields(&mut doc, &fields).unwrap();
 
-        // Save to a byte buffer and reload
         let mut buf = Vec::new();
         doc.save_to(&mut buf).unwrap();
         let doc2 = Document::load_mem(&buf).unwrap();
 
-        // Find the text field in the reloaded document and check /V
         let cat2 = doc2.get_object(catalog_id(&doc2).unwrap()).unwrap().as_dict().unwrap();
         let af_id = cat2.get(b"AcroForm").unwrap().as_reference().unwrap();
         let af = doc2.get_object(af_id).unwrap().as_dict().unwrap();
@@ -1635,14 +1514,12 @@ mod tests {
         }
     }
 
-    /// Verify that field names stored as PDFDocEncoding (Latin-1) are matched correctly.
     #[test]
     fn test_write_form_fields_pdfdocencoding_name() {
         use lopdf::dictionary;
 
         let (mut doc, cat_id) = make_doc_with_catalog();
 
-        // "État" in Latin-1: É=0xC9, t=0x74, a=0x61, t=0x74
         let latin1_name: Vec<u8> = vec![0xC9, b't', b'a', b't'];
         let text_field_id = doc.add_object(dictionary! {
             b"T" => Object::String(latin1_name, StringFormat::Literal),
@@ -1657,7 +1534,6 @@ mod tests {
             cat.set(b"AcroForm", Object::Reference(acroform_id));
         }
 
-        // Frontend sends the name as proper Unicode "État"
         let fields = vec![FormFieldValue { name: "\u{00C9}tat".into(), value: "test".into() }];
         write_form_fields(&mut doc, &fields).unwrap();
 
@@ -1668,14 +1544,12 @@ mod tests {
         }
     }
 
-    /// Verify that UTF-16BE field names are matched correctly.
     #[test]
     fn test_write_form_fields_utf16be_name() {
         use lopdf::dictionary;
 
         let (mut doc, cat_id) = make_doc_with_catalog();
 
-        // "État" as UTF-16BE with BOM: FE FF 00C9 0074 0061 0074
         let utf16_name: Vec<u8> = vec![0xFE, 0xFF, 0x00, 0xC9, 0x00, 0x74, 0x00, 0x61, 0x00, 0x74];
         let text_field_id = doc.add_object(dictionary! {
             b"T" => Object::String(utf16_name, StringFormat::Literal),
@@ -1700,13 +1574,10 @@ mod tests {
         }
     }
 
-    /// Full save → load → strip cycle: annotation must be readable from meta
-    /// and its burned content stream must be clearable by stream_id.
     #[test]
     fn test_save_strip_roundtrip() {
         use lopdf::dictionary;
 
-        // 1. Build a one-page PDF
         let (mut doc, _cat_id) = make_doc_with_catalog();
         let content_stream = Stream::new(dictionary! {}, b"q Q".to_vec());
         let cs_id = doc.add_object(Object::Stream(content_stream));
@@ -1716,7 +1587,6 @@ mod tests {
             b"Resources" => Object::Dictionary(lopdf::Dictionary::new()),
         });
 
-        // Register the page in the Pages tree
         let pages_id = {
             let cat = doc.get_object(catalog_id(&doc).unwrap()).unwrap().as_dict().unwrap();
             cat.get(b"Pages").unwrap().as_reference().unwrap()
@@ -1726,7 +1596,6 @@ mod tests {
             d.set("Count", Object::Integer(1));
         }
 
-        // 2. Burn a text annotation
         let ann = Annotation::Text(TextAnnotation {
             page: 1,
             x: 50.0,
@@ -1755,23 +1624,19 @@ mod tests {
         meta.stream_ids.insert(1, [sid.0, sid.1 as u32]);
         save_meta(&mut doc, &meta).unwrap();
 
-        // 3. Save to a temp file, reload
         let tmp = std::env::temp_dir().join("test_roundtrip.pdf");
         doc.save(&tmp).unwrap();
         let doc2 = Document::load(&tmp).unwrap();
 
-        // 4. Verify meta is readable
         let meta2 = load_meta(&doc2);
         assert_eq!(meta2.annotations.len(), 1, "should read back 1 annotation");
         assert!(meta2.stream_ids.contains_key(&1), "should have stream id for page 1");
 
-        // 5. Verify the annotation stream has content
         let sid2 = meta2.stream_ids.get(&1).unwrap();
         let stream_obj = doc2.get_object((sid2[0], sid2[1] as u16)).unwrap();
         let stream = stream_obj.as_stream().unwrap();
         assert!(!stream.content.is_empty(), "annotation stream should have content before strip");
 
-        // 6. Strip and verify stream is empty
         let mut doc3 = Document::load(&tmp).unwrap();
         let meta3 = load_meta(&doc3);
         clear_annotation_streams(&mut doc3, &meta3).unwrap();
@@ -1782,13 +1647,10 @@ mod tests {
         let _ = std::fs::remove_file(&tmp);
     }
 
-    /// Simulate: save with annotation → save again from same file (no strip).
-    /// The annotation stream should be updated in-place, not duplicated.
     #[test]
     fn test_double_save_no_duplicate_streams() {
         use lopdf::dictionary;
 
-        // 1. Build a one-page PDF
         let (mut doc, _cat_id) = make_doc_with_catalog();
         let content_stream = Stream::new(dictionary! {}, b"q Q".to_vec());
         let cs_id = doc.add_object(Object::Stream(content_stream));
@@ -1824,7 +1686,6 @@ mod tests {
             cover: None,
         });
 
-        // 2. First save (no existing meta)
         let mut meta = load_meta(&doc);
         let existing = meta.stream_ids.get(&1).map(|arr| (arr[0], arr[1] as u16));
         let sid = write_annotations_for_page(&mut doc, page_id, std::slice::from_ref(&ann), existing).unwrap().unwrap();
@@ -1835,7 +1696,6 @@ mod tests {
         let tmp = std::env::temp_dir().join("test_double_save.pdf");
         doc.save(&tmp).unwrap();
 
-        // 3. Second save from the same file (simulates Ctrl+S without reopen)
         let mut doc2 = Document::load(&tmp).unwrap();
         let meta2 = load_meta(&doc2);
         let pages2 = doc2.get_pages();
@@ -1848,7 +1708,6 @@ mod tests {
         save_meta(&mut doc2, &new_meta).unwrap();
         doc2.save(&tmp).unwrap();
 
-        // 4. Verify: Contents should have exactly 2 entries (original + annotation)
         let doc3 = Document::load(&tmp).unwrap();
         let pages3 = doc3.get_pages();
         let page_id3 = *pages3.get(&1).unwrap();
@@ -1866,7 +1725,6 @@ mod tests {
             _ => panic!("Contents should be an array after append"),
         }
 
-        // 5. Strip and verify annotation stream is empty
         let mut doc4 = Document::load(&tmp).unwrap();
         let meta4 = load_meta(&doc4);
         assert_eq!(meta4.annotations.len(), 1);

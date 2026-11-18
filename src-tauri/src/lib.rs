@@ -31,29 +31,17 @@ use tauri::{DragDropEvent, Manager, WindowEvent};
 pub struct StartupArgs {
     pub file_path: Option<String>,
     pub should_print: bool,
-    /// The file is a temp copy that was never saved (pages dragged out to a
-    /// new window): Save asks where to write it.
     pub unsaved: bool,
-    /// A tab dragged out of another window: the file is a temp copy holding
-    /// its edits, and Save writes back to this path, its real file.
     #[serde(default)]
     pub save_path: Option<String>,
-    /// That tab had unsaved changes.
     #[serde(default)]
     pub dirty: bool,
-    /// The password of a protected document moved from another window.
     #[serde(default)]
     pub password: Option<String>,
-    /// The page the tab showed (1-based; 0: the first).
     #[serde(default)]
     pub page: u32,
 }
 
-/**
- * Puts the window in the middle of the screen it opens on, shrunk (keeping
- * its shape) when it would not fit in the screen's work area: a small or
- * scaled screen must not hide its bottom behind the taskbar.
- */
 fn fit_to_screen(window: &tauri::WebviewWindow) -> tauri::Result<()> {
     let Some(monitor) = window.current_monitor()? else { return Ok(()) };
     let area = monitor.work_area();
@@ -73,7 +61,6 @@ fn fit_to_screen(window: &tauri::WebviewWindow) -> tauri::Result<()> {
     window.set_position(tauri::PhysicalPosition::new(x as i32, y as i32))
 }
 
-/// How much a `size` window must shrink to fit in 95 % of `area` (1: it fits).
 fn fit_scale(size: (u32, u32), area: (u32, u32)) -> f64 {
     let room = |a: u32, s: u32| if s == 0 { 1.0 } else { a as f64 * 0.95 / s as f64 };
     room(area.0, size.0).min(room(area.1, size.1)).min(1.0)
@@ -81,19 +68,10 @@ fn fit_scale(size: (u32, u32), area: (u32, u32)) -> f64 {
 
 pub struct AppState {
     pub startup_args: Mutex<StartupArgs>,
-    /// The main window has read `startup_args`: later files go to it as
-    /// events.
     pub startup_taken: std::sync::atomic::AtomicBool,
-    /// What each extra window opens, by window label.
     pub window_args: Mutex<HashMap<String, StartupArgs>>,
 }
 
-/// Lets the webview read `path` through the asset protocol (pdf.js loads the
-/// document that way), and the commands read and write it (see [`grants`]).
-/// The static scope in tauri.conf.json only covers the app's own temp files;
-/// documents are allowed one by one when the user picks them (open dialog,
-/// drag and drop, command line), so a compromised page cannot read or write
-/// arbitrary files on disk.
 pub(crate) fn allow_viewing<R: tauri::Runtime, M: Manager<R>>(app: &M, path: &str) {
     grants::allow_file(path);
     let _ = app.asset_protocol_scope().allow_file(path);
@@ -101,7 +79,7 @@ pub(crate) fn allow_viewing<R: tauri::Runtime, M: Manager<R>>(app: &M, path: &st
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    let mut args = std::env::args().skip(1); // skip the executable name
+    let mut args = std::env::args().skip(1);
     let mut startup = StartupArgs::default();
 
     while let Some(arg) = args.next() {
@@ -120,19 +98,13 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .setup(move |app| {
-            // Temp files left by an EzReader that crashed: removed in the
-            // background, so a big leftover never delays the window.
             std::thread::spawn(tempfiles::sweep_leftovers);
-            // The previous exe a portable update renamed out of the way.
             std::thread::spawn(commands::update::remove_leftover);
             if let Some(path) = &startup_file {
                 allow_viewing(app, path);
             }
             if let Some(main) = app.get_webview_window("main") {
-                // Best effort: a window that cannot be measured stays as it is.
                 let _ = fit_to_screen(&main);
-                // The launcher keeps its shape when resized; a document
-                // window is free (its page decides, see window-fit.ts).
                 ratio_lock::set_ratio_lock(&main, startup_file.is_none());
             }
             Ok(())
@@ -208,9 +180,6 @@ pub fn run() {
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
         .run(|_app, event| {
-            // Documents opened from the Finder (double click, "Open With",
-            // dropped on the Dock icon) come as an event, not on the
-            // command line.
             #[cfg(target_os = "macos")]
             if let tauri::RunEvent::Opened { urls } = &event {
                 open_from_finder(_app, urls);
@@ -221,13 +190,9 @@ pub fn run() {
         })
 }
 
-/// Where the macOS window buttons sit, in logical pixels: centred on the
-/// 36 px menu row (see `body.mac` in app.css).
 #[cfg(target_os = "macos")]
 pub(crate) const TRAFFIC_LIGHTS: (f64, f64) = (14.0, 18.0);
 
-/// The first file opens in the main window (on launch, or when the page
-/// takes it: see `open-files` in main.ts), the others in windows of their own.
 #[cfg(target_os = "macos")]
 fn open_from_finder(app: &tauri::AppHandle, urls: &[url::Url]) {
     use tauri::Emitter;
@@ -243,7 +208,6 @@ fn open_from_finder(app: &tauri::AppHandle, urls: &[url::Url]) {
     {
         let mut startup = state.startup_args.lock().unwrap();
         if !state.startup_taken.load(std::sync::atomic::Ordering::SeqCst) && startup.file_path.is_none() {
-            // Launched by this file: the window has not asked yet.
             startup.file_path = Some(first.clone());
             to_page = rest.to_vec();
             if let Some(main) = app.get_webview_window("main") {
@@ -266,9 +230,6 @@ fn open_from_finder(app: &tauri::AppHandle, urls: &[url::Url]) {
 
 #[cfg(test)]
 mod icon_tests {
-    /// Tauri makes the window (and so the taskbar) icon from the first image
-    /// of icon.ico: it must be the biggest one, or Windows blows up a 16 px
-    /// picture and the icon looks blurry.
     #[test]
     fn the_window_icon_is_the_biggest_image_of_icon_ico() {
         let d = include_bytes!("../icons/icon.ico");

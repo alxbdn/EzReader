@@ -1,13 +1,7 @@
-/**
- * Presentation mode: one page at a time over a black screen, fitted so the
- * whole page shows. Keys, clicks and the wheel turn pages; a small pill with
- * ‹ n / total › ✕ shows while the mouse moves. Esc or ✕ ends it.
- */
 import { ICON_CHEVRON_LEFT, ICON_CHEVRON_RIGHT, ICON_CLOSE } from "./icons";
 
 export type PresentAction = "next" | "prev" | "first" | "last" | "exit";
 
-/** What a key does while presenting (null: nothing). */
 export function presentActionForKey(key: string): PresentAction | null {
   switch (key) {
     case "ArrowRight": case "ArrowDown": case "PageDown": case " ": case "Enter":
@@ -21,7 +15,6 @@ export function presentActionForKey(key: string): PresentAction | null {
   }
 }
 
-/** The page shown after `action`, kept within 1…count. */
 export function stepPage(page: number, count: number, action: Exclude<PresentAction, "exit">): number {
   const target = action === "next" ? page + 1
     : action === "prev" ? page - 1
@@ -38,28 +31,17 @@ export interface PresentationLabels {
 
 export interface PresentationHost {
   pageCount: number;
-  /** Renders page `n` to fit `w` × `h` CSS pixels. */
   render(n: number, w: number, h: number): Promise<HTMLCanvasElement | null>;
-  /** Called once when presenting ends, with the last page shown. */
   onExit(page: number): void;
 }
 
-/** Idle time before the controls and the cursor hide. */
 const IDLE_MS = 2000;
-/** Wheel travel that turns one page, and the pause before the next turn. */
 const WHEEL_STEP = 40;
 const WHEEL_PAUSE_MS = 350;
-/**
- * While the window goes full screen it can pass through several sizes
- * (restored from maximized, then full screen, then stretched by hand on
- * Windows 10). The first page is shown only once the size has held still
- * this long, and never later than SETTLE_MAX_MS after the hold began.
- */
 const SETTLE_QUIET_MS = 120;
 const SETTLE_MAX_MS = 1200;
 const SETTLE_POLL_MS = 30;
 
-/** Resolves once `measure()` has returned the same size for `quietMs` (or after `maxMs`). */
 export function waitForStableSize(
   measure: () => { w: number; h: number },
   quietMs = SETTLE_QUIET_MS,
@@ -88,7 +70,6 @@ export class Presentation {
   private prevBtn: HTMLButtonElement;
   private nextBtn: HTMLButtonElement;
   private page: number;
-  /** Rendered pages for the current screen size, keyed by page number. */
   private cache = new Map<number, Promise<HTMLCanvasElement | null>>();
   private cacheSize = "";
   private idleTimer: ReturnType<typeof setTimeout> | null = null;
@@ -96,9 +77,7 @@ export class Presentation {
   private wheelSum = 0;
   private wheelLockedUntil = 0;
   private closed = false;
-  /** Bumped on every page change so a slow render never replaces a newer page. */
   private showToken = 0;
-  /** True between open({ hold: true }) and reveal(): nothing is drawn yet. */
   private holding = false;
 
   constructor(private host: PresentationHost, startPage: number, labels: PresentationLabels) {
@@ -134,7 +113,6 @@ export class Presentation {
     const sep = document.createElement("span");
     sep.className = "presentation-sep";
     bar.append(this.prevBtn, this.counter, this.nextBtn, sep, exitBtn);
-    // Clicks on the bar never turn pages.
     bar.addEventListener("mousedown", (e) => e.stopPropagation());
 
     this.el.append(this.stage, bar);
@@ -149,12 +127,6 @@ export class Presentation {
 
   get currentPage(): number { return this.page; }
 
-  /**
-   * Puts the presentation on screen and shows the start page. With `hold`,
-   * the screen stays plain black until reveal(): the caller is about to
-   * resize the window (full screen) and the page should appear once, at its
-   * final size, instead of jumping through every size on the way.
-   */
   open(opts: { hold?: boolean } = {}): void {
     this.holding = !!opts.hold;
     this.el.classList.toggle("holding", this.holding);
@@ -164,19 +136,11 @@ export class Presentation {
     if (!this.holding) void this.show();
   }
 
-  /**
-   * Starts drawing the page at `w` × `h` before reveal() so it is ready
-   * when the window gets there (the screen size the window is heading to).
-   */
   prefetch(w: number, h: number): void {
     if (this.closed || w <= 0 || h <= 0) return;
     void this.renderCached(this.page, Math.round(w), Math.round(h));
   }
 
-  /**
-   * Ends the hold: waits for the window size to settle, draws the page once
-   * at that size, then fades it in.
-   */
   async reveal(): Promise<void> {
     if (!this.holding || this.closed) return;
     await waitForStableSize(() => this.size());
@@ -184,7 +148,6 @@ export class Presentation {
     await this.show();
     if (this.closed) return;
     this.holding = false;
-    // Next frame, so the canvas is laid out before the fade starts.
     requestAnimationFrame(() => this.el.classList.remove("holding"));
   }
 
@@ -195,7 +158,6 @@ export class Presentation {
     };
   }
 
-  /** Ends presenting; the host hears about it once. */
   close(): void {
     if (this.closed) return;
     this.closed = true;
@@ -214,7 +176,6 @@ export class Presentation {
     const target = stepPage(this.page, this.host.pageCount, action);
     if (target === this.page) return;
     this.page = target;
-    // While holding, only the counter moves; reveal() draws the page.
     if (this.holding) { this.counter.textContent = `${target} / ${this.host.pageCount}`; return; }
     void this.show();
   }
@@ -243,22 +204,13 @@ export class Presentation {
     if (token !== this.showToken || this.closed) return;
     if (canvas) this.stage.replaceChildren(canvas);
 
-    // Keep the pages around this one ready, drop the rest.
     for (const k of this.cache.keys()) if (Math.abs(k - n) > 1) this.cache.delete(k);
     if (n < count) void this.renderCached(n + 1, w, h);
     if (n > 1) void this.renderCached(n - 1, w, h);
   }
 
-  /** Where the pointer was at the last mouse move, in screen pixels. */
   private lastPointer: { x: number; y: number } | null = null;
 
-  /**
-   * Only a pointer that really moved wakes the controls. On Windows the
-   * page also gets mouse moves without any movement, for instance when
-   * what lies under the pointer changes (the pill fading out, a tooltip
-   * closing): each one woke the controls, so the pill and the cursor kept
-   * coming back and going away with the mouse standing still.
-   */
   private onMouseMove = (e: MouseEvent): void => {
     const last = this.lastPointer;
     this.lastPointer = { x: e.screenX, y: e.screenY };
@@ -266,7 +218,6 @@ export class Presentation {
     this.wake();
   };
 
-  /** Shows the controls and the cursor, then hides them after a pause. */
   private wake = (): void => {
     this.el.classList.remove("idle");
     if (this.idleTimer) clearTimeout(this.idleTimer);
@@ -289,12 +240,10 @@ export class Presentation {
     this.wheelLockedUntil = now + WHEEL_PAUSE_MS;
   };
 
-  /** Takes every key while presenting so the viewer behind never reacts. */
   private onKey = (e: KeyboardEvent): void => {
     if (e.key === "F12") return;
     e.preventDefault();
     e.stopImmediatePropagation();
-    // A focused control keeps Enter and Space for itself.
     if ((e.key === "Enter" || e.key === " ") && document.activeElement instanceof HTMLButtonElement
         && this.el.contains(document.activeElement)) {
       document.activeElement.click();
@@ -305,7 +254,6 @@ export class Presentation {
   };
 
   private onResize = (): void => {
-    // reveal() waits for the size to settle itself.
     if (this.holding) return;
     if (this.resizeTimer) clearTimeout(this.resizeTimer);
     this.resizeTimer = setTimeout(() => { void this.show(); }, 120);

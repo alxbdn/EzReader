@@ -1,26 +1,12 @@
-//! The app's temp files: working copies of open documents, unlocked copies
-//! of password-protected ones, pages dragged out to a new window.
-//!
-//! They hold the document's content, sometimes without its password or
-//! with text that a redaction removed, so none may outlive the app. Each
-//! file is named after the process that made it (`ezreader-p<pid>-…`): the
-//! app removes its own on exit, and at startup removes those of processes
-//! that are gone (a crash, a forced shutdown).
-
 use std::path::Path;
 use std::time::{Duration, SystemTime};
 
-/// What every temp file of this process starts with, after `ezreader-`.
 pub fn tag() -> String {
     format!("p{}", std::process::id())
 }
 
-/// Files from before temp names carried a process id are removed once
-/// they are this old: by then no running app still uses them.
 const LEGACY_MAX_AGE: Duration = Duration::from_secs(24 * 60 * 60);
 
-/// The process that owns the temp entry `name`, when its name says so.
-/// `None` for a name of an older version (or not an EzReader name).
 fn owner(name: &str) -> Option<u32> {
     let rest = name.strip_prefix("ezreader-")?;
     let digits =
@@ -29,9 +15,6 @@ fn owner(name: &str) -> Option<u32> {
     digits[..end].parse().ok()
 }
 
-/// Removes the EzReader temp entries in `dir` that `stale` says no running
-/// app can still be using. Errors are ignored: a file that cannot be
-/// removed now is tried again at the next start.
 fn sweep_with(dir: &Path, stale: impl Fn(&str, Option<SystemTime>) -> bool) {
     let Ok(entries) = std::fs::read_dir(dir) else { return };
     for entry in entries.flatten() {
@@ -52,8 +35,6 @@ fn sweep_with(dir: &Path, stale: impl Fn(&str, Option<SystemTime>) -> bool) {
     }
 }
 
-/// At startup: removes the temp files of EzReader processes that are no
-/// longer running, and old files from versions before this naming.
 pub fn sweep_leftovers() {
     let me = std::process::id();
     let now = SystemTime::now();
@@ -63,7 +44,6 @@ pub fn sweep_leftovers() {
     });
 }
 
-/// On exit: removes every temp file this process made.
 pub fn remove_own() {
     let me = std::process::id();
     sweep_with(&std::env::temp_dir(), |name, _| owner(name) == Some(me));
@@ -81,8 +61,6 @@ fn is_running(pid: u32) -> bool {
     unsafe {
         let handle = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
         if handle.is_null() {
-            // No such process, or one we may not look at (another user's):
-            // only a process that is gone is treated as gone.
             return winapi::um::errhandlingapi::GetLastError() != winapi::shared::winerror::ERROR_INVALID_PARAMETER;
         }
         let mut code = 0u32;
@@ -97,8 +75,6 @@ fn is_running(pid: u32) -> bool {
     Path::new(&format!("/proc/{pid}")).exists()
 }
 
-/// No /proc on macOS: signal 0 checks that the process exists without
-/// touching it (EPERM: it exists, but belongs to another user).
 #[cfg(all(unix, not(target_os = "linux")))]
 fn is_running(pid: u32) -> bool {
     extern "C" {

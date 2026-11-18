@@ -1,12 +1,5 @@
-//! Text recognition (OCR): uses the engine built into Windows 10 and 11
-//! (`Windows.Media.Ocr`) on Windows, the one built into macOS (Vision) on
-//! macOS, and the PaddleOCR models built into the app (see `rapid_ocr`) on
-//! Linux.
-
 use serde::Serialize;
 
-/// A recognized word; the box is in fractions of the picture (0 to 1), so
-/// it maps onto a page whatever the resolution it was rendered at.
 #[derive(Debug, Clone, Serialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct OcrWord {
@@ -27,10 +20,8 @@ pub struct OcrLine {
 #[derive(Debug, Clone, Serialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct OcrResult {
-    /// The lines, one per line of text.
     pub text: String,
     pub lines: Vec<OcrLine>,
-    /// Tag of the language used (e.g. "fr-FR" on Windows, "latin" on Linux).
     pub language: String,
 }
 
@@ -38,12 +29,9 @@ pub struct OcrResult {
 #[serde(rename_all = "camelCase")]
 pub struct OcrLanguage {
     pub tag: String,
-    /// The language's readable name.
     pub name: String,
 }
 
-/// Resizes small images up so text reaches a comfortable height, clamps to
-/// `max_side`, and composites transparent pixels over white paper.
 pub(crate) fn prepare_rgba(bytes: &[u8], max_side: u32) -> Result<image::RgbaImage, String> {
     let img = image::load_from_memory(bytes).map_err(|e| e.to_string())?;
     let (w, h) = (img.width().max(1), img.height().max(1));
@@ -57,7 +45,6 @@ pub(crate) fn prepare_rgba(bytes: &[u8], max_side: u32) -> Result<image::RgbaIma
         img
     };
     let mut rgba = img.to_rgba8();
-    // Transparent areas read as white paper.
     for p in rgba.pixels_mut() {
         let a = p[3] as u32;
         if a < 255 {
@@ -70,9 +57,6 @@ pub(crate) fn prepare_rgba(bytes: &[u8], max_side: u32) -> Result<image::RgbaIma
     Ok(rgba)
 }
 
-/// The picture as Windows OCR wants it: BGRA pixels, small text enlarged
-/// (it reads text from about 20 px high best) and the whole thing within
-/// `max_side`.
 #[cfg_attr(not(windows), allow(dead_code))]
 pub fn prepare(bytes: &[u8], max_side: u32) -> Result<(Vec<u8>, u32, u32), String> {
     let rgba = prepare_rgba(bytes, max_side)?;
@@ -84,7 +68,6 @@ pub fn prepare(bytes: &[u8], max_side: u32) -> Result<(Vec<u8>, u32, u32), Strin
     Ok((bgra, w, h))
 }
 
-/// Joins recognized lines into the text shown to the user.
 pub fn join_lines(lines: &[OcrLine]) -> String {
     lines.iter().map(|l| l.text.as_str()).collect::<Vec<_>>().join("\n")
 }
@@ -99,8 +82,6 @@ mod engine {
     use windows::Storage::Streams::DataWriter;
 
     fn init() {
-        // WinRT needs the thread in a COM apartment; "already initialized"
-        // (in any mode) is fine.
         unsafe {
             let _ = windows::Win32::System::WinRT::RoInitialize(windows::Win32::System::WinRT::RO_INIT_MULTITHREADED);
         }
@@ -183,7 +164,6 @@ mod engine {
         request
     }
 
-    /// Language tags Vision reads (en-US, fr-FR, …).
     fn supported() -> Result<Vec<String>, String> {
         // SAFETY: a plain query on a fresh request.
         let tags =
@@ -202,9 +182,6 @@ mod engine {
             .collect())
     }
 
-    /// The languages to read with: `language`, or else the user's own
-    /// languages (System Settings ▸ Language & Region) that Vision reads, in
-    /// their order, with English last.
     fn languages_for(language: Option<&str>) -> Vec<String> {
         let supported = supported().unwrap_or_default();
         let base = |t: &str| t.split(['-', '_']).next().unwrap_or("").to_ascii_lowercase();
@@ -227,8 +204,6 @@ mod engine {
         out
     }
 
-    /// The box of `range` (UTF-16 units of the line) in fractions of the
-    /// picture, from the top left. Vision measures from the bottom left.
     fn word_box(text: &VNRecognizedText, range: NSRange) -> Option<(f32, f32, f32, f32)> {
         // SAFETY: `boundingBoxForRange:error:` takes an NSRange and returns
         // the observation (or nil and an error).
@@ -240,8 +215,6 @@ mod engine {
     }
 
     pub fn recognize(bytes: &[u8], language: Option<&str>) -> Result<OcrResult, String> {
-        // Same picture as the other engines read: small text enlarged,
-        // transparency on white.
         let rgba = prepare_rgba(bytes, 4000)?;
         let mut png = Vec::new();
         image::DynamicImage::ImageRgba8(rgba)
@@ -267,7 +240,6 @@ mod engine {
             let Some(top) = obs.topCandidates(1).firstObject() else { continue };
             let line = top.string().to_string();
             let mut words = Vec::new();
-            // Word by word, each with its own box; offsets in UTF-16 units.
             let mut offset = 0usize;
             for (is_space, chunk) in chunks(&line) {
                 let len = chunk.encode_utf16().count();
@@ -284,7 +256,6 @@ mod engine {
         Ok(OcrResult { text: join_lines(&lines), lines, language })
     }
 
-    /// `line` cut into runs of spaces and runs of anything else.
     fn chunks(line: &str) -> Vec<(bool, &str)> {
         let mut out = Vec::new();
         let mut start = 0;
@@ -318,8 +289,6 @@ mod engine {
 mod engine {
     use super::*;
 
-    /// One model reads every language written in the Latin alphabet
-    /// (English, French, German, Spanish, …): there is nothing to choose.
     pub fn languages() -> Result<Vec<OcrLanguage>, String> {
         Ok(Vec::new())
     }
@@ -378,8 +347,6 @@ mod tests {
         assert_eq!(join_lines(&[l("a b"), l("c")]), "a b\nc");
     }
 
-    /// Reads a real picture of text when an OCR language is installed
-    /// (skipped on machines without one).
     #[test]
     fn recognizes_text_on_windows() {
         if languages().map(|l| l.is_empty()).unwrap_or(true) {

@@ -16,11 +16,6 @@ import { LiveText, hasRealText, layoutOcr, renderOcrLayer } from "./live-text";
 
 pdfjs.GlobalWorkerOptions.workerSrc = workerUrl;
 
-/**
- * Maps a PDF-space rectangle to viewport coordinates, corner by corner.
- * Stand-in for `PageViewport.convertToViewportRectangle`, gone since pdf.js 6.
- * Like the original, the result is not normalised (x1 may exceed x2).
- */
 export function toViewportRect(
   viewport: Pick<PageViewport, "convertToViewportPoint">,
   [x1, y1, x2, y2]: readonly number[] | Float32Array,
@@ -30,14 +25,9 @@ export function toViewportRect(
   return [a, b, c, d];
 }
 
-// ── Pure layout functions (exported for unit tests) ───────────────────────────
-
 const MAX_COLUMNS = 3;
-const PAGE_GAP = 12; // px between columns
+const PAGE_GAP = 12;
 
-/**
- * Calculate how many pages fit side-by-side in the viewer, capped at MAX_COLUMNS.
- */
 export function calculateColumnCount(
   containerWidth: number,
   refPageWidthPx: number,
@@ -46,11 +36,6 @@ export function calculateColumnCount(
   return Math.min(MAX_COLUMNS, Math.max(1, Math.floor((containerWidth + gap) / (refPageWidthPx + gap))));
 }
 
-/**
- * Group 1-indexed page numbers into rows of `columnCount`.
- * When `columnCount === 2 && evenSpread`, page 1 sits alone on the first row
- * (cover) and even pages sit on the left of each subsequent row ([2, 3], [4, 5]…).
- */
 export function buildRows(pageCount: number, columnCount: number, evenSpread = false): number[][] {
   const rows: number[][] = [];
   if (pageCount <= 0) return rows;
@@ -69,14 +54,6 @@ export function buildRows(pageCount: number, columnCount: number, evenSpread = f
   return rows;
 }
 
-/**
- * The page shown as the current one: the page whose middle is nearest a
- * third of the way down the view. Scrolled all the way to the end, it is the
- * last page, even when that page is too short to ever reach that line (a
- * landscape page in a tall window): otherwise the counter stopped one page
- * short and "next page" scrolled back up. `pages` are in page order, with
- * their offset and size along the scroll direction.
- */
 export function focusedPageAt(
   pos: number,
   viewSize: number,
@@ -95,12 +72,10 @@ export function focusedPageAt(
   return best;
 }
 
-/** Start offsets of the non-overlapping occurrences of `needle` (already lower-cased) in `text`. */
 export function matchOffsets(text: string, needle: string): number[] {
   const out: number[] = [];
   if (!needle) return out;
   const hay = text.toLocaleLowerCase();
-  // Lower-casing can change the length of a few characters; fall back to no hits.
   if (hay.length !== text.length) return out;
   let at = hay.indexOf(needle);
   while (at !== -1) {
@@ -127,10 +102,6 @@ export interface LinkNavigationHandler {
   goToPage?: (page: number) => void;
 }
 
-/**
- * Resolve a PDF named destination (string) or explicit destination array into
- * a 1-based page number and optional PDF-user-space target point.
- */
 export async function resolveDestination(
   pdfDoc: DestinationDoc,
   dest: unknown,
@@ -190,8 +161,6 @@ export async function resolveDestination(
   return { page: pageNumber, point };
 }
 
-// ── PdfPageView ───────────────────────────────────────────────────────────────
-
 export class PdfPageView {
   readonly pageNum: number;
   readonly wrapper: HTMLElement;
@@ -205,10 +174,8 @@ export class PdfPageView {
   private formLayer: HTMLElement;
   private annotationCanvas: HTMLCanvasElement;
   private _viewport: PageViewport | null = null;
-  /** Bumped by clear() / cancelRender(); an in-flight render that sees a new value stops. */
   private _generation = 0;
   private _renderTask: RenderTask | null = null;
-  /** The pdf.js page last drawn here, whose caches clear() frees. */
   private _page: PDFPageProxy | null = null;
   private _renderedScale = 0;
   private _renderedRotation = -1;
@@ -243,13 +210,10 @@ export class PdfPageView {
       this.formLayer,
       this.annotationCanvas
     );
-    // No pixels until the page is drawn: a canvas starts at 300×150, and a
-    // 2D context allocates that much for each of the thousands of pages.
     for (const c of [this.canvas, this.annotationCanvas]) { c.width = 0; c.height = 0; }
     this.overlay = new CanvasOverlay(this.annotationCanvas, this.wrapper, tools, annotations);
   }
 
-  /** The view is thrown away (new layout, document closed): stops its work and listeners. */
   destroy(): void {
     this.clear();
     this.overlay.destroy();
@@ -257,12 +221,10 @@ export class PdfPageView {
 
   get viewport(): PageViewport | null { return this._viewport; }
 
-  /** True while the canvas holds a bitmap (drawn, or kept through a zoom). */
   get hasPixels(): boolean { return this.canvas.width > 0; }
 
   get renderedRotation(): number { return this._renderedRotation; }
 
-  /** True when the page is already drawn at this exact scale, rotation, and pixel ratio. */
   isRenderedAt(scale: number, rotation: number, dpr = window.devicePixelRatio || 1): boolean {
     return (
       this.rendered &&
@@ -273,7 +235,6 @@ export class PdfPageView {
     );
   }
 
-  /** Stops an in-flight render (e.g. superseded by a new zoom) while keeping the current bitmap visible. */
   cancelRender(): void {
     if (!this.rendering && !this._renderTask) return;
     this._generation++;
@@ -313,14 +274,6 @@ export class PdfPageView {
       const viewport = page.getViewport({ scale, rotation: (page.rotate + rotation) % 360 });
       this._viewport = viewport;
 
-      // Render PDF content into a back-buffer canvas first so the visible
-      // canvas is never blank — old content stays until the new frame is ready,
-      // then the DOM node is swapped in place without a full-bitmap drawImage copy.
-      //
-      // The canvas must map 1:1 onto screen pixels to look sharp.  Pick a
-      // whole number of device pixels first, then derive the CSS size from
-      // it.  (Flooring the backing store while keeping the fractional CSS
-      // size made the browser stretch every page slightly, blurring text.)
       const dpr = window.devicePixelRatio || 1;
       const pxW = Math.max(1, Math.round(viewport.width  * dpr));
       const pxH = Math.max(1, Math.round(viewport.height * dpr));
@@ -341,7 +294,6 @@ export class PdfPageView {
         await this._renderTask.promise;
       } catch (err) {
         buf.width = buf.height = 0;
-        // clear() cancels the task when the page scrolls out of range.
         if (stale()) return;
         throw err;
       } finally {
@@ -352,37 +304,28 @@ export class PdfPageView {
         return;
       }
 
-      // Atomic DOM swap: replace the old canvas node directly and free its bitmap.
       const prevCanvas = this.canvas;
       this.canvas = buf;
       prevCanvas.replaceWith(buf);
       prevCanvas.width = prevCanvas.height = 0;
 
-      // Size annotation canvas (no content to preserve here).
       this.annotationCanvas.width  = pxW;
       this.annotationCanvas.height = pxH;
       this.annotationCanvas.style.width  = `${cssW}px`;
       this.annotationCanvas.style.height = `${cssH}px`;
 
-      // Snap wrapper to actual rendered size
       this.setPlaceholderSize(viewport.width, viewport.height);
 
-      // Sync annotation overlay immediately with the new canvas
       this.overlay.syncToPage(
         this.pageNum,
         scale,
         viewport.height / scale,
         viewport
       );
-      // The sharp page is on screen: the next page can start drawing while
-      // this one lays out its words, links and fields.
       onPainted?.();
 
-      // Build overlay layers (text first — link layer scans text spans)
       const hasText = await this.buildTextLayer(page, viewport, stale);
       if (stale()) return;
-      // A scan or a photo: read its words in the background, then lay them
-      // over the picture so they can be selected like any text.
       if (!hasText && this.liveText) void this.addLiveText(page, viewport, stale);
       await this.buildLinkLayer(page, viewport, stale, linkHandler);
       if (stale()) return;
@@ -398,21 +341,11 @@ export class PdfPageView {
     }
   }
 
-  /** Remove rendered content while preserving placeholder dimensions. */
   clear(): void {
-    // Stop any render still running for this page.  Without this, a render
-    // that finishes after the page was cleared marks it "rendered" while its
-    // canvas is blank, and the page is never drawn again (fast scrolling).
     this._generation++;
     this._renderTask?.cancel();
     this._renderTask = null;
-    // Give the pixels back: a cleared canvas keeps its full-size bitmap
-    // otherwise, and scrolling through a long document piles them up until
-    // the window runs out of memory. Width 0 frees them; the wrapper keeps
-    // the page's place in the layout.
     for (const c of [this.canvas, this.annotationCanvas]) { c.width = 0; c.height = 0; }
-    // pdf.js keeps each drawn page's drawing commands and decoded pictures
-    // until told otherwise: free them too (it is drawn again from the file).
     this._page?.cleanup();
     this._page = null;
     this.textLayer.innerHTML  = "";
@@ -423,13 +356,9 @@ export class PdfPageView {
     this._renderedRotation = -1;
     this._renderedDpr = 0;
     this.rendered = false;
-    // The render it stopped can no longer finish: let the page be drawn again.
     this.rendering = false;
   }
 
-  // ── Text layer ──────────────────────────────────────────────────────────────
-
-  /** Builds the text layer; false when the page has no real text (a scan). */
   private async buildTextLayer(page: PDFPageProxy, viewport: PageViewport, stale: () => boolean): Promise<boolean> {
     this.textLayer.innerHTML = "";
     this.textLayer.classList.remove("has-ocr");
@@ -437,7 +366,6 @@ export class PdfPageView {
     this.textLayer.style.height = `${viewport.height}px`;
 
     const textContent = await page.getTextContent();
-    // Cleared or redrawn meanwhile: the newer render lays the words out.
     if (stale()) return true;
     const fragment = document.createDocumentFragment();
     const measureCtx = document.createElement("canvas").getContext("2d")!;
@@ -470,7 +398,6 @@ export class PdfPageView {
       span.style.cursor          = "text";
       span.style.pointerEvents   = "auto";
       span.style.transformOrigin = "0% 100%";
-      // Where the words are on the page, for the Edit text tool.
       span.dataset.pdf = [tx, ty, Math.hypot(a, b), item.width].map((n) => n.toFixed(2)).join(",");
       const family = item.fontName ? textContent.styles[item.fontName]?.fontFamily : undefined;
       if (family) span.dataset.family = family;
@@ -498,7 +425,6 @@ export class PdfPageView {
 
   private async addLiveText(page: PDFPageProxy, viewport: PageViewport, stale: () => boolean): Promise<void> {
     const result = await this.liveText!.read(page, viewport.rotation, () => !stale() && this.wrapper.isConnected);
-    // Zoomed or rotated meanwhile: the newer render lays the words out.
     if (!result || stale() || this._viewport !== viewport) return;
     const ctx = document.createElement("canvas").getContext("2d")!;
     const measure = (text: string, size: number) => {
@@ -508,13 +434,6 @@ export class PdfPageView {
     renderOcrLayer(this.textLayer, layoutOcr(result, viewport.width, viewport.height, measure));
   }
 
-  // ── Search highlights ──────────────────────────────────────────────────────
-
-  /**
-   * Wraps each occurrence of `query` (case-insensitive, within one text item,
-   * as `countMatches` counts them) in a <mark>. The `active`-th one on this
-   * page gets the "active" class and is returned.
-   */
   highlight(query: string, active: number): HTMLElement | null {
     const needle = query.toLocaleLowerCase();
     let n = 0;
@@ -551,8 +470,6 @@ export class PdfPageView {
     return activeMark;
   }
 
-  // ── Link layer ──────────────────────────────────────────────────────────────
-
   private async buildLinkLayer(
     page: PDFPageProxy,
     viewport: PageViewport,
@@ -567,7 +484,6 @@ export class PdfPageView {
     interface DomEntry { startPos: number; rects: Rect[] }
     const domLinks = new Map<string, DomEntry>();
 
-    // Only scan DOM text spans and measure glyph widths when the page text actually contains "http"
     if (this.textLayer.textContent?.includes("http")) {
       const mc = document.createElement("canvas").getContext("2d")!;
       let lastFont = "";
@@ -585,11 +501,11 @@ export class PdfPageView {
         start: number;
         end: number;
         text: string;
-        pivotX: number;   // canvas x of text origin (= CSS left)
-        pivotY: number;   // canvas y of text origin (= CSS top + fontSize)
-        top: number;      // CSS top (used for line-break detection only)
+        pivotX: number;
+        pivotY: number;
+        top: number;
         fontSize: number;
-        angle: number;    // CSS rotation in degrees (from transform:rotate())
+        angle: number;
       }
 
       let combined = "";
@@ -615,7 +531,7 @@ export class PdfPageView {
           end: combined.length,
           text,
           pivotX:   parseFloat(span.style.left) || 0,
-          pivotY:   spanTop + fontSize,   // transform-origin is 0% 100% = bottom-left
+          pivotY:   spanTop + fontSize,
           top:      spanTop,
           fontSize,
           angle:    rotMatch ? parseFloat(rotMatch[1]) : 0,
@@ -633,16 +549,11 @@ export class PdfPageView {
           const dxR = measure(e.text.slice(0, urlR), e.span);
           if (dxR <= dxL) continue;
           if (Math.abs(e.angle) < 0.5) {
-            // No rotation — simple horizontal rect.
             rects.push({ left: e.pivotX + dxL, top: e.pivotY - e.fontSize,
                          right: e.pivotX + dxR, bottom: e.pivotY });
           } else {
-            // Rotate the 4 corners of the URL sub-rect around the pivot and
-            // return the axis-aligned bounding box.
             const θ = e.angle * Math.PI / 180;
             const cos = Math.cos(θ), sin = Math.sin(θ);
-            // corners relative to pivot (pivotX, pivotY):
-            //   x axis = text advance direction, y axis = up (−fontSize)
             const corners: [number, number][] = [
               [dxL, -e.fontSize], [dxR, -e.fontSize],
               [dxR, 0],           [dxL, 0],
@@ -684,7 +595,6 @@ export class PdfPageView {
       }
     }
 
-    // Formal PDF link annotations
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const annotations: any[] = await (page as any).getAnnotations();
     if (stale()) return;
@@ -757,7 +667,7 @@ export class PdfPageView {
       } else if (typeof ann.unsafeUrl === "string" && ann.unsafeUrl.startsWith("#") && linkHandler) {
         const rawHash = ann.unsafeUrl.slice(1);
         let hash = rawHash;
-        try { hash = decodeURIComponent(rawHash); } catch { /* keep raw hash */ }
+        try { hash = decodeURIComponent(rawHash); } catch {}
         const pageMatch = /^page=(\d+)$/i.exec(hash);
         if (pageMatch && linkHandler.goToPage) {
           const targetPage = Number(pageMatch[1]);
@@ -768,13 +678,10 @@ export class PdfPageView {
       }
     }
 
-    // DOM-discovered URLs not covered by a formal annotation
     for (const [url, { rects }] of domLinks) {
       if (!addedUrls.has(url)) appendAnchors(rects, () => { void openUrl(url); });
     }
   }
-
-  // ── Form layer ──────────────────────────────────────────────────────────────
 
   private async buildFormLayer(
     page: PDFPageProxy,
@@ -810,7 +717,6 @@ export class PdfPageView {
       els[i].addEventListener("keydown", (e: Event) => {
         const ke = e as KeyboardEvent;
         if (ke.key !== "ArrowDown" && ke.key !== "ArrowUp") return;
-        // Lists and multi-line fields use the arrows themselves.
         if (els[i] instanceof HTMLTextAreaElement || els[i] instanceof HTMLSelectElement) return;
         ke.preventDefault();
         const next = ke.key === "ArrowDown" ? els[i + 1] : els[i - 1];
@@ -820,14 +726,12 @@ export class PdfPageView {
   }
 }
 
-// ── PdfViewer ─────────────────────────────────────────────────────────────────
-
 export class PdfViewer {
   private pdfDoc: PDFDocumentProxy | null = null;
   private _currentPage = 1;
   private _focusedPage = 1;
   private _pageCount  = 0;
-  private _scale      = CSS_UNITS; // 100% actual size
+  private _scale      = CSS_UNITS;
   private _rotation   = 0;
   private _tools: ToolSelection = new ToolSelection();
   private _annotations: AnnotationSession = new AnnotationSession();
@@ -842,40 +746,26 @@ export class PdfViewer {
   pageDimensions: Array<{ width: number; height: number }> = [];
   pageViews: PdfPageView[] = [];
   columnCount = 1;
-  /** Pages per row chosen by the user, or null to fit as many as the width allows. */
   private _forcedColumns: number | null = null;
-  /** In 2-column mode, true puts page 1 alone and even pages on the left (2–3, 4–5). */
   private _evenSpread = false;
   private _shownEvenSpread = false;
-  /** "horizontal" lays every page out in a single row that scrolls sideways. */
   private _scrollMode: "vertical" | "horizontal" = "vertical";
 
   private onLayoutChangedCb?: (views: PdfPageView[]) => void;
   private onRenderActivityCb?: (busy: boolean) => void;
   onResizeCb?: () => void;
   private observer: IntersectionObserver | null = null;
-  /** Pages currently inside the observer's area (viewport + margin). */
   private _visiblePages = new Set<number>();
-  /** Pages waiting to be rendered, prioritized by proximity to the focused page. */
   private _renderQueue = new Set<PdfPageView>();
   private _activeRenders = 0;
-  /**
-   * Bumped when the document is destroyed. pdf.js never answers the requests
-   * still pending then (getPage, text, annotations), so the renders waiting on
-   * them never finish: they must not keep counting as active, or the viewer
-   * stays "busy" for good and the thumbnails panel never draws.
-   */
   private _renderEpoch = 0;
   private _renderBusy = false;
-  /** Cached layout offsets along the scroll axis; invalidated on layout/reflow. */
   private _pageOffsets: { start: number; size: number }[] | null = null;
   private _scrollRaf = 0;
   private resizeObserver: ResizeObserver | null = null;
-  /** Search term to highlight, and the match to show (page 0 = none). */
   private _search = { query: "", page: 0, index: -1, scroll: false };
   private resizeTimer: ReturnType<typeof setTimeout> | null = null;
   private scrollEl: HTMLElement;
-  /** Reads the text of scanned pages in the background (see live-text.ts). */
   readonly liveText = new LiveText(null);
 
   constructor() {
@@ -883,11 +773,6 @@ export class PdfViewer {
     this._watchPixelRatio();
   }
 
-  /**
-   * Re-render when the screen pixel density changes (window moved to another
-   * monitor, Windows display scaling changed).  Otherwise pages keep the
-   * resolution of the previous screen and look blurry.
-   */
   private _watchPixelRatio(): void {
     if (typeof window.matchMedia !== "function") return;
     const mq = window.matchMedia(`(resolution: ${window.devicePixelRatio || 1}dppx)`);
@@ -897,8 +782,6 @@ export class PdfViewer {
     }, { once: true });
   }
 
-  // ── Accessors ───────────────────────────────────────────────────────────────
-
   get currentPage(): number   { return this._currentPage; }
   get pageCount():   number   { return this._pageCount; }
   get scale():       number   { return this._scale; }
@@ -907,14 +790,12 @@ export class PdfViewer {
   get evenSpread(): boolean { return this._evenSpread; }
   get scrollMode(): "vertical" | "horizontal" { return this._scrollMode; }
 
-  /** Number of pages per row for the current settings. */
   private _columnsFor(containerWidth: number, refPageWidthPx: number): number {
     if (this._scrollMode === "horizontal") return Math.max(1, this._pageCount);
     if (this._forcedColumns) return this._forcedColumns;
     return calculateColumnCount(containerWidth, refPageWidthPx, PAGE_GAP);
   }
 
-  /** Shows `n` pages per row (null: as many as fit), then keeps the current page in view. */
   setColumns(n: number | null, evenSpread = false): void {
     this._forcedColumns = n;
     this._evenSpread = n === 2 && evenSpread;
@@ -942,19 +823,14 @@ export class PdfViewer {
     return this.pageViews[this._currentPage - 1]?.viewport ?? null;
   }
 
-  // ── Setup ────────────────────────────────────────────────────────────────────
-
-  /** Register a callback invoked after every buildLayout() with the fresh pageViews array. */
   onLayoutChanged(cb: (views: PdfPageView[]) => void): void {
     this.onLayoutChangedCb = cb;
   }
 
-  /** Register a callback notified when the viewer starts or finishes rendering pages. */
   onRenderActivity(cb: (busy: boolean) => void): void {
     this.onRenderActivityCb = cb;
   }
 
-  /** The renders of the document about to be destroyed stop counting. */
   private _forgetActiveRenders(): void {
     this._renderEpoch++;
     this._activeRenders = 0;
@@ -969,7 +845,6 @@ export class PdfViewer {
     }
   }
 
-  /** Call from main.ts before the first load() to provide shared context. */
   setup(
     tools: ToolSelection,
     annotations: AnnotationSession,
@@ -982,9 +857,6 @@ export class PdfViewer {
     this._onFormChange = onFormChange;
   }
 
-  // ── Load ────────────────────────────────────────────────────────────────────
-
-  /** Opens `filePath`, its pages turned by `rotation` (a tab brought back). */
   async load(filePath: string, rotation = 0): Promise<void> {
     await this._openDoc(convertFileSrc(filePath) + `?t=${Date.now()}`, undefined, rotation);
   }
@@ -993,12 +865,6 @@ export class PdfViewer {
     await this._openDoc(convertFileSrc(filePath) + `?t=${Date.now()}`, password);
   }
 
-  /**
-   * Shows a new version of the same document (after a page edit) without
-   * moving: the scroll position is kept. The view rotation starts over at 0:
-   * the new version was written with it (`DocumentSession.materialize`), so
-   * keeping it would turn the pages twice.
-   */
   async reload(filePath: string): Promise<void> {
     const top = this.scrollEl.scrollTop;
     const left = this.scrollEl.scrollLeft;
@@ -1011,8 +877,6 @@ export class PdfViewer {
   }
 
   private async _openDoc(url: string, password?: string, rotation = 0): Promise<void> {
-    // The pages still drawing stop first: destroying their document under
-    // them would fail their renders (another tab, another file).
     this._renderQueue.clear();
     this._updateRenderActivity();
     for (const view of this.pageViews) view.clear();
@@ -1035,9 +899,6 @@ export class PdfViewer {
     this._focusedPage = 1;
     this._rotation    = rotation;
 
-    // Pre-fetch initial page dimensions in parallel; for large documents,
-    // use page 1's size as the initial placeholder estimate so we don't block
-    // opening on hundreds of sequential worker round-trips.
     const initialCount = Math.min(this._pageCount, 16);
     const initialPages = await Promise.all(
       Array.from({ length: initialCount }, (_, i) => this.pdfDoc!.getPage(i + 1))
@@ -1056,8 +917,6 @@ export class PdfViewer {
     this.setupResizeObserver();
   }
 
-  // ── Layout (T011 + T018-T019) ────────────────────────────────────────────────
-
   buildLayout(): void {
     this._clearPreview();
     this._pageOffsets = null;
@@ -1073,15 +932,11 @@ export class PdfViewer {
 
     if (!this.pdfDoc || this.pageDimensions.length === 0) return;
 
-    // Column count (US2: T018)
-    // Swap width/height when user rotation is 90° or 270° so placeholder sizes
-    // match the rendered viewport and don't trigger a ResizeObserver loop.
     const swapped = this._rotation % 180 !== 0;
     const containerWidth  = Math.max(1, this.scrollEl.clientWidth - 40);
     const refPageWidthPx  = Math.max(...this.pageDimensions.map(d => swapped ? d.height : d.width)) * this._scale;
     this.columnCount = this._columnsFor(containerWidth, refPageWidthPx);
 
-    // Build rows (US2: T019)
     this._shownEvenSpread = this.columnCount === 2 && this._evenSpread;
     const rows = buildRows(this._pageCount, this.columnCount, this._shownEvenSpread);
     const frag = document.createDocumentFragment();
@@ -1106,7 +961,6 @@ export class PdfViewer {
     this.onLayoutChangedCb?.(this.pageViews);
   }
 
-  /** Re-groups existing `pageViews` into rows of `columnCount` without destroying their canvases. */
   private _regroupRows(columnCount: number): void {
     this._shownEvenSpread = columnCount === 2 && this._evenSpread;
     const rows = buildRows(this._pageCount, columnCount, this._shownEvenSpread);
@@ -1124,10 +978,7 @@ export class PdfViewer {
     this._pageOffsets = null;
   }
 
-  // ── IntersectionObserver & Render Queue (T012) ───────────────────────────────
-
   private setupObserver(): void {
-    // IntersectionObserver for lazy pre-rendering / eviction
     this.observer = new IntersectionObserver(
       (entries) => {
         for (const entry of entries) {
@@ -1159,7 +1010,6 @@ export class PdfViewer {
 
     for (const pv of this.pageViews) this.observer.observe(pv.wrapper);
 
-    // Throttled scroll listener for current-page tracking (at most once per frame)
     this._scrollHandler = () => {
       if (this._scrollRaf) return;
       this._scrollRaf = requestAnimationFrame(() => {
@@ -1168,16 +1018,11 @@ export class PdfViewer {
       });
     };
     this.scrollEl.addEventListener("scroll", this._scrollHandler, { passive: true });
-    // Run once to set initial focused page
     this._updateFocusedPage();
   }
 
   private _scrollHandler: (() => void) | null = null;
 
-  /**
-   * Clears pages that have scrolled well outside the active window so memory
-   * stays bounded while keeping nearby pages cached for smooth back-and-forth scrolling.
-   */
   private _evictDistantPages(): void {
     const visiblePages = [...this._visiblePages];
     if (visiblePages.length === 0) return;
@@ -1239,14 +1084,9 @@ export class PdfViewer {
 
   private _pumpRenderQueue(): void {
     const maxConcurrent = 2;
-    // While a zoom gesture runs, nothing is drawn: it would be drawn at the
-    // old scale and thrown away when the gesture ends. The queue waits.
     if (this._previewScale !== null) { this._updateRenderActivity(); return; }
     let screen: DOMRect | null = null;
     while (this._activeRenders < maxConcurrent && this._renderQueue.size > 0) {
-      // Pages actually on screen come first, then the queued page closest to
-      // the focused one, so what the user looks at is drawn before the
-      // neighbours just outside the view.
       screen ??= this.scrollEl.getBoundingClientRect();
       let best: PdfPageView | null = null;
       let bestDist = Infinity;
@@ -1272,7 +1112,6 @@ export class PdfViewer {
   }
 
   private async _renderPage(pageView: PdfPageView): Promise<void> {
-    // A render already running re-checks the state below when it finishes.
     if (!this.pdfDoc || pageView.rendering) return;
     this._renderQueue.delete(pageView);
     this._activeRenders++;
@@ -1282,7 +1121,6 @@ export class PdfViewer {
     const release = () => {
       if (released) return;
       released = true;
-      // A render of a destroyed document was already forgotten.
       if (epoch === this._renderEpoch) this._activeRenders = Math.max(0, this._activeRenders - 1);
       this._pumpRenderQueue();
     };
@@ -1298,7 +1136,6 @@ export class PdfViewer {
         this._linkHandler,
         release
       );
-      // Its document was replaced meanwhile: nothing here is about the new one.
       if (epoch !== this._renderEpoch) return;
       if (pageView.viewport) {
         const unitW = pageView.viewport.width / expectedScale;
@@ -1312,17 +1149,11 @@ export class PdfViewer {
           this._pageOffsets = null;
         }
       }
-      // If scale/rotation changed while this render was running (e.g. the user
-      // zoomed again before the previous render finished), the render that just
-      // completed used a stale scale and its setPlaceholderSize() call left the
-      // wrapper at the wrong size.  Re-render immediately at the current values.
       if (this._scale !== expectedScale || this._rotation !== expectedRotation) {
         this._queueRender(pageView);
         return;
       }
       if (pageView.rendered) this._applySearch(pageView);
-      // The render was abandoned (page cleared while scrolling) or a reflow
-      // invalidated it, but the page is back in view: draw it now.
       if (!pageView.rendered && this._visiblePages.has(pageView.pageNum)) {
         this._queueRender(pageView);
       }
@@ -1332,13 +1163,6 @@ export class PdfViewer {
     }
   }
 
-  // ── Search ──────────────────────────────────────────────────────────────────
-
-  /**
-   * Highlights `query` on every page and marks match `index` of `page` as the
-   * current one. With `scroll`, brings that match into view (rendering its
-   * page first when needed).
-   */
   setSearch(query: string, page = 0, index = -1, scroll = false): void {
     this._search = { query, page, index, scroll };
     for (const pv of this.pageViews) if (pv.rendered) this._applySearch(pv);
@@ -1353,8 +1177,6 @@ export class PdfViewer {
       mark.scrollIntoView({ block: "center", inline: "nearest" });
     }
   }
-
-  // ── Navigation (T015) ────────────────────────────────────────────────────────
 
   private _setCurrentAndFocusedPage(page: number): void {
     this._currentPage = page;
@@ -1422,10 +1244,6 @@ export class PdfViewer {
     }
   }
 
-  /**
-   * Next row of pages. From the last row it goes to the very end instead of
-   * scrolling back up to the top of the last page.
-   */
   nextPage(): void {
     const step = this.columnCount === 2 && this._shownEvenSpread && this._currentPage === 1 ? 1 : this.columnCount;
     const target = this._currentPage + step;
@@ -1435,10 +1253,6 @@ export class PdfViewer {
     else el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
   }
 
-  /**
-   * Previous row of pages: the first one above the view's start, so it always
-   * moves (at the end, several short pages can sit below the start at once).
-   */
   prevPage(): void {
     const horizontal = this._scrollMode === "horizontal";
     const pos = horizontal ? this.scrollEl.scrollLeft : this.scrollEl.scrollTop;
@@ -1451,13 +1265,6 @@ export class PdfViewer {
     this.goToPage(target);
   }
 
-  // ── Zoom / Rotate / Reflow (T022-T026) ──────────────────────────────────────
-
-  /**
-   * Zooms to `scale`. With `anchor` (a point on screen, e.g. the mouse), the
-   * spot of the page under it stays under it, instead of jumping to the top
-   * of the current page.
-   */
   async setScale(scale: number, anchor?: { x: number; y: number }): Promise<void> {
     const next = this.clampScale(scale);
     const spot = anchor ? this._spotAt(anchor) : null;
@@ -1481,37 +1288,23 @@ export class PdfViewer {
     return Math.max(MIN_SCALE * CSS_UNITS, Math.min(MAX_SCALE * CSS_UNITS, scale));
   }
 
-  /** Scale shown while a zoom gesture runs (pages stretched, not redrawn). */
   private _previewScale: number | null = null;
 
-  /** The scale on screen: the gesture's while one runs, else the real one. */
   get shownScale(): number { return this._previewScale ?? this._scale; }
 
-  /**
-   * During a zoom gesture: stretches the pages already drawn to `scale`
-   * around `anchor` without redrawing them, which keeps the gesture fluid.
-   * `setScale` then redraws them sharp at the final scale.
-   */
   previewScale(scale: number, anchor: { x: number; y: number }): void {
     if (!this.pdfDoc) return;
     const next = this.clampScale(scale);
     const el = this.scrollEl;
     let p = this._preview;
     if (this._previewScale === null || !p) {
-      // The gesture starts: stop drawing at the old scale (each page keeps
-      // the bitmap it has), so the whole machine goes to the gesture.
       this._renderQueue.clear();
       for (const view of this.pageViews) view.cancelRender();
-      // The rows are scaled with a CSS transform, which moves pixels without
-      // laying the document out again (CSS zoom restyled and re-laid out
-      // every page at each wheel step). A 1 px marker holds the scroll range
-      // where it is, so shrinking rows cannot pull the view back.
       const rows = (Array.from(el.children) as HTMLElement[]).filter((r) => r.classList.contains("page-row"));
       const marker = document.createElement("div");
       marker.className = "zoom-preview-marker";
       marker.style.cssText = `position:absolute;width:1px;height:1px;left:${el.scrollWidth - 1}px;top:${el.scrollHeight - 1}px;pointer-events:none;visibility:hidden`;
       el.appendChild(marker);
-      // The widest row of pages, without the room around it.
       let widest = 0;
       for (const r of rows) {
         const pages = Array.from(r.children) as HTMLElement[];
@@ -1522,11 +1315,7 @@ export class PdfViewer {
       for (const r of rows) r.style.transformOrigin = "0 0";
     }
     this._previewScale = next;
-    // Screen = t + z × layout position (in scrolled-content pixels). The
-    // content point under the anchor stays under it.
     const er = el.getBoundingClientRect();
-    // Pages narrower than the view sit in its middle once redrawn: then they
-    // grow or shrink from the middle, so nothing slides sideways at the end.
     const z = next / this._scale;
     const ax = this._scrollMode !== "horizontal" && p.widest * z + 40 <= el.clientWidth ? er.left + el.clientLeft + el.clientWidth / 2 : anchor.x;
     const sx = el.scrollLeft + ax - er.left - el.clientLeft;
@@ -1541,7 +1330,6 @@ export class PdfViewer {
     }
   }
 
-  /** The rows scaled by a zoom gesture, and the scaling (see previewScale). */
   private _preview: {
     rows: { el: HTMLElement; x: number; y: number }[];
     marker: HTMLElement;
@@ -1558,7 +1346,6 @@ export class PdfViewer {
     p.marker.remove();
   }
 
-  /** The page under a screen point and where on it (0–1), or the nearest page. */
   private _spotAt(at: { x: number; y: number }): { page: number; fx: number; fy: number } | null {
     let best: { page: number; fx: number; fy: number; d: number } | null = null;
     for (const view of this.pageViews) {
@@ -1584,10 +1371,6 @@ export class PdfViewer {
     const savedPage = this._focusedPage;
     this._pageOffsets = null;
 
-    // Reuse existing PdfPageView instances instead of tearing down the DOM
-    // (even when the column count changes). Already-rendered canvases stay
-    // on screen until a new render at the target scale/rotation replaces them,
-    // and pages already drawn at the current scale/rotation are not redrawn.
     if (this.pdfDoc && this.pageViews.length === this._pageCount) {
       const swapped        = this._rotation % 180 !== 0;
       const containerWidth = Math.max(1, this.scrollEl.clientWidth - 40);
@@ -1623,9 +1406,6 @@ export class PdfViewer {
       this._pageOffsets = null;
       this.onLayoutChangedCb?.(this.pageViews);
       if (!options?.preserveScroll) {
-        // Only scroll to the page when sizes or columns actually changed.
-        // When only the container height changed (e.g. toolbar toggle), preserve
-        // the exact scroll position to avoid a jarring jump.
         if (anySizeChanged) {
           this.goToPage(savedPage, "instant");
         } else {
@@ -1643,7 +1423,6 @@ export class PdfViewer {
     }
   }
 
-  /** Queues the pages on screen (and just around it) that need rendering. */
   private _renderVisible(): void {
     this._renderQueue.clear();
     const scrollRect = this.scrollEl.getBoundingClientRect();
@@ -1666,15 +1445,11 @@ export class PdfViewer {
     this._rotation = degrees;
   }
 
-  // ── ResizeObserver (T021) ────────────────────────────────────────────────────
-
   private setupResizeObserver(): void {
     this.resizeObserver?.disconnect();
     this.resizeObserver = new ResizeObserver(() => {
       if (this.resizeTimer) clearTimeout(this.resizeTimer);
       this.resizeTimer = setTimeout(() => {
-        // onResizeCb may call setScale (which includes reflow), so only
-        // fall back to a plain reflow when no callback handled it.
         if (this.onResizeCb) this.onResizeCb();
         else this.reflow();
       }, 100);
@@ -1682,13 +1457,6 @@ export class PdfViewer {
     this.resizeObserver.observe(this.scrollEl);
   }
 
-  // ── Print (T027 — unchanged logic) ──────────────────────────────────────────
-
-  /**
-   * Renders page `n` of the open document as large as fits in `maxW` × `maxH`
-   * CSS pixels (view rotation applied), sharp at the screen's pixel density.
-   * Used by presentation mode; null when no document is open.
-   */
   async renderPageToFit(n: number, maxW: number, maxH: number): Promise<HTMLCanvasElement | null> {
     if (!this.pdfDoc || n < 1 || n > this.pdfDoc.numPages) return null;
     const page = await this.pdfDoc.getPage(n);
@@ -1696,7 +1464,6 @@ export class PdfViewer {
     const unit = page.getViewport({ scale: 1, rotation });
     const dpr = window.devicePixelRatio || 1;
     const fit = Math.min(maxW / unit.width, maxH / unit.height);
-    // Cap the bitmap (~40 MP) so very large pages do not exhaust memory.
     const scale = Math.min(fit * dpr, Math.sqrt(40e6 / (unit.width * unit.height)));
     const viewport = page.getViewport({ scale, rotation });
     const canvas = document.createElement("canvas");
@@ -1711,16 +1478,11 @@ export class PdfViewer {
     return canvas;
   }
 
-  /** Rasterises pages of the document currently shown, applying the view rotation. */
   async renderPagesForPrint(pageNumbers: number[], dpi = 200): Promise<string[]> {
     if (!this.pdfDoc) return [];
     return renderDocPages(this.pdfDoc, pageNumbers, dpi, this._rotation);
   }
 
-  /**
-   * Rasterises pages of another PDF file (typically a temp copy with the
-   * user's pending annotations burned in) without touching the open view.
-   */
   async renderFileForPrint(filePath: string, pageNumbers: number[], dpi = 200): Promise<string[]> {
     const doc = await pdfjs.getDocument({ ...SAFE_PDF, url: convertFileSrc(filePath) + `?t=${Date.now()}` }).promise;
     try {
@@ -1730,10 +1492,6 @@ export class PdfViewer {
     }
   }
 
-  /**
-   * Renders pages of `filePath` one by one at `dpi` (as shown, with their
-   * /Rotate) and hands each picture to `onPage` as a data: URL.
-   */
   async renderFilePages(
     filePath: string,
     pageNumbers: number[],
@@ -1747,7 +1505,6 @@ export class PdfViewer {
         if (n < 1 || n > doc.numPages) continue;
         const page = await doc.getPage(n);
         const unit = page.getViewport({ scale: 1, rotation: page.rotate });
-        // Cap the bitmap (~40 MP) so very large pages do not exhaust memory.
         const scale = Math.min(dpi / 72, Math.sqrt(40e6 / (unit.width * unit.height)));
         const viewport = page.getViewport({ scale, rotation: page.rotate });
         const canvas = document.createElement("canvas");
@@ -1766,8 +1523,6 @@ export class PdfViewer {
       await doc.loadingTask.destroy();
     }
   }
-
-  // ── Lifecycle ────────────────────────────────────────────────────────────────
 
   isLoaded(): boolean { return this.pdfDoc !== null; }
 
@@ -1793,28 +1548,22 @@ export class PdfViewer {
     this.pageDimensions = [];
   }
 
-  // ── Backward-compat shims (removed in T016) ──────────────────────────────────
-
-  /** @deprecated Use buildLayout() + IntersectionObserver instead. */
   async render(): Promise<void> {
     if (!this.pdfDoc) return;
     this.buildLayout();
   }
 
-  /** @deprecated Kept for transition; per-page form layers are built in PdfPageView.render(). */
   async buildFormLayer(
     _container: HTMLElement,
     _storedValues: Map<string, string>,
     _onChange: (name: string, val: string) => void
-  ): Promise<void> { /* no-op during transition */ }
+  ): Promise<void> {}
 
-  /** @deprecated Kept for transition; link annotations are now per-page. */
   async getPageLinkAnnotations(): Promise<Array<{ url: string; rect: [number, number, number, number] }>> {
     return [];
   }
 }
 
-/** Renders the given 1-based pages to base64 JPEG strings (no data: prefix). */
 async function renderDocPages(
   doc: PDFDocumentProxy,
   pageNumbers: number[],
@@ -1833,18 +1582,12 @@ async function renderDocPages(
     const ctx = canvas.getContext("2d")!;
     await page.render({ canvas: ctx.canvas, viewport }).promise;
     results.push(canvas.toDataURL("image/jpeg", 0.92).split(",")[1]);
-    // Free the bitmap right away; long documents otherwise pile up canvases.
     canvas.width = canvas.height = 0;
     page.cleanup();
   }
   return results;
 }
 
-/**
- * Renders the pages of `filePath` that carry redactions, unrotated and over
- * their visible area (`page.view`), with the redacted areas filled black.
- * Redaction coordinates are PDF user space, like every annotation.
- */
 export async function renderRedactedPages(
   filePath: string,
   redactions: RedactAnnotation[],
@@ -1859,7 +1602,6 @@ export async function renderRedactedPages(
     for (const [pageNum, areas] of [...byPage.entries()].sort((a, b) => a[0] - b[0])) {
       if (pageNum < 1 || pageNum > doc.numPages) continue;
       const page = await doc.getPage(pageNum);
-      // Cap the bitmap (~40 MP) so very large pages do not exhaust memory.
       const unit  = page.getViewport({ scale: 1, rotation: 0 });
       const scale = Math.min(dpi / 72, Math.sqrt(40e6 / (unit.width * unit.height)));
       const viewport = page.getViewport({ scale, rotation: 0 });
@@ -1873,14 +1615,12 @@ export async function renderRedactedPages(
 
       ctx.fillStyle = "#000";
       ctx.strokeStyle = "#000";
-      // A 2 px stroke along curved outlines leaves no anti-aliased sliver.
       ctx.lineWidth = 2;
       for (const a of areas) {
         const [x1, y1] = viewport.convertToViewportPoint(a.x, a.y);
         const [x2, y2] = viewport.convertToViewportPoint(a.x + a.width, a.y + a.height);
         const shape = a.shape ?? "rect";
         if (shape === "rect" || ((shape === "lasso" || shape === "poly") && (a.points?.length ?? 0) < 3)) {
-          // Round outwards so no anti-aliased sliver of the content survives.
           const left = Math.floor(Math.min(x1, x2)) - 1, top = Math.floor(Math.min(y1, y2)) - 1;
           const right = Math.ceil(Math.max(x1, x2)) + 1, bottom = Math.ceil(Math.max(y1, y2)) + 1;
           ctx.fillRect(left, top, right - left, bottom - top);
@@ -1917,13 +1657,6 @@ export async function renderRedactedPages(
   }
 }
 
-/**
- * Straightens pages of `filePath`: the area inside each `quad` (fractions of
- * the page as shown, with its /Rotate) is stretched over the whole page.
- * Returns, for `straighten_pages`, each picture (unrotated, over
- * `page.view`), where the warp moves the page's points, and its text runs
- * moved accordingly.
- */
 export async function renderStraightenedPages(
   filePath: string,
   items: { page: number; quad: [Point, Point, Point, Point] }[],
@@ -1952,7 +1685,6 @@ export async function renderStraightenedPages(
       const warped = warpToRect(pixels, px, src.width, src.height);
       sctx.putImageData(new ImageData(warped.data as Uint8ClampedArray<ArrayBuffer>, warped.width, warped.height), 0, 0);
 
-      // Back to the page's own orientation: /Rotate stays on the page.
       const dst = document.createElement("canvas");
       dst.width = Math.ceil(flat.width);
       dst.height = Math.ceil(flat.height);

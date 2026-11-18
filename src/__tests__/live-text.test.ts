@@ -3,7 +3,6 @@ import { describe, it, expect, vi } from "vitest";
 import { LiveText, hasRealText, layoutOcr, renderOcrLayer } from "../live-text";
 import type { OcrResult } from "../ocr-modal";
 
-/** 10 px per character at font size 20, proportional otherwise. */
 const measure = (text: string, size: number) => text.length * size / 2;
 
 const result = (lines: { x: number; y: number; w: number; h: number; text: string }[][]): OcrResult => ({
@@ -37,10 +36,8 @@ describe("layoutOcr", () => {
     expect(l.top).toBeCloseTo(200);
     expect(l.fontSize).toBeCloseTo(20);
     expect(l.words.map((w) => w.text)).toEqual(["Bonjour ", "Alex"]);
-    // "Bonjour" is 70 px wide naturally and 200 px on the picture.
     expect(l.words[0].margin).toBeCloseTo(0);
     expect(l.words[0].scaleX).toBeCloseTo(200 / 70);
-    // The second word starts where "Bonjour " ends in layout (100 + 80) → margin 170.
     expect(l.words[1].margin).toBeCloseTo(350 - 180);
     expect(l.words[1].scaleX).toBeCloseTo(100 / 40);
     expect(l.words[1].dy).toBeCloseTo(0);
@@ -69,7 +66,6 @@ describe("renderOcrLayer", () => {
     expect(lines).toHaveLength(2);
     expect(lines[0].textContent).toBe("Hello world");
     expect(layer.classList.contains("has-ocr")).toBe(true);
-    // Laying out again replaces the words, and keeps the PDF's own spans.
     renderOcrLayer(layer, []);
     expect(layer.querySelectorAll(".ocr-line")).toHaveLength(0);
     expect(layer.contains(pdfSpan)).toBe(true);
@@ -83,7 +79,6 @@ describe("LiveText", () => {
     render: () => ({ promise: Promise.resolve() }),
   }) as never;
 
-  // jsdom has no canvas: stub what the reader draws with.
   HTMLCanvasElement.prototype.getContext = (() => ({ fillRect() {}, fillStyle: "" })) as never;
   HTMLCanvasElement.prototype.toDataURL = () => "data:image/jpeg;base64,AA==";
 

@@ -33,11 +33,9 @@ describe("warpToRect", () => {
   it("straightens a tilted dark square into the whole picture", () => {
     const src = blank(40, 40);
     const quad: [number, number][] = [[10, 8], [30, 12], [28, 32], [8, 28]];
-    // Darken the inside of the quad (roughly).
     for (let y = 12; y < 27; y++) for (let x = 12; x < 27; x++) paint(src, x, y, 0);
     const out = warpToRect(src, quad as never, 20, 20);
     expect(out.width).toBe(20);
-    // The middle of the result comes from the dark middle of the quad.
     expect(out.data[(10 * 20 + 10) * 4]).toBeLessThan(30);
     expect(out.data[(10 * 20 + 10) * 4 + 3]).toBe(255);
   });
@@ -109,20 +107,15 @@ describe("moveTextRuns", () => {
 
 describe("pageMap", () => {
   it("sends the quad's corners to the page's corners, in user space", () => {
-    // A 100 × 200 pt page rendered at 2× with y pointing down.
     const shown = [2, 0, 0, -2, 0, 400];
     const quad: [number, number][] = [[0.1, 0.1], [0.9, 0.05], [0.95, 0.9], [0.05, 0.95]];
     const m = pageMap(shown, quad as never, 200, 400);
-    // Top left of the quad (fraction 0.1, 0.1 of the picture) is user (10, 180).
     const [x, y] = apply3(m, [10, 180]);
     expect(x).toBeCloseTo(0, 6);
     expect(y).toBeCloseTo(200, 6);
   });
 });
 
-// ── Crop / flip conversion ───────────────────────────────────────────────────
-
-/** A pdf.js-like viewport of a `w` × `h` pt page (origin bottom left) shown with `rotation`. */
 function viewport(w: number, h: number, rotation: number): ViewportLike {
   const sideways = rotation % 180 !== 0;
   return {
@@ -160,7 +153,6 @@ describe("cropAdjustment", () => {
   });
 
   it("maps the box through the shown rotation", () => {
-    // Shown at 90°: the top half on screen is the left half of the page.
     const adj = cropAdjustment(setting({ crop: { l: 0, t: 0, r: 1, b: 0.5 } }), viewport(600, 800, 90), 90);
     expect(adj.crop).toEqual([0, 0, 300, 800]);
   });
@@ -173,7 +165,7 @@ describe("buildPageAdjustments", () => {
 
   it("adds the view rotation to the page's own /Rotate", async () => {
     const { crops } = await buildPageAdjustments(doc(90), 270, [setting({ flipH: true })]);
-    expect(crops[0]).toMatchObject({ flipH: true, flipV: false }); // 90 + 270 = upright
+    expect(crops[0]).toMatchObject({ flipH: true, flipV: false });
     const turned = await buildPageAdjustments(doc(0), 90, [setting({ flipH: true })]);
     expect(turned.crops[0]).toMatchObject({ flipH: false, flipV: true });
   });
@@ -188,12 +180,10 @@ describe("buildPageAdjustments", () => {
 
 describe("reproject", () => {
   it("redraws a picture rendered at 90° in the page's own orientation", () => {
-    // 100 × 200 pt page, scale 1: upright and turned a quarter.
     const flat = [1, 0, 0, -1, 0, 200];
     const shown = [0, 1, 1, 0, 0, 0];
     const m = reproject(shown, flat);
     const at = (x: number, y: number) => [m[0] * x + m[2] * y + m[4], m[1] * x + m[3] * y + m[5]];
-    // User-space (10, 20) is at (20, 10) shown and at (10, 180) upright.
     expect(at(20, 10)).toEqual([10, 180]);
   });
 });

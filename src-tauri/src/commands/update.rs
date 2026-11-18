@@ -1,23 +1,3 @@
-//! "Up to date?" on the welcome screen, and the update behind its button.
-//!
-//! The check asks GitHub for the latest release, once per launch, with the
-//! system's `curl` (in Windows since 10 1803, in macOS, a dependency of the
-//! .deb): no HTTP or TLS stack of our own in the app. Nothing about the user
-//! or their documents is sent.
-//!
-//! What "update" means depends on how EzReader was installed:
-//! - Microsoft Store: the Store updates the app; the button opens its page.
-//! - Windows installer: the new setup runs in passive mode and restarts
-//!   EzReader when done.
-//! - Portable exe or Linux binary: the new file replaces this one, which
-//!   restarts.
-//! - .deb: `pkexec apt-get install` the new package, then restart.
-//! - Homebrew: `brew upgrade --cask`, then restart.
-//! - macOS without Homebrew: the new .dmg opens.
-//! - Anything else: the release page opens in the browser.
-//!
-//! Every downloaded file is checked against the SHA-256 GitHub gives for it.
-
 use crate::error::CmdResult;
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
@@ -31,7 +11,6 @@ const STORE_PAGE: &str = "ms-windows-store://pdp/?productid=9P9PVN4DRVS8";
 #[cfg(target_os = "macos")]
 const BREW_CASK: &str = "alxbdn/ezreader/ezreader";
 
-/// How this copy of EzReader was installed.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub enum Channel {
@@ -53,15 +32,11 @@ pub struct UpdateStatus {
     pub channel: Channel,
 }
 
-/// What the update button did.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub enum UpdateOutcome {
-    /// The new version is installed (or installing) and EzReader restarts.
     Restarting,
-    /// The Store page, the .dmg or the release page is open: the user finishes there.
     Opened,
-    /// Other windows are open (maybe with unsaved work): nothing was done.
     OtherWindows,
 }
 
@@ -80,14 +55,12 @@ struct Asset {
     digest: Option<String>,
 }
 
-/// The numbers of a version ("v1.10.0-beta.1" → [1, 10, 0]); suffixes are ignored.
 fn version_parts(v: &str) -> Vec<u64> {
     let v = v.trim().trim_start_matches(['v', 'V']);
     let core = v.split(['-', '+']).next().unwrap_or("");
     core.split('.').map(|p| p.parse::<u64>().unwrap_or(0)).collect()
 }
 
-/// True when `latest` is a higher version than `current`.
 fn is_newer(latest: &str, current: &str) -> bool {
     let (mut a, mut b) = (version_parts(latest), version_parts(current));
     let n = a.len().max(b.len());
@@ -96,7 +69,6 @@ fn is_newer(latest: &str, current: &str) -> bool {
     a > b
 }
 
-/// The release file for `channel` (`windows`: running on Windows).
 fn pick_asset(assets: &[Asset], channel: Channel, windows: bool) -> Option<&Asset> {
     let wanted = |n: &str| match channel {
         Channel::Installer => n.ends_with("-win-x64-setup.exe"),
@@ -109,17 +81,12 @@ fn pick_asset(assets: &[Asset], channel: Channel, windows: bool) -> Option<&Asse
     assets.iter().find(|a| wanted(&a.name))
 }
 
-/// The channel, from facts about this install (kept apart from the
-/// filesystem so it can be tested).
 #[cfg_attr(not(test), allow(dead_code))]
 struct InstallFacts<'a> {
     os: &'a str,
     exe: &'a str,
-    /// Windows: `uninstall.exe` sits next to the exe (NSIS install).
     has_uninstaller: bool,
-    /// macOS: Homebrew's Caskroom has an `ezreader` entry.
     in_caskroom: bool,
-    /// Linux: running as an AppImage.
     appimage: bool,
 }
 
@@ -165,7 +132,6 @@ fn detect_channel() -> Channel {
     })
 }
 
-/// A command that shows no console window on Windows.
 fn quiet(program: impl AsRef<std::ffi::OsStr>) -> Command {
     #[allow(unused_mut)]
     let mut cmd = Command::new(program);
@@ -194,7 +160,6 @@ fn curl() -> Command {
     }
 }
 
-/// Common options: HTTPS only (redirects too), fail on HTTP errors.
 fn curl_get(version: &str, max_secs: u32) -> Command {
     let mut cmd = curl();
     cmd.args(["-fsSL", "--proto", "=https", "--proto-redir", "=https", "--tlsv1.2", "--max-time"])
@@ -215,7 +180,6 @@ fn fetch_latest(version: &str) -> Result<Release, String> {
     serde_json::from_slice(&out.stdout).map_err(|e| format!("unexpected answer from GitHub ({e})"))
 }
 
-/// Downloads `asset` to `dest` and checks its SHA-256.
 fn download(asset: &Asset, dest: &Path, version: &str) -> Result<(), String> {
     let _ = std::fs::remove_file(dest);
     let out = curl_get(version, 900)
@@ -236,7 +200,6 @@ fn download(asset: &Asset, dest: &Path, version: &str) -> Result<(), String> {
     Ok(())
 }
 
-/// True when `bytes` hash to `digest` ("sha256:<hex>"). No digest: false.
 fn digest_matches(bytes: &[u8], digest: Option<&str>) -> bool {
     use sha2::{Digest, Sha256};
     let Some(expected) = digest.and_then(|d| d.strip_prefix("sha256:")) else { return false };
@@ -244,7 +207,6 @@ fn digest_matches(bytes: &[u8], digest: Option<&str>) -> bool {
     got.eq_ignore_ascii_case(expected.trim())
 }
 
-/// Asks GitHub for the latest release and compares it with this version.
 #[tauri::command]
 pub async fn check_for_update(app: tauri::AppHandle) -> CmdResult<UpdateStatus> {
     let current = app.package_info().version.to_string();
@@ -262,9 +224,6 @@ pub async fn check_for_update(app: tauri::AppHandle) -> CmdResult<UpdateStatus> 
     .map_err(|e| e.to_string())?
 }
 
-/// Installs the latest release the way this copy was installed (see the
-/// module doc). Refuses while other windows are open, since restarting
-/// would close them.
 #[tauri::command]
 pub async fn install_update(app: tauri::AppHandle) -> CmdResult<UpdateOutcome> {
     let channel = detect_channel();
@@ -304,8 +263,6 @@ fn run_update(channel: Channel, version: &str) -> CmdResult<UpdateOutcome> {
         Channel::Installer => {
             let dest = std::env::temp_dir().join(&asset.name);
             download(asset, &dest, version)?;
-            // Passive: a progress bar only; it closes EzReader if needed
-            // and starts it again when done (/R).
             quiet(&dest).args(["/P", "/R"]).spawn().map_err(|e| format!("could not start the installer ({e})"))?;
             Ok(UpdateOutcome::Restarting)
         }
@@ -320,15 +277,11 @@ fn run_update(channel: Channel, version: &str) -> CmdResult<UpdateOutcome> {
     }
 }
 
-/// Portable exe / Linux binary: the new file takes this one's place, then
-/// starts. A running exe can be renamed (not overwritten) on Windows: it
-/// becomes `<name>.old`, removed at the next start (`remove_leftover`).
 fn replace_self(asset: &Asset, version: &str) -> CmdResult<UpdateOutcome> {
     let exe = current_exe().ok_or("could not find EzReader's own file")?;
     let new = with_suffix(&exe, ".new");
     let old = with_suffix(&exe, ".old");
     if download(asset, &new, version).is_err() {
-        // Not writable (read-only folder…): the browser can still get it.
         return open_release_page();
     }
     #[cfg(unix)]
@@ -352,7 +305,6 @@ fn with_suffix(p: &Path, suffix: &str) -> PathBuf {
     PathBuf::from(s)
 }
 
-/// Removes the `.old` file a portable update leaves behind. Best effort.
 pub fn remove_leftover() {
     if let Some(exe) = current_exe() {
         let old = with_suffix(&exe, ".old");
@@ -366,7 +318,6 @@ pub fn remove_leftover() {
 fn install_deb(asset: &Asset, version: &str) -> CmdResult<UpdateOutcome> {
     let dest = std::env::temp_dir().join(&asset.name);
     download(asset, &dest, version)?;
-    // pkexec asks for the password in a window of its own.
     let status = Command::new("pkexec").args(["apt-get", "install", "-y"]).arg(&dest).status();
     match status {
         Ok(s) if s.success() => {
@@ -374,8 +325,6 @@ fn install_deb(asset: &Asset, version: &str) -> CmdResult<UpdateOutcome> {
             Command::new(exe).spawn().map_err(|e| format!("could not restart EzReader ({e})"))?;
             Ok(UpdateOutcome::Restarting)
         }
-        // Cancelled (126/127) or no pkexec: the package opens in the
-        // desktop's software installer instead.
         _ => {
             shell_open(&dest.to_string_lossy())?;
             Ok(UpdateOutcome::Opened)
@@ -402,7 +351,6 @@ fn brew_upgrade() -> CmdResult<UpdateOutcome> {
             format!("Homebrew could not update EzReader ({})", String::from_utf8_lossy(&out.stderr).trim()).into()
         );
     }
-    // …/EzReader.app/Contents/MacOS/<exe> → …/EzReader.app
     let bundle = current_exe()
         .and_then(|e| e.ancestors().nth(3).map(Path::to_path_buf))
         .filter(|b| b.extension().is_some_and(|x| x == "app"))
@@ -420,7 +368,6 @@ fn open_release_page() -> CmdResult<UpdateOutcome> {
     Ok(UpdateOutcome::Opened)
 }
 
-/// Opens a file or a link with what the system uses for it.
 fn shell_open(target: &str) -> CmdResult<()> {
     #[cfg(target_os = "windows")]
     {

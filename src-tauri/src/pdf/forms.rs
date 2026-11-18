@@ -1,34 +1,19 @@
-//! Filling AcroForm fields (PDF 32000-1 §12.7): the values typed in the
-//! viewer are written to the fields, check boxes and radio buttons get the
-//! state of each of their widgets, and text fields and combo boxes get a new
-//! appearance, so the values show in every reader (macOS Preview, phones,
-//! printers), not only in the ones that honour `/NeedAppearances`.
-//!
-//! Appearances are drawn in Helvetica with WinAnsi encoding, which covers
-//! French and the other Western European languages. A value it can't draw
-//! (Greek, Cyrillic, CJK…), a rotated widget or a list box keeps its value
-//! and the form asks readers to redraw it (`/NeedAppearances true`).
-
 use std::collections::HashMap;
 
 use lopdf::{dictionary, Dictionary, Document, Object, ObjectId, Stream, StringFormat};
 
-/// A form field name/value pair sent from the frontend.
 #[derive(serde::Deserialize, Clone)]
 pub struct FormFieldValue {
     pub name: String,
-    /// Plain text for Tx/Ch, "true"/"false" for checkboxes, export value for radios.
     pub value: String,
 }
 
-// Field flags (§12.7.3.1, §12.7.4).
 const FF_MULTILINE: i64 = 1 << 12;
 const FF_PASSWORD: i64 = 1 << 13;
 const FF_PUSHBUTTON: i64 = 1 << 16;
 const FF_COMBO: i64 = 1 << 17;
 const FF_COMB: i64 = 1 << 24;
 
-/// One terminal field, with what it inherits from its ancestors.
 struct Field {
     id: ObjectId,
     full_name: String,
@@ -38,7 +23,6 @@ struct Field {
     da: Option<String>,
     q: i64,
     max_len: i64,
-    /// Widget annotations: the field itself when they are merged.
     widgets: Vec<ObjectId>,
 }
 
@@ -52,8 +36,6 @@ struct Inherited {
     max_len: i64,
 }
 
-/// Write user-supplied form field values into the document's AcroForm structure.
-/// Silently succeeds if the document has no AcroForm or `fields` is empty.
 pub fn write_form_fields(doc: &mut Document, fields: &[FormFieldValue]) -> Result<(), String> {
     if fields.is_empty() {
         return Ok(());
@@ -103,7 +85,6 @@ pub fn write_form_fields(doc: &mut Document, fields: &[FormFieldValue]) -> Resul
     Ok(())
 }
 
-/// The AcroForm's object id, promoting an inline AcroForm to an object of its own.
 fn acroform_id(doc: &mut Document) -> Result<Option<ObjectId>, String> {
     let cat_id = doc.trailer.get(b"Root").and_then(Object::as_reference).map_err(|_| "No catalog".to_string())?;
     let inline = {
@@ -121,8 +102,6 @@ fn acroform_id(doc: &mut Document) -> Result<Option<ObjectId>, String> {
     Ok(Some(new_id))
 }
 
-/// Walks the field tree: a node with `/T` is a field, a kid without one is a
-/// widget of its parent field.
 fn collect_fields(
     doc: &Document,
     refs: &[Object],
@@ -132,7 +111,7 @@ fn collect_fields(
     depth: usize,
 ) {
     if depth > 32 {
-        return; // a hostile tree
+        return;
     }
     for r in refs {
         let Ok(id) = r.as_reference() else { continue };
@@ -201,9 +180,6 @@ fn make_field(id: ObjectId, partial: &str, inh: &Inherited, widgets: Vec<ObjectI
     }
 }
 
-// ── Check boxes and radio buttons ─────────────────────────────────────────────
-
-/// The appearance states of a widget other than `Off`.
 fn on_states(dict: &Dictionary) -> Vec<Vec<u8>> {
     let Ok(Object::Dictionary(ap)) = dict.get(b"AP") else { return Vec::new() };
     let Ok(Object::Dictionary(n)) = ap.get(b"N") else { return Vec::new() };
@@ -220,7 +196,6 @@ fn set_button(doc: &mut Document, field: &Field, value: &str) -> Result<(), Stri
         .map(|w| doc.get_object(*w).and_then(Object::as_dict).map(on_states).unwrap_or_default())
         .collect();
 
-    // "true" is a check box turned on: its own on state (often /Yes, not always).
     let chosen: Vec<u8> = match value {
         "false" | "" | "Off" => b"Off".to_vec(),
         "true" => states.iter().flatten().next().cloned().unwrap_or_else(|| b"Yes".to_vec()),
@@ -246,17 +221,12 @@ fn set_button(doc: &mut Document, field: &Field, value: &str) -> Result<(), Stri
     Ok(())
 }
 
-// ── Text fields and choice fields ─────────────────────────────────────────────
-
-/// Sets the value and redraws each widget. False when a widget couldn't be
-/// redrawn and readers must do it themselves.
 fn set_text(doc: &mut Document, field: &Field, value: &str, font: &mut Option<ObjectId>) -> Result<bool, String> {
     let is_choice = field.ft == "Ch";
     let shown = if is_choice { choice_display(doc, field.id, value) } else { value.to_string() };
 
     if let Ok(Object::Dictionary(d)) = doc.get_object_mut(field.id) {
         d.set(b"V", text_string(value));
-        // A rich text value would be shown instead of the new plain one.
         d.remove(b"RV");
         if is_choice {
             d.remove(b"I");
@@ -264,7 +234,7 @@ fn set_text(doc: &mut Document, field: &Field, value: &str, font: &mut Option<Ob
     }
 
     if is_choice && field.flags & FF_COMBO == 0 {
-        return Ok(false); // list box: readers draw the selection
+        return Ok(false);
     }
     let Some(encoded) = win_ansi(&shown) else { return Ok(false) };
 
@@ -300,7 +270,6 @@ fn set_text(doc: &mut Document, field: &Field, value: &str, font: &mut Option<Ob
     Ok(all_drawn)
 }
 
-/// What a combo box shows for an export value: its `/Opt` display text.
 fn choice_display(doc: &Document, id: ObjectId, value: &str) -> String {
     let opts = doc
         .get_object(id)
@@ -343,7 +312,6 @@ fn color_op(o: Option<&Object>, fill: bool) -> Option<String> {
     }
 }
 
-/// Font size and text color from a default appearance string ("/Helv 10 Tf 0 g").
 fn parse_da(da: &str) -> (f64, String) {
     let toks: Vec<&str> = da.split_whitespace().collect();
     let mut size = 0.0;
@@ -377,7 +345,6 @@ fn parse_da(da: &str) -> (f64, String) {
     (size, color)
 }
 
-/// The appearance stream of one text widget: (width, height, content).
 fn text_appearance(doc: &Document, widget: ObjectId, field: &Field, text: &[u8]) -> Option<(f64, f64, Vec<u8>)> {
     let dict = doc.get_object(widget).and_then(Object::as_dict).ok()?;
     let rect: Vec<f64> = dict.get(b"Rect").ok()?.as_array().ok()?.iter().filter_map(num).collect();
@@ -390,7 +357,7 @@ fn text_appearance(doc: &Document, widget: ObjectId, field: &Field, text: &[u8])
     }
     let mk = dict.get(b"MK").ok().and_then(|o| o.as_dict().ok());
     if mk.and_then(|m| m.get(b"R").ok()).and_then(num).is_some_and(|r| r.rem_euclid(360.0) != 0.0) {
-        return None; // rotated widget: let the reader draw it
+        return None;
     }
     let da = dict.get(b"DA").ok().and_then(text_of).or_else(|| field.da.clone()).unwrap_or_default();
     let (da_size, color) = parse_da(&da);
@@ -452,7 +419,6 @@ fn text_appearance(doc: &Document, widget: ObjectId, field: &Field, text: &[u8])
             body.push_str(&format!("1 0 0 1 {x:.2} {y:.2} Tm\n({}) Tj\n", escape(&[*ch])));
         }
     } else {
-        // One line; "auto" size fills the height and shrinks to fit the width.
         let size = if da_size > 0.0 {
             da_size
         } else {
@@ -474,7 +440,6 @@ fn text_appearance(doc: &Document, widget: ObjectId, field: &Field, text: &[u8])
 }
 
 fn baseline(h: f64, size: f64) -> f64 {
-    // Center the cap height (≈0.72 em) with a little room for descenders.
     (h - size * 0.72) / 2.0 + size * 0.05
 }
 
@@ -509,26 +474,24 @@ fn wrap(text: &[u8], max_w: f64, size: f64) -> Vec<Vec<u8>> {
     out
 }
 
-/// Helvetica advance widths (AFM, 1/1000 em) for WinAnsi bytes 32..=126.
 const HELV: [u16; 95] = [
-    278, 278, 355, 556, 556, 889, 667, 191, 333, 333, 389, 584, 278, 333, 278, 278, // ' '../
-    556, 556, 556, 556, 556, 556, 556, 556, 556, 556, 278, 278, 584, 584, 584, 556, // 0..?
-    1015, 667, 667, 722, 722, 667, 611, 778, 722, 278, 500, 667, 556, 833, 722, 778, // @..O
-    667, 778, 722, 667, 611, 722, 667, 944, 667, 667, 611, 278, 278, 278, 469, 556, // P.._
-    333, 556, 556, 500, 556, 556, 278, 556, 556, 222, 222, 500, 222, 833, 556, 556, // `..o
-    556, 556, 333, 500, 278, 556, 500, 722, 500, 500, 500, 334, 260, 334, 584, // p..~
+    278, 278, 355, 556, 556, 889, 667, 191, 333, 333, 389, 584, 278, 333, 278, 278, 556, 556, 556, 556, 556, 556, 556,
+    556, 556, 556, 278, 278, 584, 584, 584, 556, 1015, 667, 667, 722, 722, 667, 611, 778, 722, 278, 500, 667, 556, 833,
+    722, 778, 667, 778, 722, 667, 611, 722, 667, 944, 667, 667, 611, 278, 278, 278, 469, 556, 333, 556, 556, 500, 556,
+    556, 278, 556, 556, 222, 222, 500, 222, 833, 556, 556, 556, 556, 333, 500, 278, 556, 500, 722, 500, 500, 500, 334,
+    260, 334, 584,
 ];
 
 fn glyph_width(b: u8) -> u16 {
     match b {
         32..=126 => HELV[(b - 32) as usize],
-        0x8C => 1000,                            // Œ
-        0x9C => 944,                             // œ
-        0xC0..=0xC5 | 0xC8..=0xCB | 0xDD => 667, // À…Å È…Ë Ý
-        0xC7 | 0xD1 | 0xD9..=0xDC => 722,        // Ç Ñ Ù…Ü
-        0xCC..=0xCF | 0xEC..=0xEF => 278,        // Ì…Ï ì…ï
-        0xD2..=0xD6 | 0xD8 => 778,               // Ò…Ö Ø
-        0xE7 | 0xFD | 0xFF => 500,               // ç ý ÿ
+        0x8C => 1000,
+        0x9C => 944,
+        0xC0..=0xC5 | 0xC8..=0xCB | 0xDD => 667,
+        0xC7 | 0xD1 | 0xD9..=0xDC => 722,
+        0xCC..=0xCF | 0xEC..=0xEF => 278,
+        0xD2..=0xD6 | 0xD8 => 778,
+        0xE7 | 0xFD | 0xFF => 500,
         _ => 556,
     }
 }
@@ -552,7 +515,6 @@ fn escape(bytes: &[u8]) -> String {
     s
 }
 
-/// Encodes text in WinAnsi, or None if a character has no WinAnsi code.
 fn win_ansi(text: &str) -> Option<Vec<u8>> {
     text.chars()
         .map(|c| {
@@ -599,8 +561,6 @@ fn latin1_bytes(text: &str) -> Option<Vec<u8>> {
     text.chars().map(|c| u8::try_from(c as u32).ok()).collect()
 }
 
-/// A PDF text string: plain bytes for ASCII, UTF-16BE with a BOM otherwise
-/// (raw UTF-8 bytes would be read back as PDFDocEncoding: "Ã©" for "é").
 fn text_string(text: &str) -> Object {
     if text.is_ascii() {
         return Object::String(text.as_bytes().to_vec(), StringFormat::Literal);
@@ -612,7 +572,6 @@ fn text_string(text: &str) -> Object {
     Object::String(bytes, StringFormat::Hexadecimal)
 }
 
-/// Decodes a PDF text string: UTF-16BE with a BOM, else UTF-8, else PDFDocEncoding (≈ Latin-1).
 fn text_of(o: &Object) -> Option<String> {
     let Object::String(bytes, _) = o else { return None };
     if let Some(rest) = bytes.strip_prefix(&[0xFE, 0xFF]) {
@@ -630,8 +589,6 @@ mod tests {
         Object::String(t.as_bytes().to_vec(), StringFormat::Literal)
     }
 
-    /// A one-page form: a text field, a check box whose on state is /Oui,
-    /// a radio group with two widgets, a combo box, a comb field.
     fn form() -> (Document, [ObjectId; 7]) {
         let mut doc = Document::with_version("1.7");
         let pages_id = doc.new_object_id();

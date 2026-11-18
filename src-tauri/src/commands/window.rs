@@ -9,7 +9,6 @@ use crate::{AppState, StartupArgs};
 
 static NEXT_WINDOW: AtomicU32 = AtomicU32::new(1);
 
-/// Characters Windows does not accept in a file name.
 fn safe_file_name(name: &str) -> String {
     let cleaned: String =
         name.chars().map(|c| if "<>:\"/\\|?*".contains(c) || c.is_control() { '_' } else { c }).collect();
@@ -21,9 +20,6 @@ fn safe_file_name(name: &str) -> String {
     }
 }
 
-/// Copies `pages` of `input_path` into a new temp file named `name` and opens
-/// it in a new EzReader window near the screen point (`x`, `y`). The new
-/// document has never been saved: its first Save asks where to put it.
 #[tauri::command]
 pub async fn open_pages_in_new_window(
     app: AppHandle,
@@ -47,20 +43,15 @@ pub async fn open_pages_in_new_window(
 
     crate::allow_viewing(&app, &out_str);
     let args = StartupArgs { file_path: Some(out_str), unsaved: true, ..Default::default() };
-    // The pointer lands on the title bar, a little in from the left.
     open_window(&app, args, x.zip(y).map(|(x, y)| (x - 160.0, y - 16.0)))
 }
 
-/// Opens `path` (a file the user already chose: a document opened from the
-/// Finder while this window shows another one) in a new EzReader window.
 #[tauri::command]
 pub fn open_file_in_new_window(app: AppHandle, path: String) -> CmdResult<()> {
     crate::grants::check(&path)?;
     open_window(&app, StartupArgs { file_path: Some(path), ..Default::default() }, None)
 }
 
-/// A new document window, opening what `args` says, at `position` (logical
-/// pixels) or where the system puts it.
 pub(crate) fn open_window(app: &AppHandle, args: StartupArgs, position: Option<(f64, f64)>) -> CmdResult<()> {
     let n = NEXT_WINDOW.fetch_add(1, Ordering::Relaxed);
     let label = format!("doc-{n}");
@@ -71,8 +62,6 @@ pub(crate) fn open_window(app: &AppHandle, args: StartupArgs, position: Option<(
         .inner_size(1100.0, 760.0)
         .min_inner_size(720.0, 480.0)
         .resizable(true);
-    // Same title bar as the main window (tauri.macos.conf.json): the system
-    // buttons on the left, over the menu row.
     #[cfg(target_os = "macos")]
     {
         builder = builder
@@ -94,13 +83,8 @@ pub(crate) fn open_window(app: &AppHandle, args: StartupArgs, position: Option<(
     Ok(())
 }
 
-// ── Tabs dragged between windows ─────────────────────────────────────────────
-
-/// The window a dragged tab is over right now (it shows where it lands).
 static TAB_HOVER: Mutex<Option<String>> = Mutex::new(None);
 
-/// A visible, not minimized EzReader window other than `own` under the
-/// screen point (`x`, `y`) (logical pixels), if any.
 fn window_at(app: &AppHandle, own: &str, x: f64, y: f64) -> Option<String> {
     let mut hits: Vec<String> = app
         .webview_windows()
@@ -118,7 +102,6 @@ fn window_at(app: &AppHandle, own: &str, x: f64, y: f64) -> Option<String> {
         })
         .map(|(label, _)| label)
         .collect();
-    // Overlapping windows: the focused one is on top.
     hits.sort_by_key(|l| !app.get_webview_window(l).and_then(|w| w.is_focused().ok()).unwrap_or(false));
     hits.into_iter().next()
 }
@@ -127,7 +110,6 @@ fn contains((left, top, width, height): (f64, f64, f64, f64), (x, y): (f64, f64)
     x >= left && x < left + width && y >= top && y < top + height
 }
 
-/// Tells the window under the dragged tab, and the one it just left.
 fn set_hover(app: &AppHandle, target: Option<String>) {
     let mut hover = TAB_HOVER.lock().unwrap();
     if *hover == target {
@@ -142,9 +124,6 @@ fn set_hover(app: &AppHandle, target: Option<String>) {
     *hover = target;
 }
 
-/// A tab of `window` is dragged out of its title bar, the pointer at the
-/// screen point (`x`, `y`): true when another EzReader window is under it,
-/// which then shows that the tab would land there.
 #[tauri::command]
 pub fn tab_drag_hover(app: AppHandle, window: WebviewWindow, x: f64, y: f64) -> bool {
     let target = window_at(&app, window.label(), x, y);
@@ -153,19 +132,11 @@ pub fn tab_drag_hover(app: AppHandle, window: WebviewWindow, x: f64, y: f64) -> 
     over
 }
 
-/// The tab drag is over.
 #[tauri::command]
 pub fn tab_drag_end(app: AppHandle) {
     set_hover(&app, None);
 }
 
-/// Moves a tab of `window` (its document as `tab` describes it) to the
-/// EzReader window under the screen point (`x`, `y`), or to a new window
-/// there when there is none and `allow_new`. Returns "merged", "window" or,
-/// when nothing happened, "stayed".
-///
-/// `name`: the tab's file is a temp copy and the new window must show it
-/// under this name; it is copied to a fresh temp folder as that.
 #[tauri::command]
 pub async fn move_tab(
     app: AppHandle,
@@ -204,15 +175,12 @@ pub async fn move_tab(
             Ok("merged".into())
         }
         None => {
-            // The pointer lands on the title bar, a little in from the left.
             open_window(&app, tab, Some((x - 160.0, y - 16.0)))?;
             Ok("window".into())
         }
     }
 }
 
-/// A fresh temp folder for a new, never-saved document, which the commands
-/// may use (see `grants`): `%TEMP%\ezreader-window-new-…`.
 fn new_document_dir() -> CmdResult<std::path::PathBuf> {
     let n = NEXT_WINDOW.fetch_add(1, Ordering::Relaxed);
     let dir = std::env::temp_dir().join(format!("ezreader-window-new-{}-{n}", std::process::id()));
@@ -220,9 +188,6 @@ fn new_document_dir() -> CmdResult<std::path::PathBuf> {
     Ok(dir)
 }
 
-/// Writes `image_paths` (one page each) to a new temp PDF named `name` and
-/// returns its path, ready to open in this window. The document has never
-/// been saved: its first Save asks where to put it.
 #[tauri::command]
 pub async fn pictures_to_new_pdf(app: AppHandle, image_paths: Vec<String>, name: String) -> CmdResult<String> {
     crate::grants::check_all(image_paths.iter())?;

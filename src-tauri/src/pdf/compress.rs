@@ -3,19 +3,14 @@ use std::collections::HashSet;
 use image::{DynamicImage, ExtendedColorType, ImageEncoder};
 use lopdf::{Document, Object, ObjectId};
 
-/// How pictures are re-encoded: at most `dpi` across the largest page, as
-/// JPEG at `quality`.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct ImageSettings {
     pub dpi: f64,
     pub quality: u8,
 }
 
-/// "Balanced": images at 150 dpi, JPEG 75.
 pub const BALANCED: ImageSettings = ImageSettings { dpi: 150.0, quality: 75 };
-/// "Maximum": images at 96 dpi, JPEG 55.
 pub const MAXIMUM: ImageSettings = ImageSettings { dpi: 96.0, quality: 55 };
-/// Settings tried, best quality first, to get under a target size.
 pub const LADDER: [ImageSettings; 8] = [
     ImageSettings { dpi: 300.0, quality: 85 },
     ImageSettings { dpi: 200.0, quality: 80 },
@@ -27,7 +22,6 @@ pub const LADDER: [ImageSettings; 8] = [
     ImageSettings { dpi: 72.0, quality: 30 },
 ];
 
-/// The only filter of a stream, if it has exactly one.
 fn single_filter(dict: &lopdf::Dictionary) -> Option<Vec<u8>> {
     match dict.get(b"Filter").ok()? {
         Object::Name(n) => Some(n.clone()),
@@ -36,7 +30,6 @@ fn single_filter(dict: &lopdf::Dictionary) -> Option<Vec<u8>> {
     }
 }
 
-/// Longest side of the largest page, in points (A4 when unknown).
 fn longest_page_side(doc: &Document) -> f64 {
     let mut longest: f64 = 0.0;
     for page_id in doc.get_pages().into_values() {
@@ -65,7 +58,6 @@ fn longest_page_side(doc: &Document) -> f64 {
     }
 }
 
-/// Images used as masks of other images: they stay as they are.
 fn mask_ids(doc: &Document) -> HashSet<ObjectId> {
     let mut masks = HashSet::new();
     for obj in doc.objects.values() {
@@ -80,8 +72,6 @@ fn mask_ids(doc: &Document) -> HashSet<ObjectId> {
     masks
 }
 
-/// Decodes an 8-bit gray or RGB picture stream (JPEG, or Flate-compressed
-/// samples); None for anything else, which is then left untouched.
 fn decode_picture(stream: &lopdf::Stream) -> Option<DynamicImage> {
     let dict = &stream.dict;
     let int = |k: &[u8]| dict.get(k).ok().and_then(|o| o.as_i64().ok());
@@ -136,15 +126,6 @@ fn encode_jpeg(img: &DynamicImage, quality: u8) -> Option<Vec<u8>> {
     Some(out.into_inner())
 }
 
-/// Re-encodes the document's pictures (JPEG, or plain 8-bit gray / RGB)
-/// as JPEG at `settings`, scaled down to at most `settings.dpi` across the
-/// largest page. A picture is only replaced when it gets smaller; masks
-/// and other colour spaces are left as they are.
-///
-/// `on_image(done, total)` is called before each picture; returning false
-/// stops the work (the user cancelled) and gives `Err(Cancelled)`.
-///
-/// Returns `(original_image_bytes, compressed_image_bytes)`.
 pub fn compress_images(
     doc: &mut Document,
     settings: ImageSettings,
@@ -185,9 +166,7 @@ pub fn compress_images(
                 stream.dict.set("Width", i64::from(img.width()));
                 stream.dict.set("Height", i64::from(img.height()));
                 stream.dict.set("BitsPerComponent", 8);
-                // set_content keeps /Length in sync with the new bytes.
                 stream.set_content(bytes);
-                // Already compressed: Document::compress must leave it alone.
                 stream.allows_compression = false;
             }
             _ => compressed_total += original_size,
@@ -196,26 +175,20 @@ pub fn compress_images(
     Ok((original_total, compressed_total))
 }
 
-/// The user cancelled a compression.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Cancelled;
 
-/// Apply FlateDecode to all streams not already compressed.
-/// Uses lopdf's built-in Document::compress().
 pub fn compress_streams(doc: &mut Document) {
     doc.compress();
 }
 
-/// Remove metadata: Info dictionary, XMP Metadata stream, page thumbnails.
 pub fn strip_metadata(doc: &mut Document) {
-    // 1. Remove /Info object and trailer entry
     let info_id = doc.trailer.get(b"Info").and_then(|o| o.as_reference()).ok();
     if let Some(id) = info_id {
         doc.objects.remove(&id);
     }
     doc.trailer.remove(b"Info");
 
-    // 2. Remove /Metadata stream from catalog (two passes to avoid borrow conflicts)
     let catalog_id = doc.trailer.get(b"Root").and_then(|o| o.as_reference()).ok();
     if let Some(cid) = catalog_id {
         let meta_id = doc
@@ -234,7 +207,6 @@ pub fn strip_metadata(doc: &mut Document) {
         }
     }
 
-    // 3. Remove /Thumb from every page dictionary
     let page_ids: Vec<_> = doc.get_pages().into_values().collect();
     for page_id in page_ids {
         if let Some(obj) = doc.objects.get_mut(&page_id) {
@@ -245,7 +217,6 @@ pub fn strip_metadata(doc: &mut Document) {
     }
 }
 
-/// Remove unreferenced objects and empty streams.
 pub fn prune_dead_objects(doc: &mut Document) {
     doc.prune_objects();
     doc.delete_zero_length_streams();

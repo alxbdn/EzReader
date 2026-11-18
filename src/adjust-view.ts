@@ -5,20 +5,15 @@ import { ICON_CROP, ICON_FLIP_H, ICON_FLIP_V, ICON_STRAIGHTEN } from "./icons";
 
 export type AdjustKind = "crop" | "straighten";
 
-/** Fractions of the page as shown (0 = left / top, 1 = right / bottom). */
 export interface CropRect { l: number; t: number; r: number; b: number }
 export type Quad = [Point, Point, Point, Point];
 
-/** How one page is set in the adjust view; coordinates are fractions of the page as shown. */
 export interface PageSetting {
   page: number;
   mode: AdjustKind;
-  /** Crop: the area kept, on the page as shown after the flips. */
   crop: CropRect;
-  /** Mirror left to right / top to bottom, as seen on screen. */
   flipH: boolean;
   flipV: boolean;
-  /** Straighten: the page's corners (top left, top right, bottom right, bottom left). */
   quad: Quad;
 }
 
@@ -29,13 +24,10 @@ const FULL: CropRect = { l: 0, t: 0, r: 1, b: 1 };
 const CORNERS: Quad = [[0, 0], [1, 0], [1, 1], [0, 1]];
 const MIN_SIZE = 0.04;
 const LOUPE = 132;
-/** The app's selection red (as in the page panel). */
 const SELECT = "#E53935";
 const ZOOM = 4;
-/** Biggest bitmap rendered for a page (the loupe reads it ×4). */
 const MAX_PIXELS = 12e6;
 
-/** True when `s` changes its page. */
 export function changesPage(s: PageSetting): boolean {
   if (s.mode === "crop") {
     return s.flipH || s.flipV || s.crop.l > 1e-4 || s.crop.t > 1e-4 || s.crop.r < 1 - 1e-4 || s.crop.b < 1 - 1e-4;
@@ -43,7 +35,6 @@ export function changesPage(s: PageSetting): boolean {
   return s.quad.some(([x, y], i) => Math.abs(x - CORNERS[i][0]) > 1e-4 || Math.abs(y - CORNERS[i][1]) > 1e-4);
 }
 
-/** A box seen through a flip: the same area once the page is mirrored. */
 export function mirrorRect(c: CropRect, flipH: boolean, flipV: boolean): CropRect {
   return {
     l: flipH ? 1 - c.r : c.l, r: flipH ? 1 - c.l : c.r,
@@ -53,15 +44,10 @@ export function mirrorRect(c: CropRect, flipH: boolean, flipV: boolean): CropRec
 
 interface Rendered {
   canvas: HTMLCanvasElement;
-  /** Page size as shown, in points. */
   widthPt: number;
   heightPt: number;
 }
 
-/**
- * Crop / Straighten, page by page: replaces the viewer until ✓ or ✕.
- * Each selected page gets its own setting; ✓ hands them all to `onApply`.
- */
 export class AdjustView {
   readonly el: HTMLElement;
   private header: HTMLElement;
@@ -84,9 +70,7 @@ export class AdjustView {
   private busy = false;
   private renders = new Map<number, Promise<Rendered>>();
   private thumbs = new Map<number, HTMLElement>();
-  /** Bumped by every page shown: a slow render does not replace a newer one. */
   private token = 0;
-  /** Bumped by every open / close: thumbnails of a closed view are dropped. */
   private opened = 0;
   private t: Translations = {} as Translations;
   private texts: [HTMLElement, Key, string][] = [];
@@ -94,15 +78,10 @@ export class AdjustView {
   private onKey = (e: KeyboardEvent) => this.handleKey(e);
   private onResize = () => { if (this.doc) void this.showPage(); };
 
-  // The stage of the page shown
   private frame: HTMLElement | null = null;
   private page: Rendered | null = null;
   private cropEls: { dim: HTMLElement; box: HTMLElement; caption: HTMLElement } | null = null;
   private warpEls: { svg: SVGSVGElement; dim: SVGPathElement; poly: SVGPathElement; link: SVGPathElement; corners: HTMLButtonElement[]; loupe: HTMLCanvasElement; label: HTMLElement } | null = null;
-  /**
-   * Straighten: the result as it will be, drawn over the page while a corner
-   * moves (`on`), from `src`, a copy of the page at about twice its shown size.
-   */
   private live: { canvas: HTMLCanvasElement; src: Pixels; on: boolean; off: number } | null = null;
 
   constructor(
@@ -167,7 +146,6 @@ export class AdjustView {
 
   get isOpen(): boolean { return this.doc !== null; }
 
-  /** Opens on `pages` of `doc` (as shown: `rotation` is the view rotation). */
   open(doc: PDFDocumentProxy, pages: number[], kind: AdjustKind, rotation: number): void {
     this.doc = doc;
     this.opened++;
@@ -204,7 +182,6 @@ export class AdjustView {
     this.onClose();
   }
 
-  /** Automatically applies any crop/straighten adjustments and closes the adjust view. */
   async finish(): Promise<void> {
     if (!this.doc || this.busy) return;
     if (this.settings.some(changesPage)) {
@@ -222,8 +199,6 @@ export class AdjustView {
     for (const [el, key, fb] of this.titles) { el.title = this.tr(key, fb); el.setAttribute("aria-label", el.title); }
     if (this.doc) { this.syncHeader(); this.syncLabels(); this.syncCrop(); this.syncWarp(); }
   }
-
-  // ── Settings ────────────────────────────────────────────────────────────────
 
   private get current(): PageSetting { return this.settings[this.index]; }
 
@@ -246,14 +221,12 @@ export class AdjustView {
     this.syncCrop();
   }
 
-  /** Snaps the crop to what is drawn on the page. */
   private async autoMargins(): Promise<void> {
     const s = this.current;
     const r = await this.render(s.page);
     if (s !== this.current) return;
     const { canvas } = r;
     const ctx = canvas.getContext("2d", { willReadFrequently: true })!;
-    // Read a smaller copy: the bounds need no more than ~1 px per point.
     const k = Math.min(1, 1000 / Math.max(canvas.width, canvas.height));
     const w = Math.max(1, Math.round(canvas.width * k)), h = Math.max(1, Math.round(canvas.height * k));
     let data: ImageData;
@@ -288,8 +261,6 @@ export class AdjustView {
     if (ok) this.close();
   }
 
-  // ── Keyboard ────────────────────────────────────────────────────────────────
-
   private handleKey(e: KeyboardEvent): void {
     const a = document.activeElement as HTMLElement | null;
     if (a && (a.tagName === "INPUT" || a.tagName === "TEXTAREA" || a.isContentEditable)) return;
@@ -302,7 +273,6 @@ export class AdjustView {
     }
     if (this.corner >= 0 && e.key.startsWith("Arrow")) {
       stop();
-      // A quarter of a screen pixel: one pixel in the ×4 loupe.
       const step = (e.shiftKey ? 2.5 : 0.25);
       const fr = this.frame?.getBoundingClientRect();
       if (!fr) return;
@@ -312,20 +282,15 @@ export class AdjustView {
       if (e.key === "ArrowUp") q[1] -= step / fr.height;
       if (e.key === "ArrowDown") q[1] += step / fr.height;
       q[0] = clamp01(q[0]); q[1] = clamp01(q[1]);
-      // A nudge shows the page itself for a moment, then the result again.
       this.setLive(false);
       if (this.live) { clearTimeout(this.live.off); this.live.off = window.setTimeout(() => this.showResult(), 700); }
       this.syncWarp();
       this.syncLabels();
       return;
     }
-    // Shortcuts of the viewer (save, undo, print…) wait for ✓ or ✕.
     if (e.ctrlKey || e.metaKey) { stop(); this.shake(); }
   }
 
-  // ── Rendering ───────────────────────────────────────────────────────────────
-
-  /** The page as shown, rendered big enough for the ×4 loupe. */
   private render(pageNum: number): Promise<Rendered> {
     let r = this.renders.get(pageNum);
     if (!r) {
@@ -352,7 +317,6 @@ export class AdjustView {
     return r;
   }
 
-  /** Display size of a page in the stage. */
   private fitSize(wPt: number, hPt: number): { w: number; h: number } {
     const crop = this.current?.mode !== "straighten";
     const availW = Math.max(120, this.stage.clientWidth - (crop ? 96 : 120));
@@ -434,7 +398,6 @@ export class AdjustView {
     this.flipHBtn.setAttribute("aria-pressed", String(s.flipH));
   }
 
-  /** Builds the stage for the page shown. */
   private async showPage(): Promise<void> {
     const token = ++this.token;
     const s = this.current;
@@ -458,7 +421,6 @@ export class AdjustView {
   }
 
   private pageCanvas(r: Rendered): HTMLCanvasElement {
-    // The stage shows a copy: the full-size render stays the loupe's source.
     const c = document.createElement("canvas");
     const k = Math.min(1, 2400 / Math.max(r.canvas.width, r.canvas.height));
     c.width = Math.round(r.canvas.width * k);
@@ -467,8 +429,6 @@ export class AdjustView {
     c.className = "adj-page";
     return c;
   }
-
-  // ── Crop ────────────────────────────────────────────────────────────────────
 
   private buildCrop(frame: HTMLElement, r: Rendered): void {
     const clip = document.createElement("div");
@@ -555,8 +515,6 @@ export class AdjustView {
     els.caption.textContent = this.tr("adjCropCaption", "Drag the handles to crop · {size}").replace("{size}", size);
   }
 
-  // ── Straighten ──────────────────────────────────────────────────────────────
-
   private buildWarp(frame: HTMLElement, r: Rendered, w: number, h: number): void {
     const canvas = this.pageCanvas(r);
     const NS = "http://www.w3.org/2000/svg";
@@ -607,7 +565,6 @@ export class AdjustView {
     const q = this.current.quad[i];
     const start: Point = [q[0], q[1]];
     const x0 = e.clientX, y0 = e.clientY;
-    // While the corner moves, the page itself shows, to aim with the loupe.
     this.setLive(false);
     this.syncWarp();
     const move = (ev: PointerEvent) => {
@@ -636,7 +593,6 @@ export class AdjustView {
     const pts = s.quad.map(([x, y]) => [x * w, y * h] as Point);
     const d = `M${pts.map((p) => `${p[0].toFixed(1)} ${p[1].toFixed(1)}`).join(" L")}Z`;
     els.poly.setAttribute("d", d);
-    // Dim what falls outside the page's corners.
     els.dim.setAttribute("d", `M0 0H${w}V${h}H0Z ${d}`);
     pts.forEach(([x, y], i) => {
       const b = els.corners[i];
@@ -650,7 +606,6 @@ export class AdjustView {
 
     const c = pts[this.corner];
     const left = this.corner === 0 || this.corner === 3, top = this.corner === 0 || this.corner === 1;
-    // Offset toward the inside, so the loupe never sits under the pointer.
     const lx = Math.min(w + 40, Math.max(-40, c[0] + (left ? 120 : -120)));
     const ly = Math.min(h + 40, Math.max(-40, c[1] + (top ? 110 : -110)));
     els.loupe.style.left = `${lx}px`;
@@ -663,7 +618,6 @@ export class AdjustView {
     this.drawLoupe(els.loupe, pts, c, w);
   }
 
-  /** A copy of the page at about twice its shown size (`w` × `h`), the result's source. */
   private liveSource(r: Rendered, w: number, h: number): Pixels {
     const k = Math.min(1, (2 * Math.max(w, h)) / Math.max(r.canvas.width, r.canvas.height));
     const sw = Math.max(1, Math.round(r.canvas.width * k)), sh = Math.max(1, Math.round(r.canvas.height * k));
@@ -678,17 +632,11 @@ export class AdjustView {
     return src;
   }
 
-  /** Shows the straightened result, once the corners change the page. */
   private showResult(): void {
     const s = this.current;
     this.setLive(!!s && s.mode === "straighten" && changesPage(s));
   }
 
-  /**
-   * Shows the straightened result in place of the page, with the outline and
-   * the corners over it (faint, ready to be grabbed again), or the page
-   * itself, as while a corner moves.
-   */
   private setLive(on: boolean): void {
     const l = this.live;
     if (!l) return;
@@ -727,7 +675,6 @@ export class AdjustView {
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.fillStyle = "#3f3f46";
     ctx.fillRect(0, 0, LOUPE, LOUPE);
-    // Display pixels → source pixels.
     const k = src.width / w;
     const span = LOUPE / ZOOM;
     ctx.imageSmoothingEnabled = true;
@@ -751,8 +698,6 @@ export class AdjustView {
     ctx.arc(LOUPE / 2, LOUPE / 2, 5, 0, Math.PI * 2);
     ctx.stroke();
   }
-
-  // ── DOM helpers ─────────────────────────────────────────────────────────────
 
   private tr(key: Key, fb: string): string {
     const v = this.t[key];

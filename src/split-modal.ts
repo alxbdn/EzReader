@@ -62,7 +62,6 @@ export class SplitModal {
   open(pageCount: number): void {
     this.pageCount = pageCount;
     this.everyInput.max = String(Math.max(1, pageCount));
-    // Default "every" value: 1 page per file
     if (Number(this.everyInput.value) < 1) this.everyInput.value = "1";
     this.refreshEnabledInputs();
     this.refreshSummary();
@@ -126,7 +125,6 @@ export class SplitModal {
       }
       return { ranges, error: null };
     }
-    // custom
     const parsed = parsePageSpans(this.customInput.value, this.pageCount);
     if (parsed === null) return { ranges: [], error: "invalid-custom" };
     if (parsed.length === 0) return { ranges: [], error: "empty-custom" };

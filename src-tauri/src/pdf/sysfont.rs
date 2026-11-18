@@ -1,10 +1,3 @@
-//! Fonts installed on the computer, embedded in the PDF for text annotations.
-//!
-//! The app offers the 30 most common fonts of Windows and macOS. A font is
-//! looked up once among the font files of the system, and embedded as a
-//! subset (only the glyphs the text uses) in a CID-keyed Type0 font, so the
-//! saved file shows the same letters on any computer.
-
 use std::collections::{BTreeMap, HashMap};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, OnceLock};
@@ -12,7 +5,6 @@ use std::sync::{Arc, Mutex, OnceLock};
 use lopdf::{dictionary, Document, Object, ObjectId, Stream};
 use subsetter::GlyphRemapper;
 
-/// The fonts offered for text, besides the standard Helvetica, Times and Courier.
 pub const FAMILIES: [&str; 30] = [
     "Arial",
     "Arial Black",
@@ -46,7 +38,6 @@ pub const FAMILIES: [&str; 30] = [
     "Menlo",
 ];
 
-/// File names of fonts whose name does not start like their family (Windows).
 const FILE_ALIASES: [&str; 8] = ["ariblk", "trebuc", "pala", "bkant", "gara", "gothic", "framd", "lucon"];
 
 const NAME_FAMILY: u16 = 1;
@@ -54,8 +45,6 @@ const NAME_SUBFAMILY: u16 = 2;
 const NAME_POST_SCRIPT: u16 = 6;
 const NAME_TYPO_FAMILY: u16 = 16;
 const NAME_TYPO_SUBFAMILY: u16 = 17;
-
-// ── OpenType / TrueType table reader ────────────────────────────────────────
 
 fn u16_be(b: &[u8], off: usize) -> Option<u16> {
     Some(u16::from_be_bytes(b.get(off..off.checked_add(2)?)?.try_into().ok()?))
@@ -309,20 +298,15 @@ fn cmap_fmt4(sub: &[u8], code: u32) -> Option<u16> {
     None
 }
 
-// ── Font index ──────────────────────────────────────────────────────────────
-
-/// One face of a font file.
 #[derive(Clone, Debug)]
 struct FaceRef {
     path: PathBuf,
     index: u32,
     bold: bool,
     italic: bool,
-    /// "Regular", "Bold", "Italic" or "Bold Italic" exactly: not a condensed or light cut.
     plain_style: bool,
 }
 
-/// The faces of the offered families on this computer, by lowercase family name.
 fn index() -> &'static HashMap<String, Vec<FaceRef>> {
     static INDEX: OnceLock<HashMap<String, Vec<FaceRef>>> = OnceLock::new();
     INDEX.get_or_init(|| build_index(&font_dirs()))
@@ -354,12 +338,10 @@ fn font_dirs() -> Vec<PathBuf> {
     dirs
 }
 
-/// Lowercase letters and digits only: "Trebuchet MS" → "trebuchetms".
 fn squash(s: &str) -> String {
     s.chars().filter(|c| c.is_ascii_alphanumeric()).map(|c| c.to_ascii_lowercase()).collect()
 }
 
-/// Whether a font file may hold one of the offered families, from its name alone.
 fn worth_reading(path: &Path) -> bool {
     let ext = path.extension().and_then(|e| e.to_str()).map(str::to_ascii_lowercase);
     if !matches!(ext.as_deref(), Some("ttf" | "otf" | "ttc" | "otc")) {
@@ -416,20 +398,17 @@ fn build_index(dirs: &[PathBuf]) -> HashMap<String, Vec<FaceRef>> {
     out
 }
 
-/// The offered families that are installed here, in the order of `FAMILIES`.
 pub fn installed() -> Vec<String> {
     let idx = index();
     FAMILIES.iter().filter(|f| idx.contains_key(&f.to_ascii_lowercase())).map(|f| f.to_string()).collect()
 }
 
-/// A font file read into memory, with the face to use.
 #[derive(Clone)]
 pub struct FontData {
     pub data: Arc<Vec<u8>>,
     pub index: u32,
 }
 
-/// The face of `family` closest to `bold` / `italic`, if the family is installed.
 pub fn find(family: &str, bold: bool, italic: bool) -> Option<FontData> {
     let faces = index().get(&family.to_ascii_lowercase())?;
     let score = |f: &FaceRef| (f.bold == bold) as u8 * 4 + (f.italic == italic) as u8 * 2 + f.plain_style as u8;
@@ -437,7 +416,6 @@ pub fn find(family: &str, bold: bool, italic: bool) -> Option<FontData> {
     load(&best.path, best.index)
 }
 
-/// Font files are read once: a document often has several texts in the same font.
 fn load(path: &Path, index: u32) -> Option<FontData> {
     static CACHE: OnceLock<Mutex<HashMap<PathBuf, Arc<Vec<u8>>>>> = OnceLock::new();
     let cache = CACHE.get_or_init(|| Mutex::new(HashMap::new()));
@@ -450,20 +428,14 @@ fn load(path: &Path, index: u32) -> Option<FontData> {
     Some(FontData { data: d, index })
 }
 
-// ── Embedding ───────────────────────────────────────────────────────────────
-
-/// A font ready to show some text: glyphs are numbered as in the subset.
 pub struct EmbeddedFont {
     font: FontData,
     remapper: GlyphRemapper,
-    /// New glyph id → (advance in 1/1000 em, the text it stands for).
     glyphs: BTreeMap<u16, (f64, String)>,
-    /// Character → new glyph id.
     by_char: HashMap<char, u16>,
 }
 
 impl EmbeddedFont {
-    /// Prepares `font` for `text` (every character of it gets a glyph, or .notdef).
     pub fn new(font: FontData, text: &str) -> Option<Self> {
         let face = Face::parse(&font.data, font.index)?;
         let upem = face.upem as f64;
@@ -492,12 +464,10 @@ impl EmbeddedFont {
         self.by_char.get(&ch).copied().unwrap_or(0)
     }
 
-    /// Width of `s` at `size` points.
     pub fn width(&self, s: &str, size: f64) -> f64 {
         s.chars().map(|c| self.glyphs.get(&self.gid(c)).map_or(0.0, |g| g.0)).sum::<f64>() * size / 1000.0
     }
 
-    /// `s` as a hex string of glyph ids, for `Tj`.
     pub fn show(&self, s: &str) -> String {
         let mut out = String::from("<");
         for c in s.chars() {
@@ -507,7 +477,6 @@ impl EmbeddedFont {
         out
     }
 
-    /// Writes the subset and its dictionaries to `doc`; returns the Type0 font.
     pub fn write(&self, doc: &mut Document) -> Result<ObjectId, String> {
         let face = Face::parse(&self.font.data, self.font.index).ok_or_else(|| "invalid font".to_string())?;
         let subset = subsetter::subset(&self.font.data, self.font.index, &self.remapper).map_err(|e| e.to_string())?;
@@ -530,7 +499,7 @@ impl EmbeddedFont {
         let file_id = doc.add_object(file);
 
         let (x_min, y_min, x_max, y_max) = face.bbox();
-        let mut flags = 32; // nonsymbolic
+        let mut flags = 32;
         if face.is_monospaced() {
             flags |= 1;
         }
@@ -585,7 +554,6 @@ impl EmbeddedFont {
         }))
     }
 
-    /// Glyph → text, so the words can be searched and copied.
     fn to_unicode(&self) -> String {
         let mut s = String::from(
             "/CIDInit /ProcSet findresource begin\n12 dict begin\nbegincmap\n\
@@ -608,7 +576,6 @@ impl EmbeddedFont {
     }
 }
 
-/// Six capital letters naming the subset, from the characters it holds.
 fn subset_tag(chars: &HashMap<char, u16>) -> String {
     let mut sorted: Vec<char> = chars.keys().copied().collect();
     sorted.sort_unstable();
@@ -623,7 +590,6 @@ fn subset_tag(chars: &HashMap<char, u16>) -> String {
 mod tests {
     use super::*;
 
-    /// A TrueType font of the build machine, if it has one.
     fn some_ttf() -> Option<FontData> {
         let mut files = Vec::new();
         for d in ["/usr/share/fonts", "/Library/Fonts", "/System/Library/Fonts", "C:\\Windows\\Fonts"] {
@@ -669,7 +635,6 @@ mod tests {
     fn text_is_shown_with_subset_glyph_ids_and_measured() {
         let Some(font) = some_ttf() else { return };
         let e = EmbeddedFont::new(font, "abca").unwrap();
-        // .notdef is 0, then a, b, c in order.
         assert_eq!(e.show("abca"), "<0001000200030001>");
         assert!(e.width("ab", 10.0) > 0.0);
         assert!((e.width("abab", 10.0) - 2.0 * e.width("ab", 10.0)).abs() < 1e-9);

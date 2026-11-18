@@ -3,15 +3,11 @@ use crate::error::{CmdResult, ErrorCode, PdfError};
 use tauri::AppHandle;
 use tauri_plugin_dialog::{DialogExt, FilePath};
 
-/// Writes the text of a document (extracted by the frontend) to `output` in
-/// `format`: "docx", "xlsx", "rtf", "html", "txt" or "xml".
 #[tauri::command]
 pub async fn convert_text(doc: TextDoc, format: String, output: String) -> CmdResult<()> {
     let format =
         Format::parse(&format).ok_or_else(|| PdfError::new(ErrorCode::Other, format!("unknown format: {format}")))?;
     crate::grants::check(&output)?;
-    // The file's type must match what is written in it: a .bat or .exe never
-    // comes out of this, even with a name chosen elsewhere.
     let ext = std::path::Path::new(&output).extension().and_then(|e| e.to_str()).map(str::to_ascii_lowercase);
     if ext.as_deref() != Some(format.extension()) {
         return Err(PdfError::new(
@@ -28,8 +24,6 @@ pub async fn convert_text(doc: TextDoc, format: String, output: String) -> CmdRe
     .map_err(|e| PdfError::from(e.to_string()))?
 }
 
-/// A Save As dialog for a converted file: `suggested` is the file name,
-/// `format` sets the type filter. Returns the chosen path or null.
 #[tauri::command(async)]
 pub fn save_as_dialog(app: AppHandle, suggested: String, format: String) -> CmdResult<Option<String>> {
     let format =

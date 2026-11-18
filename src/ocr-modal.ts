@@ -6,18 +6,13 @@ export interface OcrLine { text: string; words: OcrWord[] }
 export interface OcrResult { text: string; lines: OcrLine[]; language: string }
 export interface OcrLanguage { tag: string; name: string }
 
-/** What the OCR dialog needs from the app. */
 export interface OcrDeps {
-  /** Pages of the open document (0 when none is open). */
   pageCount(): number;
   currentPage(): number;
-  /** The document as it is now; called once each time the dialog opens. */
   materialize(): Promise<string>;
-  /** Page `n` of `path` as a PNG data URL, sharp enough to read. */
   renderPage(path: string, n: number): Promise<string>;
   languages(): Promise<OcrLanguage[]>;
   recognize(data: string, language: string): Promise<OcrResult>;
-  /** Lets the user pick a picture; its data URL and file name, or null. */
   pickPicture(): Promise<{ dataUrl: string; name: string } | null>;
   copy(text: string): Promise<void>;
   errText(err: unknown): string;
@@ -25,22 +20,15 @@ export interface OcrDeps {
 
 const LANG_KEY = "ezreader.ocrLanguage";
 
-/** The language picked in the OCR dialog ("" = automatic). */
 export function savedLanguage(): string {
   try { return localStorage.getItem(LANG_KEY) ?? ""; } catch { return ""; }
 }
 
-/** Joins per-page texts, with a heading per page when there are several. */
 export function joinPages(pages: [number, string][]): string {
   if (pages.length === 1) return pages[0][1];
   return pages.map(([n, t]) => `— ${n} —\n${t}`).join("\n\n");
 }
 
-/**
- * "Recognize text": the page (or a picture) on the left with the words
- * found outlined, the text on the right, ready to copy. Reading is done by
- * the OCR engine built into Windows.
- */
 export class OcrModal extends Modal {
   private source: { kind: "pdf"; path: Promise<string> } | { kind: "picture"; dataUrl: string; name: string } | null = null;
   private page = 1;
@@ -86,7 +74,7 @@ export class OcrModal extends Modal {
     this.title(this.langSelect, "ocrLanguage", "Language of the text");
     this.langSelect.addEventListener("change", () => {
       this.language = this.langSelect.value;
-      try { localStorage.setItem(LANG_KEY, this.language); } catch { /* not kept */ }
+      try { localStorage.setItem(LANG_KEY, this.language); } catch {}
       this.results.clear();
       void this.showPage();
     });
@@ -117,7 +105,6 @@ export class OcrModal extends Modal {
     this.okBtn.addEventListener("click", () => void this.copyText());
   }
 
-  /** Opens on the current page of the open document, or empty for a picture. */
   open(): void {
     this.run++;
     this.results.clear();
@@ -125,7 +112,7 @@ export class OcrModal extends Modal {
     this.pageCount = this.d.pageCount();
     this.page = Math.min(Math.max(1, this.d.currentPage()), Math.max(1, this.pageCount));
     this.source = this.pageCount > 0 ? { kind: "pdf", path: this.d.materialize() } : null;
-    if (this.source) this.source.path.catch(() => { /* reported when the page is shown */ });
+    if (this.source) this.source.path.catch(() => {});
     this.textArea.value = "";
     this.img.removeAttribute("src");
     this.boxes.replaceChildren();
@@ -138,7 +125,7 @@ export class OcrModal extends Modal {
 
   private async loadLanguages(): Promise<void> {
     let langs: OcrLanguage[] = [];
-    try { langs = await this.d.languages(); } catch { /* the select keeps "Automatic" */ }
+    try { langs = await this.d.languages(); } catch {}
     const auto = this.el("option", "", "ocrAuto", "Automatic");
     auto.value = "";
     this.langSelect.replaceChildren(auto, ...langs.map((l) => {
@@ -171,7 +158,6 @@ export class OcrModal extends Modal {
     await this.showPage();
   }
 
-  /** Image of what is shown: the picture, or the page rendered once. */
   private async imageOf(page: number): Promise<string> {
     const src = this.source!;
     if (src.kind === "picture") return src.dataUrl;

@@ -1,19 +1,9 @@
-/**
- * Small flags for the language picker on the welcome screen.
- *
- * Windows has no flag emoji (it shows the two letters instead), so each flag
- * is a tiny inline SVG, simplified to read at 20×14 px. A language spoken
- * across many countries with no obvious flag (Arabic, Swahili) gets a globe.
- */
-
 const svg = (viewBox: string, body: string): string =>
   `<svg width="20" height="14" viewBox="${viewBox}" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">${body}</svg>`;
 
-/** Three vertical bands. */
 const vbands = (a: string, b: string, c: string): string =>
   svg("0 0 3 2", `<rect width="1" height="2" fill="${a}"/><rect x="1" width="1" height="2" fill="${b}"/><rect x="2" width="1" height="2" fill="${c}"/>`);
 
-/** Three horizontal bands. */
 const hbands = (a: string, b: string, c: string): string =>
   svg("0 0 3 3", `<rect width="3" height="1" fill="${a}"/><rect y="1" width="3" height="1" fill="${b}"/><rect y="2" width="3" height="1" fill="${c}"/>`);
 
@@ -44,20 +34,16 @@ const FLAGS: Record<string, string> = {
   tr: svg("0 0 30 20", `<rect width="30" height="20" fill="#E30A17"/><circle cx="11" cy="10" r="5" fill="#ffffff"/><circle cx="12.25" cy="10" r="4" fill="#E30A17"/><path d="${STAR}" transform="translate(17.2,10) rotate(-18) scale(2)" fill="#ffffff"/>`),
   vi: svg("0 0 30 20", `<rect width="30" height="20" fill="#DA251D"/><path d="${STAR}" transform="translate(15,10.5) scale(6)" fill="#FFFF00"/>`),
 };
-// Marathi, Telugu and Tamil are spoken in India.
 FLAGS["mr"] = FLAGS["hi"]!;
 FLAGS["te"] = FLAGS["hi"]!;
 FLAGS["ta"] = FLAGS["hi"]!;
 
-/** Lucide-style globe for languages with no single country. */
 export const FLAG_GLOBE = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/><path d="M2 12h20"/></svg>`;
 
-/** The flag for a language code, or null when it shows a globe. */
 export function flagFor(lang: string): string | null {
   return FLAGS[lang] ?? null;
 }
 
-/** The markup to show for `lang`: a framed flag, or the globe. */
 export function flagMarkup(lang: string): string {
   const flag = flagFor(lang);
   return flag

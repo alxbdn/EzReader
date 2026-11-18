@@ -1,16 +1,3 @@
-// End-to-end tests: the real EzReader (Rust backend + webview) driven through
-// WebDriver, as a user would: open a PDF, annotate it, save, use the menus,
-// the launcher and the settings.
-//
-// Needs a built app and tauri-driver (https://v2.tauri.app/develop/tests/webdriver/):
-//
-//   npx tauri build --debug --no-bundle
-//   cargo install tauri-driver --locked
-//   npm run test:e2e            (Linux: inside xvfb-run, with webkit2gtk-driver)
-//
-// EZREADER_APP overrides the app's path. Each test starts the app afresh with
-// its own profile (settings, signatures) and its own copy of the documents.
-
 import { after, afterEach, before, describe, test } from "node:test";
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
@@ -41,11 +28,6 @@ after(() => {
   if (work) rmSync(work, { recursive: true, force: true });
 });
 
-/**
- * tauri-driver, started for each test with a new profile: no settings,
- * language or signatures left by the test before. (On Windows the WebView2
- * profile lives in LOCALAPPDATA, on Linux in the XDG folders.)
- */
 async function startDriver() {
   const profile = join(work, `profile-${++profiles}`);
   const env = {
@@ -57,18 +39,16 @@ async function startDriver() {
     XDG_CACHE_HOME: join(profile, "cache"),
     LOCALAPPDATA: join(profile, "local"),
   };
-  // Its own process group, so stopping it also stops the native driver it runs.
   driverProc = spawn("tauri-driver", [], { env, stdio: "ignore", detached: process.platform !== "win32" });
   await waitForDriver();
 }
 
 afterEach(async (t) => {
   if (!driver) return;
-  // A failed test leaves a screenshot of the window behind (uploaded by CI).
   if (t.passed === false || process.exitCode) {
     try {
       writeFileSync(join(SHOTS, `${t.name.replace(/[^\w-]+/g, "_")}.png`), await driver.takeScreenshot(), "base64");
-    } catch { /* the app may already be gone */ }
+    } catch {}
   }
   await driver.quit().catch(() => {});
   driver = undefined;
@@ -81,7 +61,7 @@ function stopDriver() {
   try {
     if (process.platform === "win32") spawn("taskkill", ["/pid", String(driverProc.pid), "/t", "/f"], { stdio: "ignore" });
     else process.kill(-driverProc.pid, "SIGTERM");
-  } catch { /* already gone */ }
+  } catch {}
   driverProc = undefined;
 }
 
@@ -90,7 +70,7 @@ async function waitForDriver() {
     try {
       const r = await fetch("http://127.0.0.1:4444/status");
       if (r.ok) return;
-    } catch { /* not up yet */ }
+    } catch {}
     await sleep(100);
   }
   throw new Error("tauri-driver did not start");
@@ -100,7 +80,6 @@ function sleep(ms) {
   return new Promise((r) => setTimeout(r, ms));
 }
 
-/** Starts the app, opening `file` when given (as the command line does). */
 async function launch(file) {
   if (!driverProc) await startDriver();
   driver = await new Builder()
@@ -111,14 +90,12 @@ async function launch(file) {
   return driver;
 }
 
-/** A fresh copy of a corpus file, safe to save over. */
 function copyOf(name) {
   const path = join(work, `${Date.now()}-${name}`);
   copyFileSync(join(CORPUS, name), path);
   return path;
 }
 
-/** Polls `fn` (run in the page) until it returns something truthy. */
 async function waitFor(what, fn, timeout = 15000, ...args) {
   const end = Date.now() + timeout;
   let last;
@@ -134,7 +111,6 @@ async function waitFor(what, fn, timeout = 15000, ...args) {
   throw new Error(`timed out waiting for ${what} (last: ${last})`);
 }
 
-/** Runs a Rust command through the app's own IPC. */
 function invoke(cmd, args) {
   return driver.executeAsyncScript(
     (cmd, args, done) => window.__TAURI_INTERNALS__.invoke(cmd, args).then(done, (e) => done({ error: String(e) })),
@@ -152,14 +128,12 @@ async function ctrl(key) {
   await driver.actions().keyDown(Key.CONTROL).sendKeys(key).keyUp(Key.CONTROL).perform();
 }
 
-/** Waits until every page of the document is listed and the first is drawn. */
 async function waitForDocument(pages) {
   await waitFor("the launcher to close", () => document.getElementById("welcome-screen").classList.contains("hidden"));
   await waitFor(`${pages} pages`, (n) => document.querySelectorAll("#viewer-scroll .page-wrapper").length === n, 15000, pages);
   await waitFor("the first page to be drawn", () => {
     const c = document.querySelector("#viewer-scroll .page-canvas");
     if (!c || !c.width) return false;
-    // Not blank: some dark pixels (the text) on the white page.
     const px = c.getContext("2d").getImageData(0, 0, c.width, c.height).data;
     for (let i = 0; i < px.length; i += 4 * 7) if (px[i] < 100) return true;
     return false;
@@ -173,22 +147,17 @@ async function toast() {
   });
 }
 
-/** Draws a rectangle with the Shapes tool on the first page. */
 async function drawRectangle() {
   await click("[data-mode=annotate]");
   await click("[data-group=shapes]");
-  // The studio panel opens on the right in Annotate: the pages refit to the
-  // narrower viewer first, so the drag must wait for them to stand still.
   await waitForStillPage();
   const page = await driver.findElement(By.css("#viewer-scroll .page-wrapper"));
   await driver.actions({ async: true })
-    // Inside the page even in a small window, next to the studio panel.
     .move({ origin: page, x: -100, y: -50 }).press()
     .move({ origin: page, x: -20, y: 30, duration: 250 })
     .release().perform();
 }
 
-/** Waits until the first page keeps the same place and size for half a second. */
 async function waitForStillPage() {
   const rect = () => driver.executeScript(() => {
     const r = document.querySelector("#viewer-scroll .page-wrapper").getBoundingClientRect();
@@ -220,7 +189,6 @@ describe("launcher", () => {
     assert.equal(await driver.findElement(By.css("#welcome-open-btn")).isDisplayed(), true);
     const menus = await driver.executeScript(() => [...document.querySelectorAll(".menubar-item")].map((b) => b.dataset.menuId));
     assert.deepEqual(menus, ["file", "edit", "view", "tools"]);
-    // Nothing open: the document commands are greyed out.
     const save = await driver.executeScript(() =>
       [...document.querySelectorAll(".menu-entry")].find((e) => e.textContent.includes("Ctrl+S")).disabled);
     assert.equal(save, true);
@@ -262,7 +230,6 @@ describe("documents", () => {
 
     const after = readFileSync(file);
     assert.notDeepEqual(after, before, "the file on disk changed");
-    // Still a sound PDF for another reader, with its text.
     const info = await pdfInfo(file);
     assert.equal(info.pages, 4);
     assert.match(info.text, /Page 1/);
@@ -271,7 +238,6 @@ describe("documents", () => {
     assert.equal(stored[0].kind, "rect");
     assert.equal(stored[0].page, 1);
 
-    // Reopened: the rectangle is editable again, not just burned in.
     await driver.quit();
     await launch(file);
     await waitForDocument(4);
@@ -291,7 +257,6 @@ describe("documents", () => {
     await sleep(1000);
     const stored = await invoke("read_annotations", { filePath: file });
     assert.equal(stored.length, 0);
-    // Nothing to save: the file is untouched.
     assert.deepEqual(readFileSync(file), before);
   });
 

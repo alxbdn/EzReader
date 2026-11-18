@@ -2,15 +2,10 @@ import { SignatureStore } from "./signature-store";
 import type { InkVector } from "./models";
 import { drawVector, fitVector, strokeSegments, vectorToPng } from "./signature-ink";
 
-/** `imageData` is base64 PNG; `vector` is set for a drawn signature. */
 type SignatureReadyHandler = (imageData: string, vector?: InkVector) => void;
 
-/** Pixels per pad unit of the PNG kept beside a vector signature (thumbnails, preview). */
 const THUMB_SCALE = 3;
-/** Longest side of an imported signature picture, in pixels. */
 const MAX_PICTURE_SIDE = 1200;
-
-// ── SignatureModal ────────────────────────────────────────────────────────────
 
 export class SignatureModal {
   private backdrop: HTMLElement;
@@ -20,14 +15,12 @@ export class SignatureModal {
   private isDrawing = false;
   private hasContent = false;
 
-  /** All strokes collected so far — each stroke is a list of [x,y] pairs. */
   private strokes: [number, number][][] = [];
 
   private store: SignatureStore;
   private savedSectionEl: HTMLElement;
   private savedListEl: HTMLElement;
   private selectedSavedId: string | null = null;
-  /** The picture shown on the pad (imported or saved), as a data URL; null when the pad has only strokes. */
   private picture: string | null = null;
   private pictureImg: HTMLImageElement | null = null;
 
@@ -46,7 +39,6 @@ export class SignatureModal {
     this.bindButtons();
   }
 
-  /** Migrate old localStorage strokes key into the new store. */
   private migrateOldStrokes(): void {
     const oldStrokes = this.store.consumeOldStrokes();
     if (!oldStrokes || oldStrokes.length === 0) return;
@@ -88,8 +80,6 @@ export class SignatureModal {
     this.pictureImg = null;
     this.updateSelectedCard();
   }
-
-  // ── Saved signatures list ───────────────────────────────────────────────
 
   private renderSavedList(): void {
     const sigs = this.store.getAll();
@@ -135,10 +125,9 @@ export class SignatureModal {
     this.picture = imageDataUrl;
     this.updateSelectedCard();
 
-    // Draw the saved image on the canvas
     const img = new Image();
     img.onload = () => {
-      if (this.picture !== imageDataUrl) return; // another card was picked meanwhile
+      if (this.picture !== imageDataUrl) return;
       this.pictureImg = img;
       this.redrawPad();
       this.hasContent = true;
@@ -162,9 +151,6 @@ export class SignatureModal {
     }
   }
 
-  // ── Drawing ──────────────────────────────────────────────────────────────
-
-  /** The pad: the picture (fitted, centred), then the strokes. */
   private redrawPad(): void {
     const { width, height } = this.canvas;
     this.ctx.clearRect(0, 0, width, height);
@@ -183,7 +169,6 @@ export class SignatureModal {
 
     this.canvas.addEventListener("pointerdown", (e) => {
       e.preventDefault();
-      // If a saved signature was selected, starting to draw means a new signature
       if (this.selectedSavedId) {
         this.selectedSavedId = null;
         this.updateSelectedCard();
@@ -192,7 +177,6 @@ export class SignatureModal {
       this.canvas.setPointerCapture(e.pointerId);
       this.strokes.push([[e.offsetX, e.offsetY]]);
 
-      // Start rough preview path
       this.ctx.beginPath();
       this.ctx.moveTo(e.offsetX, e.offsetY);
       this.ctx.strokeStyle = "#000";
@@ -207,7 +191,6 @@ export class SignatureModal {
       const current = this.strokes[this.strokes.length - 1];
       current.push([e.offsetX, e.offsetY]);
 
-      // Rough preview
       this.ctx.lineTo(e.offsetX, e.offsetY);
       this.ctx.stroke();
       this.ctx.beginPath();
@@ -218,14 +201,11 @@ export class SignatureModal {
     const stopDrawing = (): void => {
       if (!this.isDrawing) return;
       this.isDrawing = false;
-      // Re-render all strokes with smooth curves (over the picture, if any)
       this.redrawPad();
     };
     this.canvas.addEventListener("pointerup", stopDrawing);
     this.canvas.addEventListener("pointercancel", stopDrawing);
   }
-
-  // ── Buttons ──────────────────────────────────────────────────────────────
 
   private bindButtons(): void {
     document
@@ -245,14 +225,10 @@ export class SignatureModal {
       let dataUrl: string;
       let vector: InkVector | undefined;
       if (saved) {
-        // Re-using an existing saved signature — update its last-used time
         this.store.touch(saved.id);
         dataUrl = saved.imageDataUrl;
         vector = saved.vector;
       } else {
-        // New signature — save it. Pen strokes alone stay vectors (sharp at
-        // any size); a picture keeps its own resolution; strokes over a
-        // picture are kept as the pad shows them.
         vector = this.picture ? undefined : fitVector(strokeSegments(this.strokes)) ?? undefined;
         dataUrl = vector
           ? vectorToPng(vector, THUMB_SCALE)
@@ -263,7 +239,7 @@ export class SignatureModal {
       }
 
       this.close();
-      this.emit(dataUrl.split(",")[1] ?? dataUrl, vector); // strip data:image/png;base64,
+      this.emit(dataUrl.split(",")[1] ?? dataUrl, vector);
     });
 
     document
@@ -289,8 +265,6 @@ export class SignatureModal {
         const img = new Image();
         img.onload = () => {
           this.clearCanvas();
-          // The picture keeps its own resolution (at most MAX_PICTURE_SIDE);
-          // the pad only shows it.
           const k = Math.min(1, MAX_PICTURE_SIDE / Math.max(img.width, img.height));
           const c = document.createElement("canvas");
           c.width = Math.max(1, Math.round(img.width * k));

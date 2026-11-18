@@ -1,12 +1,3 @@
-//! Permanent redaction.
-//!
-//! A redacted page is replaced by a picture of itself with the redacted areas
-//! already blacked out (rendered by pdf.js on the frontend). Its original
-//! content streams, resources, links and form widgets are dropped and the
-//! file is fully rewritten, so neither the hidden text nor an earlier
-//! incremental revision survives in the bytes. The cost is that the text of a
-//! redacted page is no longer selectable.
-
 use std::collections::HashSet;
 use std::io::Cursor;
 
@@ -16,24 +7,18 @@ use serde::Deserialize;
 
 use crate::pdf::writer;
 
-/// One page as rendered by the frontend.
 #[derive(Debug, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct RedactedPage {
-    /// 1-based page number.
     pub page: u32,
-    /// Base64 JPEG of the page's visible area, unrotated, redactions filled.
     pub jpeg_base64: String,
     pub width_px: u32,
     pub height_px: u32,
-    /// Area the image covers, in PDF user space: [x0, y0, x1, y1].
     pub view: [f64; 4],
 }
 
-/// Name of the image XObject drawn on each redacted page.
 const IMAGE_NAME: &str = "EzRedacted";
 
-/// Page entries that can carry or point at the original content.
 const DROPPED_PAGE_KEYS: [&[u8]; 9] =
     [b"Annots", b"Thumb", b"PieceInfo", b"StructParents", b"CropBox", b"BleedBox", b"TrimBox", b"ArtBox", b"Metadata"];
 
@@ -73,8 +58,6 @@ pub fn redact_pages(doc: &mut Document, pages: &[RedactedPage]) -> Result<(), St
     Ok(())
 }
 
-/// Adds the page picture of `rp` as an image XObject. Returns its id and
-/// the content that draws it over the page's view as `/EzRedacted`.
 pub(crate) fn add_picture(doc: &mut Document, rp: &RedactedPage) -> Result<(ObjectId, String), String> {
     let jpeg = base64::engine::general_purpose::STANDARD
         .decode(&rp.jpeg_base64)
@@ -106,9 +89,6 @@ pub(crate) fn add_picture(doc: &mut Document, rp: &RedactedPage) -> Result<(Obje
     Ok((img_id, ops))
 }
 
-/// `content_id`, followed by EzReader's own annotation layer of `page` when
-/// it has one: that layer (emptied in the display copy, refilled on save)
-/// stays so its metadata keeps pointing at a live stream.
 pub(crate) fn with_annotation_layer(
     doc: &Document,
     meta: &writer::AnnotationMeta,
@@ -125,7 +105,6 @@ pub(crate) fn with_annotation_layer(
     contents
 }
 
-/// Name of the page picture in the resources of a redacted or straightened page.
 pub(crate) const PICTURE_NAME: &str = IMAGE_NAME;
 
 pub(crate) fn fmt(v: f64) -> String {
@@ -152,15 +131,10 @@ fn collect_widgets(doc: &Document, annots: &Object, out: &mut HashSet<ObjectId>)
     }
 }
 
-/// Removes the form fields whose widgets sat on redacted pages: a field's
-/// value (/V) lives in the field dictionary, so dropping only the widget
-/// from the page would leave the text in the file.
 fn remove_form_fields(doc: &mut Document, mut dead: HashSet<ObjectId>) {
     if dead.is_empty() {
         return;
     }
-    // Strip dead refs from every /Kids array; a field left without kids is
-    // dead too. Page-tree /Kids never reference widgets, so they are untouched.
     loop {
         let mut newly_dead = Vec::new();
         for (&id, obj) in doc.objects.iter_mut() {
@@ -213,8 +187,6 @@ fn acroform_id_or_catalog(doc: &Document) -> Option<AcroForm> {
     }
 }
 
-/// Tagged PDFs repeat page text in the structure tree (ActualText, Alt).
-/// It cannot be kept consistent with rasterised pages, so it goes.
 fn drop_structure_tree(doc: &mut Document) {
     let Some(cat) = catalog_id(doc) else { return };
     if let Ok(dict) = doc.get_object_mut(cat).and_then(Object::as_dict_mut) {
@@ -245,7 +217,6 @@ mod tests {
         }
     }
 
-    /// One page with "TOP SECRET" in its content and in a filled form field.
     fn secret_pdf() -> Document {
         let mut doc = Document::with_version("1.7");
         let pages_id = doc.new_object_id();
