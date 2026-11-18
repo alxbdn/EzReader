@@ -93,7 +93,7 @@ import {
   type StartupArgs,
 } from "./tauri-bridge";
 import { DocTabs, type DocTab } from "./doc-tabs";
-import { isMac, macShortcuts } from "./platform";
+import { isLinux, isMac, macShortcuts } from "./platform";
 import { TabStrip } from "./tab-strip";
 import type { SessionSnapshot } from "./document-session";
 import type { AnnotationSnapshot } from "./annotation-session";
@@ -104,6 +104,7 @@ import { keepCentred, pageFitScale, planWindowFit, VIEWER_PADDING } from "./wind
 import { mountWindowControls } from "./window-controls";
 import { menuOwnsKey } from "./mac-menu";
 import { InfoPanel } from "./info-panel";
+import { SmoothWheelScroller, normalizeWheelDelta } from "./wheel-scroll";
 import { tempDir, basename } from "@tauri-apps/api/path";
 import { ask } from "@tauri-apps/plugin-dialog";
 
@@ -2339,15 +2340,38 @@ document.getElementById("viewer-scroll")!.addEventListener("mouseup", () => {
   }, 0);
 });
 
-document.getElementById("viewer-scroll")!.addEventListener("wheel", async (e: WheelEvent) => {
-  if (!e.ctrlKey && viewer.scrollMode === "horizontal" && !e.shiftKey && Math.abs(e.deltaY) > Math.abs(e.deltaX)) {
-    e.preventDefault();
-    const el = e.currentTarget as HTMLElement;
-    const lines = e.deltaMode === 1 ? 40 : e.deltaMode === 2 ? el.clientWidth : 1;
-    el.scrollLeft += e.deltaY * lines;
+const viewerScrollEl = document.getElementById("viewer-scroll")!;
+const wheelScroller = isLinux ? new SmoothWheelScroller(viewerScrollEl) : null;
+
+viewerScrollEl.addEventListener("wheel", async (e: WheelEvent) => {
+  if (!e.ctrlKey) {
+    if (e.defaultPrevented) return;
+    if (wheelScroller && viewer.isLoaded()) {
+      const { dx, dy, discrete } = normalizeWheelDelta({
+        deltaX: e.deltaX,
+        deltaY: e.deltaY,
+        deltaMode: e.deltaMode,
+        shiftKey: e.shiftKey,
+        horizontalMode: viewer.scrollMode === "horizontal",
+        clientWidth: viewerScrollEl.clientWidth,
+        clientHeight: viewerScrollEl.clientHeight,
+      });
+      if (dx === 0 && dy === 0) return;
+      if (discrete || wheelScroller.isAnimating) {
+        e.preventDefault();
+        wheelScroller.scrollBy(dx, dy);
+        return;
+      }
+    }
+    if (viewer.scrollMode === "horizontal" && !e.shiftKey && Math.abs(e.deltaY) > Math.abs(e.deltaX)) {
+      e.preventDefault();
+      const lines = e.deltaMode === 1 ? 40 : e.deltaMode === 2 ? viewerScrollEl.clientWidth : 1;
+      viewerScrollEl.scrollLeft += e.deltaY * lines;
+    }
     return;
   }
   if (!e.ctrlKey || !viewer.isLoaded()) return;
+  wheelScroller?.cancel();
   e.preventDefault();
   const px = e.deltaMode === 1 ? e.deltaY * 40 : e.deltaMode === 2 ? e.deltaY * 400 : e.deltaY;
   wheelZoom.factor *= Math.min(1.25, Math.max(0.8, Math.exp(-px * 0.0015)));
