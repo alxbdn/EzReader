@@ -552,6 +552,8 @@ viewer.onLayoutChanged((pageViews) => {
   }
 });
 
+viewer.onRenderActivity((busy) => pageSidebar.setViewerBusy(busy));
+
 // ── Focused-page tracking → toolbar page indicator ────────────────────────────
 
 document.getElementById("viewer-scroll")!.addEventListener("focused-page-changed", (e: Event) => {
