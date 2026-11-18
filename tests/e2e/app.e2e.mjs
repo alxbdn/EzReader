@@ -20,11 +20,11 @@ import { join, resolve } from "node:path";
 import { Builder, By, Key } from "selenium-webdriver";
 import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
 
-const root = resolve(import.meta.dirname, "..");
+const root = resolve(import.meta.dirname, "..", "..");
 const exe = process.platform === "win32" ? "ezreader-portable.exe" : "ezreader-portable";
 const APP = process.env.EZREADER_APP ?? join(root, "src-tauri", "target", "debug", exe);
 const CORPUS = join(root, "src-tauri", "tests", "corpus");
-const SHOTS = join(root, "e2e", "results");
+const SHOTS = join(root, "tests", "e2e", "results");
 
 let driverProc;
 let work;

@@ -1,13 +1,13 @@
 // Quick load test of the viewer: opens a very large PDF in the built app,
 // then scrolls, jumps and zooms in a loop while it measures memory, CPU and
-// response times, and fails when a figure goes past perf/thresholds.json.
+// response times, and fails when a figure goes past tests/perf/thresholds.json.
 //
 // It runs the real front end (dist/, pdf.js and all) in headless Chromium,
 // the engine of WebView2 on Windows, with the Rust side replaced by a few
 // canned answers: the app's own commands are tested by `cargo test`.
 // Process memory and CPU are read from /proc, so they are Linux only.
 //
-// Usage: node perf/stress.mjs <big.pdf> [--out results.json] [--seconds N]
+// Usage: node tests/perf/stress.mjs <big.pdf> [--out results.json] [--seconds N]
 
 import { createServer } from "node:http";
 import { createReadStream, readFileSync, statSync, existsSync, readdirSync, writeFileSync, appendFileSync } from "node:fs";
@@ -23,7 +23,7 @@ const pdfPath = resolve(positional[0] ?? "big.pdf");
 const outPath = opt("--out", "perf-results.json");
 const rounds = Number(opt("--rounds", 3));
 const thresholds = JSON.parse(readFileSync(join(here, "thresholds.json"), "utf8"));
-const dist = resolve(here, "..", "dist");
+const dist = resolve(here, "..", "..", "dist");
 if (!existsSync(join(dist, "index.html"))) throw new Error("dist/ is missing: run `npm run build` first");
 
 // ── Static server for dist/ and the PDF (with byte ranges, like the asset protocol) ──
