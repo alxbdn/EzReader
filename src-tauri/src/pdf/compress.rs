@@ -221,3 +221,79 @@ pub fn prune_dead_objects(doc: &mut Document) {
     doc.prune_objects();
     doc.delete_zero_length_streams();
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use lopdf::{dictionary, Stream};
+
+    fn flate(mut dict: lopdf::Dictionary, raw: &[u8]) -> Stream {
+        use std::io::Write;
+        let mut z = flate2::write::ZlibEncoder::new(Vec::new(), flate2::Compression::default());
+        z.write_all(raw).unwrap();
+        dict.set("Filter", "FlateDecode");
+        Stream::new(dict, z.finish().unwrap())
+    }
+
+    #[test]
+    fn decodes_flate_gray_and_rgb_pictures() {
+        let gray = flate(
+            dictionary! { "ColorSpace" => "DeviceGray", "BitsPerComponent" => 8, "Width" => 2, "Height" => 2 },
+            &[0, 64, 128, 255],
+        );
+        assert_eq!(decode_picture(&gray).unwrap().width(), 2);
+        let rgb = flate(
+            dictionary! { "ColorSpace" => "DeviceRGB", "BitsPerComponent" => 8, "Width" => 1, "Height" => 2 },
+            &[255, 0, 0, 0, 255, 0],
+        );
+        assert_eq!(decode_picture(&rgb).unwrap().height(), 2);
+    }
+
+    #[test]
+    fn leaves_pictures_it_cannot_rewrite() {
+        let short = flate(
+            dictionary! { "ColorSpace" => "DeviceRGB", "BitsPerComponent" => 8, "Width" => 4, "Height" => 4 },
+            &[1, 2, 3],
+        );
+        assert!(decode_picture(&short).is_none());
+        let cmyk = flate(
+            dictionary! { "ColorSpace" => "DeviceCMYK", "BitsPerComponent" => 8, "Width" => 1, "Height" => 1 },
+            &[0, 0, 0, 0],
+        );
+        assert!(decode_picture(&cmyk).is_none());
+        let mask = flate(
+            dictionary! { "ImageMask" => true, "ColorSpace" => "DeviceGray", "BitsPerComponent" => 8, "Width" => 1, "Height" => 1 },
+            &[0],
+        );
+        assert!(decode_picture(&mask).is_none());
+        let one_bit = flate(
+            dictionary! { "ColorSpace" => "DeviceGray", "BitsPerComponent" => 1, "Width" => 8, "Height" => 1 },
+            &[0],
+        );
+        assert!(decode_picture(&one_bit).is_none());
+    }
+
+    #[test]
+    fn a_filter_array_of_one_counts_as_that_filter() {
+        let d = dictionary! { "Filter" => vec![Object::Name(b"DCTDecode".to_vec())] };
+        assert_eq!(single_filter(&d).as_deref(), Some(b"DCTDecode".as_slice()));
+        let two = dictionary! { "Filter" => vec![Object::Name(b"A".to_vec()), Object::Name(b"B".to_vec())] };
+        assert_eq!(single_filter(&two), None);
+    }
+
+    #[test]
+    fn a_document_without_pages_uses_a4_and_loses_its_metadata() {
+        let mut doc = Document::with_version("1.7");
+        assert_eq!(longest_page_side(&doc), 842.0);
+        let info = doc.add_object(dictionary! { "Title" => Object::string_literal("secret") });
+        let meta = doc.add_object(Stream::new(dictionary! { "Type" => "Metadata" }, b"<x/>".to_vec()));
+        let pages = doc.add_object(dictionary! { "Type" => "Pages", "Kids" => vec![], "Count" => 0 });
+        let root = doc.add_object(dictionary! { "Type" => "Catalog", "Pages" => pages, "Metadata" => meta });
+        doc.trailer.set("Root", root);
+        doc.trailer.set("Info", info);
+        strip_metadata(&mut doc);
+        assert!(doc.trailer.get(b"Info").is_err());
+        assert!(!doc.objects.contains_key(&meta));
+        assert!(doc.get_dictionary(root).unwrap().get(b"Metadata").is_err());
+    }
+}

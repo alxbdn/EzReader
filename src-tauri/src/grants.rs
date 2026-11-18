@@ -225,4 +225,18 @@ mod tests {
         g.allow_file(Path::new(r"C:\Users\me\Docs\Contrat.pdf"));
         assert!(g.allows(Path::new("c:/users/ME/docs/contrat.PDF"), &temp()));
     }
+
+    #[test]
+    fn the_app_wide_grants_remember_picked_files_and_folders() {
+        let dir = std::env::temp_dir().join(format!("ezreader-grants-{}", std::process::id()));
+        let file = dir.join("picked.pdf");
+        let file = file.to_string_lossy();
+        assert!(!is_granted_file(&file));
+        allow_file(&file);
+        assert!(is_granted_file(&file));
+        allow_dir(&dir.to_string_lossy());
+        assert!(check_dir(&dir.to_string_lossy()).is_ok());
+        assert!(check_all([&file.to_string()]).is_ok());
+        assert!(absolute("relative.pdf").is_absolute());
+    }
 }

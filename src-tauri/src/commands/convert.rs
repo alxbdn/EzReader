@@ -47,3 +47,38 @@ pub fn save_as_dialog(app: AppHandle, suggested: String, format: String) -> CmdR
     }
     Ok(picked)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn out(name: &str) -> String {
+        std::env::temp_dir()
+            .join(format!("ezreader-convert-{}-{name}", std::process::id()))
+            .to_string_lossy()
+            .into_owned()
+    }
+
+    #[test]
+    fn writes_each_format_to_a_matching_file() {
+        for (format, name) in [("txt", "a.txt"), ("html", "a.html"), ("docx", "a.docx"), ("xlsx", "a.xlsx")] {
+            let path = out(name);
+            tauri::async_runtime::block_on(convert_text(crate::convert::tests::sample(), format.into(), path.clone()))
+                .unwrap();
+            assert!(std::fs::metadata(&path).unwrap().len() > 0, "{format}");
+            let _ = std::fs::remove_file(path);
+        }
+    }
+
+    #[test]
+    fn refuses_an_unknown_format_or_a_wrong_extension() {
+        let bad =
+            tauri::async_runtime::block_on(convert_text(crate::convert::tests::sample(), "pdf".into(), out("a.pdf")));
+        assert_eq!(bad.unwrap_err().code, ErrorCode::Other);
+        let path = out("a.doc");
+        let wrong =
+            tauri::async_runtime::block_on(convert_text(crate::convert::tests::sample(), "docx".into(), path.clone()));
+        assert_eq!(wrong.unwrap_err().code, ErrorCode::InvalidName);
+        assert!(!std::path::Path::new(&path).exists());
+    }
+}
