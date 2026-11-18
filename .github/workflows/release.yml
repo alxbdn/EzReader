@@ -130,8 +130,7 @@ jobs:
           path: ezreader-${{ steps.version.outputs.version }}-windows.intoto.jsonl
           if-no-files-found: error
 
-      # The .msix is only for the Microsoft Store (which signs it), so it is not
-      # attached to the GitHub release. store-publish.yml and
+      # The .msix is also attached to the GitHub release. store-publish.yml and
       # scripts/get-store-msix.ps1 fetch it from this artifact.
       - name: Upload Store package
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -227,6 +226,7 @@ jobs:
           files: |
             ezreader-portable-${{ needs.build.outputs.version }}-win-x64.exe
             ezreader-${{ needs.build.outputs.version }}-win-x64-setup.exe
+            ezreader-${{ needs.build.outputs.version }}-win-x64.msix
             ezreader-${{ needs.build.outputs.version }}-windows.intoto.jsonl
             ezreader-${{ needs.build.outputs.version }}-macos-universal.dmg
             ezreader-${{ needs.build.outputs.version }}-macos.intoto.jsonl
