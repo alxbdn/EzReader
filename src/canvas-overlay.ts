@@ -25,7 +25,8 @@ import {
   DRAW_TOOLS,
   HIGHLIGHT_PRESETS,
 } from "./models";
-import { ICON_CHEVRON_DOWN, ICON_TRASH } from "./icons";
+import { ICON_CHECK, ICON_CHEVRON_DOWN, ICON_COPY, ICON_TRASH } from "./icons";
+import { textUnder, type Box } from "./highlight-text";
 import { drawVector } from "./signature-ink";
 import type { AnnotationSession } from "./annotation-session";
 import type { SelectionOwner, ToolSelection } from "./tool-selection";
@@ -628,6 +629,15 @@ export class CanvasOverlay implements SelectionOwner {
       swatches.appendChild(sw);
     }
 
+    const copyBtn = document.createElement("button");
+    copyBtn.type = "button";
+    copyBtn.className = "hl-popover-copy";
+    const copyLabel = document.getElementById("ctx-copy")?.textContent?.trim() || "Copy";
+    copyBtn.title = copyLabel;
+    copyBtn.setAttribute("aria-label", copyLabel);
+    copyBtn.innerHTML = ICON_COPY;
+    copyBtn.addEventListener("click", () => void this.copyHighlight(ann, copyBtn));
+
     const sep = document.createElement("span");
     sep.className = "hl-popover-sep";
 
@@ -642,15 +652,49 @@ export class CanvasOverlay implements SelectionOwner {
       this.emitHighlightSelected(null);
     });
 
-    pop.append(colorBtn, swatches, sep, delBtn);
+    pop.append(colorBtn, swatches, copyBtn, sep, delBtn);
 
     const b = this.getAnnBounds(ann);
     const pageW = this.canvas.clientWidth || (this.canvas.width / (window.devicePixelRatio || 1));
     const pageH = this.canvas.clientHeight || (this.canvas.height / (window.devicePixelRatio || 1));
     const top = Math.min(Math.max(4, pageH - 42), b.bottom + 6);
-    const rightOffset = Math.max(4, Math.min(pageW - 96, pageW - b.right));
+    const rightOffset = Math.max(4, Math.min(pageW - 128, pageW - b.right));
     pop.style.top = `${Math.round(top)}px`;
     pop.style.right = `${Math.round(rightOffset)}px`;
+  }
+
+  highlightText(ann: HighlightAnnotation): string {
+    const layer = this.container.querySelector<HTMLElement>(".page-text-layer");
+    if (!layer) return "";
+    const origin = this.canvas.getBoundingClientRect();
+    const boxes: Box[] = ann.rects.map((r) => {
+      const [x1, y1] = this.toCanvas(r.x, r.y + r.height);
+      const [x2, y2] = this.toCanvas(r.x + r.width, r.y);
+      return {
+        left: origin.left + Math.min(x1, x2),
+        right: origin.left + Math.max(x1, x2),
+        top: origin.top + Math.min(y1, y2),
+        bottom: origin.top + Math.max(y1, y2),
+      };
+    });
+    return textUnder(layer, boxes);
+  }
+
+  private async copyHighlight(ann: HighlightAnnotation, btn: HTMLButtonElement): Promise<void> {
+    const selected = window.getSelection()?.toString() ?? "";
+    const text = selected || this.highlightText(ann);
+    if (!text) return;
+    try {
+      await navigator.clipboard.writeText(text);
+    } catch {
+      return;
+    }
+    btn.innerHTML = ICON_CHECK;
+    btn.classList.add("done");
+    setTimeout(() => {
+      btn.innerHTML = ICON_COPY;
+      btn.classList.remove("done");
+    }, 1200);
   }
 
   private textLineCount(ann: TextAnnotation): number {

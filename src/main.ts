@@ -2116,6 +2116,11 @@ const ctxCopyBtn = document.getElementById("ctx-copy") as HTMLButtonElement;
 
 document.addEventListener("contextmenu", (e: MouseEvent) => {
   e.preventDefault();
+  const hlPage = document.querySelector(".hl-popover")?.closest(".page-wrapper");
+  if (hlPage && hlPage.contains(e.target as Node)) {
+    ctxMenu.classList.add("hidden");
+    return;
+  }
   const sel = window.getSelection()?.toString() ?? "";
   ctxCopyBtn.disabled = sel.length === 0;
   ctxMenu.style.left = `${e.clientX}px`;
