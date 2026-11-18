@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { Presentation, presentActionForKey, stepPage } from "../presentation";
+import { Presentation, presentActionForKey, stepPage, waitForStableSize } from "../presentation";
 
 const labels = { prev: "Previous page", next: "Next page", exit: "Stop presenting (Esc)" };
 
@@ -114,5 +114,57 @@ describe("Presentation", () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it("with hold, draws nothing until reveal, then draws once at the settled size", async () => {
+    const sizes: string[] = [];
+    const p = new Presentation({
+      pageCount: 5,
+      render: async (n, w, h) => { sizes.push(`${n}@${w}x${h}`); const c = document.createElement("canvas"); c.dataset["page"] = String(n); return c; },
+      onExit: () => {},
+    }, 2, labels);
+    p.open({ hold: true });
+    open.push(p);
+    await flush();
+    expect(sizes).toEqual([]);
+    expect(p.el.classList.contains("holding")).toBe(true);
+    expect(document.querySelector(".presentation-stage canvas")).toBeNull();
+    window.dispatchEvent(new Event("resize"));
+    await p.reveal();
+    expect(document.querySelector(".presentation-stage canvas")).not.toBeNull();
+    expect(sizes.filter((s) => s.startsWith("2@"))).toHaveLength(1);
+    await new Promise((r) => setTimeout(r, 50));
+    expect(p.el.classList.contains("holding")).toBe(false);
+  });
+
+  it("prefetch at the final size is reused by reveal", async () => {
+    const sizes: string[] = [];
+    const p = new Presentation({
+      pageCount: 3,
+      render: async (n, w, h) => { sizes.push(`${n}@${w}x${h}`); return document.createElement("canvas"); },
+      onExit: () => {},
+    }, 1, labels);
+    p.open({ hold: true });
+    open.push(p);
+    p.prefetch(window.innerWidth, window.innerHeight);
+    await p.reveal();
+    expect(sizes.filter((s) => s.startsWith("1@"))).toHaveLength(1);
+  });
+});
+
+describe("waitForStableSize", () => {
+  it("waits until the size stops changing", async () => {
+    const steps = [{ w: 800, h: 600 }, { w: 800, h: 600 }, { w: 1000, h: 700 }, { w: 1920, h: 1080 }];
+    let i = 0;
+    const got = await waitForStableSize(() => steps[Math.min(i++, steps.length - 1)]!, 40, 2000, 5);
+    expect(got).toEqual({ w: 1920, h: 1080 });
+  });
+
+  it("gives up after the maximum wait", async () => {
+    let w = 0;
+    const t0 = Date.now();
+    const got = await waitForStableSize(() => ({ w: ++w, h: 1 }), 50, 100, 5);
+    expect(Date.now() - t0).toBeLessThan(400);
+    expect(got.w).toBeGreaterThan(1);
   });
 });
