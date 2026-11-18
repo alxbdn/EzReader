@@ -200,7 +200,7 @@ Every push, every pull request and every week, GitHub Actions checks the code:
 | Load test | A 1,500-page PDF opened, scrolled and zoomed while memory and CPU are measured |
 | Supply chain | Dependabot updates, third-party actions pinned to a commit, [OpenSSF Scorecard](https://scorecard.dev/viewer/?uri=github.com/alxbdn/EzReader) |
 
-The results of each release are attached to it as PDF reports, in [`ezreader-reports.zip`](https://github.com/alxbdn/EzReader/releases/latest/download/ezreader-reports.zip) with the SBOMs. To report a vulnerability privately, see [SECURITY.md](.github/SECURITY.md). Why the design holds: the [security assurance case](docs/security/assurance-case.md). Self-assessment against the OWASP Desktop App Security Top 10: [docs/security](docs/security/owasp-desktop-top10.md). How EzReader stands against the EU Cyber Resilience Act: [docs/cra](docs/cra/README.md).
+The results of each release are attached to it as PDF reports, in [`ezreader-reports.zip`](https://github.com/alxbdn/EzReader/releases/latest/download/ezreader-reports.zip) with the SBOMs. To report a vulnerability privately, see [SECURITY.md](.github/SECURITY.md). Why the design holds: the [security assurance case](docs/security/assurance-case.md). Self-assessment against the OWASP Desktop App Security Top 10: [docs/security](docs/security/owasp-desktop-top10.md).
 
 ---
 
