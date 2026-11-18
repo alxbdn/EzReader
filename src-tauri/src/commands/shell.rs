@@ -226,6 +226,16 @@ pub fn register_pdf_handler() -> CmdResult<()> {
         let (app_print_cmd, _) = app_key.create_subkey(r"shell\print\command").map_err(|e| e.to_string())?;
         app_print_cmd.set_value("", &format!("\"{exe}\" --print \"%1\"")).map_err(|e| e.to_string())?;
 
+        let (capabilities, _) = hkcu.create_subkey(CAPABILITIES_KEY).map_err(|e| e.to_string())?;
+        capabilities.set_value("ApplicationName", &"EzReader").map_err(|e| e.to_string())?;
+        capabilities
+            .set_value("ApplicationDescription", &"A simple, lightweight PDF reader")
+            .map_err(|e| e.to_string())?;
+        let (file_assoc, _) = capabilities.create_subkey("FileAssociations").map_err(|e| e.to_string())?;
+        file_assoc.set_value(".pdf", &"com.ezreader.app").map_err(|e| e.to_string())?;
+        let (registered, _) = hkcu.create_subkey(r"Software\RegisteredApplications").map_err(|e| e.to_string())?;
+        registered.set_value(REGISTERED_APP_NAME, &CAPABILITIES_KEY).map_err(|e| e.to_string())?;
+
         Ok(())
     }
     #[cfg(target_os = "macos")]
@@ -809,6 +819,12 @@ pub fn unregister_pdf_handler() -> CmdResult<()> {
             key.delete_value("com.ezreader.app").ok();
         }
 
+        if let Ok(key) = hkcu.open_subkey_with_flags(r"Software\RegisteredApplications", winreg::enums::KEY_SET_VALUE) {
+            key.delete_value(REGISTERED_APP_NAME).ok();
+        }
+        hkcu.delete_subkey_all(r"Software\EzReader\Capabilities").ok();
+        hkcu.delete_subkey(r"Software\EzReader").ok();
+
         Ok(())
     }
     #[cfg(target_os = "macos")]
@@ -959,9 +975,24 @@ pub async fn open_default_apps_settings() -> CmdResult<()> {
                 Err(_) => {}
             }
         }
-        Command::new("cmd").args(["/C", "start", "", "ms-settings:defaultapps"]).spawn().map_err(|e| e.to_string())?;
+        let family = std::env::current_exe().ok().and_then(|p| package_family_from_exe(&p.to_string_lossy()));
+        let uri = default_apps_uri(family.as_deref());
+        Command::new("cmd").args(["/C", "start", "", &uri]).spawn().map_err(|e| e.to_string())?;
     }
     Ok(())
+}
+
+#[cfg(target_os = "windows")]
+const CAPABILITIES_KEY: &str = r"Software\EzReader\Capabilities";
+#[cfg(target_os = "windows")]
+const REGISTERED_APP_NAME: &str = "EzReader";
+
+#[cfg_attr(not(target_os = "windows"), allow(dead_code))]
+fn default_apps_uri(package_family: Option<&str>) -> String {
+    match package_family {
+        Some(family) => format!("ms-settings:defaultapps?registeredAUMID={family}!App"),
+        None => "ms-settings:defaultapps?registeredAppUser=EzReader".to_string(),
+    }
 }
 
 #[cfg(target_os = "windows")]
@@ -1011,7 +1042,16 @@ fn show_pdf_open_with_picker() -> Result<(), i32> {
 
 #[cfg(test)]
 mod windows_version_tests {
-    use super::is_windows_10_build;
+    use super::{default_apps_uri, is_windows_10_build};
+
+    #[test]
+    fn default_apps_opens_on_ezreader_page() {
+        assert_eq!(default_apps_uri(None), "ms-settings:defaultapps?registeredAppUser=EzReader");
+        assert_eq!(
+            default_apps_uri(Some("alxbdn.EzReader_abc123")),
+            "ms-settings:defaultapps?registeredAUMID=alxbdn.EzReader_abc123!App"
+        );
+    }
 
     #[test]
     fn windows_10_builds_are_told_apart_from_windows_11() {

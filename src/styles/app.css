@@ -2055,7 +2055,8 @@ kbd,
   transition: background-color 120ms ease, color 120ms ease;
 }
 .update-badge[hidden] { display: none; }
-.update-badge:hover { background: var(--accent); color: var(--foreground); }
+.update-badge[data-state="current"] { cursor: default; }
+.update-badge[data-state="outdated"]:hover { background: var(--accent); color: var(--foreground); }
 .update-badge:disabled { pointer-events: none; }
 .update-badge-icon { display: flex; }
 .update-badge[data-state="current"] .update-badge-icon { color: var(--success); }
