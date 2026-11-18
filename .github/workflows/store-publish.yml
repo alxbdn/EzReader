@@ -62,8 +62,8 @@ jobs:
           echo "version=$VERSION" >> $GITHUB_OUTPUT
           echo "tag=$TAG" >> $GITHUB_OUTPUT
 
-      # The .msix is the store-msix-<version> artifact of the run that built the
-      # release (Release or Bump & Release), the same file as on the release.
+      # The .msix is not on the GitHub release: it is the store-msix-<version>
+      # artifact of the run that built the release (Release or Bump & Release).
       - name: Download MSIX from the release build
         if: steps.creds.outputs.ready == 'true'
         shell: bash

@@ -35,7 +35,8 @@ pdfium.dll
 # Store promo material, kept locally only
 marketing/
 
-# MSIX built locally (build-msix.ps1, scripts/get-store-msix.ps1)
+# MSIX for the Microsoft Store (build-msix.ps1, scripts/get-store-msix.ps1):
+# uploaded to the Store only, never published on GitHub
 store/
 
 # Test outputs
