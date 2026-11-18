@@ -3463,4 +3463,20 @@ body.fullscreen .window-controls { display: none; }
   cursor: pointer;
 }
 .hl-popover-del:hover { background: #3f3f46; color: #f87171; }
+.hl-popover-copy {
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  color: #d4d4d8;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+.hl-popover-copy:hover { background: #3f3f46; color: #fafafa; }
+.hl-popover-copy.done { color: #4ade80; }
+.hl-popover-copy svg { width: 13px; height: 13px; }
 .hl-popover-del svg { width: 13px; height: 13px; }
