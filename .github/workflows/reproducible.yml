@@ -1,0 +1,89 @@
+name: Reproducible build
+
+on:
+  schedule:
+    - cron: '17 4 * * 1'
+  workflow_dispatch:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'package-lock.json'
+      - 'src-tauri/Cargo.lock'
+      - 'src-tauri/Cargo.toml'
+      - 'src-tauri/tauri.conf.json'
+      - 'vite.config.ts'
+      - '.github/workflows/reproducible.yml'
+
+permissions:
+  contents: read
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  rebuild:
+    name: Build twice and compare
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+
+    steps:
+      - name: Checkout (first copy)
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          path: first
+          persist-credentials: false
+
+      - name: Checkout (second copy)
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          path: second
+          persist-credentials: false
+
+      - name: Install Ubuntu system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev libssl-dev
+
+      - name: Setup Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '22'
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@39008827e6b4319a349e9a42dfc90579dd25f1ca # stable
+
+      - name: Build both copies
+        run: |
+          export SOURCE_DATE_EPOCH="$(git -C first log -1 --format=%ct)"
+          for copy in first second; do
+            (
+              cd "$copy"
+              export RUSTFLAGS="--remap-path-prefix=$PWD=/build --remap-path-prefix=$HOME/.cargo=/cargo --remap-path-prefix=$HOME/.rustup=/rustup"
+              export CARGO_TARGET_DIR="$PWD/src-tauri/target"
+              npm ci --no-audit --no-fund
+              npx tauri build --no-bundle
+            )
+          done
+
+      - name: Compare
+        run: |
+          bin=src-tauri/target/release/ezreader-portable
+          {
+            echo "## Reproducible build"
+            echo
+            echo "| File | First build | Second build |"
+            echo "|------|-------------|--------------|"
+          } >> "$GITHUB_STEP_SUMMARY"
+          status=0
+          for f in "$bin" $(cd first && find dist -type f | sort); do
+            a=$(sha256sum "first/$f" | cut -d' ' -f1)
+            b=$(sha256sum "second/$f" | cut -d' ' -f1)
+            if [ "$a" != "$b" ]; then status=1; mark=" (differs)"; else mark=""; fi
+            [ "$f" = "$bin" ] || [ -n "$mark" ] && echo "| \`$f\`$mark | \`$a\` | \`$b\` |" >> "$GITHUB_STEP_SUMMARY"
+          done
+          echo "dist/: $(cd first && find dist -type f | wc -l) files compared" >> "$GITHUB_STEP_SUMMARY"
+          if [ $status -ne 0 ]; then
+            echo "::error::The two builds differ"
+            exit 1
+          fi
+          echo "Both builds are bit-for-bit identical."
