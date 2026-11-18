@@ -34,7 +34,7 @@ Include what you can:
 
 ## Actively exploited vulnerabilities
 
-A vulnerability that is being exploited in the wild is handled first: the fix ships as soon as it is ready, and the advisory says so. EzReader is free, non-commercial open-source software and is currently outside the scope of the EU Cyber Resilience Act. If that changes, such vulnerabilities and severe incidents will also be reported to ENISA through its single reporting platform within the CRA's deadlines (24 hours for an early warning, 72 hours for a notification, 14 days after the fix for a final report). See [docs/cra](../docs/cra/README.md).
+A vulnerability that is being exploited in the wild is handled first: the fix ships as soon as it is ready, and the advisory says so. EzReader is free, non-commercial open-source software and is currently outside the scope of the EU Cyber Resilience Act. If that changes, such vulnerabilities and severe incidents will also be reported to ENISA through its single reporting platform within the CRA's deadlines (24 hours for an early warning, 72 hours for a notification, 14 days after the fix for a final report).
 
 ## How EzReader is checked
 
