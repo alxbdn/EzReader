@@ -118,6 +118,17 @@ $dupes = @(Get-ItemProperty $uninstallKeys -ErrorAction SilentlyContinue | Where
 Check ($dupes.Count -eq 1) "a single EzReader entry after the upgrade (found $($dupes.Count))"
 if ($exe) { Test-Launch { Start-Process $exe.FullName -ArgumentList "`"$Pdf`"" } "installed EzReader" }
 
+# Explorer add-in: PDF thumbnails and the preview pane (installer-hooks.nsh).
+$shellDll = Join-Path ($install.InstallLocation -replace '"', '') "ezreader_shell.dll"
+$thumbClsid = "{5AE37068-61BA-478F-9D24-EA58E7C1EBF6}"
+$previewClsid = "{202348CF-BD0B-4EB3-91B2-C87E74F2FD32}"
+$pdfShellEx = "HKCU:\Software\Classes\.pdf\ShellEx"
+function Get-Default($key) { (Get-ItemProperty -LiteralPath $key -ErrorAction SilentlyContinue).'(default)' }
+Check (Test-Path $shellDll) "the Explorer add-in is in the install folder"
+Check ((Get-Default "$pdfShellEx\{e357fccd-a995-4576-b01f-234630154e96}") -eq $thumbClsid) "PDF thumbnails are registered"
+Check ((Get-Default "$pdfShellEx\{8895b1c6-b41f-4c1c-a562-0d564250836f}") -eq $previewClsid) "the PDF preview handler is registered"
+Check ((Get-Default "HKCU:\Software\Classes\CLSID\$thumbClsid\InprocServer32") -eq $shellDll) "the thumbnail class points to the add-in"
+
 Step "NSIS: uninstall"
 $uninstaller = ($install.UninstallString -replace '"', '')
 $p = Start-Process $uninstaller -ArgumentList "/S" -Wait -PassThru
@@ -128,6 +139,8 @@ if ($exe) {
     for ($i = 0; $i -lt 15 -and (Test-Path $exe.FullName); $i++) { Start-Sleep -Seconds 1 }
     Check (-not (Test-Path $exe.FullName)) "the program file was removed"
 }
+Check (-not (Test-Path "$pdfShellEx\{e357fccd-a995-4576-b01f-234630154e96}")) "PDF thumbnails are unregistered"
+Check (-not (Test-Path "HKCU:\Software\Classes\CLSID\$previewClsid")) "the PDF preview handler is unregistered"
 
 # ── MSIX ──────────────────────────────────────────────────────────────────────
 
@@ -166,6 +179,7 @@ Check ($pkg.Version -eq $msixVersion) "installed version is $msixVersion (found 
 Check (@($pkg).Count -eq 1) "a single version installed after the upgrade"
 if ($pkg) {
     Check (Test-Path (Join-Path $pkg.InstallLocation "EzReader.exe")) "EzReader.exe is in the package"
+    Check (Test-Path (Join-Path $pkg.InstallLocation "ezreader_shell.dll")) "the Explorer add-in is in the package"
     $family = $pkg.PackageFamilyName
     Test-Launch { Start-Process "explorer.exe" "shell:AppsFolder\$family!App" } "the Store app"
 }

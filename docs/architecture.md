@@ -36,6 +36,10 @@ flowchart LR
 - `tempfiles.rs` manages temporary working copies and removes them at exit or after a crash.
 - `error.rs` returns coded errors (`ErrorCode`) that the interface translates.
 
+## Windows Explorer add-in (`src-tauri/shell-ext/`)
+
+A separate DLL (`ezreader_shell.dll`) that Explorer loads: a thumbnail provider (page 1 of a PDF as its icon) and a preview handler (the pages in the preview pane, also used by PowerToys Peek). It draws pages with the PDF engine built into Windows (`Windows.Data.Pdf`), so nothing is bundled. `npm run build:shell-ext` builds it as part of the Windows build (`tauri.windows.conf.json`). The setup .exe registers it (`src-tauri/windows/installer-hooks.nsh`) and the Store package declares it (`AppxManifest.xml`); the portable .exe has no add-in.
+
 ## Data flow
 
 1. The user opens a file (dialog, drag and drop, command line). The back end records it in the grants and returns its bytes; PDF.js renders it.
@@ -53,6 +57,7 @@ flowchart LR
 |-------|-------|----------|
 | Interface unit tests | `src/__tests__/` | `npm test` (Vitest) |
 | Rust unit tests | `#[cfg(test)]` modules next to the code | `cargo test` |
+| Explorer add-in | `src-tauri/shell-ext/` | `cargo test --manifest-path src-tauri/shell-ext/Cargo.toml` (Windows) |
 | Hostile input and PDF corpus | `src-tauri/src/hostile_input_tests.rs`, `corpus_tests.rs` | `cargo test` |
 | End-to-end on the real app | `e2e/` | `npm run test:e2e` |
 | Visual regression | `visual/` | `npm run test:visual` |
