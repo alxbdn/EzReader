@@ -96,10 +96,6 @@ Each release also carries **[`ezreader-reports.zip`](https://github.com/alxbdn/E
 gh attestation verify <downloaded file> --repo alxbdn/EzReader
 ```
 
-### Code signing policy
-
-Free code signing provided by [SignPath.io](https://about.signpath.io), certificate by [SignPath Foundation](https://signpath.org). Only the Windows files built by this repository's release workflow are signed; who approves each signing, and how, is set out in the [code signing policy](.github/CODE_SIGNING.md).
-
 ---
 
 ## Features

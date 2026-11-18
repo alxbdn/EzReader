@@ -70,7 +70,7 @@ Status against Annex I. ✅ met, 🟡 partly met, ⬜ only needed if the CRA app
 
 Useful now, whatever happens:
 
-1. **Sign the GitHub builds**: Authenticode for the Windows installer (for example SignPath's free plan for open-source projects), and Developer ID signing plus notarization for macOS.
+1. **Sign the GitHub builds**: Authenticode for the Windows installer, and Developer ID signing plus notarization for macOS.
 
 Only if EzReader is monetized:
 
