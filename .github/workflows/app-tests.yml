@@ -103,13 +103,13 @@ jobs:
 
       - name: Compare screenshots
         if: ${{ !inputs.update_baselines }}
-        run: npx playwright test
+        run: npx playwright test -c tests/visual/playwright.config.ts
         env:
           HOME: /root
 
       - name: Regenerate the baselines
         if: ${{ inputs.update_baselines }}
-        run: npx playwright test --update-snapshots
+        run: npx playwright test -c tests/visual/playwright.config.ts --update-snapshots
         env:
           HOME: /root
 

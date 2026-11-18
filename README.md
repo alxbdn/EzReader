@@ -58,6 +58,12 @@ macOS 11+, Intel and Apple Silicon, with [Homebrew](https://brew.sh):
 brew install --cask alxbdn/ezreader/ezreader
 ```
 
+No Homebrew yet? Install it first, then run the line above:
+
+```bash
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+```
+
 ### Linux
 
 x64. On Debian, Ubuntu and derivatives, this downloads the latest package and installs it:
