@@ -238,6 +238,9 @@ pub fn register_pdf_handler() -> CmdResult<()> {
         // .pdf → com.ezreader.app
         let (pdf_ext, _) = classes.create_subkey(".pdf").map_err(|e| e.to_string())?;
         pdf_ext.set_value("", &"com.ezreader.app").map_err(|e| e.to_string())?;
+        // Listed in "Open with" / the default-app picker for .pdf.
+        let (open_with, _) = pdf_ext.create_subkey("OpenWithProgids").map_err(|e| e.to_string())?;
+        open_with.set_value("com.ezreader.app", &"").map_err(|e| e.to_string())?;
 
         // Also register print verb under Applications\ezreader.exe (used when
         // Windows sets the default via Settings → Default Apps, which ignores our
@@ -1027,11 +1030,93 @@ mod url_tests {
     }
 }
 
+/// Lets the user pick the app PDFs open with (Windows decides that, never
+/// the app). On Windows 10, Settings → Default apps buries .pdf at the bottom
+/// of a long "by file type" list, so we show the shell's own "How do you want
+/// to open .pdf files?" picker instead: one click on EzReader and it is set.
+/// Windows 11 keeps Settings, where searching for the app or .pdf is quick.
+/// Async so the welcome screen can read the new state once the picker closes.
 #[tauri::command]
-pub fn open_default_apps_settings() -> CmdResult<()> {
+pub async fn open_default_apps_settings() -> CmdResult<()> {
     #[cfg(target_os = "windows")]
     {
+        if is_windows_10() {
+            let picked = tauri::async_runtime::spawn_blocking(show_pdf_open_with_picker).await.unwrap_or(Err(0));
+            match picked {
+                Ok(()) => return Ok(()),
+                // The user closed the picker: nothing to change.
+                Err(code) if code == ERROR_CANCELLED_HRESULT => return Ok(()),
+                // The picker is unavailable: fall back to Settings.
+                Err(_) => {}
+            }
+        }
         Command::new("cmd").args(["/C", "start", "", "ms-settings:defaultapps"]).spawn().map_err(|e| e.to_string())?;
     }
     Ok(())
+}
+
+/// HRESULT_FROM_WIN32(ERROR_CANCELLED): what the picker returns on Cancel.
+#[cfg(target_os = "windows")]
+const ERROR_CANCELLED_HRESULT: i32 = 0x8007_04C7_u32 as i32;
+
+/// Windows 11 reports itself as 10.0 too: builds below 22000 are Windows 10.
+#[cfg(target_os = "windows")]
+fn is_windows_10() -> bool {
+    use winreg::enums::HKEY_LOCAL_MACHINE;
+    use winreg::RegKey;
+    RegKey::predef(HKEY_LOCAL_MACHINE)
+        .open_subkey(r"SOFTWARE\Microsoft\Windows NT\CurrentVersion")
+        .and_then(|k| k.get_value::<String, _>("CurrentBuildNumber"))
+        .ok()
+        .and_then(|b| b.trim().parse::<u32>().ok())
+        .is_some_and(is_windows_10_build)
+}
+
+#[cfg(any(target_os = "windows", test))]
+fn is_windows_10_build(build: u32) -> bool {
+    (10240..22000).contains(&build)
+}
+
+/// Shows "How do you want to open .pdf files from now on?" and, when the user
+/// picks an app, makes it the default for .pdf (the shell records the choice
+/// itself, so it is a real user choice). Runs on its own STA thread because
+/// the dialog is modal. Returns the failing HRESULT, if any.
+#[cfg(target_os = "windows")]
+fn show_pdf_open_with_picker() -> Result<(), i32> {
+    use windows::core::w;
+    use windows::Win32::System::Com::{CoInitializeEx, CoUninitialize, COINIT_APARTMENTTHREADED};
+    use windows::Win32::UI::Shell::{
+        SHOpenWithDialog, OAIF_ALLOW_REGISTRATION, OAIF_FORCE_REGISTRATION, OAIF_REGISTER_EXT, OPENASINFO,
+    };
+
+    std::thread::spawn(|| unsafe {
+        let com = CoInitializeEx(None, COINIT_APARTMENTTHREADED);
+        let info = OPENASINFO {
+            // Only the extension matters: the file is never opened.
+            pcszFile: w!("document.pdf"),
+            pcszClass: windows::core::PCWSTR::null(),
+            oaifInFlags: OAIF_ALLOW_REGISTRATION | OAIF_REGISTER_EXT | OAIF_FORCE_REGISTRATION,
+        };
+        let res = SHOpenWithDialog(None, &info).map_err(|e| e.code().0);
+        if com.is_ok() {
+            CoUninitialize();
+        }
+        res
+    })
+    .join()
+    .unwrap_or(Err(0))
+}
+
+#[cfg(test)]
+mod windows_version_tests {
+    use super::is_windows_10_build;
+
+    #[test]
+    fn windows_10_builds_are_told_apart_from_windows_11() {
+        assert!(is_windows_10_build(19045)); // 22H2
+        assert!(is_windows_10_build(10240)); // RTM
+        assert!(!is_windows_10_build(22000)); // Windows 11 21H2
+        assert!(!is_windows_10_build(26100));
+        assert!(!is_windows_10_build(9600)); // Windows 8.1
+    }
 }
