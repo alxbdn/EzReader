@@ -2,7 +2,7 @@ import { test, expect, type Page } from "@playwright/test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
-const root = join(import.meta.dirname, "..");
+const root = join(import.meta.dirname, "..", "..");
 const stub = readFileSync(join(import.meta.dirname, "tauri-stub.js"), "utf8");
 const DOC = "pdf14-mixed-sizes-rotated.pdf";
 
