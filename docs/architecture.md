@@ -56,6 +56,7 @@ A separate DLL (`ezreader_shell.dll`) that Explorer loads: a thumbnail provider 
 | Layer | Where | Run with |
 |-------|-------|----------|
 | Interface unit tests | `src/__tests__/` | `npm test` (Vitest) |
+| Interface flows in a browser (coverage) | `tests/ui/` | `npm run test:ui` (Playwright, Tauri stubbed) |
 | Rust unit tests | `#[cfg(test)]` modules next to the code | `cargo test` |
 | Explorer add-in | `src-tauri/shell-ext/` | `cargo test --manifest-path src-tauri/shell-ext/Cargo.toml` (Windows) |
 | Hostile input and PDF corpus | `src-tauri/src/hostile_input_tests.rs`, `corpus_tests.rs` | `cargo test` |

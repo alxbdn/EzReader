@@ -12,6 +12,7 @@
     "test": "vitest run",
     "test:e2e": "node --test --test-reporter=spec --test-concurrency=1 tests/e2e/app.e2e.mjs",
     "test:visual": "playwright test",
+    "test:ui": "playwright test -c tests/ui/playwright.config.ts",
     "test:corpus": "cargo test --manifest-path src-tauri/Cargo.toml --lib corpus_tests",
     "test:perf": "vite build && node tests/perf/make-big-pdf.mjs perf-big.pdf && node tests/perf/stress.mjs perf-big.pdf"
   },
@@ -24,6 +25,8 @@
     "@playwright/test": "1.65.1",
     "@tauri-apps/cli": "^2.12.4",
     "@vitest/coverage-v8": "^5.1.0",
+    "ast-v8-to-istanbul": "1.0.8",
+    "istanbul-lib-coverage": "3.2.2",
     "jsdom": "^31.0.1",
     "playwright": "^1.63.0",
     "selenium-webdriver": "^4.52.0",

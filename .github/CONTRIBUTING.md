@@ -44,7 +44,7 @@ CI runs the tests on Windows, the security checks (npm audit, cargo deny, CodeQL
 
 - **New functionality must come with tests** in the automated suites (Vitest, `cargo test`, or the end-to-end and visual tests for what only shows in the real app). A pull request that adds a feature without tests is not merged.
 - **Every bug fix must come with a regression test** that fails before the fix and passes after it, unless the bug cannot be reproduced in an automated test (say why in the pull request).
-- Coverage is measured on every pull request (the *Coverage* job of the CI workflow). The goal is at least 80 % of statements; a change should not lower it.
+- Coverage is measured on every pull request (the *Coverage* job of the CI workflow): the Rust unit tests, and for the interface the Vitest unit tests merged with the browser flows in `tests/ui/` (`npm run test:ui`). The goal is at least 80 % of statements; a change should not lower it.
 
 ## Coding standards
 
