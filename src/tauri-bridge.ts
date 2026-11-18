@@ -354,6 +354,10 @@ export async function openPagesInNewWindow(
   return call<void>("open_pages_in_new_window", { inputPath, pages, name, x, y });
 }
 
+export async function extractPagesToTemp(inputPath: string, pages: number[], name: string): Promise<string> {
+  return call<string>("extract_pages_to_temp", { inputPath, pages, name });
+}
+
 export async function tabDragHover(x: number, y: number): Promise<boolean> {
   return call<boolean>("tab_drag_hover", { x, y });
 }

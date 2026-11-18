@@ -66,6 +66,7 @@ import {
   printPages,
   extractPdfPages,
   openPagesInNewWindow,
+  extractPagesToTemp,
   rearrangePages,
   splitPdf,
   pickDirectoryDialog,
@@ -1466,19 +1467,39 @@ pageSidebar.onExport(async (pages) => {
   }
 });
 
-pageSidebar.onDragOut(async (pages, x, y) => {
-  if (!session.isOpen || !viewer.isLoaded() || refuseIfProtected()) return;
+function pagesDocName(pages: number[]): string {
   const t = getTranslations(settingsModal.getSettings().language);
   const pattern = pages.length === 1 ? t.nwPageOne ?? "{name} (page {pages})" : t.nwPageMany ?? "{name} (pages {pages})";
-  const name = `${fmt(pattern, { name: docStem(), pages: formatPageRange(pages) })}.pdf`;
+  return `${fmt(pattern, { name: docStem(), pages: formatPageRange(pages) })}.pdf`;
+}
+
+pageSidebar.onDragOut(async (pages, x, y) => {
+  if (!session.isOpen || !viewer.isLoaded() || refuseIfProtected()) return;
   pageSidebar.setBusy(true);
   try {
-    await openPagesInNewWindow(await session.materialize(), pages, name, x, y);
+    await openPagesInNewWindow(await session.materialize(), pages, pagesDocName(pages), x, y);
   } catch (err) {
     showToast(msg("msgNewWindowFailed", { err: errText(err) }), true);
   } finally {
     pageSidebar.setBusy(false);
   }
+});
+
+pageSidebar.onTabZone((over) => tabStrip.setDropTarget(over));
+
+pageSidebar.onDragToTab(async (pages) => {
+  if (!session.isOpen || !viewer.isLoaded() || refuseIfProtected()) return;
+  let file: string;
+  pageSidebar.setBusy(true);
+  try {
+    file = await extractPagesToTemp(await session.materialize(), pages, pagesDocName(pages));
+  } catch (err) {
+    showToast(msg("msgOpenFailed", { err: errText(err) }), true);
+    return;
+  } finally {
+    pageSidebar.setBusy(false);
+  }
+  await openTransferred({ filePath: file, shouldPrint: false, unsaved: true });
 });
 
 splitModal.onConfirm(async (req) => {

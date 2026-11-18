@@ -274,6 +274,7 @@ export interface Translations {
   sbMovingOne?: string;
   sbMovingMany?: string;
   sbDragOut?: string;
+  sbDragTab?: string;
   tabClose?: string;
   tabDragMerge?: string;
   nwPageOne?: string;
@@ -859,6 +860,7 @@ const EN: Translations = {
   sbMovingOne: "Page {p}",
   sbMovingMany: "{n} pages",
   sbDragOut: "Release to open in a new window",
+  sbDragTab: "Release to open in a new tab",
   tabClose: "Close tab (Ctrl+W)",
   tabDragMerge: "Release to move it to that window",
   nwPageOne: "{name} (page {pages})",
@@ -1444,6 +1446,7 @@ const FR: Translations = {
   sbMovingOne: "Page {p}",
   sbMovingMany: "{n} pages",
   sbDragOut: "Relâchez pour ouvrir dans une nouvelle fenêtre",
+  sbDragTab: "Relâchez pour ouvrir dans un nouvel onglet",
   tabClose: "Fermer l'onglet (Ctrl+W)",
   tabDragMerge: "Relâchez pour le déplacer dans cette fenêtre",
   nwPageOne: "{name} (page {pages})",

@@ -171,6 +171,7 @@ pub fn run() {
             commands::update::check_for_update,
             commands::update::install_update,
             commands::window::open_pages_in_new_window,
+            commands::window::extract_pages_to_temp,
             commands::window::open_file_in_new_window,
             commands::window::pictures_to_new_pdf,
             commands::window::tab_drag_hover,

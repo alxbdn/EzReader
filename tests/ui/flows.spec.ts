@@ -417,6 +417,23 @@ test.describe("documents", () => {
     await input.press("ArrowDown").catch(() => {});
     await page.keyboard.press("Control+z");
   });
+
+  test("drag pages onto the document to open them in a new tab", async ({ page }) => {
+    await start(page, { doc: true });
+    const frame = page.locator('[data-page="1"] .page-sidebar-frame');
+    const a = await frame.boundingBox();
+    const viewer = await page.locator("#viewer-scroll").boundingBox();
+    if (!a || !viewer) throw new Error("no layout");
+    await page.mouse.move(a.x + a.width / 2, a.y + a.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(viewer.x + viewer.width / 2, viewer.y + viewer.height / 2, { steps: 8 });
+    await expect(page.locator(".page-sidebar-ghost")).toHaveText("Release to open in a new tab");
+    await expect(page.locator("#menubar-row")).toHaveClass(/tab-drop-target/);
+    await page.mouse.up();
+    await expect(page.locator(".doc-tab")).toHaveCount(2);
+    await expect(page.locator("#menubar-row")).not.toHaveClass(/tab-drop-target/);
+    await expect(page.locator(".doc-tab.active")).toContainText("(page 1)");
+  });
 });
 
 test.describe("motion", () => {
