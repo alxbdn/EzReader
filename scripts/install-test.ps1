@@ -103,6 +103,7 @@ $previewClsid = "{202348CF-BD0B-4EB3-91B2-C87E74F2FD32}"
 $pdfShellEx = "HKCU:\Software\Classes\.pdf\ShellEx"
 function Get-Default($key) { (Get-ItemProperty -LiteralPath $key -ErrorAction SilentlyContinue).'(default)' }
 Check (Test-Path $shellDll) "the Explorer add-in is in the install folder"
+Check (Test-Path (Join-Path (Split-Path $shellDll) "ezreader-quicklook.exe")) "the quick-look helper is in the install folder"
 Check ((Get-Default "$pdfShellEx\{e357fccd-a995-4576-b01f-234630154e96}") -eq $thumbClsid) "PDF thumbnails are registered"
 Check ((Get-Default "$pdfShellEx\{8895b1c6-b41f-4c1c-a562-0d564250836f}") -eq $previewClsid) "the PDF preview handler is registered"
 Check ((Get-Default "HKCU:\Software\Classes\CLSID\$thumbClsid\InprocServer32") -eq $shellDll) "the thumbnail class points to the add-in"
@@ -155,6 +156,7 @@ Check (@($pkg).Count -eq 1) "a single version installed after the upgrade"
 if ($pkg) {
     Check (Test-Path (Join-Path $pkg.InstallLocation "EzReader.exe")) "EzReader.exe is in the package"
     Check (Test-Path (Join-Path $pkg.InstallLocation "ezreader_shell.dll")) "the Explorer add-in is in the package"
+    Check (Test-Path (Join-Path $pkg.InstallLocation "ezreader-quicklook.exe")) "the quick-look helper is in the package"
     $family = $pkg.PackageFamilyName
     Test-Launch { Start-Process "explorer.exe" "shell:AppsFolder\$family!App" } "the Store app"
 }

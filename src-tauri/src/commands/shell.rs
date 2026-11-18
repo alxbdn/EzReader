@@ -1022,3 +1022,100 @@ mod windows_version_tests {
         assert!(!is_windows_10_build(9600));
     }
 }
+
+#[derive(serde::Serialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct QuickLookState {
+    available: bool,
+    enabled: bool,
+}
+
+#[cfg(target_os = "windows")]
+mod quick_look {
+    use std::path::PathBuf;
+
+    pub const RUN_KEY: &str = r"Software\Microsoft\Windows\CurrentVersion\Run";
+    pub const RUN_VALUE: &str = "EzReader Quick Look";
+    pub const TASK_ID: &str = "QuickLook";
+
+    pub fn helper() -> Option<PathBuf> {
+        let exe = std::env::current_exe().ok()?;
+        let helper = exe.parent()?.join("ezreader-quicklook.exe");
+        helper.is_file().then_some(helper)
+    }
+
+    fn startup_task() -> Result<windows::ApplicationModel::StartupTask, String> {
+        windows::ApplicationModel::StartupTask::GetAsync(&windows::core::HSTRING::from(TASK_ID))
+            .and_then(|op| op.join())
+            .map_err(|e| e.message())
+    }
+
+    pub fn enabled() -> bool {
+        use windows::ApplicationModel::StartupTaskState;
+        if super::is_packaged() {
+            return startup_task()
+                .and_then(|t| t.State().map_err(|e| e.message()))
+                .is_ok_and(|s| s == StartupTaskState::Enabled || s == StartupTaskState::EnabledByPolicy);
+        }
+        use winreg::enums::HKEY_CURRENT_USER;
+        winreg::RegKey::predef(HKEY_CURRENT_USER)
+            .open_subkey(RUN_KEY)
+            .and_then(|k| k.get_value::<String, _>(RUN_VALUE))
+            .is_ok()
+    }
+
+    pub fn set(enabled: bool, helper: &std::path::Path) -> Result<(), String> {
+        use windows::ApplicationModel::StartupTaskState;
+        if super::is_packaged() {
+            let task = startup_task()?;
+            if enabled {
+                let state = task.RequestEnableAsync().and_then(|op| op.join()).map_err(|e| e.message())?;
+                if state != StartupTaskState::Enabled && state != StartupTaskState::EnabledByPolicy {
+                    return Err("startup-blocked".into());
+                }
+            } else {
+                task.Disable().map_err(|e| e.message())?;
+            }
+        } else {
+            use winreg::enums::{HKEY_CURRENT_USER, KEY_SET_VALUE};
+            let hkcu = winreg::RegKey::predef(HKEY_CURRENT_USER);
+            let (run, _) = hkcu.create_subkey(RUN_KEY).map_err(|e| e.to_string())?;
+            if enabled {
+                run.set_value(RUN_VALUE, &format!("\"{}\"", helper.display())).map_err(|e| e.to_string())?;
+            } else if let Ok(run) = hkcu.open_subkey_with_flags(RUN_KEY, KEY_SET_VALUE) {
+                let _ = run.delete_value(RUN_VALUE);
+            }
+        }
+        let mut command = std::process::Command::new(helper);
+        if !enabled {
+            command.arg("--stop");
+        }
+        command.spawn().map(|_| ()).map_err(|e| e.to_string())
+    }
+}
+
+#[tauri::command]
+pub fn quick_look_state() -> QuickLookState {
+    #[cfg(target_os = "windows")]
+    {
+        if quick_look::helper().is_some() {
+            return QuickLookState { available: true, enabled: quick_look::enabled() };
+        }
+    }
+    QuickLookState::default()
+}
+
+#[tauri::command]
+pub fn set_quick_look(enabled: bool) -> CmdResult<()> {
+    #[cfg(target_os = "windows")]
+    {
+        let helper = quick_look::helper().ok_or("quick-look-missing")?;
+        quick_look::set(enabled, &helper)?;
+        Ok(())
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = enabled;
+        Err("quick-look-missing".into())
+    }
+}

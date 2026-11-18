@@ -2325,6 +2325,10 @@ kbd,
   gap: 10px;
 }
 
+.settings-section.hidden { display: none; }
+
+label.settings-row { cursor: pointer; }
+
 .settings-section + .settings-section {
   padding-top: 16px;
   border-top: 1px solid var(--border);

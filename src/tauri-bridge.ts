@@ -99,6 +99,19 @@ export async function checkPdfAssociation(): Promise<boolean> {
   return call<boolean>("check_pdf_association");
 }
 
+export interface QuickLookState {
+  available: boolean;
+  enabled: boolean;
+}
+
+export async function quickLookState(): Promise<QuickLookState> {
+  return call<QuickLookState>("quick_look_state");
+}
+
+export async function setQuickLook(enabled: boolean): Promise<void> {
+  return call<void>("set_quick_look", { enabled });
+}
+
 export async function isDefaultPdfReader(): Promise<boolean> {
   return call<boolean>("is_default_pdf_reader");
 }

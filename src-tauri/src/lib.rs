@@ -166,6 +166,8 @@ pub fn run() {
             commands::shell::register_print_verb,
             commands::shell::open_default_apps_settings,
             commands::shell::open_url,
+            commands::shell::quick_look_state,
+            commands::shell::set_quick_look,
             commands::update::check_for_update,
             commands::update::install_update,
             commands::window::open_pages_in_new_window,

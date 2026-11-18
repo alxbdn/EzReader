@@ -79,6 +79,12 @@ if (-not (Test-Path $shellDll)) {
     exit 1
 }
 Copy-Item $shellDll "$PackageDir\" -Force
+$quickLook = ".\src-tauri\shell-ext\target\release\ezreader-quicklook.exe"
+if (-not (Test-Path $quickLook)) {
+    Write-Error "Quick-look helper not found: $quickLook (run npm run build:shell-ext)"
+    exit 1
+}
+Copy-Item $quickLook "$PackageDir\" -Force
 
 Write-Host "Copying icons..." -ForegroundColor Yellow
 $iconFiles = @(

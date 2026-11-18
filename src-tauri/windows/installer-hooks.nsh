@@ -9,6 +9,11 @@
 ; Built by `npm run build:shell-ext` (part of the Windows beforeBuildCommand).
 ; Not a Tauri resource: Tauri would then require the DLL for every cargo build.
 !define EZ_SHELL_DLL_SOURCE "${__FILEDIR__}\..\shell-ext\target\release\ezreader_shell.dll"
+!define EZ_QUICK_LOOK "ezreader-quicklook.exe"
+!define EZ_QUICK_LOOK_SOURCE "${__FILEDIR__}\..\shell-ext\target\release\ezreader-quicklook.exe"
+; Written by the app when quick look is turned on in Settings.
+!define EZ_RUN_KEY "Software\Microsoft\Windows\CurrentVersion\Run"
+!define EZ_RUN_VALUE "EzReader Quick Look"
 !define EZ_THUMB_CLSID "{5AE37068-61BA-478F-9D24-EA58E7C1EBF6}"
 !define EZ_PREVIEW_CLSID "{202348CF-BD0B-4EB3-91B2-C87E74F2FD32}"
 ; Explorer's slots for a file type's thumbnail provider and preview handler.
@@ -21,21 +26,42 @@
 ; Explorer may hold the DLL loaded (thumbnail and preview hosts): a loaded
 ; DLL cannot be overwritten or deleted, but it can be renamed. The old copy
 ; goes at the next restart.
+!macro EZ_MOVE_ASIDE NAME
+  ${If} ${FileExists} "$INSTDIR\${NAME}"
+    Delete "$INSTDIR\${NAME}.old"
+    Rename "$INSTDIR\${NAME}" "$INSTDIR\${NAME}.old"
+    Delete /REBOOTOK "$INSTDIR\${NAME}.old"
+  ${EndIf}
+!macroend
+
 !macro EZ_MOVE_SHELL_DLL_ASIDE
-  ${If} ${FileExists} "$INSTDIR\${EZ_SHELL_DLL}"
-    Delete "$INSTDIR\${EZ_SHELL_DLL}.old"
-    Rename "$INSTDIR\${EZ_SHELL_DLL}" "$INSTDIR\${EZ_SHELL_DLL}.old"
-    Delete /REBOOTOK "$INSTDIR\${EZ_SHELL_DLL}.old"
+  !insertmacro EZ_MOVE_ASIDE "${EZ_SHELL_DLL}"
+!macroend
+
+; The quick-look helper (Space in File Explorer) runs in the background
+; once turned on: stop it so its file can be replaced.
+!macro EZ_STOP_QUICK_LOOK
+  ${If} ${FileExists} "$INSTDIR\${EZ_QUICK_LOOK}"
+    ExecWait '"$INSTDIR\${EZ_QUICK_LOOK}" --stop'
+    Sleep 500
+    !insertmacro EZ_MOVE_ASIDE "${EZ_QUICK_LOOK}"
   ${EndIf}
 !macroend
 
 !macro NSIS_HOOK_PREINSTALL
+  !insertmacro EZ_STOP_QUICK_LOOK
   !insertmacro EZ_MOVE_SHELL_DLL_ASIDE
 !macroend
 
 !macro NSIS_HOOK_POSTINSTALL
   SetOutPath $INSTDIR
   File "${EZ_SHELL_DLL_SOURCE}"
+  File "${EZ_QUICK_LOOK_SOURCE}"
+  ReadRegStr $0 HKCU "${EZ_RUN_KEY}" "${EZ_RUN_VALUE}"
+  ${If} $0 != ""
+    WriteRegStr HKCU "${EZ_RUN_KEY}" "${EZ_RUN_VALUE}" '"$INSTDIR\${EZ_QUICK_LOOK}"'
+    Exec '"$INSTDIR\${EZ_QUICK_LOOK}"'
+  ${EndIf}
   ${If} ${FileExists} "$INSTDIR\${EZ_SHELL_DLL}"
     ; Class ids live in the 64-bit view (the installer itself is 32-bit).
     SetRegView 64
@@ -76,4 +102,8 @@
   SetRegView lastused
   System::Call 'shell32::SHChangeNotify(i 0x08000000, i 0, p 0, p 0)'
   !insertmacro EZ_MOVE_SHELL_DLL_ASIDE
+  !insertmacro EZ_STOP_QUICK_LOOK
+  ${If} $UpdateMode <> 1
+    DeleteRegValue HKCU "${EZ_RUN_KEY}" "${EZ_RUN_VALUE}"
+  ${EndIf}
 !macroend
