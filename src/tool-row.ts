@@ -1,6 +1,7 @@
 import {
   defaultToolState,
   FONT_FAMILIES,
+  HIGHLIGHT_PRESETS,
   SYSTEM_FONTS,
   type ActiveToolState,
   type FontFamilyValue,
@@ -57,9 +58,7 @@ const BACKGROUNDS: [string, string][] = [
 const NOTE_COLORS: [string, string][] = [
   ["#fde047", "Yellow"], ["#f9a8d4", "Pink"], ["#93c5fd", "Blue"], ["#86efac", "Green"], ["#fdba74", "Orange"],
 ];
-const HIGHLIGHT_COLORS: [string, string][] = [
-  ["#facc15", "Yellow"], ["#4ade80", "Green"], ["#f472b6", "Pink"], ["#60a5fa", "Blue"], ["#fb923c", "Orange"],
-];
+const HIGHLIGHT_COLORS: [string, string][] = HIGHLIGHT_PRESETS;
 const STAMP_COLORS: [string, string][] = [
   ["#000000", "Black"], ["#1e3a8a", "Ink blue"], ["#16a34a", "Green"], ["#dc2626", "Red"], ["#2563eb", "Blue"],
 ];
@@ -314,6 +313,17 @@ export class ToolRow {
   }
 
   hideSignatureStyles(): void { this.hideSelectionPanel("sign"); }
+
+  /** Colour and opacity of the selected highlight annotation. */
+  showHighlightStyles(st: { color: RgbColor; opacity: number }): void {
+    this.state.highlightColor = { ...st.color };
+    this.state.highlightOpacity = st.opacity;
+    this.selectionPanel = "highlight";
+    this.panel = "highlight";
+    this.syncAll();
+  }
+
+  hideHighlightStyles(): void { this.hideSelectionPanel("highlight"); }
 
   /** Number of pages selected in the side panel (Crop and Straighten need some). */
   setPageSelection(count: number): void {

@@ -23,7 +23,9 @@ import {
   type ToolKind,
   type FontFamilyValue,
   DRAW_TOOLS,
+  HIGHLIGHT_PRESETS,
 } from "./models";
+import { ICON_CHEVRON_DOWN, ICON_TRASH } from "./icons";
 import { drawVector } from "./signature-ink";
 import type { AnnotationSession } from "./annotation-session";
 import type { SelectionOwner, ToolSelection } from "./tool-selection";
@@ -86,8 +88,9 @@ interface PdfViewport {
   rotation: number;
 }
 
-type TextAnnotationSelectedHandler  = (ann: TextAnnotation | null) => void;
-type ShapeAnnotationSelectedHandler = (ann: ShapeAnnotation | null) => void;
+type TextAnnotationSelectedHandler      = (ann: TextAnnotation | null) => void;
+type ShapeAnnotationSelectedHandler     = (ann: ShapeAnnotation | null) => void;
+type HighlightAnnotationSelectedHandler = (ann: HighlightAnnotation | null) => void;
 type ResizeHandle = "nw" | "n" | "ne" | "e" | "se" | "s" | "sw" | "w";
 
 const HANDLE_R = 4; // half-size of handle squares in px
@@ -172,8 +175,11 @@ export class CanvasOverlay implements SelectionOwner {
   private viewportRotation = 0;
 
   // ── Callbacks ───────────────────────────────────────────────────────────────
-  private textSelectedHandlers:  TextAnnotationSelectedHandler[]  = [];
-  private shapeSelectedHandlers: ShapeAnnotationSelectedHandler[] = [];
+  private textSelectedHandlers:      TextAnnotationSelectedHandler[]      = [];
+  private shapeSelectedHandlers:     ShapeAnnotationSelectedHandler[]     = [];
+  private highlightSelectedHandlers: HighlightAnnotationSelectedHandler[] = [];
+  private hlPopover: HTMLElement | null = null;
+  private containerDownPos: { x: number; y: number } | null = null;
 
   /** Called on hover when no annotation is hit; return the desired cursor string (e.g. "pointer") or "" for default. */
   onHoverCursor: ((offsetX: number, offsetY: number) => string) | null = null;
@@ -211,13 +217,15 @@ export class CanvasOverlay implements SelectionOwner {
     CanvasOverlay.byContainer.set(container, this);
     container.addEventListener("mousemove", this.onContainerMouseMove);
     container.addEventListener("mousedown", this.onContainerMouseDown);
+    container.addEventListener("mouseup",   this.onContainerMouseUp);
     container.addEventListener("wheel", this.onWheel, { passive: false });
 
     this.applyPointerEvents(this.activeTool);
   }
 
-  onTextAnnotationSelected (h: TextAnnotationSelectedHandler):  void { this.textSelectedHandlers.push(h); }
-  onShapeAnnotationSelected(h: ShapeAnnotationSelectedHandler): void { this.shapeSelectedHandlers.push(h); }
+  onTextAnnotationSelected     (h: TextAnnotationSelectedHandler):      void { this.textSelectedHandlers.push(h); }
+  onShapeAnnotationSelected    (h: ShapeAnnotationSelectedHandler):     void { this.shapeSelectedHandlers.push(h); }
+  onHighlightAnnotationSelected(h: HighlightAnnotationSelectedHandler): void { this.highlightSelectedHandlers.push(h); }
 
   /** A click only selects; the first actual move or resize opens the change. */
   private notifyChangeOnce(): void {
@@ -225,8 +233,9 @@ export class CanvasOverlay implements SelectionOwner {
     this.changeNotified = true;
     this.session.beginEdit();
   }
-  private emitTextSelected  (a: TextAnnotation | null):                void { this.textSelectedHandlers.forEach(h => h(a)); }
-  private emitShapeSelected (a: ShapeAnnotation | null): void { this.shapeSelectedHandlers.forEach(h => h(a)); }
+  private emitTextSelected     (a: TextAnnotation | null):      void { this.textSelectedHandlers.forEach(h => h(a)); }
+  private emitShapeSelected    (a: ShapeAnnotation | null):     void { this.shapeSelectedHandlers.forEach(h => h(a)); }
+  private emitHighlightSelected(a: HighlightAnnotation | null): void { this.highlightSelectedHandlers.forEach(h => h(a)); }
 
   private pickHandlers: ((ann: Annotation) => void)[] = [];
   /**
@@ -242,6 +251,7 @@ export class CanvasOverlay implements SelectionOwner {
     this.redrawCommitted();
     this.emitTextSelected(ann.kind === "text" ? ann : null);
     this.emitShapeSelected((ann.kind === "rect" || ann.kind === "circle" || ann.kind === "ink") ? ann : null);
+    this.emitHighlightSelected(ann.kind === "highlight" ? ann : null);
   }
 
   get currentTool(): ToolKind { return this.activeTool; }
@@ -251,6 +261,19 @@ export class CanvasOverlay implements SelectionOwner {
 
   /** Where the page's annotation layer is on screen. */
   get screenRect(): DOMRect { return this.canvas.getBoundingClientRect(); }
+
+  /** Apply highlight style fields to an existing highlight and redraw. */
+  applyHighlightAnnotationStyle(
+    ann: HighlightAnnotation,
+    color: RgbColor,
+    opacity: number,
+  ): void {
+    this.session.beginEdit();
+    ann.color = { ...color };
+    ann.opacity = opacity;
+    this.redrawCommitted();
+    this.session.edited();
+  }
 
   /** Apply shape style fields to an existing shape or stroke and redraw. */
   applyShapeAnnotationStyle(
@@ -432,6 +455,24 @@ export class CanvasOverlay implements SelectionOwner {
     return null;
   }
 
+  private hitHighlight(cx: number, cy: number): HighlightAnnotation | null {
+    const P = 3;
+    for (let i = this.committed.length - 1; i >= 0; i--) {
+      const ann = this.committed[i];
+      if (ann.kind !== "highlight") continue;
+      for (const r of ann.rects) {
+        const [x1, y1] = this.toCanvas(r.x, r.y + r.height);
+        const [x2, y2] = this.toCanvas(r.x + r.width, r.y);
+        const left = Math.min(x1, x2), right = Math.max(x1, x2);
+        const top = Math.min(y1, y2), bottom = Math.max(y1, y2);
+        if (cx >= left - P && cx <= right + P && cy >= top - P && cy <= bottom + P) {
+          return ann;
+        }
+      }
+    }
+    return null;
+  }
+
   // ── Resize handles ───────────────────────────────────────────────────────────
 
   /** Returns canvas-px positions of all handles for a selection box. */
@@ -446,6 +487,7 @@ export class CanvasOverlay implements SelectionOwner {
   }
 
   private handlesFor(ann: Annotation): ResizeHandle[] {
+    if (ann.kind === "highlight") return [];
     if (ann.kind === "text") return ["w", "e"];
     if (ann.kind === "redact" && ann.shape === "poly") return []; // its corners are the handles
     if (KEEPS_RATIO.has(ann.kind)) return ["nw", "ne", "se", "sw"];
@@ -585,16 +627,17 @@ export class CanvasOverlay implements SelectionOwner {
     if (this.selected && this.committed.includes(this.selected)) {
       this.drawSelectionBox(this.selected);
     }
+    this.syncHighlightPopover();
   }
 
   private drawSelectionBox(ann: Annotation): void {
-    const SEL_PAD = 5;
+    const SEL_PAD = ann.kind === "highlight" ? 2 : 5;
     const b = this.getAnnBounds(ann);
     const box = { left: b.left - SEL_PAD, top: b.top - SEL_PAD, right: b.right + SEL_PAD, bottom: b.bottom + SEL_PAD };
 
-    this.ctx.strokeStyle = SELECT;
+    this.ctx.strokeStyle = ann.kind === "highlight" ? "#4f46e5" : SELECT;
     this.ctx.lineWidth   = 1.5;
-    this.ctx.setLineDash([5, 3]);
+    this.ctx.setLineDash(ann.kind === "highlight" ? [] : [5, 3]);
     this.ctx.strokeRect(box.left, box.top, box.right - box.left, box.bottom - box.top);
     this.ctx.setLineDash([]);
 
@@ -621,6 +664,91 @@ export class CanvasOverlay implements SelectionOwner {
       this.ctx.fillRect  (x - HANDLE_R, y - HANDLE_R, HANDLE_R * 2, HANDLE_R * 2);
       this.ctx.strokeRect(x - HANDLE_R, y - HANDLE_R, HANDLE_R * 2, HANDLE_R * 2);
     }
+  }
+
+  /** Shows or hides the Firefox-style floating highlight popover below the selected highlight. */
+  private syncHighlightPopover(): void {
+    const ann = this.selected?.kind === "highlight" && this.committed.includes(this.selected)
+      ? this.selected
+      : null;
+    if (!ann) {
+      if (this.hlPopover) {
+        this.hlPopover.remove();
+        this.hlPopover = null;
+      }
+      return;
+    }
+
+    if (!this.hlPopover) {
+      const pop = document.createElement("div");
+      pop.className = "hl-popover";
+      pop.addEventListener("mousedown", (ev) => ev.stopPropagation());
+      pop.addEventListener("mouseup",   (ev) => ev.stopPropagation());
+      pop.addEventListener("click",     (ev) => ev.stopPropagation());
+      this.hlPopover = pop;
+      this.container.appendChild(pop);
+    }
+
+    const pop = this.hlPopover;
+    const wasOpen = pop.classList.contains("swatches-open");
+    pop.replaceChildren();
+    pop.classList.toggle("swatches-open", wasOpen);
+
+    const colorBtn = document.createElement("button");
+    colorBtn.type = "button";
+    colorBtn.className = "hl-popover-color";
+    const dot = document.createElement("span");
+    dot.className = "hl-popover-dot";
+    dot.style.background = rgbToCss(ann.color);
+    const chev = document.createElement("span");
+    chev.className = "hl-popover-chev";
+    chev.innerHTML = ICON_CHEVRON_DOWN;
+    colorBtn.append(dot, chev);
+    colorBtn.addEventListener("click", () => {
+      pop.classList.toggle("swatches-open");
+    });
+
+    const swatches = document.createElement("div");
+    swatches.className = "hl-popover-swatches";
+    const activeHex = rgbToHex(ann.color).toLowerCase();
+    for (const [hex, label] of HIGHLIGHT_PRESETS) {
+      const sw = document.createElement("button");
+      sw.type = "button";
+      sw.className = `hl-popover-swatch${hex.toLowerCase() === activeHex ? " active" : ""}`;
+      sw.style.background = hex;
+      sw.title = label;
+      sw.addEventListener("click", () => {
+        const nextColor = hexToRgb(hex);
+        this.style.highlightColor = { ...nextColor };
+        this.applyHighlightAnnotationStyle(ann, nextColor, ann.opacity);
+        this.emitHighlightSelected(ann);
+      });
+      swatches.appendChild(sw);
+    }
+
+    const sep = document.createElement("span");
+    sep.className = "hl-popover-sep";
+
+    const delBtn = document.createElement("button");
+    delBtn.type = "button";
+    delBtn.className = "hl-popover-del";
+    delBtn.innerHTML = ICON_TRASH;
+    delBtn.addEventListener("click", () => {
+      this.selected = null;
+      this.session.remove(ann);
+      this.redrawCommitted();
+      this.emitHighlightSelected(null);
+    });
+
+    pop.append(colorBtn, swatches, sep, delBtn);
+
+    const b = this.getAnnBounds(ann);
+    const pageW = this.canvas.clientWidth || (this.canvas.width / (window.devicePixelRatio || 1));
+    const pageH = this.canvas.clientHeight || (this.canvas.height / (window.devicePixelRatio || 1));
+    const top = Math.min(Math.max(4, pageH - 42), b.bottom + 6);
+    const rightOffset = Math.max(4, Math.min(pageW - 96, pageW - b.right));
+    pop.style.top = `${Math.round(top)}px`;
+    pop.style.right = `${Math.round(rightOffset)}px`;
   }
 
   // ── Annotation drawing ───────────────────────────────────────────────────────
@@ -1036,6 +1164,8 @@ export class CanvasOverlay implements SelectionOwner {
   };
 
   private onContainerMouseDown = (e: MouseEvent): void => {
+    if ((e.target as HTMLElement | null)?.closest(".hl-popover")) return;
+    this.containerDownPos = { x: e.clientX, y: e.clientY };
     if (this.activeTool !== "select") return;
     if (this.dragging || this.resizing) return;
     if (!this.selected) return;
@@ -1045,12 +1175,38 @@ export class CanvasOverlay implements SelectionOwner {
     const cy = e.clientY - rect.top;
 
     const hitAnn = this.hitTest(cx, cy);
+    const hitHl  = this.hitHighlight(cx, cy);
     const hitH   = this.hitHandle(cx, cy, this.selected);
-    if (!hitAnn && !hitH && this.hitVertex(cx, cy, this.selected) === null) {
+    if (!hitAnn && !hitHl && !hitH && this.hitVertex(cx, cy, this.selected) === null) {
       this.selected = null;
       this.redrawCommitted();
       this.emitTextSelected(null);
       this.emitShapeSelected(null);
+      this.emitHighlightSelected(null);
+    }
+  };
+
+  private onContainerMouseUp = (e: MouseEvent): void => {
+    const down = this.containerDownPos;
+    this.containerDownPos = null;
+    if ((e.target as HTMLElement | null)?.closest(".hl-popover")) return;
+    if (this.activeTool !== "select" && this.activeTool !== "highlight") return;
+    if (this.dragging || this.resizing || this.isDrawing) return;
+    if (down && Math.hypot(e.clientX - down.x, e.clientY - down.y) > 5) return;
+    const sel = window.getSelection();
+    if (sel && !sel.isCollapsed && sel.toString().trim().length > 0) return;
+
+    const rect = this.canvas.getBoundingClientRect();
+    const cx = e.clientX - rect.left;
+    const cy = e.clientY - rect.top;
+    if (this.hitTest(cx, cy)) return;
+    const hitHl = this.hitHighlight(cx, cy);
+    if (hitHl) {
+      this.select(hitHl);
+    } else if (this.selected?.kind === "highlight") {
+      this.selected = null;
+      this.redrawCommitted();
+      this.emitHighlightSelected(null);
     }
   };
 
@@ -1102,6 +1258,7 @@ export class CanvasOverlay implements SelectionOwner {
       this.redrawCommitted();
       this.emitTextSelected(hit?.kind === "text" ? hit : null);
       this.emitShapeSelected((hit?.kind === "rect" || hit?.kind === "circle" || hit?.kind === "ink") ? hit : null);
+      this.emitHighlightSelected(null);
       return;
     }
 
@@ -1539,11 +1696,12 @@ export class CanvasOverlay implements SelectionOwner {
     if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" ||
         (document.activeElement as HTMLElement)?.isContentEditable) return;
     if ((e.key === "Delete" || e.key === "Backspace") &&
-        this.selected && this.activeTool === "select") {
+        this.selected && (this.activeTool === "select" || this.selected.kind === "highlight")) {
       const removed = this.selected;
       this.selected = null;
       this.session.remove(removed);
       this.redrawCommitted();
+      if (removed.kind === "highlight") this.emitHighlightSelected(null);
     }
   };
 

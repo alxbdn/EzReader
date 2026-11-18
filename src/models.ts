@@ -317,6 +317,15 @@ export interface ActiveToolState {
   signatureColor: RgbColor;
 }
 
+/** Softer pastel highlighter palette (shared by the toolbar and the floating highlight popover). */
+export const HIGHLIGHT_PRESETS: [string, string][] = [
+  ["#fef08a", "Yellow"],
+  ["#bbf7d0", "Green"],
+  ["#fbcfe8", "Pink"],
+  ["#bfdbfe", "Blue"],
+  ["#fed7aa", "Orange"],
+];
+
 export function defaultToolState(): ActiveToolState {
   return {
     tool: "select",
@@ -334,8 +343,8 @@ export function defaultToolState(): ActiveToolState {
     strokeWidth: 2,
     opacity: 1,
     textBackground: null,
-    highlightColor: { r: 250, g: 204, b: 21 },
-    highlightOpacity: 0.45,
+    highlightColor: { r: 254, g: 240, b: 138 },
+    highlightOpacity: 0.55,
     noteColor: { r: 253, g: 224, b: 71 },
     redactShape: "rect",
     stampMark: "check",
