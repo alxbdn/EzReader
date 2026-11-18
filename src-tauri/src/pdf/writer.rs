@@ -871,6 +871,22 @@ fn clear_annotation_streams(doc: &mut Document, meta: &AnnotationMeta) -> Result
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn every_standard_font_has_its_own_name_and_key() {
+        let mut names = std::collections::HashSet::new();
+        let mut keys = std::collections::HashSet::new();
+        for family in [FontFamily::Helvetica, FontFamily::Times, FontFamily::Courier] {
+            for bold in [false, true] {
+                for italic in [false, true] {
+                    assert!(names.insert(font_name(family, bold, italic)));
+                    assert!(keys.insert(font_key(family, bold, italic)));
+                }
+            }
+        }
+        assert_eq!(names.len(), 12);
+        assert!(names.contains("Times-BoldItalic") && names.contains("Courier"));
+    }
     use crate::pdf::models::PdfRect;
     use crate::pdf::models::{RgbColor, TextAlignment};
     use lopdf::StringFormat;
