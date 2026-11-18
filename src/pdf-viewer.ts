@@ -197,11 +197,14 @@ export class PdfPageView {
   private formLayer: HTMLElement;
   private annotationCanvas: HTMLCanvasElement;
   private _viewport: PageViewport | null = null;
-  /** Bumped by clear(); an in-flight render that sees a new value stops. */
+  /** Bumped by clear() / cancelRender(); an in-flight render that sees a new value stops. */
   private _generation = 0;
   private _renderTask: RenderTask | null = null;
   /** The pdf.js page last drawn here, whose caches clear() frees. */
   private _page: PDFPageProxy | null = null;
+  private _renderedScale = 0;
+  private _renderedRotation = -1;
+  private _renderedDpr = 0;
 
   constructor(pageNum: number, tools: ToolSelection, annotations: AnnotationSession, private liveText: LiveText | null = null) {
     this.pageNum = pageNum;
@@ -249,9 +252,37 @@ export class PdfPageView {
   /** True while the canvas holds a bitmap (drawn, or kept through a zoom). */
   get hasPixels(): boolean { return this.canvas.width > 0; }
 
-  setPlaceholderSize(width: number, height: number): void {
-    this.wrapper.style.width  = `${Math.round(width)}px`;
-    this.wrapper.style.height = `${Math.round(height)}px`;
+  get renderedRotation(): number { return this._renderedRotation; }
+
+  /** True when the page is already drawn at this exact scale, rotation, and pixel ratio. */
+  isRenderedAt(scale: number, rotation: number, dpr = window.devicePixelRatio || 1): boolean {
+    return (
+      this.rendered &&
+      this.canvas.width > 0 &&
+      Math.abs(this._renderedScale - scale) < 1e-6 &&
+      this._renderedRotation === rotation &&
+      Math.abs(this._renderedDpr - dpr) < 1e-4
+    );
+  }
+
+  /** Stops an in-flight render (e.g. superseded by a new zoom) while keeping the current bitmap visible. */
+  cancelRender(): void {
+    if (!this.rendering && !this._renderTask) return;
+    this._generation++;
+    this._renderTask?.cancel();
+    this._renderTask = null;
+    this.rendering = false;
+  }
+
+  setPlaceholderSize(width: number, height: number, keepStretchedCanvas = false): void {
+    const w = `${Math.round(width)}px`;
+    const h = `${Math.round(height)}px`;
+    this.wrapper.style.width  = w;
+    this.wrapper.style.height = h;
+    if (keepStretchedCanvas && this.canvas.width > 0) {
+      this.canvas.style.width  = w;
+      this.canvas.style.height = h;
+    }
   }
 
   async render(
@@ -273,8 +304,9 @@ export class PdfPageView {
       const viewport = page.getViewport({ scale, rotation: (page.rotate + rotation) % 360 });
       this._viewport = viewport;
 
-      // Render PDF content into an off-screen buffer first so the visible
-      // canvas is never blank — old content stays until the new frame is ready.
+      // Render PDF content into a back-buffer canvas first so the visible
+      // canvas is never blank — old content stays until the new frame is ready,
+      // then the DOM node is swapped in place without a full-bitmap drawImage copy.
       //
       // The canvas must map 1:1 onto screen pixels to look sharp.  Pick a
       // whole number of device pixels first, then derive the CSS size from
@@ -286,8 +318,11 @@ export class PdfPageView {
       const cssW = pxW / dpr;
       const cssH = pxH / dpr;
       const buf = document.createElement("canvas");
+      buf.className = "page-canvas";
       buf.width  = pxW;
       buf.height = pxH;
+      buf.style.width  = `${cssW}px`;
+      buf.style.height = `${cssH}px`;
       const bufCtx = buf.getContext("2d")!;
       const sx = pxW / viewport.width;
       const sy = pxH / viewport.height;
@@ -296,23 +331,23 @@ export class PdfPageView {
       try {
         await this._renderTask.promise;
       } catch (err) {
+        buf.width = buf.height = 0;
         // clear() cancels the task when the page scrolls out of range.
         if (stale()) return;
         throw err;
       } finally {
         this._renderTask = null;
       }
-      if (stale()) return;
+      if (stale()) {
+        buf.width = buf.height = 0;
+        return;
+      }
 
-      // Atomic swap: resize + blit in one synchronous block.
-      this.canvas.width  = buf.width;
-      this.canvas.height = buf.height;
-      this.canvas.style.width  = `${cssW}px`;
-      this.canvas.style.height = `${cssH}px`;
-      this.canvas.getContext("2d")!.drawImage(buf, 0, 0);
-      // The buffer is garbage now, but its bitmap lives outside the JS heap
-      // and would wait for a garbage collection: free it right away.
-      buf.width = buf.height = 0;
+      // Atomic DOM swap: replace the old canvas node directly and free its bitmap.
+      const prevCanvas = this.canvas;
+      this.canvas = buf;
+      prevCanvas.replaceWith(buf);
+      prevCanvas.width = prevCanvas.height = 0;
 
       // Size annotation canvas (no content to preserve here).
       this.annotationCanvas.width  = pxW;
@@ -322,6 +357,14 @@ export class PdfPageView {
 
       // Snap wrapper to actual rendered size
       this.setPlaceholderSize(viewport.width, viewport.height);
+
+      // Sync annotation overlay immediately with the new canvas
+      this.overlay.syncToPage(
+        this.pageNum,
+        scale,
+        viewport.height / scale,
+        viewport
+      );
 
       // Build overlay layers (text first — link layer scans text spans)
       const hasText = await this.buildTextLayer(page, viewport);
@@ -334,17 +377,12 @@ export class PdfPageView {
       await this.buildFormLayer(page, viewport, formValues, onFormChange);
       if (stale()) return;
 
-      // Sync annotation overlay
-      this.overlay.syncToPage(
-        this.pageNum,
-        scale,
-        viewport.height / scale,
-        viewport
-      );
-
+      this._renderedScale = scale;
+      this._renderedRotation = rotation;
+      this._renderedDpr = dpr;
       this.rendered = true;
     } finally {
-      this.rendering = false;
+      if (!stale()) this.rendering = false;
     }
   }
 
@@ -369,6 +407,9 @@ export class PdfPageView {
     this.linkLayer.innerHTML  = "";
     this.formLayer.innerHTML  = "";
     this.overlay.hide();
+    this._renderedScale = 0;
+    this._renderedRotation = -1;
+    this._renderedDpr = 0;
     this.rendered = false;
   }
 
@@ -384,6 +425,7 @@ export class PdfPageView {
     const textContent = await page.getTextContent();
     const fragment = document.createDocumentFragment();
     const measureCtx = document.createElement("canvas").getContext("2d")!;
+    let lastFont = "";
 
     for (const rawItem of textContent.items) {
       if (!("str" in rawItem)) continue;
@@ -419,7 +461,11 @@ export class PdfPageView {
       span.style.setProperty("user-select",        "text");
       span.style.setProperty("-webkit-user-select", "text");
 
-      measureCtx.font = `${fontSizePx}px sans-serif`;
+      const font = `${fontSizePx}px sans-serif`;
+      if (font !== lastFont) {
+        measureCtx.font = font;
+        lastFont = font;
+      }
       const measured = measureCtx.measureText(item.str).width;
       const scaleX   = measured > 0.5 ? widthPx / measured : 1;
 
@@ -500,116 +546,124 @@ export class PdfPageView {
     this.linkLayer.style.width  = `${viewport.width}px`;
     this.linkLayer.style.height = `${viewport.height}px`;
 
-    // Collect text span positions for URL detection
-    const mc = document.createElement("canvas").getContext("2d")!;
-    const measure = (text: string, span: HTMLSpanElement): number => {
-      mc.font = `${span.style.fontSize} ${span.style.fontFamily || "sans-serif"}`;
-      return mc.measureText(text).width;
-    };
-
-    interface SpanEntry {
-      span: HTMLSpanElement;
-      start: number;
-      end: number;
-      text: string;
-      pivotX: number;   // canvas x of text origin (= CSS left)
-      pivotY: number;   // canvas y of text origin (= CSS top + fontSize)
-      top: number;      // CSS top (used for line-break detection only)
-      fontSize: number;
-      angle: number;    // CSS rotation in degrees (from transform:rotate())
-    }
     type Rect = { left: number; top: number; right: number; bottom: number };
-
-    let combined = "";
-    const entries: SpanEntry[] = [];
-    const lineBreakPos = new Set<number>();
-    let prevTop = NaN;
-
-    for (const span of this.textLayer.querySelectorAll(":scope > span:not(.ocr-line)") as NodeListOf<HTMLSpanElement>) {
-      const text = span.textContent ?? "";
-      if (!text) continue;
-      const spanTop  = parseFloat(span.style.top)      || 0;
-      const fontSize = parseFloat(span.style.fontSize) || 12;
-      if (combined.length > 0 && Math.abs(spanTop - prevTop) > 2) {
-        lineBreakPos.add(combined.length);
-        combined += " ";
-      }
-      const start = combined.length;
-      combined += text;
-      const rotMatch = /rotate\(([+-]?\d+(?:\.\d+)?)deg\)/.exec(span.style.transform || "");
-      entries.push({
-        span,
-        start,
-        end: combined.length,
-        text,
-        pivotX:   parseFloat(span.style.left) || 0,
-        pivotY:   spanTop + fontSize,   // transform-origin is 0% 100% = bottom-left
-        top:      spanTop,
-        fontSize,
-        angle:    rotMatch ? parseFloat(rotMatch[1]) : 0,
-      });
-      prevTop = spanTop;
-    }
-
-    const domRectsForRange = (urlStart: number, urlEnd: number): Rect[] => {
-      const rects: Rect[] = [];
-      for (const e of entries) {
-        if (e.end <= urlStart || e.start >= urlEnd) continue;
-        const urlL = Math.max(e.start, urlStart) - e.start;
-        const urlR = Math.min(e.end,   urlEnd)   - e.start;
-        const dxL = measure(e.text.slice(0, urlL), e.span);
-        const dxR = measure(e.text.slice(0, urlR), e.span);
-        if (dxR <= dxL) continue;
-        if (Math.abs(e.angle) < 0.5) {
-          // No rotation — simple horizontal rect.
-          rects.push({ left: e.pivotX + dxL, top: e.pivotY - e.fontSize,
-                       right: e.pivotX + dxR, bottom: e.pivotY });
-        } else {
-          // Rotate the 4 corners of the URL sub-rect around the pivot and
-          // return the axis-aligned bounding box.
-          const θ = e.angle * Math.PI / 180;
-          const cos = Math.cos(θ), sin = Math.sin(θ);
-          // corners relative to pivot (pivotX, pivotY):
-          //   x axis = text advance direction, y axis = up (−fontSize)
-          const corners: [number, number][] = [
-            [dxL, -e.fontSize], [dxR, -e.fontSize],
-            [dxR, 0],           [dxL, 0],
-          ];
-          const xs = corners.map(([x, y]) => e.pivotX + cos * x - sin * y);
-          const ys = corners.map(([x, y]) => e.pivotY + sin * x + cos * y);
-          rects.push({ left: Math.min(...xs), right: Math.max(...xs),
-                       top:  Math.min(...ys), bottom: Math.max(...ys) });
-        }
-      }
-      return rects;
-    };
-
     interface DomEntry { startPos: number; rects: Rect[] }
-    const urlRe = /https?:\/\/[^\s)\]>"]+/g;
-    let m: RegExpExecArray | null;
     const domLinks = new Map<string, DomEntry>();
 
-    while ((m = urlRe.exec(combined)) !== null) {
-      const urlEnd = m.index + m[0].length;
-      const rects  = domRectsForRange(m.index, urlEnd);
-      if (rects.length > 0 && !domLinks.has(m[0])) {
-        domLinks.set(m[0], { startPos: m.index, rects });
+    // Only scan DOM text spans and measure glyph widths when the page text actually contains "http"
+    if (this.textLayer.textContent?.includes("http")) {
+      const mc = document.createElement("canvas").getContext("2d")!;
+      let lastFont = "";
+      const measure = (text: string, span: HTMLSpanElement): number => {
+        const font = `${span.style.fontSize} ${span.style.fontFamily || "sans-serif"}`;
+        if (font !== lastFont) {
+          mc.font = font;
+          lastFont = font;
+        }
+        return mc.measureText(text).width;
+      };
+
+      interface SpanEntry {
+        span: HTMLSpanElement;
+        start: number;
+        end: number;
+        text: string;
+        pivotX: number;   // canvas x of text origin (= CSS left)
+        pivotY: number;   // canvas y of text origin (= CSS top + fontSize)
+        top: number;      // CSS top (used for line-break detection only)
+        fontSize: number;
+        angle: number;    // CSS rotation in degrees (from transform:rotate())
       }
-      if (!lineBreakPos.has(urlEnd)) continue;
-      for (const e of entries) {
-        if (e.start < urlEnd + 1) continue;
-        if (e.start > urlEnd + 2) break;
-        const fragMatch = /^[^\s)\]>"]+/.exec(e.text);
-        if (!fragMatch) break;
-        const frag = fragMatch[0];
-        if (frag.length >= 2 && frag.length <= 40 && /[./\-_?#=&%]/.test(frag)) {
-          const fullUrl = m[0] + frag;
-          if (!domLinks.has(fullUrl)) {
-            const contRects = domRectsForRange(e.start, e.start + frag.length);
-            domLinks.set(fullUrl, { startPos: m.index, rects: [...rects, ...contRects] });
+
+      let combined = "";
+      const entries: SpanEntry[] = [];
+      const lineBreakPos = new Set<number>();
+      let prevTop = NaN;
+
+      for (const span of this.textLayer.querySelectorAll(":scope > span:not(.ocr-line)") as NodeListOf<HTMLSpanElement>) {
+        const text = span.textContent ?? "";
+        if (!text) continue;
+        const spanTop  = parseFloat(span.style.top)      || 0;
+        const fontSize = parseFloat(span.style.fontSize) || 12;
+        if (combined.length > 0 && Math.abs(spanTop - prevTop) > 2) {
+          lineBreakPos.add(combined.length);
+          combined += " ";
+        }
+        const start = combined.length;
+        combined += text;
+        const rotMatch = /rotate\(([+-]?\d+(?:\.\d+)?)deg\)/.exec(span.style.transform || "");
+        entries.push({
+          span,
+          start,
+          end: combined.length,
+          text,
+          pivotX:   parseFloat(span.style.left) || 0,
+          pivotY:   spanTop + fontSize,   // transform-origin is 0% 100% = bottom-left
+          top:      spanTop,
+          fontSize,
+          angle:    rotMatch ? parseFloat(rotMatch[1]) : 0,
+        });
+        prevTop = spanTop;
+      }
+
+      const domRectsForRange = (urlStart: number, urlEnd: number): Rect[] => {
+        const rects: Rect[] = [];
+        for (const e of entries) {
+          if (e.end <= urlStart || e.start >= urlEnd) continue;
+          const urlL = Math.max(e.start, urlStart) - e.start;
+          const urlR = Math.min(e.end,   urlEnd)   - e.start;
+          const dxL = measure(e.text.slice(0, urlL), e.span);
+          const dxR = measure(e.text.slice(0, urlR), e.span);
+          if (dxR <= dxL) continue;
+          if (Math.abs(e.angle) < 0.5) {
+            // No rotation — simple horizontal rect.
+            rects.push({ left: e.pivotX + dxL, top: e.pivotY - e.fontSize,
+                         right: e.pivotX + dxR, bottom: e.pivotY });
+          } else {
+            // Rotate the 4 corners of the URL sub-rect around the pivot and
+            // return the axis-aligned bounding box.
+            const θ = e.angle * Math.PI / 180;
+            const cos = Math.cos(θ), sin = Math.sin(θ);
+            // corners relative to pivot (pivotX, pivotY):
+            //   x axis = text advance direction, y axis = up (−fontSize)
+            const corners: [number, number][] = [
+              [dxL, -e.fontSize], [dxR, -e.fontSize],
+              [dxR, 0],           [dxL, 0],
+            ];
+            const xs = corners.map(([x, y]) => e.pivotX + cos * x - sin * y);
+            const ys = corners.map(([x, y]) => e.pivotY + sin * x + cos * y);
+            rects.push({ left: Math.min(...xs), right: Math.max(...xs),
+                         top:  Math.min(...ys), bottom: Math.max(...ys) });
           }
         }
-        break;
+        return rects;
+      };
+
+      const urlRe = /https?:\/\/[^\s)\]>"]+/g;
+      let m: RegExpExecArray | null;
+
+      while ((m = urlRe.exec(combined)) !== null) {
+        const urlEnd = m.index + m[0].length;
+        const rects  = domRectsForRange(m.index, urlEnd);
+        if (rects.length > 0 && !domLinks.has(m[0])) {
+          domLinks.set(m[0], { startPos: m.index, rects });
+        }
+        if (!lineBreakPos.has(urlEnd)) continue;
+        for (const e of entries) {
+          if (e.start < urlEnd + 1) continue;
+          if (e.start > urlEnd + 2) break;
+          const fragMatch = /^[^\s)\]>"]+/.exec(e.text);
+          if (!fragMatch) break;
+          const frag = fragMatch[0];
+          if (frag.length >= 2 && frag.length <= 40 && /[./\-_?#=&%]/.test(frag)) {
+            const fullUrl = m[0] + frag;
+            if (!domLinks.has(fullUrl)) {
+              const contRects = domRectsForRange(e.start, e.start + frag.length);
+              domLinks.set(fullUrl, { startPos: m.index, rects: [...rects, ...contRects] });
+            }
+          }
+          break;
+        }
       }
     }
 
@@ -774,10 +828,18 @@ export class PdfViewer {
   private _scrollMode: "vertical" | "horizontal" = "vertical";
 
   private onLayoutChangedCb?: (views: PdfPageView[]) => void;
+  private onRenderActivityCb?: (busy: boolean) => void;
   onResizeCb?: () => void;
   private observer: IntersectionObserver | null = null;
   /** Pages currently inside the observer's area (viewport + margin). */
   private _visiblePages = new Set<number>();
+  /** Pages waiting to be rendered, prioritized by proximity to the focused page. */
+  private _renderQueue = new Set<PdfPageView>();
+  private _activeRenders = 0;
+  private _renderBusy = false;
+  /** Cached layout offsets along the scroll axis; invalidated on layout/reflow. */
+  private _pageOffsets: { start: number; size: number }[] | null = null;
+  private _scrollRaf = 0;
   private resizeObserver: ResizeObserver | null = null;
   /** Search term to highlight, and the match to show (page 0 = none). */
   private _search = { query: "", page: 0, index: -1, scroll: false };
@@ -824,13 +886,13 @@ export class PdfViewer {
   /** Shows `n` pages per row (null: as many as fit), then keeps the current page in view. */
   setColumns(n: number | null): void {
     this._forcedColumns = n;
-    if (this.pdfDoc) { this.buildLayout(); this.goToPage(this._focusedPage, "instant"); }
+    if (this.pdfDoc) this.reflow();
   }
 
   setScrollMode(mode: "vertical" | "horizontal"): void {
     this._scrollMode = mode;
     this.scrollEl.classList.toggle("horizontal", mode === "horizontal");
-    if (this.pdfDoc) { this.buildLayout(); this.goToPage(this._focusedPage, "instant"); }
+    if (this.pdfDoc) this.reflow();
   }
 
   get pageWidthPt():  number {
@@ -853,6 +915,19 @@ export class PdfViewer {
   /** Register a callback invoked after every buildLayout() with the fresh pageViews array. */
   onLayoutChanged(cb: (views: PdfPageView[]) => void): void {
     this.onLayoutChangedCb = cb;
+  }
+
+  /** Register a callback notified when the viewer starts or finishes rendering pages. */
+  onRenderActivity(cb: (busy: boolean) => void): void {
+    this.onRenderActivityCb = cb;
+  }
+
+  private _updateRenderActivity(): void {
+    const busy = this._activeRenders > 0 || this._renderQueue.size > 0;
+    if (busy !== this._renderBusy) {
+      this._renderBusy = busy;
+      this.onRenderActivityCb?.(busy);
+    }
   }
 
   /** Call from main.ts before the first load() to provide shared context. */
@@ -899,6 +974,8 @@ export class PdfViewer {
   private async _openDoc(url: string, password?: string, rotation = 0): Promise<void> {
     // The pages still drawing stop first: destroying their document under
     // them would fail their renders (another tab, another file).
+    this._renderQueue.clear();
+    this._updateRenderActivity();
     for (const view of this.pageViews) view.clear();
     if (this.pdfDoc) {
       await this.pdfDoc.loadingTask.destroy();
@@ -906,6 +983,8 @@ export class PdfViewer {
     }
     this.observer?.disconnect();
     this._visiblePages.clear();
+    this._pageOffsets = null;
+    if (this._scrollRaf) { cancelAnimationFrame(this._scrollRaf); this._scrollRaf = 0; }
     if (this._scrollHandler) { this.scrollEl.removeEventListener("scroll", this._scrollHandler); this._scrollHandler = null; }
 
     this.liveText.reset();
@@ -916,13 +995,22 @@ export class PdfViewer {
     this._focusedPage = 1;
     this._rotation    = rotation;
 
-    // Pre-fetch page dimensions (T010)
-    this.pageDimensions = [];
-    for (let i = 1; i <= this._pageCount; i++) {
-      const p  = await this.pdfDoc.getPage(i);
+    // Pre-fetch initial page dimensions in parallel; for large documents,
+    // use page 1's size as the initial placeholder estimate so we don't block
+    // opening on hundreds of sequential worker round-trips.
+    const initialCount = Math.min(this._pageCount, 16);
+    const initialPages = await Promise.all(
+      Array.from({ length: initialCount }, (_, i) => this.pdfDoc!.getPage(i + 1))
+    );
+    const initialDims = initialPages.map((p) => {
       const vp = p.getViewport({ scale: 1.0 });
-      this.pageDimensions.push({ width: vp.width, height: vp.height });
-    }
+      return { width: vp.width, height: vp.height };
+    });
+    const fallbackDim = initialDims[0] ?? { width: 595, height: 842 };
+    this.pageDimensions = Array.from(
+      { length: this._pageCount },
+      (_, i) => initialDims[i] ? { ...initialDims[i] } : { width: fallbackDim.width, height: fallbackDim.height }
+    );
 
     this.buildLayout();
     this.setupResizeObserver();
@@ -932,8 +1020,12 @@ export class PdfViewer {
 
   buildLayout(): void {
     this._previewScale = null;
+    this._pageOffsets = null;
+    this._renderQueue.clear();
+    this._updateRenderActivity();
     this.observer?.disconnect();
     this._visiblePages.clear();
+    if (this._scrollRaf) { cancelAnimationFrame(this._scrollRaf); this._scrollRaf = 0; }
     if (this._scrollHandler) { this.scrollEl.removeEventListener("scroll", this._scrollHandler); this._scrollHandler = null; }
     for (const view of this.pageViews) view.destroy();
     this.scrollEl.innerHTML = "";
@@ -951,6 +1043,7 @@ export class PdfViewer {
 
     // Build rows (US2: T019)
     const rows = buildRows(this._pageCount, this.columnCount);
+    const frag = document.createDocumentFragment();
     for (const row of rows) {
       const rowEl = document.createElement("div");
       rowEl.className = "page-row";
@@ -964,17 +1057,35 @@ export class PdfViewer {
         rowEl.appendChild(view.wrapper);
         this.pageViews.push(view);
       }
-      this.scrollEl.appendChild(rowEl);
+      frag.appendChild(rowEl);
     }
+    this.scrollEl.appendChild(frag);
 
     this.setupObserver();
     this.onLayoutChangedCb?.(this.pageViews);
   }
 
-  // ── IntersectionObserver (T012) ──────────────────────────────────────────────
+  /** Re-groups existing `pageViews` into rows of `columnCount` without destroying their canvases. */
+  private _regroupRows(columnCount: number): void {
+    const rows = buildRows(this._pageCount, columnCount);
+    const frag = document.createDocumentFragment();
+    for (const row of rows) {
+      const rowEl = document.createElement("div");
+      rowEl.className = "page-row";
+      for (const pageNum of row) {
+        const view = this.pageViews[pageNum - 1];
+        if (view) rowEl.appendChild(view.wrapper);
+      }
+      frag.appendChild(rowEl);
+    }
+    this.scrollEl.replaceChildren(frag);
+    this._pageOffsets = null;
+  }
+
+  // ── IntersectionObserver & Render Queue (T012) ───────────────────────────────
 
   private setupObserver(): void {
-    // IntersectionObserver for lazy rendering / clearing
+    // IntersectionObserver for lazy pre-rendering / eviction
     this.observer = new IntersectionObserver(
       (entries) => {
         for (const entry of entries) {
@@ -983,9 +1094,6 @@ export class PdfViewer {
           if (entry.isIntersecting) this._visiblePages.add(pageNum);
           else this._visiblePages.delete(pageNum);
         }
-        // Use every page still in view, not only the ones in this batch:
-        // during a fast scroll a batch can hold only pages that just left.
-        const visiblePages = [...this._visiblePages];
 
         for (const entry of entries) {
           const pageNum  = parseInt((entry.target as HTMLElement).dataset.page ?? "0");
@@ -994,37 +1102,80 @@ export class PdfViewer {
 
           if (entry.isIntersecting) {
             if (!pageView.rendered && !pageView.rendering) {
-              void this._renderPage(pageView);
+              this._queueRender(pageView);
             }
+          } else {
+            this._renderQueue.delete(pageView);
           }
         }
 
-        // Clear every drawn page that is now more than 2 pages away from the
-        // view, not only the ones in this batch: a page usually leaves the
-        // area while still next to a visible one, gets no later event, and
-        // would keep its full-size bitmap for good (gigabytes after a fast
-        // scroll through a long document).
-        if (visiblePages.length > 0) {
-          const minV = Math.min(...visiblePages);
-          const maxV = Math.max(...visiblePages);
-          for (const view of this.pageViews) {
-            if ((view.rendered || view.rendering || view.hasPixels) && (view.pageNum < minV - 2 || view.pageNum > maxV + 2)) view.clear();
-          }
-        }
+        this._evictDistantPages();
+        this._pumpRenderQueue();
       },
-      { root: this.scrollEl, rootMargin: "200px 200px" }
+      { root: this.scrollEl, rootMargin: "1200px 400px" }
     );
 
     for (const pv of this.pageViews) this.observer.observe(pv.wrapper);
 
-    // Scroll listener for accurate current-page tracking
-    this._scrollHandler = () => this._updateFocusedPage();
+    // Throttled scroll listener for current-page tracking (at most once per frame)
+    this._scrollHandler = () => {
+      if (this._scrollRaf) return;
+      this._scrollRaf = requestAnimationFrame(() => {
+        this._scrollRaf = 0;
+        this._updateFocusedPage();
+      });
+    };
     this.scrollEl.addEventListener("scroll", this._scrollHandler, { passive: true });
     // Run once to set initial focused page
     this._updateFocusedPage();
   }
 
   private _scrollHandler: (() => void) | null = null;
+
+  /**
+   * Clears pages that have scrolled well outside the active window so memory
+   * stays bounded while keeping nearby pages cached for smooth back-and-forth scrolling.
+   */
+  private _evictDistantPages(): void {
+    const visiblePages = [...this._visiblePages];
+    if (visiblePages.length === 0) return;
+    const minV = Math.min(...visiblePages);
+    const maxV = Math.max(...visiblePages);
+    const keepMargin = 5;
+    const maxCached = 14;
+
+    const keptWithPixels: PdfPageView[] = [];
+    for (const view of this.pageViews) {
+      if (view.pageNum < minV - keepMargin || view.pageNum > maxV + keepMargin) {
+        this._renderQueue.delete(view);
+        if (view.rendered || view.rendering || view.hasPixels) view.clear();
+      } else if (view.hasPixels) {
+        keptWithPixels.push(view);
+      }
+    }
+
+    if (keptWithPixels.length > maxCached) {
+      const center = (minV + maxV) / 2;
+      keptWithPixels.sort((a, b) => Math.abs(b.pageNum - center) - Math.abs(a.pageNum - center));
+      for (let i = 0; i < keptWithPixels.length - maxCached; i++) {
+        const view = keptWithPixels[i];
+        if (!this._visiblePages.has(view.pageNum)) {
+          this._renderQueue.delete(view);
+          view.clear();
+        }
+      }
+    }
+  }
+
+  private _getPageOffsets(): { start: number; size: number }[] {
+    if (!this._pageOffsets) {
+      const horizontal = this._scrollMode === "horizontal";
+      this._pageOffsets = this.pageViews.map((pv) => horizontal
+        ? { start: pv.wrapper.offsetLeft, size: pv.wrapper.offsetWidth }
+        : { start: pv.wrapper.offsetTop, size: pv.wrapper.offsetHeight });
+    }
+    return this._pageOffsets;
+  }
 
   private _updateFocusedPage(): void {
     const horizontal = this._scrollMode === "horizontal";
@@ -1033,39 +1184,89 @@ export class PdfViewer {
       horizontal ? el.scrollLeft : el.scrollTop,
       horizontal ? el.clientWidth : el.clientHeight,
       horizontal ? el.scrollWidth - el.clientWidth : el.scrollHeight - el.clientHeight,
-      this.pageViews.map((pv) => horizontal
-        ? { start: pv.wrapper.offsetLeft, size: pv.wrapper.offsetWidth }
-        : { start: pv.wrapper.offsetTop, size: pv.wrapper.offsetHeight }),
+      this._getPageOffsets(),
     );
     this._setCurrentAndFocusedPage(best);
+  }
+
+  private _queueRender(pageView: PdfPageView): void {
+    if (!this.pdfDoc || pageView.rendered || pageView.rendering) return;
+    this._renderQueue.add(pageView);
+    this._pumpRenderQueue();
+  }
+
+  private _pumpRenderQueue(): void {
+    const maxConcurrent = 2;
+    while (this._activeRenders < maxConcurrent && this._renderQueue.size > 0) {
+      // Pick the queued page closest to the currently focused page so the page
+      // right in front of the user is always drawn before off-screen neighbours.
+      let best: PdfPageView | null = null;
+      let bestDist = Infinity;
+      const focus = this._focusedPage;
+      for (const pv of this._renderQueue) {
+        if (pv.rendered || pv.rendering) {
+          this._renderQueue.delete(pv);
+          continue;
+        }
+        const dist = Math.abs(pv.pageNum - focus);
+        if (dist < bestDist) {
+          bestDist = dist;
+          best = pv;
+        }
+      }
+      if (!best) break;
+      this._renderQueue.delete(best);
+      void this._renderPage(best);
+    }
+    this._updateRenderActivity();
   }
 
   private async _renderPage(pageView: PdfPageView): Promise<void> {
     // A render already running re-checks the state below when it finishes.
     if (!this.pdfDoc || pageView.rendering) return;
+    this._renderQueue.delete(pageView);
+    this._activeRenders++;
+    this._updateRenderActivity();
     const expectedScale    = this._scale;
     const expectedRotation = this._rotation;
-    await pageView.render(
-      this.pdfDoc,
-      expectedScale,
-      expectedRotation,
-      this._formValues,
-      this._onFormChange,
-      this._linkHandler
-    );
-    // If scale/rotation changed while this render was running (e.g. the user
-    // zoomed again before the previous render finished), the render that just
-    // completed used a stale scale and its setPlaceholderSize() call left the
-    // wrapper at the wrong size.  Re-render immediately at the current values.
-    if (this._scale !== expectedScale || this._rotation !== expectedRotation) {
-      void this._renderPage(pageView);
-      return;
-    }
-    if (pageView.rendered) this._applySearch(pageView);
-    // The render was abandoned (page cleared while scrolling) or a reflow
-    // invalidated it, but the page is back in view: draw it now.
-    if (!pageView.rendered && this._visiblePages.has(pageView.pageNum)) {
-      void this._renderPage(pageView);
+    try {
+      await pageView.render(
+        this.pdfDoc,
+        expectedScale,
+        expectedRotation,
+        this._formValues,
+        this._onFormChange,
+        this._linkHandler
+      );
+      if (pageView.viewport) {
+        const unitW = pageView.viewport.width / expectedScale;
+        const unitH = pageView.viewport.height / expectedScale;
+        const swapped = expectedRotation % 180 !== 0;
+        const baseW = swapped ? unitH : unitW;
+        const baseH = swapped ? unitW : unitH;
+        const prev = this.pageDimensions[pageView.pageNum - 1];
+        if (!prev || Math.abs(prev.width - baseW) > 0.5 || Math.abs(prev.height - baseH) > 0.5) {
+          this.pageDimensions[pageView.pageNum - 1] = { width: baseW, height: baseH };
+          this._pageOffsets = null;
+        }
+      }
+      // If scale/rotation changed while this render was running (e.g. the user
+      // zoomed again before the previous render finished), the render that just
+      // completed used a stale scale and its setPlaceholderSize() call left the
+      // wrapper at the wrong size.  Re-render immediately at the current values.
+      if (this._scale !== expectedScale || this._rotation !== expectedRotation) {
+        this._queueRender(pageView);
+        return;
+      }
+      if (pageView.rendered) this._applySearch(pageView);
+      // The render was abandoned (page cleared while scrolling) or a reflow
+      // invalidated it, but the page is back in view: draw it now.
+      if (!pageView.rendered && this._visiblePages.has(pageView.pageNum)) {
+        this._queueRender(pageView);
+      }
+    } finally {
+      this._activeRenders = Math.max(0, this._activeRenders - 1);
+      this._pumpRenderQueue();
     }
   }
 
@@ -1197,16 +1398,19 @@ export class PdfViewer {
   async setScale(scale: number, anchor?: { x: number; y: number }): Promise<void> {
     const next = this.clampScale(scale);
     const spot = anchor ? this._spotAt(anchor) : null;
+    const hadPreview = this._previewScale !== null;
     this._clearPreview();
+    if (Math.abs(next - this._scale) < 1e-6 && !hadPreview) return;
     this._scale = next;
-    this.reflow();
+    this.reflow({ preserveScroll: Boolean(spot && anchor) });
     if (spot && anchor) {
       const r = this.pageViews[spot.page - 1]?.wrapper.getBoundingClientRect();
       if (r) {
         this.scrollEl.scrollLeft += r.left + spot.fx * r.width - anchor.x;
         this.scrollEl.scrollTop  += r.top  + spot.fy * r.height - anchor.y;
-        this._renderVisible();
       }
+      this._updateFocusedPage();
+      this._renderVisible();
     }
   }
 
@@ -1269,36 +1473,49 @@ export class PdfViewer {
     this.reflow();
   }
 
-  reflow(): void {
+  reflow(options?: { preserveScroll?: boolean }): void {
     const savedPage = this._focusedPage;
+    this._pageOffsets = null;
 
-    // When the column count won't change, avoid tearing down the DOM entirely
-    // (which causes a full black-screen flash).  Instead update placeholder
-    // sizes and re-render visible pages in place — old canvas content stays
-    // visible until the new render overwrites it.
+    // Reuse existing PdfPageView instances instead of tearing down the DOM
+    // (even when the column count changes). Already-rendered canvases stay
+    // on screen until a new render at the target scale/rotation replaces them,
+    // and pages already drawn at the current scale/rotation are not redrawn.
     if (this.pdfDoc && this.pageViews.length === this._pageCount) {
       const swapped        = this._rotation % 180 !== 0;
       const containerWidth = Math.max(1, this.scrollEl.clientWidth - 40);
       const refW           = Math.max(...this.pageDimensions.map(d => swapped ? d.height : d.width)) * this._scale;
       const newCols        = this._columnsFor(containerWidth, refW);
+      const colsChanged    = newCols !== this.columnCount;
 
-      if (newCols === this.columnCount) {
-        const savedScroll = this.scrollEl.scrollTop;
-        const savedScrollX = this.scrollEl.scrollLeft;
-        let anySizeChanged = false;
-        for (const view of this.pageViews) {
-          const dim = this.pageDimensions[view.pageNum - 1];
-          if (dim) {
-            const newW = Math.round((swapped ? dim.height : dim.width) * this._scale);
-            const newH = Math.round((swapped ? dim.width  : dim.height) * this._scale);
-            if (newW !== (parseInt(view.wrapper.style.width) || 0) ||
-                newH !== (parseInt(view.wrapper.style.height) || 0)) anySizeChanged = true;
-            view.setPlaceholderSize(newW, newH);
-          }
+      if (colsChanged) {
+        this.columnCount = newCols;
+        this._regroupRows(newCols);
+      }
+
+      const savedScroll = this.scrollEl.scrollTop;
+      const savedScrollX = this.scrollEl.scrollLeft;
+      let anySizeChanged = colsChanged;
+      const dpr = window.devicePixelRatio || 1;
+      for (const view of this.pageViews) {
+        const dim = this.pageDimensions[view.pageNum - 1];
+        if (dim) {
+          const newW = Math.round((swapped ? dim.height : dim.width) * this._scale);
+          const newH = Math.round((swapped ? dim.width  : dim.height) * this._scale);
+          if (newW !== (parseInt(view.wrapper.style.width) || 0) ||
+              newH !== (parseInt(view.wrapper.style.height) || 0)) anySizeChanged = true;
+          const keepStretched = view.renderedRotation === this._rotation;
+          view.setPlaceholderSize(newW, newH, keepStretched);
+        }
+        if (!view.isRenderedAt(this._scale, this._rotation, dpr)) {
+          view.cancelRender();
           view.rendered = false;
         }
-        this.onLayoutChangedCb?.(this.pageViews);
-        // Only scroll to the page when sizes actually changed (zoom/rotate).
+      }
+      this._pageOffsets = null;
+      this.onLayoutChangedCb?.(this.pageViews);
+      if (!options?.preserveScroll) {
+        // Only scroll to the page when sizes or columns actually changed.
         // When only the container height changed (e.g. toolbar toggle), preserve
         // the exact scroll position to avoid a jarring jump.
         if (anySizeChanged) {
@@ -1308,25 +1525,31 @@ export class PdfViewer {
           this.scrollEl.scrollLeft = savedScrollX;
         }
         this._renderVisible();
-        return;
       }
+      return;
     }
 
     this.buildLayout();
-    this.goToPage(savedPage, "instant");
+    if (!options?.preserveScroll) {
+      this.goToPage(savedPage, "instant");
+    }
   }
 
-  /** Renders the pages on screen (and just around it) that need it. */
+  /** Queues the pages on screen (and just around it) that need rendering. */
   private _renderVisible(): void {
     const scrollRect = this.scrollEl.getBoundingClientRect();
     for (const view of this.pageViews) {
       if (view.rendered) continue;
       const r = view.wrapper.getBoundingClientRect();
-      if (r.bottom > scrollRect.top - 200 && r.top < scrollRect.bottom + 200 &&
-          r.right > scrollRect.left - 200 && r.left < scrollRect.right + 200) {
-        void this._renderPage(view);
+      if (r.bottom > scrollRect.top - 1200 && r.top < scrollRect.bottom + 1200 &&
+          r.right > scrollRect.left - 400 && r.left < scrollRect.right + 400) {
+        this._queueRender(view);
+      } else {
+        this._renderQueue.delete(view);
       }
     }
+    this._evictDistantPages();
+    this._pumpRenderQueue();
   }
 
   restoreRotation(degrees: number): void {
@@ -1439,8 +1662,12 @@ export class PdfViewer {
   isLoaded(): boolean { return this.pdfDoc !== null; }
 
   async close(): Promise<void> {
+    this._renderQueue.clear();
+    this._updateRenderActivity();
     this.observer?.disconnect();
     this._visiblePages.clear();
+    this._pageOffsets = null;
+    if (this._scrollRaf) { cancelAnimationFrame(this._scrollRaf); this._scrollRaf = 0; }
     if (this._scrollHandler) { this.scrollEl.removeEventListener("scroll", this._scrollHandler); this._scrollHandler = null; }
     this.resizeObserver?.disconnect();
     for (const view of this.pageViews) view.destroy();

@@ -75,6 +75,10 @@ export class PageSidebar {
   private observer: IntersectionObserver;
   private _visible: boolean;
   private busy = false;
+  private viewerBusy = false;
+  private pendingThumbs = new Set<Thumb>();
+  private renderingThumb = false;
+  private revealRaf = 0;
   private drag: DragState | null = null;
   private suppressClick = false;
   private translations: Translations | null = null;
@@ -235,8 +239,18 @@ export class PageSidebar {
     this._visible = visible;
     this.root.classList.toggle("collapsed", !visible);
     this.writeVisible(visible);
-    if (visible) this.scrollToCurrent();
+    if (visible) {
+      this.scrollToCurrent();
+      this.pumpThumbs();
+    }
     for (const cb of this.visibilityHandlers) cb(visible);
+  }
+
+  /** Pauses thumbnail rendering while the main viewer is drawing visible pages. */
+  setViewerBusy(busy: boolean): void {
+    if (this.viewerBusy === busy) return;
+    this.viewerBusy = busy;
+    if (!busy) this.pumpThumbs();
   }
 
   /** Shows the panel and moves keyboard focus into it. */
@@ -281,6 +295,8 @@ export class PageSidebar {
   clear(): void {
     this.cancelDrag();
     this.stopHold();
+    if (this.revealRaf) { cancelAnimationFrame(this.revealRaf); this.revealRaf = 0; }
+    this.pendingThumbs.clear();
     this.observer.disconnect();
     for (const t of this.thumbs) t.task?.cancel();
     this.thumbs = [];
@@ -306,6 +322,7 @@ export class PageSidebar {
   setRotation(rotation: number, dims: { width: number; height: number }[]): void {
     if (rotation === this.rotation) return;
     this.rotation = rotation;
+    this.pendingThumbs.clear();
     for (const t of this.thumbs) {
       t.task?.cancel();
       t.task = null;
@@ -327,7 +344,14 @@ export class PageSidebar {
     const t = this.thumbs[page - 1];
     if (!t) return;
     t.card.classList.add("current");
-    if (reveal && this._visible && !this.drag) this.scrollIntoViewIfNeeded(t.card);
+    if (reveal && this._visible && !this.drag) {
+      if (this.revealRaf) cancelAnimationFrame(this.revealRaf);
+      this.revealRaf = requestAnimationFrame(() => {
+        this.revealRaf = 0;
+        const cur = this.thumbs[this.current - 1];
+        if (cur && this._visible && !this.drag) this.scrollIntoViewIfNeeded(cur.card);
+      });
+    }
   }
 
   applyTranslations(t: Translations): void {
@@ -531,11 +555,34 @@ export class PageSidebar {
       const thumb = this.thumbs[page - 1];
       if (!thumb) continue;
       if (entry.isIntersecting) {
-        if (!thumb.rendered && !thumb.task) void this.render(thumb);
+        if (!thumb.rendered && !thumb.task) this.pendingThumbs.add(thumb);
       } else {
+        this.pendingThumbs.delete(thumb);
         this.release(thumb);
       }
     }
+    this.pumpThumbs();
+  }
+
+  private pumpThumbs(): void {
+    if (this.renderingThumb || this.viewerBusy || !this._visible || !this.doc || this.pendingThumbs.size === 0) return;
+    let best: Thumb | null = null;
+    let bestDist = Infinity;
+    const focus = this.current || 1;
+    for (const t of this.pendingThumbs) {
+      if (t.rendered || t.task) {
+        this.pendingThumbs.delete(t);
+        continue;
+      }
+      const dist = Math.abs(t.page - focus);
+      if (dist < bestDist) {
+        bestDist = dist;
+        best = t;
+      }
+    }
+    if (!best) return;
+    this.pendingThumbs.delete(best);
+    void this.render(best);
   }
 
   /**
@@ -545,6 +592,7 @@ export class PageSidebar {
    * held about 900 MB.
    */
   private release(thumb: Thumb): void {
+    this.pendingThumbs.delete(thumb);
     thumb.task?.cancel();
     thumb.task = null;
     if (!thumb.rendered) return;
@@ -555,6 +603,7 @@ export class PageSidebar {
   private async render(thumb: Thumb): Promise<void> {
     const doc = this.doc;
     if (!doc) return;
+    this.renderingThumb = true;
     try {
       const page = await doc.getPage(thumb.page);
       if (doc !== this.doc) return;
@@ -577,13 +626,18 @@ export class PageSidebar {
       thumb.canvas.replaceWith(canvas);
       thumb.canvas = canvas;
       thumb.rendered = true;
-      // pdf.js keeps the page's drawing commands and decoded pictures until
-      // told otherwise; the thumbnail is a plain bitmap now, so give them back
-      // (otherwise every page the panel ever showed stays decoded in memory).
-      page.cleanup();
+      // Only free the page's operator list if it is not near the main viewer's
+      // current page; otherwise cleaning it up here forces the main viewer to
+      // re-parse the page when zooming or rendering.
+      if (Math.abs(thumb.page - (this.current || 1)) > 5) {
+        page.cleanup();
+      }
     } catch {
       // Cancelled, or the document was replaced meanwhile.
       thumb.task = null;
+    } finally {
+      this.renderingThumb = false;
+      this.pumpThumbs();
     }
   }
 

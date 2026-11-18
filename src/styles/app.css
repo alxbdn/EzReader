@@ -1680,7 +1680,9 @@ input[type="color"].color-picker.is-off::-webkit-color-swatch {
   position: relative;
   line-height: 0;
   border-radius: 2px;
+  background: #fff;
   box-shadow: var(--page-shadow);
+  contain: layout style;
 }
 
 .page-canvas {
