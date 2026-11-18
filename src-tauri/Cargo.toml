@@ -48,7 +48,10 @@ windows = { version = "0.62", features = [
   "Graphics_Imaging",
   "Media_Ocr",
   "Storage_Streams",
+  "Win32_System_Com",
   "Win32_System_WinRT",
+  # The "How do you want to open .pdf files?" picker (SHOpenWithDialog).
+  "Win32_UI_Shell",
 ] }
 
 # Text recognition on Linux: ONNX Runtime linked statically, running
