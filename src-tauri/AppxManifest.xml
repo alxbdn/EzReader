@@ -57,15 +57,15 @@
             <!-- Explorer add-in (shell-ext/): page 1 as the file's icon, and
                  the pages in the preview pane. Same class ids as
                  shell-ext/src/lib.rs and windows/installer-hooks.nsh. -->
-            <desktop2:ThumbnailHandler Clsid="{5AE37068-61BA-478F-9D24-EA58E7C1EBF6}" Cutoff="20x20" />
-            <desktop2:DesktopPreviewHandler Clsid="{202348CF-BD0B-4EB3-91B2-C87E74F2FD32}" />
+            <desktop2:ThumbnailHandler Clsid="5AE37068-61BA-478F-9D24-EA58E7C1EBF6" Cutoff="20x20" />
+            <desktop2:DesktopPreviewHandler Clsid="202348CF-BD0B-4EB3-91B2-C87E74F2FD32" />
           </uap:FileTypeAssociation>
         </uap:Extension>
         <com:Extension Category="windows.comServer">
           <com:ComServer>
             <com:SurrogateServer DisplayName="EzReader PDF thumbnails and preview">
-              <com:Class Id="{5AE37068-61BA-478F-9D24-EA58E7C1EBF6}" Path="ezreader_shell.dll" ThreadingModel="STA" />
-              <com:Class Id="{202348CF-BD0B-4EB3-91B2-C87E74F2FD32}" Path="ezreader_shell.dll" ThreadingModel="STA" />
+              <com:Class Id="5AE37068-61BA-478F-9D24-EA58E7C1EBF6" Path="ezreader_shell.dll" ThreadingModel="STA" />
+              <com:Class Id="202348CF-BD0B-4EB3-91B2-C87E74F2FD32" Path="ezreader_shell.dll" ThreadingModel="STA" />
             </com:SurrogateServer>
           </com:ComServer>
         </com:Extension>
