@@ -170,19 +170,10 @@ jobs:
       artifact: release-packages
       version: ${{ needs.build.outputs.version }}
 
-  # The macOS and Linux packages, built once the scans have passed and handed
-  # over as artifacts (release-macos, release-linux).
-  macos:
-    needs: security
-    permissions:
-      contents: write
-      id-token: write
-      attestations: write
-    uses: ./.github/workflows/macos-dmg.yml
-    with:
-      for_release: true
-      release_tag: ${{ github.ref_name }}
-
+  # The Linux packages, built once the scans have passed and handed over as
+  # the release-linux artifact. The macOS disk image is built and published by
+  # the Homebrew tap (alxbdn/homebrew-ezreader) after this release, so scarce
+  # macOS runners never hold it back.
   linux:
     needs: security
     permissions:
@@ -196,13 +187,12 @@ jobs:
 
   # One draft release holding every package and its provenance.
   draft:
-    needs: [build, install-test, macos, linux]
+    needs: [build, install-test, linux]
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
-      # release-packages, release-provenance (Windows), release-macos,
-      # release-linux.
+      # release-packages, release-provenance (Windows), release-linux.
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           pattern: release-*
@@ -224,8 +214,6 @@ jobs:
             ezreader-${{ needs.build.outputs.version }}-win-x64-setup.exe
             ezreader-${{ needs.build.outputs.version }}-win-x64.msix
             ezreader-${{ needs.build.outputs.version }}-windows.intoto.jsonl
-            ezreader-${{ needs.build.outputs.version }}-macos-universal.dmg
-            ezreader-${{ needs.build.outputs.version }}-macos.intoto.jsonl
             ezreader_${{ needs.build.outputs.version }}_amd64.deb
             ezreader-portable-${{ needs.build.outputs.version }}-linux-x64
             ezreader-${{ needs.build.outputs.version }}-linux.intoto.jsonl

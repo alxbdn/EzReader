@@ -50,7 +50,7 @@ The same crate builds `ezreader-quicklook.exe`, the quick-look helper. Once turn
 
 ## Build and release
 
-- `npm run tauri build` produces the app for the current platform; GitHub Actions builds Windows (installer, portable, MSIX), macOS (universal `.dmg`) and Linux (`.deb`, portable).
+- `npm run tauri build` produces the app for the current platform; GitHub Actions builds Windows (installer, portable, MSIX) and Linux (`.deb`, portable) for each release; the Homebrew tap (alxbdn/homebrew-ezreader) builds the macOS universal `.dmg` from the release tag and publishes it there.
 - Releases come only from the *Bump & Release* and *Release* workflows. See [SECURITY.md](../.github/SECURITY.md#how-ezreader-is-checked) and [GOVERNANCE.md](../.github/GOVERNANCE.md#releases).
 
 ## Tests
