@@ -183,9 +183,9 @@ jobs:
         run: |
           # The release's front end, driven by the load test of the tools.
           rm -rf .report-tools/dist && cp -r dist .report-tools/dist
-          node .report-tools/perf/make-big-pdf.mjs "$RUNNER_TEMP/big.pdf" 1500
+          node .report-tools/tests/perf/make-big-pdf.mjs "$RUNNER_TEMP/big.pdf" 1500
           set -o pipefail
-          node .report-tools/perf/stress.mjs "$RUNNER_TEMP/big.pdf" --rounds 3 --out "$PWD/ezreader-${TAG#v}-perf-results.json" 2>&1 | tee perf-log.txt
+          node .report-tools/tests/perf/stress.mjs "$RUNNER_TEMP/big.pdf" --rounds 3 --out "$PWD/ezreader-${TAG#v}-perf-results.json" 2>&1 | tee perf-log.txt
 
       - name: Performance report
         run: |

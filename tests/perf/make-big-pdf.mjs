@@ -2,7 +2,7 @@
 // scanned pages in it: text and vector drawing on most pages, a colour
 // picture every 10th page, and every 5th page a scan (a full-page picture
 // of its own with no text), which the app reads in the background (OCR).
-// Usage: node perf/make-big-pdf.mjs <out.pdf> [pages]
+// Usage: node tests/perf/make-big-pdf.mjs <out.pdf> [pages]
 import { writeFileSync } from "node:fs";
 import { deflateSync } from "node:zlib";
 

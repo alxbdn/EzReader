@@ -10,10 +10,10 @@
     "build:shell-ext": "cargo build --release --manifest-path src-tauri/shell-ext/Cargo.toml",
     "tauri": "tauri",
     "test": "vitest run",
-    "test:e2e": "node --test --test-reporter=spec --test-concurrency=1 e2e/app.e2e.mjs",
+    "test:e2e": "node --test --test-reporter=spec --test-concurrency=1 tests/e2e/app.e2e.mjs",
     "test:visual": "playwright test",
     "test:corpus": "cargo test --manifest-path src-tauri/Cargo.toml --lib corpus_tests",
-    "test:perf": "vite build && node perf/make-big-pdf.mjs perf-big.pdf && node perf/stress.mjs perf-big.pdf"
+    "test:perf": "vite build && node tests/perf/make-big-pdf.mjs perf-big.pdf && node tests/perf/stress.mjs perf-big.pdf"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.12.4",

@@ -34,7 +34,7 @@ EzReader has no account, no login, no server and no session. Opening a password-
 
 ## DA3. Sensitive data exposure 🟡
 
-- Documents never leave the computer: no telemetry, no upload, no analytics ([PRIVACY.md](../../PRIVACY.md)).
+- Documents never leave the computer: no telemetry, no upload, no analytics ([PRIVACY.md](../../.github/PRIVACY.md)).
 - Temporary working copies live in the system temp folder under `ezreader-…` names and are deleted at exit, or at the next start after a crash (`src-tauri/src/tempfiles.rs`).
 - **Redaction** removes the content under the black boxes when the file is saved, instead of just covering it.
 - **Residual**: saved signatures (up to three) are kept in the webview's local storage, unencrypted, in the user's profile. Anyone who can read that profile can copy them. Possible improvement: keep them in the system keychain (Windows Credential Manager, macOS Keychain, Secret Service).
@@ -81,4 +81,4 @@ EzReader has no account, no login, no server and no session. Opening a password-
 
 ## DA10. Insufficient logging and monitoring ➖
 
-EzReader is an offline, single-user tool with no server, no account and no telemetry, so there is no one to monitor events for, and recording what a user does would go against its privacy promise. Errors are shown to the user and written to the console only. Security monitoring happens upstream instead: dependency advisories, CodeQL alerts, secret scanning and private vulnerability reports ([SECURITY.md](../../SECURITY.md)).
+EzReader is an offline, single-user tool with no server, no account and no telemetry, so there is no one to monitor events for, and recording what a user does would go against its privacy promise. Errors are shown to the user and written to the console only. Security monitoring happens upstream instead: dependency advisories, CodeQL alerts, secret scanning and private vulnerability reports ([SECURITY.md](../../.github/SECURITY.md)).

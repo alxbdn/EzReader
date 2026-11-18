@@ -2,11 +2,11 @@
 
 Free code signing provided by [SignPath.io](https://about.signpath.io), certificate by [SignPath Foundation](https://signpath.org).
 
-> **Status:** EzReader has applied to the SignPath Foundation. Until signing is switched on, the Windows files on the releases page are not Authenticode-signed; every release already carries signed [build provenance](README.md#download-the-files) you can check with `gh attestation verify`.
+> **Status:** EzReader has applied to the SignPath Foundation. Until signing is switched on, the Windows files on the releases page are not Authenticode-signed; every release already carries signed [build provenance](../README.md#download-the-files) you can check with `gh attestation verify`.
 
 ## What gets signed
 
-Only files built by this repository's [release workflow](.github/workflows/release.yml) on GitHub Actions, from the tagged source code, are signed:
+Only files built by this repository's [release workflow](workflows/release.yml) on GitHub Actions, from the tagged source code, are signed:
 
 - the Windows installer, `ezreader-<version>-win-x64-setup.exe`;
 - the portable Windows app, `ezreader-portable-<version>-win-x64.exe`.

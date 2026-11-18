@@ -20,7 +20,7 @@ on:
         type: string
   pull_request:
     paths:
-      - build-msix.ps1
+      - scripts/build-msix.ps1
       - scripts/install-test.ps1
       - src-tauri/AppxManifest.xml
       - src-tauri/tauri.conf.json
@@ -84,7 +84,7 @@ jobs:
 
       - name: Build the MSIX
         shell: pwsh
-        run: .\build-msix.ps1 -SkipBuild -Version "${{ steps.version.outputs.version }}"
+        run: .\scripts\build-msix.ps1 -SkipBuild -Version "${{ steps.version.outputs.version }}"
 
       - name: Stage packages
         shell: bash

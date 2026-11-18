@@ -1,6 +1,6 @@
 # Load test
 
-`perf/stress.mjs` checks that EzReader stays fast and does not leak on a very
+`tests/perf/stress.mjs` checks that EzReader stays fast and does not leak on a very
 large document. CI runs it on every pull request (`.github/workflows/perf.yml`).
 
 What it does:

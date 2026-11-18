@@ -3,7 +3,7 @@ name: Performance
 # Load test of the viewer: a 1500-page PDF (300 of them scanned, read by the
 # background OCR) is opened, scrolled, jumped through and zoomed in a loop
 # while memory, CPU and response times are measured. The job fails when a
-# figure goes past perf/thresholds.json (see perf/README.md).
+# figure goes past tests/perf/thresholds.json (see tests/perf/README.md).
 #
 # Pull requests and pushes run the quick test (3 rounds, a few minutes).
 # Mondays, and on demand, a soak test runs 15 rounds on a 3000-page PDF.
@@ -47,8 +47,8 @@ jobs:
         run: |
           PAGES=1500; ROUNDS=3
           case "${{ github.event_name }}" in schedule|workflow_dispatch) PAGES=3000; ROUNDS=15 ;; esac
-          node perf/make-big-pdf.mjs "$RUNNER_TEMP/big.pdf" $PAGES
-          node perf/stress.mjs "$RUNNER_TEMP/big.pdf" --rounds $ROUNDS --out perf-results.json
+          node tests/perf/make-big-pdf.mjs "$RUNNER_TEMP/big.pdf" $PAGES
+          node tests/perf/stress.mjs "$RUNNER_TEMP/big.pdf" --rounds $ROUNDS --out perf-results.json
 
       - name: Keep the measurements
         if: always()

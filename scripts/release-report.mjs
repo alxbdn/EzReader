@@ -239,7 +239,7 @@ function performanceHtml() {
       <tbody>${rows.map((r) => `<tr><td>${esc(r.label)}</td><td class="num">${esc(r.value)}</td><td class="num">${esc(r.max)}</td><td>${badge(r.ok ? OK : FAIL, r.ok ? "OK" : "Above")}</td></tr>`).join("")}</tbody>
     </table>
     <h2>Method</h2>
-    <p>The test builds the front end, generates the PDF, and drives the viewer in Chromium through Playwright while it measures memory (all processes, JavaScript heap, canvases), CPU, DOM size and response times. The thresholds live in <span class="mono">perf/thresholds.json</span>; the full measurements are in the <span class="mono">perf-results.json</span> file of <span class="mono">ezreader-reports.zip</span>, attached to this release.</p>
+    <p>The test builds the front end, generates the PDF, and drives the viewer in Chromium through Playwright while it measures memory (all processes, JavaScript heap, canvases), CPU, DOM size and response times. The thresholds live in <span class="mono">tests/perf/thresholds.json</span>; the full measurements are in the <span class="mono">perf-results.json</span> file of <span class="mono">ezreader-reports.zip</span>, attached to this release.</p>
   `);
 }
 
@@ -261,7 +261,7 @@ function performanceFailedHtml() {
     <h2>End of the load test log</h2>
     <pre class="log">${esc(lines.slice(-18).join("\n"))}</pre>
     <h2>Method</h2>
-    <p>The test opens a PDF of 1,500 pages, part of them scanned, and scrolls, jumps through and zooms it in a loop in Chromium through Playwright, while it measures memory, CPU and response times. The thresholds live in <span class="mono">perf/thresholds.json</span>.</p>
+    <p>The test opens a PDF of 1,500 pages, part of them scanned, and scrolls, jumps through and zooms it in a loop in Chromium through Playwright, while it measures memory, CPU and response times. The thresholds live in <span class="mono">tests/perf/thresholds.json</span>.</p>
   `);
 }
 
