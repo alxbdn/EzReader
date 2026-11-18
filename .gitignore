@@ -42,6 +42,9 @@ store/
 # Test outputs
 tests/e2e/results/
 tests/visual/results/
+tests/ui/results/
+tests/ui/raw/
+coverage-ts/
 tests/visual/report/
 
 # Load test (tests/perf/)

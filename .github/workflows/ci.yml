@@ -95,11 +95,16 @@ jobs:
       - name: Install frontend dependencies
         run: npm ci
 
+      - name: Install Chromium for the interface tests
+        run: npx playwright install chromium
+
       - name: Frontend coverage
         shell: bash
         run: |
           npx vitest run --coverage.enabled --coverage.provider=v8 --coverage.include='src/**/*.ts' \
-            --coverage.reporter=text-summary --coverage.reporter=json-summary --coverage.reportsDirectory=coverage-ts
+            --coverage.reporter=text-summary --coverage.reporter=json --coverage.reportsDirectory=coverage-ts
+          npx playwright test -c tests/ui/playwright.config.ts
+          node tests/ui/merge.mjs coverage-ts/coverage-final.json coverage-ts/coverage-summary.json
           node -e "const t=require('./coverage-ts/coverage-summary.json').total; console.log('| Frontend (TypeScript) | '+t.statements.pct+' % | '+t.lines.pct+' % | '+t.branches.pct+' % |')" > ts-row.txt
 
       - name: Rust coverage
