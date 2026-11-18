@@ -269,3 +269,71 @@ pub fn write_image_file(path: String, data: String) -> CmdResult<()> {
     crate::fsutil::write_atomic(&path, |tmp| std::fs::write(tmp, &bytes).map_err(|e| e.to_string()))
         .map_err(PdfError::from)
 }
+
+#[cfg(test)]
+mod export_tests {
+    use super::*;
+    use base64::Engine;
+
+    fn dir() -> std::path::PathBuf {
+        let d = std::env::temp_dir().join(format!(
+            "ezreader-export-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos()
+        ));
+        std::fs::create_dir_all(&d).unwrap();
+        d
+    }
+
+    #[test]
+    fn writes_png_and_jpeg_pictures_from_base64() {
+        let d = dir();
+        let png = d.join("page.png").to_string_lossy().into_owned();
+        let data = format!("data:image/png;base64,{}", base64::engine::general_purpose::STANDARD.encode(b"png bytes"));
+        write_image_file(png.clone(), data).unwrap();
+        assert_eq!(std::fs::read(&png).unwrap(), b"png bytes");
+
+        let jpg = d.join("page.JPG").to_string_lossy().into_owned();
+        write_image_file(jpg.clone(), base64::engine::general_purpose::STANDARD.encode(b"jpg")).unwrap();
+        assert_eq!(std::fs::read(&jpg).unwrap(), b"jpg");
+        let _ = std::fs::remove_dir_all(d);
+    }
+
+    #[test]
+    fn refuses_other_extensions_and_bad_data() {
+        let d = dir();
+        let exe = d.join("page.exe").to_string_lossy().into_owned();
+        assert_eq!(write_image_file(exe.clone(), String::new()).unwrap_err().code, ErrorCode::NotAnImage);
+        assert!(!Path::new(&exe).exists());
+        let png = d.join("page.png").to_string_lossy().into_owned();
+        assert!(write_image_file(png.clone(), "not base64!".into()).is_err());
+        assert!(!Path::new(&png).exists());
+        let _ = std::fs::remove_dir_all(d);
+    }
+
+    #[test]
+    fn lists_only_the_files_that_exist() {
+        let d = dir();
+        let there = d.join("there.png").to_string_lossy().into_owned();
+        let missing = d.join("missing.png").to_string_lossy().into_owned();
+        std::fs::write(&there, b"x").unwrap();
+        assert_eq!(existing_files(vec![there.clone(), missing]), vec![there]);
+        let _ = std::fs::remove_dir_all(d);
+    }
+
+    #[test]
+    fn temp_tag_matches_the_temp_files() {
+        assert_eq!(temp_tag(), crate::tempfiles::tag());
+    }
+
+    #[test]
+    fn reads_picture_bytes_within_limits() {
+        let d = dir();
+        let png = d.join("a.png");
+        std::fs::write(&png, b"bytes").unwrap();
+        assert_eq!(read_image_bytes(&png.to_string_lossy()).unwrap(), b"bytes");
+        assert_eq!(read_image_bytes(&d.join("a.txt").to_string_lossy()).unwrap_err().code, ErrorCode::NotAnImage);
+        assert!(read_image_bytes(&d.join("gone.png").to_string_lossy()).is_err());
+        let _ = std::fs::remove_dir_all(d);
+    }
+}

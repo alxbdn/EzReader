@@ -795,4 +795,29 @@ mod tests {
         }
         fill(&mut doc, &[("nom", "x")]);
     }
+
+    #[test]
+    fn win_ansi_maps_the_cp1252_extras() {
+        let all = "€‚ƒ„…†‡ˆ‰Š‹ŒŽ‘’“”•–—˜™š›œžŸ";
+        let bytes = win_ansi(all).unwrap();
+        assert_eq!(bytes.len(), all.chars().count());
+        assert!(bytes.iter().all(|&b| (0x80..=0x9F).contains(&b)));
+        assert_eq!(win_ansi("a\tb\u{e9}").unwrap(), b"a b\xe9");
+        assert_eq!(win_ansi("\u{4e2d}"), None);
+    }
+
+    #[test]
+    fn multiline_text_wraps_at_the_width_and_on_new_lines() {
+        let lines = wrap(b"one two three four\r\nfive", width_of(b"three four", 10.0) + 0.1, 10.0);
+        assert_eq!(lines, vec![b"one two".to_vec(), b"three four".to_vec(), b"five".to_vec()]);
+        assert_eq!(wrap(b"", 50.0, 10.0), vec![Vec::<u8>::new()]);
+        assert_eq!(wrap(b"unbreakable", 1.0, 10.0), vec![b"unbreakable".to_vec()]);
+    }
+
+    #[test]
+    fn quadding_aligns_left_center_and_right() {
+        assert_eq!(align_x(0, 2.0, 100.0, 40.0), 2.0);
+        assert_eq!(align_x(1, 2.0, 100.0, 40.0), 32.0);
+        assert_eq!(align_x(2, 2.0, 100.0, 40.0), 62.0);
+    }
 }
