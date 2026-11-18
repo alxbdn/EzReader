@@ -1127,7 +1127,7 @@ export class PdfViewer {
         this._evictDistantPages();
         this._pumpRenderQueue();
       },
-      { root: this.scrollEl, rootMargin: "1200px 400px" }
+      { root: this.scrollEl, rootMargin: "300px 200px" }
     );
 
     for (const pv of this.pageViews) this.observer.observe(pv.wrapper);
@@ -1156,8 +1156,8 @@ export class PdfViewer {
     if (visiblePages.length === 0) return;
     const minV = Math.min(...visiblePages);
     const maxV = Math.max(...visiblePages);
-    const keepMargin = 5;
-    const maxCached = 14;
+    const keepMargin = 3;
+    const maxCached = 10;
 
     const keptWithPixels: PdfPageView[] = [];
     for (const view of this.pageViews) {
@@ -1554,15 +1554,17 @@ export class PdfViewer {
 
   /** Queues the pages on screen (and just around it) that need rendering. */
   private _renderVisible(): void {
+    this._renderQueue.clear();
     const scrollRect = this.scrollEl.getBoundingClientRect();
-    for (const view of this.pageViews) {
+    const startIdx = Math.max(0, this._focusedPage - 7);
+    const endIdx = Math.min(this.pageViews.length - 1, this._focusedPage + 6);
+    for (let i = startIdx; i <= endIdx; i++) {
+      const view = this.pageViews[i];
       if (view.rendered) continue;
       const r = view.wrapper.getBoundingClientRect();
-      if (r.bottom > scrollRect.top - 1200 && r.top < scrollRect.bottom + 1200 &&
-          r.right > scrollRect.left - 400 && r.left < scrollRect.right + 400) {
+      if (r.bottom > scrollRect.top - 300 && r.top < scrollRect.bottom + 300 &&
+          r.right > scrollRect.left - 200 && r.left < scrollRect.right + 200) {
         this._queueRender(view);
-      } else {
-        this._renderQueue.delete(view);
       }
     }
     this._evictDistantPages();
