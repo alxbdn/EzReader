@@ -14,8 +14,8 @@ $AppName = "ezreader"
 $ExeName = "ezreader-portable"
 # Name of the executable inside the package (the Store install is not the portable app)
 $PackagedExeName = "EzReader"
-# The .msix lands in store\ (git-ignored): it is only uploaded to the Microsoft
-# Store, never published on GitHub.
+# The .msix lands in store\ (git-ignored). The release workflow attaches it to
+# the GitHub release and the Microsoft Store submission uses the same file.
 $OutputDir = ".\store"
 $PackageDir = ".\target\msix-package"
 

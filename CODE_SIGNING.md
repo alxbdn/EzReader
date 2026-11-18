@@ -11,7 +11,7 @@ Only files built by this repository's [release workflow](.github/workflows/relea
 - the Windows installer, `ezreader-<version>-win-x64-setup.exe`;
 - the portable Windows app, `ezreader-portable-<version>-win-x64.exe`.
 
-Nothing built on a personal computer is ever signed, and no file that was not built from this repository's source is signed. The Microsoft Store package (`.msix`) is not published on GitHub: it goes to the Store only, and Microsoft signs it when the Store publishes it.
+Nothing built on a personal computer is ever signed, and no file that was not built from this repository's source is signed. The Microsoft Store package (`ezreader-<version>-win-x64.msix`) is attached to each release by the same workflow but is not signed through SignPath: Microsoft signs it when the Store publishes it, so install EzReader from the Store to get the signed package.
 
 Every signed file carries the product name **EzReader** and the version of the release it belongs to.
 
