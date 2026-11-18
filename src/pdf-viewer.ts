@@ -847,6 +847,13 @@ export class PdfViewer {
   /** Pages waiting to be rendered, prioritized by proximity to the focused page. */
   private _renderQueue = new Set<PdfPageView>();
   private _activeRenders = 0;
+  /**
+   * Bumped when the document is destroyed. pdf.js never answers the requests
+   * still pending then (getPage, text, annotations), so the renders waiting on
+   * them never finish: they must not keep counting as active, or the viewer
+   * stays "busy" for good and the thumbnails panel never draws.
+   */
+  private _renderEpoch = 0;
   private _renderBusy = false;
   /** Cached layout offsets along the scroll axis; invalidated on layout/reflow. */
   private _pageOffsets: { start: number; size: number }[] | null = null;
@@ -935,6 +942,13 @@ export class PdfViewer {
     this.onRenderActivityCb = cb;
   }
 
+  /** The renders of the document about to be destroyed stop counting. */
+  private _forgetActiveRenders(): void {
+    this._renderEpoch++;
+    this._activeRenders = 0;
+    this._updateRenderActivity();
+  }
+
   private _updateRenderActivity(): void {
     const busy = this._activeRenders > 0 || this._renderQueue.size > 0;
     if (busy !== this._renderBusy) {
@@ -990,6 +1004,7 @@ export class PdfViewer {
     this._renderQueue.clear();
     this._updateRenderActivity();
     for (const view of this.pageViews) view.clear();
+    this._forgetActiveRenders();
     if (this.pdfDoc) {
       await this.pdfDoc.loadingTask.destroy();
       this.pdfDoc = null;
@@ -1242,6 +1257,7 @@ export class PdfViewer {
     this._renderQueue.delete(pageView);
     this._activeRenders++;
     this._updateRenderActivity();
+    const epoch = this._renderEpoch;
     const expectedScale    = this._scale;
     const expectedRotation = this._rotation;
     try {
@@ -1253,6 +1269,8 @@ export class PdfViewer {
         this._onFormChange,
         this._linkHandler
       );
+      // Its document was replaced meanwhile: nothing here is about the new one.
+      if (epoch !== this._renderEpoch) return;
       if (pageView.viewport) {
         const unitW = pageView.viewport.width / expectedScale;
         const unitH = pageView.viewport.height / expectedScale;
@@ -1280,7 +1298,8 @@ export class PdfViewer {
         this._queueRender(pageView);
       }
     } finally {
-      this._activeRenders = Math.max(0, this._activeRenders - 1);
+      // A render of a destroyed document was already forgotten.
+      if (epoch === this._renderEpoch) this._activeRenders = Math.max(0, this._activeRenders - 1);
       this._pumpRenderQueue();
     }
   }
@@ -1692,6 +1711,7 @@ export class PdfViewer {
     for (const view of this.pageViews) view.destroy();
     this.scrollEl.innerHTML = "";
     this.pageViews = [];
+    this._forgetActiveRenders();
     if (this.pdfDoc) {
       await this.pdfDoc.loadingTask.destroy();
       this.pdfDoc = null;
