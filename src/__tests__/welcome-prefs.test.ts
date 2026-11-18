@@ -106,3 +106,54 @@ describe("default reader checkbox", () => {
     expect(check().getAttribute("aria-checked")).toBe("false");
   });
 });
+
+describe("quick look toggle", () => {
+  beforeEach(() => { document.body.innerHTML = ""; });
+
+  const quick = () => document.querySelector<HTMLButtonElement>(".welcome-quick-look");
+
+  it("is absent without quick look deps", async () => {
+    const { prefs } = setUp();
+    await prefs.refresh();
+    expect(quick()).toBeNull();
+  });
+
+  it("stays hidden when quick look is unavailable", async () => {
+    const { prefs } = setUp({
+      quickLook: async () => ({ available: false, enabled: false }),
+      setQuickLook: vi.fn(async () => {}),
+    });
+    await prefs.refresh();
+    expect(quick()!.hidden).toBe(true);
+  });
+
+  it("shows the state and toggles it", async () => {
+    let enabled = false;
+    const setQuickLook = vi.fn(async (on: boolean) => { enabled = on; });
+    const { prefs } = setUp({ quickLook: async () => ({ available: true, enabled }), setQuickLook });
+    await prefs.refresh();
+    const el = quick()!;
+    expect(el.hidden).toBe(false);
+    expect(el.getAttribute("aria-checked")).toBe("false");
+    expect(el.textContent).toBe("Aperçu avec Espace");
+    el.click();
+    await flush();
+    await flush();
+    expect(setQuickLook).toHaveBeenCalledWith(true);
+    expect(el.getAttribute("aria-checked")).toBe("true");
+    expect(el.classList.contains("on")).toBe(true);
+  });
+
+  it("keeps the old state when turning it on fails", async () => {
+    const { prefs } = setUp({
+      quickLook: async () => ({ available: true, enabled: false }),
+      setQuickLook: vi.fn(async () => { throw new Error("startup-blocked"); }),
+    });
+    await prefs.refresh();
+    quick()!.click();
+    await flush();
+    await flush();
+    expect(quick()!.getAttribute("aria-checked")).toBe("false");
+    expect(quick()!.disabled).toBe(false);
+  });
+});

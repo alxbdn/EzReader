@@ -146,6 +146,7 @@ export interface Translations {
   welcomeDropHint?: string;
   welcomeDefaultReader?: string;
   welcomeDefaultReaderHint?: string;
+  welcomeQuickLook?: string;
   updateUpToDateHint?: string;
   updateAvailable?: string;
   updateAvailableHint?: string;
@@ -730,6 +731,7 @@ const EN: Translations = {
   welcomeDropHint:          "Drop a file to begin",
   welcomeDefaultReader:     "Default PDF reader",
   welcomeDefaultReaderHint: "Open PDF files with EzReader",
+  welcomeQuickLook:         "Quick look with Space",
   updateUpToDateHint:  "Up to date: {v} is the latest version",
   updateAvailable:     "Update to {v}",
   updateAvailableHint: "Version {v} is out (you have {cur}). Click to install it.",
@@ -1314,6 +1316,7 @@ const FR: Translations = {
   welcomeDropHint:          "D\u00e9posez un fichier pour commencer",
   welcomeDefaultReader:     "Lecteur PDF par d\u00e9faut",
   welcomeDefaultReaderHint: "Ouvrir les fichiers PDF avec EzReader",
+  welcomeQuickLook:         "Aper\u00e7u avec Espace",
   updateUpToDateHint:  "\u00c0 jour : {v} est la derni\u00e8re version",
   updateAvailable:     "Mettre \u00e0 jour vers {v}",
   updateAvailableHint: "La version {v} est sortie (vous avez {cur}). Cliquez pour l'installer.",

@@ -87,6 +87,8 @@ import {
   registerPrintVerb,
   unregisterPdfHandler,
   openDefaultAppsSettings,
+  quickLookState,
+  setQuickLook,
   tabDragHover,
   tabDragEnd,
   moveTab,
@@ -1531,6 +1533,17 @@ const welcomePrefs = new WelcomePrefs(document.getElementById("welcome-screen")!
       await unregisterPdfHandler();
     }
     await openDefaultAppsSettings();
+  },
+  quickLook: () => quickLookState(),
+  setQuickLook: async (on) => {
+    try {
+      await setQuickLook(on);
+    } catch (err) {
+      const t = getTranslations(settingsModal.getSettings().language);
+      const blocked = err instanceof Error && err.message === "startup-blocked";
+      showToast(blocked ? t.settingsQuickLookBlocked ?? errText(err) : errText(err), true);
+      throw err;
+    }
   },
 });
 void welcomePrefs.refresh();
