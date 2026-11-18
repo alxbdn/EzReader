@@ -44,6 +44,7 @@ function answers(png: string) {
     compress_pdf: () => ({ original: 100000, compressed: 50000 }),
     ocr_image: () => ({ lines: [{ text: "Hello", x: 0, y: 0, width: 10, height: 2 }] }),
     convert_text: () => null,
+    extract_pages_to_temp: () => "/tmp/doc (page 1).pdf",
   };
   internals.invoke = async (cmd, args) => {
     (window as unknown as { __EZ_CALLS__: string[] }).__EZ_CALLS__.push(cmd);

@@ -20,6 +20,22 @@ fn safe_file_name(name: &str) -> String {
     }
 }
 
+async fn extract_to_temp(app: &AppHandle, input_path: String, pages: Vec<u32>, name: &str) -> CmdResult<String> {
+    crate::grants::check(&input_path)?;
+    let n = NEXT_WINDOW.fetch_add(1, Ordering::Relaxed);
+    let dir = std::env::temp_dir().join(format!("ezreader-window-{}-{n}", std::process::id()));
+    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    let out = dir.join(safe_file_name(name));
+    let out_str = out.to_string_lossy().to_string();
+    let extract = {
+        let out_str = out_str.clone();
+        tauri::async_runtime::spawn_blocking(move || super::pdf::extract_pdf_pages(input_path, out_str, pages))
+    };
+    extract.await.map_err(|e| e.to_string())??;
+    crate::allow_viewing(app, &out_str);
+    Ok(out_str)
+}
+
 #[tauri::command]
 pub async fn open_pages_in_new_window(
     app: AppHandle,
@@ -29,21 +45,14 @@ pub async fn open_pages_in_new_window(
     x: Option<f64>,
     y: Option<f64>,
 ) -> CmdResult<()> {
-    crate::grants::check(&input_path)?;
-    let n = NEXT_WINDOW.fetch_add(1, Ordering::Relaxed);
-    let dir = std::env::temp_dir().join(format!("ezreader-window-{}-{n}", std::process::id()));
-    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
-    let out = dir.join(safe_file_name(&name));
-    let out_str = out.to_string_lossy().to_string();
-    let extract = {
-        let out_str = out_str.clone();
-        tauri::async_runtime::spawn_blocking(move || super::pdf::extract_pdf_pages(input_path, out_str, pages))
-    };
-    extract.await.map_err(|e| e.to_string())??;
-
-    crate::allow_viewing(&app, &out_str);
+    let out_str = extract_to_temp(&app, input_path, pages, &name).await?;
     let args = StartupArgs { file_path: Some(out_str), unsaved: true, ..Default::default() };
     open_window(&app, args, x.zip(y).map(|(x, y)| (x - 160.0, y - 16.0)))
+}
+
+#[tauri::command]
+pub async fn extract_pages_to_temp(app: AppHandle, input_path: String, pages: Vec<u32>, name: String) -> CmdResult<String> {
+    extract_to_temp(&app, input_path, pages, &name).await
 }
 
 #[tauri::command]

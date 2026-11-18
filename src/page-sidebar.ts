@@ -36,16 +36,20 @@ interface DragState {
   moving: number[] | null;
   insertAt: number;
   lastY: number;
-  outside: boolean;
+  zone: DragZone;
   ghost: HTMLElement | null;
   scrollRaf: number;
 }
+
+type DragZone = "list" | "tab" | "window";
 
 type PagesHandler = (pages: number[]) => void;
 
 function isOutsideWindow(e: PointerEvent): boolean {
   return e.clientX < 0 || e.clientY < 0 || e.clientX >= window.innerWidth || e.clientY >= window.innerHeight;
 }
+
+const TAB_ZONE_MARGIN_PX = 24;
 
 export class PageSidebar {
   private root: HTMLElement;
@@ -77,6 +81,8 @@ export class PageSidebar {
   private rotateHandlers: ((pages: number[], quarterTurns: number) => void)[] = [];
   private moveHandlers: ((pages: number[], insertAt: number) => void)[] = [];
   private dragOutHandlers: ((pages: number[], screenX: number, screenY: number) => void)[] = [];
+  private dragToTabHandlers: PagesHandler[] = [];
+  private tabZoneHandlers: ((over: boolean) => void)[] = [];
   private insertBlankHandlers: ((after: number) => void)[] = [];
   private insertImagesHandlers: ((after: number) => void)[] = [];
   private insertPdfHandlers: ((after: number) => void)[] = [];
@@ -187,6 +193,8 @@ export class PageSidebar {
   onRotate(cb: (pages: number[], quarterTurns: number) => void): void { this.rotateHandlers.push(cb); }
   onMove(cb: (pages: number[], insertAt: number) => void): void { this.moveHandlers.push(cb); }
   onDragOut(cb: (pages: number[], screenX: number, screenY: number) => void): void { this.dragOutHandlers.push(cb); }
+  onDragToTab(cb: PagesHandler): void { this.dragToTabHandlers.push(cb); }
+  onTabZone(cb: (over: boolean) => void): void { this.tabZoneHandlers.push(cb); }
   onInsertBlank(cb: (after: number) => void): void { this.insertBlankHandlers.push(cb); }
   onInsertPdf(cb: (after: number) => void): void { this.insertPdfHandlers.push(cb); }
   onInsertImages(cb: (after: number) => void): void { this.insertImagesHandlers.push(cb); }
@@ -873,7 +881,7 @@ export class PageSidebar {
       moving: null,
       insertAt: -1,
       lastY: e.clientY,
-      outside: false,
+      zone: "list",
       ghost: null,
       scrollRaf: 0,
     };
@@ -898,16 +906,19 @@ export class PageSidebar {
       this.startAutoscroll();
     }
     e.preventDefault();
-    const outside = isOutsideWindow(e) && this.dragOutHandlers.length > 0;
-    if (d.ghost && (outside !== d.outside || !d.ghost.textContent)) {
-      d.ghost.classList.toggle("out", outside);
-      d.ghost.textContent = outside
+    const zone = this.zoneOf(e);
+    if (d.ghost && (zone !== d.zone || !d.ghost.textContent)) {
+      d.ghost.classList.toggle("out", zone !== "list");
+      d.ghost.textContent = zone === "window"
         ? this.t("sbDragOut", "Release to open in a new window")
-        : d.moving.length === 1
-          ? fmt(this.t("sbMovingOne", "Page {p}"), { p: d.moving[0] })
-          : fmt(this.t("sbMovingMany", "{n} pages"), { n: d.moving.length });
+        : zone === "tab"
+          ? this.t("sbDragTab", "Release to open in a new tab")
+          : d.moving.length === 1
+            ? fmt(this.t("sbMovingOne", "Page {p}"), { p: d.moving[0] })
+            : fmt(this.t("sbMovingMany", "{n} pages"), { n: d.moving.length });
     }
-    d.outside = outside;
+    if ((zone === "tab") !== (d.zone === "tab")) for (const cb of this.tabZoneHandlers) cb(zone === "tab");
+    d.zone = zone;
     if (d.ghost) {
       const w = d.ghost.offsetWidth;
       const h = d.ghost.offsetHeight;
@@ -928,12 +939,26 @@ export class PageSidebar {
     if (!moving || e.type === "pointercancel") return;
     this.suppressClick = true;
     setTimeout(() => { this.suppressClick = false; }, 0);
-    if (isOutsideWindow(e) && this.dragOutHandlers.length > 0) {
+    const zone = this.zoneOf(e);
+    if (zone === "window") {
       for (const cb of this.dragOutHandlers) cb(moving, e.screenX, e.screenY);
+      return;
+    }
+    if (zone === "tab") {
+      for (const cb of this.dragToTabHandlers) cb(moving);
       return;
     }
     if (insertAt < 0 || this.isNoOpMove(moving, insertAt)) return;
     for (const cb of this.moveHandlers) cb(moving, insertAt);
+  }
+
+  private zoneOf(e: PointerEvent): DragZone {
+    if (isOutsideWindow(e)) return this.dragOutHandlers.length > 0 ? "window" : "list";
+    if (this.dragToTabHandlers.length === 0) return "list";
+    const r = this.root.getBoundingClientRect();
+    const near = e.clientX >= r.left - TAB_ZONE_MARGIN_PX && e.clientX <= r.right + TAB_ZONE_MARGIN_PX
+      && e.clientY >= r.top && e.clientY <= r.bottom;
+    return near ? "list" : "tab";
   }
 
   private isNoOpMove(pages: number[], insertAt: number): boolean {
@@ -946,7 +971,7 @@ export class PageSidebar {
   private updateDropTarget(): void {
     const d = this.drag;
     if (!d) return;
-    if (d.outside) {
+    if (d.zone !== "list") {
       d.insertAt = -1;
       this.dropIndicator.classList.add("hidden");
       return;
@@ -1011,6 +1036,7 @@ export class PageSidebar {
     if (!d) return;
     cancelAnimationFrame(d.scrollRaf);
     d.ghost?.remove();
+    if (d.zone === "tab") for (const cb of this.tabZoneHandlers) cb(false);
     for (const t of this.thumbs) t.card.classList.remove("dragging");
     this.dropIndicator.classList.add("hidden");
     this.root.classList.remove("dragging");
