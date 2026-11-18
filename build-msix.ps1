@@ -87,6 +87,15 @@ Get-ChildItem "$buildDir\*.dll" | ForEach-Object {
     Copy-Item $_.FullName "$PackageDir\" -Force
 }
 
+# Explorer add-in (PDF thumbnails and preview pane), registered by the
+# manifest. Built by `npm run build:shell-ext` (part of the Windows build).
+$shellDll = ".\src-tauri\shell-ext\target\release\ezreader_shell.dll"
+if (-not (Test-Path $shellDll)) {
+    Write-Error "Explorer add-in not found: $shellDll (run npm run build:shell-ext)"
+    exit 1
+}
+Copy-Item $shellDll "$PackageDir\" -Force
+
 # Step 4: Copy icons
 Write-Host "Copying icons..." -ForegroundColor Yellow
 $iconFiles = @(
