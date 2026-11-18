@@ -51,7 +51,12 @@ pub async fn open_pages_in_new_window(
 }
 
 #[tauri::command]
-pub async fn extract_pages_to_temp(app: AppHandle, input_path: String, pages: Vec<u32>, name: String) -> CmdResult<String> {
+pub async fn extract_pages_to_temp(
+    app: AppHandle,
+    input_path: String,
+    pages: Vec<u32>,
+    name: String,
+) -> CmdResult<String> {
     extract_to_temp(&app, input_path, pages, &name).await
 }
 
