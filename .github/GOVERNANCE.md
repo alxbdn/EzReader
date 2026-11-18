@@ -7,7 +7,7 @@ EzReader is a small open-source project with one maintainer and one backup maint
 | Role | Who | Responsibilities |
 |------|-----|------------------|
 | **Maintainer** | Alexandre Boudon ([@alxbdn](https://github.com/alxbdn)) | Sets the direction and the [roadmap](ROADMAP.md). Reviews and merges pull requests. Triages issues. Publishes releases and the Microsoft Store, Homebrew and Linux packages. Handles vulnerability reports as described in [SECURITY.md](SECURITY.md). Enforces the [code of conduct](CODE_OF_CONDUCT.md). Keeps the documentation current. |
-| **Backup maintainer** | Mathieu De Sousa (GitHub: `@TODO-github-handle`) | Holds admin access to the repository so that the project never depends on one account. Takes over the maintainer's tasks if the maintainer is unavailable (see [Continuity](#continuity)). Does not merge or release while the maintainer is active, unless the maintainer asks. |
+| **Backup maintainer** | Mathieu De Sousa ([@mdesousa-fr](https://github.com/mdesousa-fr)) | Holds admin access to the repository so that the project never depends on one account. Takes over the maintainer's tasks if the maintainer is unavailable (see [Continuity](#continuity)). Does not merge or release while the maintainer is active, unless the maintainer asks. |
 | **Contributor** | Anyone | Reports bugs, suggests ideas, and sends pull requests following [CONTRIBUTING.md](CONTRIBUTING.md). |
 | **Security reporter** | Anyone | Reports vulnerabilities privately, as described in [SECURITY.md](SECURITY.md), and is credited in the advisory unless they prefer otherwise. |
 
