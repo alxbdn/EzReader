@@ -18,12 +18,13 @@ export interface AppSettings {
   defaultZoom: string;
   pxPerInch: number;
   pageBrightness: number;
+  outlineExpanded: boolean;
 }
 
 export const ZOOM_CHOICES = ["fit-width", "fit-page", "50", "75", "100", "125", "150", "200"] as const;
 
 const STORAGE_KEY = "pdf-rider-settings";
-const DEFAULTS: AppSettings = { language: "en", theme: "system", defaultZoom: "100", pxPerInch: 96, pageBrightness: 100 };
+const DEFAULTS: AppSettings = { language: "en", theme: "system", defaultZoom: "100", pxPerInch: 96, pageBrightness: 100, outlineExpanded: false };
 
 const CARD_W_MM = 85.6;
 const CARD_H_MM = 53.98;
@@ -214,6 +215,12 @@ export class SettingsModal {
       this.showBrightness(this.settings.pageBrightness);
       brightInput.addEventListener("input", () => this.showBrightness(Number(brightInput.value)));
       brightInput.addEventListener("change", () => this.set("pageBrightness", Number(brightInput.value)));
+    }
+
+    const outlineBox = document.getElementById("settings-outline-expanded") as HTMLInputElement | null;
+    if (outlineBox) {
+      outlineBox.checked = this.settings.outlineExpanded;
+      outlineBox.addEventListener("change", () => this.set("outlineExpanded", outlineBox.checked));
     }
 
     const quickLook = document.getElementById("settings-quick-look") as HTMLInputElement | null;

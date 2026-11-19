@@ -60,3 +60,42 @@ describe("PageSidebar thumbnails", () => {
     expect(next.getPage).toHaveBeenCalled();
   });
 });
+
+describe("PageSidebar outline", () => {
+  const outline = [
+    { title: "Part one", dest: null, items: [{ title: "Chapter 1", dest: null, items: [] }, { title: "Chapter 2", dest: null, items: [] }] },
+    { title: "Part two", dest: null, items: [] },
+  ];
+
+  async function open(expanded?: boolean) {
+    const root = document.createElement("div");
+    document.body.appendChild(root);
+    const sidebar = new PageSidebar(root);
+    if (expanded !== undefined) sidebar.setOutlineExpanded(expanded);
+    const page = { rotate: 0, getViewport: () => ({ width: 595, height: 842 }), cleanup: vi.fn() };
+    const doc = { getPage: vi.fn(async () => page), getOutline: vi.fn(async () => outline) } as unknown as PDFDocumentProxy;
+    sidebar.load(doc, dims(2), 0);
+    root.querySelector<HTMLButtonElement>(".sb-outline")!.click();
+    await flush();
+    await flush();
+    return { root, sidebar };
+  }
+
+  const folded = (root: HTMLElement) =>
+    [...root.querySelectorAll(".sb-outline-children")].map((el) => el.classList.contains("collapsed"));
+
+  it("starts with chapters folded", async () => {
+    const { root } = await open();
+    expect(folded(root)).toEqual([true]);
+    expect(root.querySelector(".sb-outline-toggle")!.textContent).toBe("▸");
+  });
+
+  it("starts unfolded when the preference is on, and follows it when it changes", async () => {
+    const { root, sidebar } = await open(true);
+    expect(folded(root)).toEqual([false]);
+    sidebar.setOutlineExpanded(false);
+    await flush();
+    await flush();
+    expect(folded(root)).toEqual([true]);
+  });
+});

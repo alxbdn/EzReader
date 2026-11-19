@@ -901,13 +901,75 @@ body.tab-dragging, body.tab-dragging * { cursor: grabbing !important; }
     linear-gradient(var(--custom, transparent), var(--custom, transparent)),
     conic-gradient(#ef4444, #f59e0b, #eab308, #22c55e, #06b6d4, #3b82f6, #a855f7, #ef4444);
 }
-.color-swatch.custom input {
+.color-swatch.custom[aria-expanded="true"] { outline-color: var(--ring); }
+
+.color-row { position: relative; }
+.color-picker-pop {
   position: absolute;
-  inset: 0;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 40;
+  width: 200px;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  box-sizing: border-box;
+  background: var(--popover);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-lg);
+}
+.color-picker-pop[hidden] { display: none; }
+.studio-options .color-picker-pop {
+  position: static;
+  width: auto;
+  padding: 0;
+  background: none;
+  border: 0;
+  box-shadow: none;
+}
+.cp-sv {
+  position: relative;
+  height: 120px;
+  border-radius: var(--radius-md);
+  background:
+    linear-gradient(to top, #000, transparent),
+    linear-gradient(to right, #fff, var(--cp-hue, #f00));
+  cursor: crosshair;
+  touch-action: none;
+  outline: none;
+}
+.cp-sv:focus-visible { box-shadow: 0 0 0 2px var(--ring); }
+.cp-knob {
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  margin: -7px 0 0 -7px;
+  box-sizing: border-box;
+  border: 2px solid #fff;
+  border-radius: 50%;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.35), 0 1px 3px rgba(0, 0, 0, 0.3);
+  pointer-events: none;
+}
+.cp-hue {
+  -webkit-appearance: none;
+  appearance: none;
   width: 100%;
-  height: 100%;
-  opacity: 0;
+  height: 12px;
+  margin: 0;
+  border-radius: 999px;
+  background: linear-gradient(to right, #f00, #ff0, #0f0, #0ff, #00f, #f0f, #f00);
   cursor: pointer;
+}
+.cp-hue::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 14px;
+  height: 14px;
+  border: 2px solid #fff;
+  border-radius: 50%;
+  background: transparent;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.35);
 }
 
 .slider-row {
@@ -1786,6 +1848,15 @@ input[type="color"].color-picker.is-off::-webkit-color-swatch {
 
 @media print {
   .page-form-layer .form-field { background: transparent; box-shadow: none; }
+}
+
+.page-highlight-canvas {
+  position: absolute;
+  top: 0;
+  left: 0;
+  pointer-events: none;
+  background: transparent;
+  mix-blend-mode: multiply;
 }
 
 .page-annotation-canvas {

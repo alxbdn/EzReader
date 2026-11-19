@@ -559,8 +559,11 @@ toolbar.brightness.value = settingsModal.getSettings().pageBrightness;
 toolbar.brightness.onInput((v) => applyPageBrightness(v));
 toolbar.brightness.onCommit((v) => settingsModal.setPageBrightness(v));
 
+pageSidebar.setOutlineExpanded(settingsModal.getSettings().outlineExpanded);
+
 settingsModal.onChange(s => {
   toolbar.brightness.value = s.pageBrightness;
+  pageSidebar.setOutlineExpanded(s.outlineExpanded);
   const t = getTranslations(s.language);
   toolbar.applyTranslations(t);
   studio.applyTranslations(t);

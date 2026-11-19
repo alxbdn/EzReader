@@ -98,6 +98,7 @@ export class PageSidebar {
   private outlineList!: HTMLElement;
   private hintEl!: HTMLElement;
   private outlineMode = false;
+  private outlineExpanded = false;
   private outlineLoadedFor: PDFDocumentProxy | null = null;
   private navTarget = 0;
   private holdTimer: ReturnType<typeof setTimeout> | null = null;
@@ -476,6 +477,13 @@ export class PageSidebar {
     }
   }
 
+  setOutlineExpanded(on: boolean): void {
+    if (on === this.outlineExpanded) return;
+    this.outlineExpanded = on;
+    this.outlineLoadedFor = null;
+    if (this.outlineMode) void this.ensureOutline();
+  }
+
   private async ensureOutline(): Promise<void> {
     const doc = this.doc;
     if (!doc) {
@@ -519,7 +527,7 @@ export class PageSidebar {
         toggle.type = "button";
         toggle.className = hasChildren ? "sb-outline-toggle" : "sb-outline-spacer";
         if (hasChildren) {
-          toggle.textContent = "▾";
+          toggle.textContent = this.outlineExpanded ? "▾" : "▸";
         } else {
           toggle.disabled = true;
         }
@@ -542,7 +550,7 @@ export class PageSidebar {
 
         if (hasChildren) {
           const childrenEl = document.createElement("div");
-          childrenEl.className = "sb-outline-children";
+          childrenEl.className = this.outlineExpanded ? "sb-outline-children" : "sb-outline-children collapsed";
           renderNodes(node.items!, childrenEl, depth + 1);
           wrap.appendChild(childrenEl);
           toggle.addEventListener("click", (e) => {

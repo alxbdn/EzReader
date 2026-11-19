@@ -96,6 +96,7 @@ export class CanvasOverlay implements SelectionOwner {
   private canvas: HTMLCanvasElement;
   private container: HTMLElement;
   private ctx: CanvasRenderingContext2D;
+  private hctx: CanvasRenderingContext2D | null;
 
   private get style(): ActiveToolState { return this.tools.state; }
   private activeTool: ToolKind = "select";
@@ -160,10 +161,12 @@ export class CanvasOverlay implements SelectionOwner {
     container: HTMLElement,
     private readonly tools: ToolSelection,
     private readonly session: AnnotationSession,
+    private readonly highlightCanvas: HTMLCanvasElement | null = null,
   ) {
     this.canvas = canvas;
     this.container = container;
     this.ctx = this.canvas.getContext("2d")!;
+    this.hctx = highlightCanvas?.getContext("2d") ?? null;
 
     this.canvas.addEventListener("mousedown",    this.onMouseDown);
     this.canvas.addEventListener("mousemove",    this.onMouseMove);
@@ -525,6 +528,10 @@ export class CanvasOverlay implements SelectionOwner {
     const dpr = window.devicePixelRatio || 1;
     this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     this.ctx.clearRect(0, 0, this.canvas.width / dpr, this.canvas.height / dpr);
+    if (this.hctx && this.highlightCanvas) {
+      this.hctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      this.hctx.clearRect(0, 0, this.highlightCanvas.width / dpr, this.highlightCanvas.height / dpr);
+    }
     for (const ann of this.committed) {
       if (ann === this.editingAnn) continue;
       this.drawAnnotation(ann);
@@ -770,16 +777,17 @@ export class CanvasOverlay implements SelectionOwner {
         ann.color, ann.strokeWidth, ann.fillColor ?? null, !!ann.arrow);
 
     } else if (ann.kind === "highlight") {
-      ctx.save();
-      ctx.globalAlpha = ann.opacity;
-      ctx.globalCompositeOperation = "multiply";
-      ctx.fillStyle = rgbToCss(ann.color);
+      const hc = this.hctx ?? ctx;
+      hc.save();
+      hc.globalAlpha = ann.opacity;
+      hc.globalCompositeOperation = "multiply";
+      hc.fillStyle = rgbToCss(ann.color);
       for (const r of ann.rects) {
         const [x1, y1] = this.toCanvas(r.x, r.y + r.height);
         const [x2, y2] = this.toCanvas(r.x + r.width, r.y);
-        ctx.fillRect(Math.min(x1, x2), Math.min(y1, y2), Math.abs(x2 - x1), Math.abs(y2 - y1));
+        hc.fillRect(Math.min(x1, x2), Math.min(y1, y2), Math.abs(x2 - x1), Math.abs(y2 - y1));
       }
-      ctx.restore();
+      hc.restore();
 
     } else if (ann.kind === "note") {
       this.drawNote(ann);

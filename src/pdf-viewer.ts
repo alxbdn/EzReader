@@ -173,6 +173,7 @@ export class PdfPageView {
   private linkLayer: HTMLElement;
   private formLayer: HTMLElement;
   private annotationCanvas: HTMLCanvasElement;
+  private highlightCanvas: HTMLCanvasElement;
   private _viewport: PageViewport | null = null;
   private _generation = 0;
   private _renderTask: RenderTask | null = null;
@@ -203,15 +204,19 @@ export class PdfPageView {
     this.annotationCanvas = document.createElement("canvas");
     this.annotationCanvas.className = "page-annotation-canvas";
 
+    this.highlightCanvas = document.createElement("canvas");
+    this.highlightCanvas.className = "page-highlight-canvas";
+
     this.wrapper.append(
       this.canvas,
+      this.highlightCanvas,
       this.textLayer,
       this.linkLayer,
       this.formLayer,
       this.annotationCanvas
     );
-    for (const c of [this.canvas, this.annotationCanvas]) { c.width = 0; c.height = 0; }
-    this.overlay = new CanvasOverlay(this.annotationCanvas, this.wrapper, tools, annotations);
+    for (const c of [this.canvas, this.highlightCanvas, this.annotationCanvas]) { c.width = 0; c.height = 0; }
+    this.overlay = new CanvasOverlay(this.annotationCanvas, this.wrapper, tools, annotations, this.highlightCanvas);
   }
 
   destroy(): void {
@@ -309,10 +314,12 @@ export class PdfPageView {
       prevCanvas.replaceWith(buf);
       prevCanvas.width = prevCanvas.height = 0;
 
-      this.annotationCanvas.width  = pxW;
-      this.annotationCanvas.height = pxH;
-      this.annotationCanvas.style.width  = `${cssW}px`;
-      this.annotationCanvas.style.height = `${cssH}px`;
+      for (const c of [this.annotationCanvas, this.highlightCanvas]) {
+        c.width  = pxW;
+        c.height = pxH;
+        c.style.width  = `${cssW}px`;
+        c.style.height = `${cssH}px`;
+      }
 
       this.setPlaceholderSize(viewport.width, viewport.height);
 
@@ -345,7 +352,7 @@ export class PdfPageView {
     this._generation++;
     this._renderTask?.cancel();
     this._renderTask = null;
-    for (const c of [this.canvas, this.annotationCanvas]) { c.width = 0; c.height = 0; }
+    for (const c of [this.canvas, this.highlightCanvas, this.annotationCanvas]) { c.width = 0; c.height = 0; }
     this._page?.cleanup();
     this._page = null;
     this.textLayer.innerHTML  = "";
