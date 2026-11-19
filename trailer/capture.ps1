@@ -250,6 +250,14 @@ $ff.WaitForExit(20000) | Out-Null
 Start-Sleep 5
 Shot "04-later"
 Get-Process ezreader-quicklook, prevhost -ErrorAction SilentlyContinue | Format-Table Id, Name, Responding, CPU | Out-Host
+$cdb = Get-ChildItem "${env:ProgramFiles(x86)}\Windows Kits\10\Debuggers\x64\cdb.exe" -ErrorAction SilentlyContinue | Select-Object -First 1
+Write-Host "cdb: $($cdb.FullName)"
+foreach ($pn in "ezreader-quicklook", "prevhost") {
+  foreach ($proc in Get-Process $pn -ErrorAction SilentlyContinue) {
+    Write-Host "##### stacks of $pn $($proc.Id) #####"
+    if ($cdb) { & $cdb.FullName -p $proc.Id -pv -c ".symfix c:\sym; .reload; ~*kn 40; qd" 2>&1 | Select-String -NotMatch "^\s*$" | Select-Object -Last 150 | Out-Host }
+  }
+}
 $marks | ConvertTo-Json | Set-Content "$Out\marks.json"
 Get-Content "$Out\marks.json" | Out-Host
 Get-ChildItem $Out | Format-Table Name, Length | Out-Host
