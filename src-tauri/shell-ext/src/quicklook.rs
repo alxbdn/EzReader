@@ -1,6 +1,7 @@
 use crate::{layout, pdf, viewer};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicIsize, Ordering};
+use std::time::{Duration, Instant};
 use windows::core::{w, Interface, PCWSTR};
 use windows::Win32::Foundation::{
     GetLastError, COLORREF, ERROR_ALREADY_EXISTS, HWND, LPARAM, LRESULT, RECT, SIZE, WPARAM,
@@ -47,6 +48,12 @@ use windows::Win32::UI::WindowsAndMessaging::{
 const HOST_CLASS: PCWSTR = w!("EzReaderQuickLookHost");
 const WINDOW_CLASS: PCWSTR = w!("EzReaderQuickLook");
 const WM_QUICK_LOOK: u32 = WM_APP + 40;
+const WM_QUICK_LOOK_FRONT: u32 = WM_APP + 41;
+/// Windows can briefly hand activation back to Explorer while the window is
+/// being brought to the front (the input queues are detached right after
+/// `SetForegroundWindow`). Losing focus inside this window is part of opening,
+/// not the user clicking away, so it must not close the quick look.
+const SETTLE: Duration = Duration::from_millis(600);
 const REPLAYED: usize = 0x455A_514C;
 
 static HOST: AtomicIsize = AtomicIsize::new(0);
@@ -407,6 +414,13 @@ struct QuickLook {
     controls: Vec<(Control, RECT)>,
     hover: Option<Control>,
     icon: Option<HICON>,
+    opened: Instant,
+}
+
+/// Whether losing activation means the user moved on (close) or is still the
+/// opening handshake with Explorer (take the front back instead).
+fn closes_when_deactivated(since_open: Duration) -> bool {
+    since_open >= SETTLE
 }
 
 impl QuickLook {
@@ -503,6 +517,7 @@ fn show(path: &Path, explorer: HWND) {
         controls: Vec::new(),
         hover: None,
         icon: app_icon(),
+        opened: Instant::now(),
     });
 
     let monitor = unsafe { MonitorFromWindow(explorer, MONITOR_DEFAULTTONEAREST) };
@@ -911,7 +926,15 @@ extern "system" fn window_proc(window: HWND, message: u32, wparam: WPARAM, lpara
             }
             WM_ACTIVATE => {
                 if (wparam.0 & 0xffff) as u32 == WA_INACTIVE && OPEN.load(Ordering::SeqCst) == window.0 as isize {
-                    let _ = PostMessageW(Some(window), WM_CLOSE, WPARAM(0), LPARAM(0));
+                    let next =
+                        if closes_when_deactivated(state.opened.elapsed()) { WM_CLOSE } else { WM_QUICK_LOOK_FRONT };
+                    let _ = PostMessageW(Some(window), next, WPARAM(0), LPARAM(0));
+                }
+                LRESULT(0)
+            }
+            WM_QUICK_LOOK_FRONT => {
+                if OPEN.load(Ordering::SeqCst) == window.0 as isize {
+                    bring_to_front(window);
                 }
                 LRESULT(0)
             }
@@ -944,6 +967,14 @@ mod tests {
         assert!(is_pdf(Path::new(r"C:\Docs\Report.PDF")));
         assert!(!is_pdf(Path::new(r"C:\Docs\photo.png")));
         assert!(!is_pdf(Path::new(r"C:\Docs\pdf")));
+    }
+
+    #[test]
+    fn focus_lost_while_opening_does_not_close() {
+        assert!(!closes_when_deactivated(Duration::ZERO));
+        assert!(!closes_when_deactivated(Duration::from_millis(200)));
+        assert!(closes_when_deactivated(SETTLE));
+        assert!(closes_when_deactivated(Duration::from_secs(3)));
     }
 
     #[test]
