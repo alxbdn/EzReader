@@ -131,6 +131,20 @@ Start-Process $helper
 Start-Sleep 2
 Write-Host "quick look running: $([bool](Get-Process ezreader-quicklook -ErrorAction SilentlyContinue))"
 
+# --- Let the shell extensions run outside the low-integrity / surrogate hosts
+foreach ($c in "{202348CF-BD0B-4EB3-91B2-C87E74F2FD32}", "{5AE37068-61BA-478F-9D24-EA58E7C1EBF6}") {
+  Write-Host "CLSID $c"; cmd /c "reg query HKCU\Software\Classes\CLSID\$c /s" | Out-Host
+}
+if ($env:EZ_INPROC -eq "1") {
+  $k = "HKCU:\Software\Classes\CLSID\{202348CF-BD0B-4EB3-91B2-C87E74F2FD32}"
+  Set-ItemProperty $k DisableLowILProcessIsolation 1 -Type DWord
+  $k = "HKCU:\Software\Classes\CLSID\{5AE37068-61BA-478F-9D24-EA58E7C1EBF6}"
+  Set-ItemProperty $k DisableProcessIsolation 1 -Type DWord
+  Stop-Process -Name explorer -Force -ErrorAction SilentlyContinue; Start-Sleep 3
+  if (-not (Get-Process explorer -ErrorAction SilentlyContinue)) { Start-Process explorer.exe; Start-Sleep 4 }
+}
+Get-WinEvent -LogName Application -MaxEvents 30 -ErrorAction SilentlyContinue | Where-Object { $_.LevelDisplayName -eq "Error" } | Format-List TimeCreated, ProviderName, Message | Out-Host
+
 # --- Demo folder ------------------------------------------------------------
 $docs = "$env:USERPROFILE\Documents\Paperwork"
 New-Item -ItemType Directory -Force $docs | Out-Null
@@ -215,7 +229,7 @@ $cond = New-Object System.Windows.Automation.PropertyCondition($AE::ClassNamePro
 $view = $win.FindFirst($TS::Descendants, $cond)
 $vr = $view.Current.BoundingRectangle
 Write-Host "file view: $vr"
-$sx = [int]($vr.X + $vr.Width + 2)
+$sx = 1645
 [W]::SetCursorPos($sx, 600) | Out-Null; Start-Sleep -Milliseconds 300
 [W]::mouse_event(2, 0, 0, 0, [IntPtr]::Zero)
 for ($x = $sx; $x -ge 1060; $x -= 20) { [W]::SetCursorPos($x, 600) | Out-Null; Start-Sleep -Milliseconds 15 }
@@ -228,6 +242,7 @@ foreach ($n in "Lease agreement", "Pride and Prejudice", "Receipt", "Garden plan
   ClickItem $win $n 200; Start-Sleep 5; Shot ("warm-{0}" -f $i++)
 }
 Dump "after warm-up"
+Get-WinEvent -LogName Application -MaxEvents 40 -ErrorAction SilentlyContinue | Where-Object { $_.LevelDisplayName -eq "Error" } | Format-List TimeCreated, ProviderName, Message | Out-Host
 [W]::SetCursorPos(900, 900) | Out-Null; Click
 Start-Sleep 2
 Shot "00-setup"
