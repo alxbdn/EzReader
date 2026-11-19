@@ -98,6 +98,26 @@ Start-Process explorer.exe $docs
 Start-Sleep 6
 Get-Process explorer | Where-Object MainWindowTitle | ForEach-Object { Write-Host "window: $($_.MainWindowTitle)" }
 
+# --- Diagnostics --------------------------------------------------------------
+Step "Diagnostics"
+Write-Host "OS: $((Get-CimInstance Win32_OperatingSystem).Caption) $([Environment]::OSVersion.Version)"
+Write-Host "Windows.Data.Pdf.dll: $(Test-Path "$env:windir\System32\Windows.Data.Pdf.dll")"
+try {
+  [void][Windows.Data.Pdf.PdfDocument, Windows.Data.Pdf, ContentType = WindowsRuntime]
+  Write-Host "WinRT PdfDocument type loads"
+} catch { Write-Host "WinRT PdfDocument type: $_" }
+$pv = Start-Process $helper -ArgumentList "--preview", "`"$docs\Garden plan.pdf`"" -PassThru
+Start-Sleep 5
+Shot "diag-preview-one"
+Write-Host "preview-one alive: $(-not $pv.HasExited)"
+if (-not $pv.HasExited) { $pv | Stop-Process -Force }
+Get-ItemProperty "HKCU:\Software\Classes\.pdf\ShellEx\*" -ErrorAction SilentlyContinue | Format-List | Out-Host
+Get-ItemProperty "HKCU:\Software\Classes\.pdf" -ErrorAction SilentlyContinue | Format-List | Out-Host
+Get-ItemProperty "HKLM:\Software\Microsoft\Windows\CurrentVersion\PreviewHandlers" -ErrorAction SilentlyContinue | Format-List | Out-Host
+Get-ItemProperty "HKCU:\Software\Microsoft\Windows\CurrentVersion\PreviewHandlers" -ErrorAction SilentlyContinue | Format-List | Out-Host
+Get-ItemProperty "HKCR:\.pdf" -ErrorAction SilentlyContinue | Out-Null
+cmd /c "reg query HKCR\.pdf /s" | Out-Host
+
 # --- UI Automation helpers -------------------------------------------------
 $AE = [System.Windows.Automation.AutomationElement]
 $TS = [System.Windows.Automation.TreeScope]
@@ -172,6 +192,7 @@ ClickItem $win "Garden plan" 700;      Start-Sleep -Milliseconds 900
 Mark "space-open"
 [W]::Key(0x20);                        Start-Sleep -Milliseconds 1800
 Shot "02-quicklook"
+Get-Process ezreader-quicklook -ErrorAction SilentlyContinue | Format-Table Id, Responding, CPU | Out-Host
 [W]::Key(0x28);                        Start-Sleep -Milliseconds 900
 [W]::Key(0x28);                        Start-Sleep -Milliseconds 1200
 Mark "space-close"
@@ -181,6 +202,9 @@ Mark "end"
 
 $ff.StandardInput.Write("q"); $ff.StandardInput.Close()
 $ff.WaitForExit(20000) | Out-Null
+Start-Sleep 5
+Shot "04-later"
+Get-Process ezreader-quicklook, prevhost -ErrorAction SilentlyContinue | Format-Table Id, Name, Responding, CPU | Out-Host
 $marks | ConvertTo-Json | Set-Content "$Out\marks.json"
 Get-Content "$Out\marks.json" | Out-Host
 Get-ChildItem $Out | Format-Table Name, Length | Out-Host
