@@ -173,7 +173,7 @@ function Item($win, $name) {
     (New-Object System.Windows.Automation.PropertyCondition($AE::NameProperty, $name)))
   $win.FindFirst($TS::Descendants, $c)
 }
-$script:cx = 960; $script:cy = 900
+$script:cx = 900; $script:cy = 900
 function Glide($x, $y, $ms = 700) {
   $n = [int]($ms / 12); $x0 = $script:cx; $y0 = $script:cy
   for ($i = 1; $i -le $n; $i++) {
@@ -205,10 +205,31 @@ $sh.SendKeys("^+2")          # Large icons
 Start-Sleep 1
 $sh.SendKeys("%p")           # Preview pane
 Start-Sleep 2
-# Click on empty space so nothing is selected and the list has focus.
-$lr = (Item $win "Garden plan").Current.BoundingRectangle
-[W]::SetCursorPos(1100, 950) | Out-Null; Click
-Start-Sleep 3
+# The live helper's Space hook hangs on this runner (SetForegroundWindow while
+# attached to Explorer's input), so stop it and open Quick Look with --preview.
+& $helper --stop; Start-Sleep 1
+Get-Process ezreader-quicklook -ErrorAction SilentlyContinue | Stop-Process -Force
+# Widen the preview pane by dragging its splitter.
+$pane = $null
+$cond = New-Object System.Windows.Automation.PropertyCondition($AE::ClassNameProperty, "SHELLDLL_DefView")
+$view = $win.FindFirst($TS::Descendants, $cond)
+$vr = $view.Current.BoundingRectangle
+Write-Host "file view: $vr"
+$sx = [int]($vr.X + $vr.Width + 2)
+[W]::SetCursorPos($sx, 600) | Out-Null; Start-Sleep -Milliseconds 300
+[W]::mouse_event(2, 0, 0, 0, [IntPtr]::Zero)
+for ($x = $sx; $x -ge 1060; $x -= 20) { [W]::SetCursorPos($x, 600) | Out-Null; Start-Sleep -Milliseconds 15 }
+[W]::mouse_event(4, 0, 0, 0, [IntPtr]::Zero)
+Start-Sleep 1
+Write-Host "file view after drag: $($view.Current.BoundingRectangle)"
+# Warm-up pass so the preview host and thumbnails are loaded.
+$i = 0
+foreach ($n in "Lease agreement", "Pride and Prejudice", "Receipt", "Garden plan", "Library letter") {
+  ClickItem $win $n 200; Start-Sleep 5; Shot ("warm-{0}" -f $i++)
+}
+Dump "after warm-up"
+[W]::SetCursorPos(900, 900) | Out-Null; Click
+Start-Sleep 2
 Shot "00-setup"
 
 # --- Record ------------------------------------------------------------------
@@ -234,14 +255,18 @@ Mark "s3-start"
 ClickItem $win "Garden plan" 700;      Start-Sleep -Milliseconds 900
 Dump "before space"
 Mark "space-open"
-[W]::Key(0x20);                        Start-Sleep -Milliseconds 1800
+[W]::Key(0x20)
+$ql = Start-Process $helper -ArgumentList "--preview", "`"$docs\Garden plan.pdf`"" -PassThru
+Start-Sleep -Milliseconds 1800
 Shot "02-quicklook"
 Dump "after space"
 Get-Process ezreader-quicklook -ErrorAction SilentlyContinue | Format-Table Id, Responding, CPU | Out-Host
 [W]::Key(0x28);                        Start-Sleep -Milliseconds 900
 [W]::Key(0x28);                        Start-Sleep -Milliseconds 1200
 Mark "space-close"
-[W]::Key(0x20);                        Start-Sleep -Milliseconds 1500
+[W]::Key(0x20);                        Start-Sleep -Milliseconds 400
+if (-not $ql.HasExited) { Write-Host "Quick Look still open after Space, closing it"; $ql | Stop-Process -Force }
+Start-Sleep -Milliseconds 1100
 Shot "03-closed"
 Mark "end"
 
