@@ -13,6 +13,7 @@ import { isMac } from "./platform";
 import { MacMenu } from "./mac-menu";
 import {
   ICON_INFO,
+  ICON_MORE,
   ICON_PRESENT,
   ICON_EYE,
   ICON_PEN,
@@ -145,10 +146,13 @@ export class Toolbar {
   private pagesBtn!: HTMLButtonElement;
   private shownColumns = 1;
   private shownEvenSpread = false;
-  private infoBtn!: HTMLButtonElement;
+  private infoEntry!: HTMLButtonElement;
+  private moreBtn!: HTMLButtonElement;
+  private moreMenu!: HTMLElement;
   private sidebarBtn!: HTMLButtonElement;
   private saveBtn!: HTMLButtonElement;
-  private lockBtn!: HTMLButtonElement;
+  private lockEntry!: HTMLButtonElement;
+  private lockTexts = { on: "Remove the password…", off: "Protect with a password…" };
   private lockTitles = { on: "Protected: remove the password", off: "Protect with a password" };
   private locked = false;
   private _lastScale = CSS_UNITS;
@@ -186,6 +190,7 @@ export class Toolbar {
     this._i18nTitle.forEach((key, el) => { const v = t[key]; if (v !== undefined) el.title = v; });
     this.renameTitle = t.ttRename ?? "Click to rename";
     this.lockTitles = { on: t.ttLockOn ?? "Protected: remove the password", off: t.ttLockOff ?? "Protect with a password" };
+    this.lockTexts = { on: t.moreUnprotect ?? "Remove the password…", off: t.moreProtect ?? "Protect with a password…" };
     this.setProtected(this.locked);
     this.docTitleName.title = this.docName ? this.renameTitle : "";
     const shift = t.kbdShift ?? "Shift";
@@ -284,7 +289,8 @@ export class Toolbar {
   }
 
   setInfoOpen(open: boolean): void {
-    this.infoBtn.classList.toggle("active", open);
+    this.infoEntry.classList.toggle("current", open);
+    this.infoEntry.setAttribute("aria-current", String(open));
   }
 
   get titleElement(): HTMLElement { return this.docTitleEl; }
@@ -301,12 +307,12 @@ export class Toolbar {
 
   setProtected(on: boolean): void {
     this.locked = on;
-    if (!this.lockBtn) return;
-    this.lockBtn.innerHTML = on ? ICON_LOCK : ICON_UNLOCK;
-    this.lockBtn.classList.toggle("on", on);
-    this.lockBtn.title = on ? this.lockTitles.on : this.lockTitles.off;
-    this.lockBtn.setAttribute("aria-label", this.lockBtn.title);
-    this.lockBtn.setAttribute("aria-pressed", String(on));
+    if (!this.lockEntry) return;
+    const [icon, label] = Array.from(this.lockEntry.children) as HTMLElement[];
+    icon!.innerHTML = on ? ICON_LOCK : ICON_UNLOCK;
+    label!.textContent = on ? this.lockTexts.on : this.lockTexts.off;
+    this.lockEntry.classList.toggle("on", on);
+    this.lockEntry.title = on ? this.lockTitles.on : this.lockTitles.off;
   }
 
   updateSidebar(visible: boolean): void {
@@ -798,23 +804,55 @@ export class Toolbar {
     columnsSeg.classList.add("tb-columns");
     modeSeg.classList.add("mode-segment");
 
-    const exportBtn = this.btn(ICON_EXPORT, "Export a copy", "icon-btn tb-square");
-    this.reg(exportBtn, undefined, "ttExport");
-    exportBtn.addEventListener("click", () => this.emit({ type: "export" }));
-    const compressBtn = this.btn(ICON_COMPRESS_LAYERS, "Compress", "icon-btn tb-square");
-    this.reg(compressBtn, undefined, "ttCompress");
-    compressBtn.addEventListener("click", () => this.emit({ type: "compress" }));
-    this.lockBtn = this.btn(ICON_UNLOCK, this.lockTitles.off, "icon-btn tb-square tb-lock");
-    this.lockBtn.addEventListener("click", () => this.emit({ type: "password" }));
-    this.infoBtn = this.btn(ICON_INFO, "Document info", "icon-btn tb-square");
-    this.reg(this.infoBtn, undefined, "ttInfo");
-    this.infoBtn.addEventListener("click", () => this.emit({ type: "info" }));
-    const presentBtn = this.btn(ICON_PRESENT, "Present (F5)", "icon-btn tb-square");
-    this.reg(presentBtn, undefined, "ttPresent");
-    presentBtn.addEventListener("click", () => this.emit({ type: "present" }));
+    this.moreBtn = this.btn(ICON_MORE, "More tools", "icon-btn tb-square tb-more");
+    this.reg(this.moreBtn, undefined, "ttMore");
+    this.moreBtn.setAttribute("aria-haspopup", "menu");
+    this.moreBtn.setAttribute("aria-expanded", "false");
+    this.moreBtn.addEventListener("click", () => this.toggleMoreMenu());
+    this.moreMenu = document.createElement("div");
+    this.moreMenu.className = "tb-more-menu";
+    this.moreMenu.setAttribute("role", "menu");
+    const moreEntry = (icon: string, text: string, key: keyof Translations | null, e: ToolbarEvent, shortcut?: string): HTMLButtonElement => {
+      const entry = document.createElement("button");
+      entry.className = "menu-entry";
+      entry.setAttribute("role", "menuitem");
+      const ic = document.createElement("span");
+      ic.className = "more-icon";
+      ic.innerHTML = icon;
+      const label = document.createElement("span");
+      label.className = "more-label";
+      label.textContent = text;
+      if (key) this.reg(label, key);
+      entry.append(ic, label);
+      if (shortcut) {
+        const sc = document.createElement("span");
+        sc.className = "shortcut";
+        sc.textContent = shortcut;
+        entry.append(sc);
+      }
+      entry.addEventListener("click", () => { this.closeMoreMenu(); this.emit(e); });
+      return entry;
+    };
+    const moreSep = document.createElement("div");
+    moreSep.className = "menu-sep";
+    this.lockEntry = moreEntry(ICON_UNLOCK, this.lockTexts.off, null, { type: "password" });
+    this.lockEntry.classList.add("more-lock");
+    this.infoEntry = moreEntry(ICON_INFO, "Document info", "ttInfo", { type: "info" });
+    this.moreMenu.append(
+      moreEntry(ICON_EXPORT, "Export or convert…", "moreExport", { type: "export" }),
+      moreEntry(ICON_COMPRESS_LAYERS, "Compress…", "moreCompress", { type: "compress" }),
+      this.lockEntry,
+      moreSep,
+      this.infoEntry,
+      moreEntry(ICON_PRESENT, "Present", "menuPresent", { type: "present" }, "F5"),
+    );
+    this.setupMoreMenu();
+    const moreWrap = document.createElement("div");
+    moreWrap.className = "tb-more-wrap";
+    moreWrap.append(this.moreBtn, this.moreMenu);
     const right = document.createElement("div");
     right.className = "toolbar-group tb-right";
-    right.append(exportBtn, compressBtn, this.lockBtn, this.infoBtn, presentBtn, this.sep(), this.search.el);
+    right.append(moreWrap, this.sep(), this.search.el);
 
     const left = document.createElement("div");
     left.className = "toolbar-group tb-left";
@@ -834,6 +872,54 @@ export class Toolbar {
       ro.observe(main);
       ro.observe(this.search.el);
     }
+  }
+
+  private toggleMoreMenu(): void {
+    if (this.moreMenu.classList.contains("open")) { this.closeMoreMenu(); return; }
+    this.closeAllMenus();
+    this.moreMenu.classList.add("open");
+    this.moreBtn.classList.add("open");
+    this.moreBtn.setAttribute("aria-expanded", "true");
+    this.moreMenu.querySelector<HTMLButtonElement>(".menu-entry:not(:disabled)")?.focus();
+  }
+
+  private closeMoreMenu(): void {
+    if (!this.moreMenu.classList.contains("open")) return;
+    this.moreMenu.classList.remove("open");
+    this.moreBtn.classList.remove("open");
+    this.moreBtn.setAttribute("aria-expanded", "false");
+  }
+
+  private setupMoreMenu(): void {
+    document.addEventListener("mousedown", (e) => {
+      const target = e.target as Node;
+      if (this.moreMenu.contains(target) || this.moreBtn.contains(target)) return;
+      this.closeMoreMenu();
+    });
+    window.addEventListener("blur", () => this.closeMoreMenu());
+    this.moreMenu.addEventListener("keydown", (e) => {
+      const entries = Array.from(this.moreMenu.querySelectorAll<HTMLButtonElement>(".menu-entry:not(:disabled)"));
+      const at = entries.indexOf(document.activeElement as HTMLButtonElement);
+      if (e.key === "Escape") {
+        this.closeMoreMenu();
+        this.moreBtn.focus();
+      } else if (e.key === "ArrowDown") {
+        entries[(at + 1) % entries.length]?.focus();
+      } else if (e.key === "ArrowUp") {
+        entries[(at - 1 + entries.length) % entries.length]?.focus();
+      } else if (e.key === "Home") {
+        entries[0]?.focus();
+      } else if (e.key === "End") {
+        entries[entries.length - 1]?.focus();
+      } else if (e.key === "Tab") {
+        this.closeMoreMenu();
+        return;
+      } else {
+        return;
+      }
+      e.preventDefault();
+      e.stopPropagation();
+    });
   }
 
   private fitMainRow(main: HTMLElement): void {
