@@ -508,13 +508,8 @@ fn show(path: &Path, explorer: HWND) {
     let monitor = unsafe { MonitorFromWindow(explorer, MONITOR_DEFAULTTONEAREST) };
     let mut info = MONITORINFO { cbSize: std::mem::size_of::<MONITORINFO>() as u32, ..Default::default() };
     let _ = unsafe { GetMonitorInfoW(monitor, &mut info) };
-    let mut owner = RECT::default();
-    let _ = unsafe { GetWindowRect(explorer, &mut owner) };
     let work = info.rcWork;
-    let r = layout::quick_look_rect(
-        (work.left, work.top, work.right, work.bottom),
-        (owner.left, owner.top, owner.right, owner.bottom),
-    );
+    let r = layout::quick_look_rect((work.left, work.top, work.right, work.bottom));
 
     let raw = Box::into_raw(state);
     let title: Vec<u16> = std::ffi::OsStr::new(&unsafe { &*raw }.name).encode_wide_null();

@@ -27,8 +27,8 @@ export class ColorRow {
   private hexInput: HTMLInputElement;
   private noneBtn: HTMLButtonElement | null = null;
   private swatches: HTMLButtonElement[] = [];
-  private custom: HTMLInputElement;
-  private customWrap: HTMLElement;
+  private customWrap: HTMLButtonElement;
+  private picker: HsvPicker;
 
   constructor(private opts: ColorRowOptions) {
     this.el = document.createElement("div");
@@ -45,29 +45,25 @@ export class ColorRow {
     if (opts.noneTitle !== undefined) {
       this.noneBtn = this.swatch("color-swatch none");
       this.noneBtn.innerHTML = NONE_SWATCH;
-      this.noneBtn.addEventListener("click", () => { this.set(null); opts.onPick(null); });
+      this.noneBtn.addEventListener("click", () => { this.closePicker(); this.set(null); opts.onPick(null); });
       this.swatchRow.append(this.noneBtn);
     }
     for (const [hex] of opts.presets) {
       const b = this.swatch("color-swatch");
       b.style.background = hex;
       b.dataset["hex"] = hex.toLowerCase();
-      b.addEventListener("click", () => { const c = hexToRgb(hex); this.set(c); opts.onPick(c); });
+      b.addEventListener("click", () => { const c = hexToRgb(hex); this.closePicker(); this.set(c); opts.onPick(c); });
       this.swatches.push(b);
       this.swatchRow.append(b);
     }
 
-    this.customWrap = document.createElement("label");
-    this.customWrap.className = "color-swatch custom";
-    this.custom = document.createElement("input");
-    this.custom.type = "color";
-    this.custom.addEventListener("input", () => {
-      const c = hexToRgb(this.custom.value);
-      this.set(c);
-      opts.onPick(c);
-    });
-    this.customWrap.append(this.custom);
+    this.customWrap = this.swatch("color-swatch custom");
+    this.customWrap.setAttribute("aria-expanded", "false");
+    this.customWrap.addEventListener("click", () => this.togglePicker());
     this.swatchRow.append(this.customWrap);
+
+    this.picker = new HsvPicker((c) => { this.set(c); opts.onPick(c); });
+    this.el.append(this.picker.el);
 
     this.hexWrap = document.createElement("label");
     this.hexWrap.className = "color-hex";
@@ -103,7 +99,8 @@ export class ColorRow {
     this.swatches.forEach((b, i) => { b.title = names[i] ?? ""; b.setAttribute("aria-label", b.title); });
     if (this.noneBtn && noneTitle !== undefined) { this.noneBtn.title = noneTitle; this.noneBtn.setAttribute("aria-label", noneTitle); }
     this.customWrap.title = customTitle;
-    this.custom.setAttribute("aria-label", customTitle);
+    this.customWrap.setAttribute("aria-label", customTitle);
+    this.picker.setLabel(customTitle);
   }
 
   set(color: RgbColor | null): void {
@@ -119,11 +116,26 @@ export class ColorRow {
     this.noneBtn?.classList.toggle("on", hex === null);
     const isCustom = hex !== null && !matched;
     this.customWrap.classList.toggle("on", isCustom);
-    if (hex) this.custom.value = hex;
+    if (hex && !this.picker.dragging) this.picker.setHex(hex);
     this.customWrap.style.setProperty("--custom", isCustom && hex ? hex : "transparent");
   }
 
   private current: string | null = null;
+
+  private togglePicker(): void {
+    if (this.picker.el.hidden) {
+      this.picker.setHex(this.current ?? "#ff0000");
+      this.picker.el.hidden = false;
+      this.customWrap.setAttribute("aria-expanded", "true");
+    } else {
+      this.closePicker();
+    }
+  }
+
+  private closePicker(): void {
+    this.picker.el.hidden = true;
+    this.customWrap.setAttribute("aria-expanded", "false");
+  }
 
   private showHex(): void {
     this.hexInput.value = this.current ? this.current.toUpperCase() : "";
@@ -171,4 +183,119 @@ export class SliderRow {
   }
 
   private show(): void { this.value.textContent = `${this.input.value}${this.unit}`; }
+}
+
+export function hsvToRgb(h: number, s: number, v: number): RgbColor {
+  const f = (n: number) => {
+    const k = (n + h / 60) % 6;
+    return Math.round(255 * (v - v * s * Math.max(0, Math.min(k, 4 - k, 1))));
+  };
+  return { r: f(5), g: f(3), b: f(1) };
+}
+
+export function rgbToHsv({ r, g, b }: RgbColor): [number, number, number] {
+  const R = r / 255, G = g / 255, B = b / 255;
+  const max = Math.max(R, G, B), min = Math.min(R, G, B), d = max - min;
+  let h = 0;
+  if (d > 0) {
+    if (max === R) h = ((G - B) / d) % 6;
+    else if (max === G) h = (B - R) / d + 2;
+    else h = (R - G) / d + 4;
+    h *= 60;
+    if (h < 0) h += 360;
+  }
+  return [h, max === 0 ? 0 : d / max, max];
+}
+
+class HsvPicker {
+  readonly el: HTMLElement;
+  dragging = false;
+  private sv: HTMLElement;
+  private knob: HTMLElement;
+  private hue: HTMLInputElement;
+  private h = 0;
+  private s = 1;
+  private v = 1;
+
+  constructor(private onPick: (c: RgbColor) => void) {
+    this.el = document.createElement("div");
+    this.el.className = "color-picker-pop";
+    this.el.hidden = true;
+    this.sv = document.createElement("div");
+    this.sv.className = "cp-sv";
+    this.sv.tabIndex = 0;
+    this.knob = document.createElement("span");
+    this.knob.className = "cp-knob";
+    this.sv.append(this.knob);
+    this.hue = document.createElement("input");
+    this.hue.type = "range";
+    this.hue.className = "cp-hue";
+    this.hue.min = "0";
+    this.hue.max = "360";
+    this.hue.addEventListener("input", () => { this.h = Number(this.hue.value); this.emit(); });
+    this.el.append(this.sv, this.hue);
+
+    this.sv.addEventListener("pointerdown", (e) => {
+      if (e.button !== 0) return;
+      e.preventDefault();
+      this.dragging = true;
+      this.sv.setPointerCapture(e.pointerId);
+      this.track(e);
+    });
+    this.sv.addEventListener("pointermove", (e) => { if (this.dragging) this.track(e); });
+    const stop = () => { this.dragging = false; };
+    this.sv.addEventListener("pointerup", stop);
+    this.sv.addEventListener("pointercancel", stop);
+    this.sv.addEventListener("keydown", (e) => {
+      const step = e.shiftKey ? 0.1 : 0.02;
+      const moves: Record<string, [number, number]> = {
+        ArrowLeft: [-step, 0], ArrowRight: [step, 0], ArrowUp: [0, step], ArrowDown: [0, -step],
+      };
+      const m = moves[e.key];
+      if (!m) return;
+      e.preventDefault();
+      e.stopPropagation();
+      this.s = clamp01(this.s + m[0]);
+      this.v = clamp01(this.v + m[1]);
+      this.emit();
+    });
+  }
+
+  setLabel(text: string): void {
+    this.sv.setAttribute("aria-label", text);
+    this.hue.setAttribute("aria-label", text);
+  }
+
+  setHex(hex: string): void {
+    const [h, s, v] = rgbToHsv(hexToRgb(hex));
+    if (s > 0 && v > 0) this.h = h;
+    this.s = s;
+    this.v = v;
+    this.paint();
+  }
+
+  private track(e: PointerEvent): void {
+    const r = this.sv.getBoundingClientRect();
+    if (r.width === 0 || r.height === 0) return;
+    this.s = clamp01((e.clientX - r.left) / r.width);
+    this.v = 1 - clamp01((e.clientY - r.top) / r.height);
+    this.emit();
+  }
+
+  private emit(): void {
+    this.paint();
+    this.onPick(hsvToRgb(this.h, this.s, this.v));
+  }
+
+  private paint(): void {
+    this.hue.value = String(Math.round(this.h));
+    this.sv.style.setProperty("--cp-hue", `hsl(${this.h} 100% 50%)`);
+    this.knob.style.left = `${this.s * 100}%`;
+    this.knob.style.top = `${(1 - this.v) * 100}%`;
+    this.knob.style.background = rgbToHex(hsvToRgb(this.h, this.s, this.v));
+  }
+}
+
+function clamp01(n: number): number {
+  return Math.max(0, Math.min(1, n));
 }

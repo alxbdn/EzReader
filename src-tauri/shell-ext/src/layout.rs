@@ -52,12 +52,12 @@ pub fn page_at(slots: &[Slot], scroll: i32, height: i32) -> usize {
     slots.partition_point(|s| s.top <= line).saturating_sub(1)
 }
 
-pub fn quick_look_rect(work: (i32, i32, i32, i32), owner: (i32, i32, i32, i32)) -> (i32, i32, i32, i32) {
+pub fn quick_look_rect(work: (i32, i32, i32, i32)) -> (i32, i32, i32, i32) {
     let (work_w, work_h) = (work.2 - work.0, work.3 - work.1);
     let height = (work_h as f32 * 0.86) as i32;
     let width = ((height as f32 * 1.08) as i32).min((work_w as f32 * 0.9) as i32);
-    let left = ((owner.0 + owner.2) / 2 - width / 2).clamp(work.0, (work.2 - width).max(work.0));
-    let top = ((owner.1 + owner.3) / 2 - height / 2).clamp(work.1, (work.3 - height).max(work.1));
+    let left = work.0 + (work_w - width) / 2;
+    let top = work.1 + (work_h - height) / 2;
     (left, top, left + width, top + height)
 }
 
@@ -127,16 +127,17 @@ mod tests {
     }
 
     #[test]
-    fn quick_look_sits_over_explorer_inside_the_screen() {
-        let work = (0, 0, 1920, 1040);
-        let (l, t, r, b) = quick_look_rect(work, (200, 100, 1400, 900));
+    fn quick_look_opens_in_the_middle_of_the_screen() {
+        let (l, t, r, b) = quick_look_rect((0, 0, 1920, 1040));
         assert_eq!(b - t, 894);
         assert_eq!(r - l, 965);
-        assert_eq!((l + r) / 2, 800);
-        let (l, _, r, _) = quick_look_rect(work, (1700, 100, 2400, 900));
-        assert!(l >= 0 && r <= 1920);
-        let (l, _, r, _) = quick_look_rect((0, 0, 800, 600), (0, 0, 800, 600));
-        assert!(r - l <= 720);
+        assert!(((l + r) / 2 - 960).abs() <= 1);
+        assert!(((t + b) / 2 - 520).abs() <= 1);
+        let (l, t, r, b) = quick_look_rect((1920, 40, 3840, 1080));
+        assert!(((l + r) / 2 - 2880).abs() <= 1);
+        assert!(((t + b) / 2 - 560).abs() <= 1);
+        let (l, _, r, _) = quick_look_rect((0, 0, 800, 600));
+        assert!(l >= 0 && r - l <= 720);
     }
 
     #[test]

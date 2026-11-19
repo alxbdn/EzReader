@@ -3,7 +3,7 @@ import { describe, it, expect, vi } from "vitest";
 import { StudioPanel, describeAnnotation } from "../studio-panel";
 import { AnnotationSession } from "../annotation-session";
 import { ToolSelection } from "../tool-selection";
-import { ColorRow, parseHex } from "../color-row";
+import { ColorRow, hsvToRgb, parseHex, rgbToHsv } from "../color-row";
 import { brushOf, BRUSHES } from "../tool-row";
 import type { Annotation, InkAnnotation, RectAnnotation, TextAnnotation } from "../models";
 
@@ -113,5 +113,29 @@ describe("StudioPanel", () => {
     expect(localStorage.getItem("ezreader-studio-collapsed")).toBe("1");
     panel.el.querySelector<HTMLButtonElement>(".studio-expand")!.click();
     expect(panel.el.classList.contains("collapsed")).toBe(false);
+  });
+});
+
+describe("custom colour picker", () => {
+  it("opens from the rainbow swatch and picks a colour from hue, saturation and brightness", () => {
+    const onPick = vi.fn();
+    const row = new ColorRow({ icon: "", title: "Ink", presets: [["#000000", "Black"]], customTitle: "Custom", onPick });
+    const pop = row.el.querySelector<HTMLElement>(".color-picker-pop")!;
+    expect(pop.hidden).toBe(true);
+    row.el.querySelector<HTMLButtonElement>(".color-swatch.custom")!.click();
+    expect(pop.hidden).toBe(false);
+    const hue = pop.querySelector<HTMLInputElement>(".cp-hue")!;
+    hue.value = "240";
+    hue.dispatchEvent(new Event("input"));
+    expect(onPick).toHaveBeenLastCalledWith({ r: 0, g: 0, b: 255 });
+    row.el.querySelector<HTMLButtonElement>(".color-swatch:not(.custom)")!.click();
+    expect(pop.hidden).toBe(true);
+  });
+
+  it("converts between rgb and hsv both ways", () => {
+    for (const c of [{ r: 220, g: 38, b: 38 }, { r: 29, g: 78, b: 216 }, { r: 0, g: 0, b: 0 }, { r: 255, g: 255, b: 255 }]) {
+      const [h, s, v] = rgbToHsv(c);
+      expect(hsvToRgb(h, s, v)).toEqual(c);
+    }
   });
 });
