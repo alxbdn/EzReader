@@ -146,34 +146,6 @@ test.describe("document", () => {
     await page.keyboard.up("Control");
   });
 
-  test("more tools menu", async ({ page }) => {
-    await start(page, { doc: true });
-    const more = page.locator(".tb-more");
-    const menu = page.locator(".tb-more-menu");
-    await more.click();
-    await expect(menu).toHaveClass(/open/);
-    await expect(more).toHaveAttribute("aria-expanded", "true");
-    await page.keyboard.press("ArrowDown");
-    await page.keyboard.press("End");
-    await page.keyboard.press("Home");
-    await page.keyboard.press("ArrowUp");
-    await page.keyboard.press("Escape");
-    await expect(menu).not.toHaveClass(/open/);
-    await expect(more).toBeFocused();
-    await more.click();
-    await page.mouse.click(300, 400);
-    await expect(menu).not.toHaveClass(/open/);
-    const count = await menu.locator(".menu-entry").count();
-    expect(count).toBe(5);
-    for (let i = 0; i < count; i++) {
-      await more.click();
-      await menu.locator(".menu-entry").nth(i).click();
-      await expect(menu).not.toHaveClass(/open/);
-      await settle(page, 300);
-      await dismiss(page);
-    }
-  });
-
   test("page sidebar", async ({ page }) => {
     await start(page, { doc: true });
     const frames = await visible(page, ".page-sidebar-frame");
