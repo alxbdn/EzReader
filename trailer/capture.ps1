@@ -39,6 +39,48 @@ public static class W {
 }
 "@
 [W]::SetProcessDPIAware() | Out-Null
+Add-Type @"
+using System;
+using System.Text;
+using System.Collections.Generic;
+using System.Runtime.InteropServices;
+public static class Win {
+  public delegate bool EnumProc(IntPtr h, IntPtr l);
+  [DllImport("user32.dll")] static extern bool EnumWindows(EnumProc f, IntPtr l);
+  [DllImport("user32.dll")] static extern bool EnumChildWindows(IntPtr p, EnumProc f, IntPtr l);
+  [DllImport("user32.dll", CharSet = CharSet.Unicode)] static extern int GetClassName(IntPtr h, StringBuilder s, int n);
+  [DllImport("user32.dll", CharSet = CharSet.Unicode)] static extern int GetWindowText(IntPtr h, StringBuilder s, int n);
+  [DllImport("user32.dll")] static extern bool IsWindowVisible(IntPtr h);
+  [DllImport("user32.dll")] static extern bool GetWindowRect(IntPtr h, out RECT r);
+  [DllImport("user32.dll")] static extern uint GetWindowThreadProcessId(IntPtr h, out uint pid);
+  [DllImport("user32.dll")] static extern IntPtr GetForegroundWindow();
+  [DllImport("user32.dll")] static extern bool GetGUIThreadInfo(uint t, ref GUITHREADINFO g);
+  public struct RECT { public int L, T, R, B; }
+  [StructLayout(LayoutKind.Sequential)] public struct GUITHREADINFO { public int cbSize, flags; public IntPtr active, focus, capture, menuOwner, moveSize, caret; public RECT rc; }
+  public static string Cls(IntPtr h) { var s = new StringBuilder(256); GetClassName(h, s, 256); return s.ToString(); }
+  static string Desc(IntPtr h) {
+    var t = new StringBuilder(256); GetWindowText(h, t, 256); RECT r; GetWindowRect(h, out r); uint pid; GetWindowThreadProcessId(h, out pid);
+    string pn = ""; try { pn = System.Diagnostics.Process.GetProcessById((int)pid).ProcessName; } catch {}
+    return String.Format("{0} [{1}] '{2}' {3},{4} {5}x{6} vis={7} pid={8}", Cls(h), pn, t, r.L, r.T, r.R - r.L, r.B - r.T, IsWindowVisible(h), pid);
+  }
+  public static string Dump() {
+    var sb = new StringBuilder();
+    EnumWindows((h, l) => {
+      if (!IsWindowVisible(h)) return true;
+      RECT r; GetWindowRect(h, out r); if (r.R - r.L < 2) return true;
+      sb.AppendLine(Desc(h));
+      EnumChildWindows(h, (c, l2) => { var k = Cls(c); if (k.StartsWith("EzReader") || k == "PreviewHandlerFrame" || k == "SHELLDLL_DefView" || k == "DirectUIHWND") sb.AppendLine("    " + Desc(c)); return true; }, IntPtr.Zero);
+      return true; }, IntPtr.Zero);
+    var fg = GetForegroundWindow(); uint pid; uint tid = GetWindowThreadProcessId(fg, out pid);
+    var g = new GUITHREADINFO(); g.cbSize = Marshal.SizeOf(g); GetGUIThreadInfo(tid, ref g);
+    sb.AppendLine("FOREGROUND " + Desc(fg));
+    sb.AppendLine("FOCUS " + (g.focus == IntPtr.Zero ? "none" : Desc(g.focus)));
+    return sb.ToString();
+  }
+}
+"@
+function Dump($tag) { Write-Host "--- windows: $tag ---"; Write-Host ([Win]::Dump()) }
+
 
 function Step($t) { Write-Host "`n=== $t ===" -ForegroundColor Cyan }
 function Shot($name) {
@@ -186,12 +228,15 @@ ClickItem $win "Lease agreement" 900;  Start-Sleep -Milliseconds 1500
 ClickItem $win "Pride and Prejudice" 600; Start-Sleep -Milliseconds 1500
 ClickItem $win "Receipt" 600;          Start-Sleep -Milliseconds 1500
 Shot "01-preview"
+Dump "receipt selected"
 # Scene 3: Space opens Quick Look on the garden plan, arrows turn pages.
 Mark "s3-start"
 ClickItem $win "Garden plan" 700;      Start-Sleep -Milliseconds 900
+Dump "before space"
 Mark "space-open"
 [W]::Key(0x20);                        Start-Sleep -Milliseconds 1800
 Shot "02-quicklook"
+Dump "after space"
 Get-Process ezreader-quicklook -ErrorAction SilentlyContinue | Format-Table Id, Responding, CPU | Out-Host
 [W]::Key(0x28);                        Start-Sleep -Milliseconds 900
 [W]::Key(0x28);                        Start-Sleep -Milliseconds 1200
