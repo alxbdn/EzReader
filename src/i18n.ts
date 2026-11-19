@@ -214,6 +214,11 @@ export interface Translations {
   ttPresent?: string;
   ttPresentExit?: string;
   menuPresent?: string;
+  ttMore?: string;
+  moreExport?: string;
+  moreCompress?: string;
+  moreProtect?: string;
+  moreUnprotect?: string;
   ttFullscreen?: string;
   ttFullscreenExit?: string;
   ttFont?: string;
@@ -801,6 +806,11 @@ const EN: Translations = {
   ttPresent:            "Present (F5)",
   ttPresentExit:        "Stop presenting (Esc)",
   menuPresent:          "Present",
+  ttMore:               "More tools",
+  moreExport:           "Export or convert…",
+  moreCompress:         "Compress…",
+  moreProtect:          "Protect with a password…",
+  moreUnprotect:        "Remove the password…",
   ttFullscreen:         "Full screen (F11)",
   ttFullscreenExit:     "Exit full screen (F11 or Esc)",
   ttFont:               "Font",
@@ -1388,6 +1398,11 @@ const FR: Translations = {
   ttPresent:            "Présenter (F5)",
   ttPresentExit:        "Arrêter la présentation (Échap)",
   menuPresent:          "Présenter",
+  ttMore:               "Plus d'outils",
+  moreExport:           "Exporter ou convertir…",
+  moreCompress:         "Compresser…",
+  moreProtect:          "Protéger par un mot de passe…",
+  moreUnprotect:        "Retirer le mot de passe…",
   ttFullscreen:         "Plein écran (F11)",
   ttFullscreenExit:     "Quitter le plein écran (F11 ou Échap)",
   ttFont:               "Police",

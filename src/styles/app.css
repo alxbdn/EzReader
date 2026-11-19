@@ -520,7 +520,8 @@ body.tab-dragging, body.tab-dragging * { cursor: grabbing !important; }
 
 .menubar-spacer { flex-shrink: 0; }
 
-.menu-dropdown {
+.menu-dropdown,
+.tb-more-menu {
   display: none;
   position: absolute;
   top: calc(100% + 4px);
@@ -534,7 +535,8 @@ body.tab-dragging, body.tab-dragging * { cursor: grabbing !important; }
   z-index: 100;
 }
 
-.menu-dropdown.open {
+.menu-dropdown.open,
+.tb-more-menu.open {
   display: block;
   animation: pop-in 0.12s ease-out;
 }
@@ -3164,8 +3166,25 @@ body.mac .titlebar-logo { display: none !important; }
   display: inline-flex; align-items: center; justify-content: center; font-weight: 700; font-size: 12px;
 }
 
-.tb-lock.on { color: #16a34a; }
-:root[data-theme="dark"] .tb-lock.on { color: #4ade80; }
+.tb-more-wrap { position: relative; display: inline-flex; }
+.icon-btn.tb-square.tb-more.open { background: var(--accent); }
+.tb-more-menu {
+  top: calc(100% + 6px);
+  left: auto;
+  right: 0;
+  min-width: 248px;
+  z-index: 150;
+}
+.tb-more-menu .menu-entry { justify-content: flex-start; gap: 10px; }
+.tb-more-menu .more-icon { display: inline-flex; color: var(--muted-foreground); }
+.tb-more-menu .more-icon svg { width: 16px; height: 16px; display: block; }
+.tb-more-menu .more-label { flex: 1; }
+.tb-more-menu .shortcut { margin-left: 24px; }
+.tb-more-menu .menu-entry.current .more-label { font-weight: 600; }
+.tb-more-menu .menu-entry.current .more-icon { color: var(--foreground); }
+.more-lock.on .more-icon { color: #16a34a; }
+:root[data-theme="dark"] .more-lock.on .more-icon { color: #4ade80; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .more-lock.on .more-icon { color: #4ade80; } }
 
 body.read-only .mode-btn:not([data-mode="read"]) { opacity: 0.45; }
 body.read-only .page-form-layer { pointer-events: none; }
