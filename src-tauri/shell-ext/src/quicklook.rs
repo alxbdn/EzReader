@@ -24,9 +24,9 @@ use windows::Win32::UI::HiDpi::{
     GetDpiForWindow, SetProcessDpiAwarenessContext, DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2,
 };
 use windows::Win32::UI::Input::KeyboardAndMouse::{
-    GetAsyncKeyState, SendInput, INPUT, INPUT_0, INPUT_KEYBOARD, KEYBDINPUT, KEYEVENTF_KEYUP, VIRTUAL_KEY, VK_CONTROL,
-    VK_DOWN, VK_END, VK_ESCAPE, VK_HOME, VK_LEFT, VK_LWIN, VK_MENU, VK_NEXT, VK_PRIOR, VK_RETURN, VK_RIGHT, VK_RWIN,
-    VK_SHIFT, VK_SPACE, VK_UP,
+    GetAsyncKeyState, SendInput, SetFocus, INPUT, INPUT_0, INPUT_KEYBOARD, INPUT_MOUSE, KEYBDINPUT, KEYEVENTF_KEYUP,
+    MOUSEINPUT, VIRTUAL_KEY, VK_CONTROL, VK_DOWN, VK_END, VK_ESCAPE, VK_HOME, VK_LEFT, VK_LWIN, VK_MENU, VK_NEXT,
+    VK_PRIOR, VK_RETURN, VK_RIGHT, VK_RWIN, VK_SHIFT, VK_SPACE, VK_UP,
 };
 use windows::Win32::UI::Shell::{
     ExtractIconExW, IFolderView2, IShellBrowser, IShellWindows, IWebBrowser2, SID_STopLevelBrowser, ShellWindows,
@@ -272,6 +272,9 @@ extern "system" fn host_proc(window: HWND, message: u32, wparam: WPARAM, lparam:
     match message {
         WM_QUICK_LOOK => {
             let explorer = HWND(wparam.0 as *mut _);
+            if close_open_window() {
+                return LRESULT(0);
+            }
             match selected_file(explorer).filter(|p| is_pdf(p)) {
                 Some(path) => show(&path, explorer),
                 None => replay_space(),
@@ -407,6 +410,10 @@ struct QuickLook {
     controls: Vec<(Control, RECT)>,
     hover: Option<Control>,
     icon: Option<HICON>,
+    /// Set once the window really is the foreground window. Until then a
+    /// deactivation is only Windows settling who owns the foreground, not the
+    /// user clicking away, so it must not close the preview.
+    armed: bool,
 }
 
 impl QuickLook {
@@ -463,23 +470,47 @@ impl EncodeWideNull for std::ffi::OsStr {
     }
 }
 
-fn close_open_window() {
+/// Closes the preview if one is open, and says whether there was one.
+fn close_open_window() -> bool {
     let open = HWND(OPEN.swap(0, Ordering::SeqCst) as *mut _);
     if !open.is_invalid() && unsafe { IsWindow(Some(open)) }.as_bool() {
         let _ = unsafe { DestroyWindow(open) };
+        return true;
     }
+    false
 }
 
-fn bring_to_front(window: HWND) {
+/// Makes the preview the foreground window, so it gets the next Space or Esc.
+///
+/// The Space press that opened it was swallowed by the keyboard hook, so
+/// Windows does not count this process as the one the user is typing to and
+/// refuses a plain `SetForegroundWindow`. A zero mouse input (no movement, no
+/// click) makes this process the last one to send input, which lifts that
+/// lock; joining Explorer's input queue is the fallback.
+fn bring_to_front(window: HWND) -> bool {
     unsafe {
+        if GetForegroundWindow() == window {
+            return true;
+        }
+        let nudge = INPUT {
+            r#type: INPUT_MOUSE,
+            Anonymous: INPUT_0 { mi: MOUSEINPUT { dwExtraInfo: REPLAYED, ..Default::default() } },
+        };
+        SendInput(&[nudge], std::mem::size_of::<INPUT>() as i32);
+        let _ = SetForegroundWindow(window);
+        if GetForegroundWindow() == window {
+            return true;
+        }
         let foreground = GetForegroundWindow();
         let theirs = GetWindowThreadProcessId(foreground, None);
         let ours = GetCurrentThreadId();
         let attached = theirs != ours && AttachThreadInput(ours, theirs, true).as_bool();
         let _ = SetForegroundWindow(window);
+        let _ = SetFocus(Some(window));
         if attached {
             let _ = AttachThreadInput(ours, theirs, false);
         }
+        GetForegroundWindow() == window
     }
 }
 
@@ -503,6 +534,7 @@ fn show(path: &Path, explorer: HWND) {
         controls: Vec::new(),
         hover: None,
         icon: app_icon(),
+        armed: false,
     });
 
     let monitor = unsafe { MonitorFromWindow(explorer, MONITOR_DEFAULTTONEAREST) };
@@ -553,11 +585,13 @@ fn show(path: &Path, explorer: HWND) {
         take_focus: false,
     };
     state.viewer = viewer::create(window, area, document, style).unwrap_or_default();
-    OPEN.store(window.0 as isize, Ordering::SeqCst);
     unsafe {
         let _ = ShowWindow(window, SW_SHOW);
     }
-    bring_to_front(window);
+    // Activation flips back and forth while the foreground changes hands, so
+    // the window only counts as open, and closes on deactivation, after that.
+    state.armed = bring_to_front(window);
+    OPEN.store(window.0 as isize, Ordering::SeqCst);
 }
 
 fn close(window: HWND, state: &QuickLook) {
@@ -910,7 +944,14 @@ extern "system" fn window_proc(window: HWND, message: u32, wparam: WPARAM, lpara
                 LRESULT(0)
             }
             WM_ACTIVATE => {
-                if (wparam.0 & 0xffff) as u32 == WA_INACTIVE && OPEN.load(Ordering::SeqCst) == window.0 as isize {
+                let current = OPEN.load(Ordering::SeqCst) == window.0 as isize;
+                if (wparam.0 & 0xffff) as u32 != WA_INACTIVE {
+                    // Clicking into a preview that never got the foreground
+                    // makes it a normal one: clicking away closes it again.
+                    if current && GetForegroundWindow() == window {
+                        state.armed = true;
+                    }
+                } else if state.armed && current {
                     let _ = PostMessageW(Some(window), WM_CLOSE, WPARAM(0), LPARAM(0));
                 }
                 LRESULT(0)
