@@ -231,6 +231,12 @@ Bug reports and ideas are welcome in the [issues](https://github.com/alxbdn/EzRe
 
 ---
 
+## Support
+
+EzReader is free and stays free. If it saves you time, you can [buy me a coffee](https://www.buymeacoffee.com/alxbdn): it helps pay for things like Apple signing for a notarized macOS version.
+
+<a href="https://www.buymeacoffee.com/alxbdn"><img src="https://img.buymeacoffee.com/button-api/?text=Buy%20me%20a%20coffee&emoji=&slug=alxbdn&button_colour=FF5F5F&font_colour=ffffff&font_family=Bree&outline_colour=000000&coffee_colour=FFDD00" alt="Buy me a coffee" height="48"></a>
+
 ## Credits and license
 
 EzReader started as a fork of [PDF Rider](https://github.com/pleymor/pdf-rider) by pleymor, used under the MIT license. Thanks to its author for the foundation this app is built on.
