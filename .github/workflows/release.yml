@@ -3,6 +3,8 @@ name: Release
 # Releases are immutable once published: nothing can be added to them
 # afterwards. So every file (Windows, macOS, Linux, provenance, reports) is
 # attached to a draft first, and the draft is published last, in one step.
+# The macOS disk image is built in parallel and attached to the same draft
+# when it is ready, so a slow Mac runner never holds back the other jobs.
 
 on:
   push:
@@ -171,9 +173,7 @@ jobs:
       version: ${{ needs.build.outputs.version }}
 
   # The Linux packages, built once the scans have passed and handed over as
-  # the release-linux artifact. The macOS disk image is built and published by
-  # the Homebrew tap (alxbdn/homebrew-ezreader) after this release, so scarce
-  # macOS runners never hold it back.
+  # the release-linux artifact.
   linux:
     needs: security
     permissions:
@@ -185,14 +185,33 @@ jobs:
       for_release: true
       release_tag: ${{ github.ref_name }}
 
-  # One draft release holding every package and its provenance.
+  # The universal macOS disk image (Intel and Apple Silicon), built in
+  # parallel once the scans have passed and handed over as the release-macos
+  # artifact. macOS runners are scarce: the Windows and Linux files go into the
+  # draft without waiting for it, and macos-attach adds the disk image before
+  # publishing. If the Mac job is dropped, re-run the failed jobs: the release
+  # stays a draft until the disk image is attached.
+  macos:
+    needs: security
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+    uses: ./.github/workflows/macos-dmg.yml
+    with:
+      for_release: true
+      release_tag: ${{ github.ref_name }}
+
+  # One draft release holding the Windows and Linux packages and their
+  # provenance.
   draft:
     needs: [build, install-test, linux]
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
-      # release-packages, release-provenance (Windows), release-linux.
+      # release-packages, release-provenance (Windows), release-linux. The
+      # macOS files are attached by macos-attach, whenever they are ready.
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           pattern: release-*
@@ -240,6 +259,31 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+  # The macOS disk image and its provenance, attached to the draft.
+  macos-attach:
+    needs: [build, draft, macos]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: release-macos
+          path: macos
+
+      - name: Attach the disk image to the draft
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ github.ref_name }}
+          VERSION: ${{ needs.build.outputs.version }}
+        run: |
+          set -euo pipefail
+          ls -l macos
+          gh release upload "$TAG" --clobber \
+            "macos/ezreader-${VERSION}-macos-universal.dmg" \
+            "macos/ezreader-${VERSION}-macos.intoto.jsonl"
+
   # The reports zip (security and performance reports, SBOMs), attached to
   # the draft.
   reports:
@@ -254,7 +298,7 @@ jobs:
 
   # Everything is attached: publish. From here on the release is immutable.
   publish:
-    needs: [draft, reports]
+    needs: [draft, macos-attach, reports]
     runs-on: ubuntu-latest
     permissions:
       contents: write

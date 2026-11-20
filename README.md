@@ -92,8 +92,9 @@ Prefer to download? **[Get the latest release](https://github.com/alxbdn/EzReade
 | | `ezreader-portable-<version>-win-x64.exe` | Portable app: a single file you can run from anywhere |
 | **Linux** | `ezreader_<version>_amd64.deb` | Package for Debian, Ubuntu and derivatives |
 | | `ezreader-portable-<version>-linux-x64` | Portable app: make it executable (`chmod +x`) and run it |
+| **macOS** | `ezreader-<version>-macos-universal.dmg` | Disk image, universal (Intel and Apple Silicon) |
 
-The macOS disk image (`ezreader-<version>-macos-universal.dmg`) is published on the [Homebrew tap's releases](https://github.com/alxbdn/homebrew-ezreader/releases/latest), shortly after each EzReader release. The app is not notarized by Apple: installed with Homebrew it opens straight away; from the disk image, macOS blocks it the first time. On macOS 15 (Sequoia) and later, open EzReader once, then go to **System Settings > Privacy & Security** and click **Open Anyway**; on earlier versions, right-click EzReader in Applications and choose **Open**. Or, in Terminal:
+The macOS app is not notarized by Apple: installed with Homebrew it opens straight away; from the disk image, macOS blocks it the first time. On macOS 15 (Sequoia) and later, open EzReader once, then go to **System Settings > Privacy & Security** and click **Open Anyway**; on earlier versions, right-click EzReader in Applications and choose **Open**. Or, in Terminal:
 
 ```sh
 xattr -dr com.apple.quarantine /Applications/EzReader.app
