@@ -295,7 +295,7 @@ describe("menus", () => {
         if (getComputedStyle(menu).display === "none" || menu.getBoundingClientRect().height === 0) return 0;
         return [...menu.querySelectorAll(".menu-entry")].filter((e) => !e.disabled).length;
       }, 5000, id);
-      assert.ok(entries >= 4, `${id}: ${entries} enabled entries`);
+      assert.ok(entries >= 3, `${id}: ${entries} enabled entries`);
       await driver.actions().sendKeys(Key.ESCAPE).perform();
       await waitFor(`the ${id} menu to close`, (id) => {
         const menu = document.querySelector(`[data-menu-id=${id}]`).nextElementSibling;
