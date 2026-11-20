@@ -1,9 +1,9 @@
 name: macOS Disk Image
 
 # A universal .dmg (Intel and Apple Silicon), built as a check after merges to
-# main. Release disk images are built and published by the Homebrew tap
-# (alxbdn/homebrew-ezreader). It is signed ad hoc only (no
-# Apple Developer account): the Homebrew cask (alxbdn/homebrew-ezreader) lifts the quarantine on install.
+# main, and for each release by the Release workflow, which attaches it to the
+# GitHub release. It is signed ad hoc only (no Apple Developer account): the
+# Homebrew cask (alxbdn/homebrew-ezreader) lifts the quarantine on install.
 
 # macOS runners are scarce on GitHub: jobs often wait in the queue and get
 # dropped ("job was not acquired by Runner"). So this build never runs on pull
