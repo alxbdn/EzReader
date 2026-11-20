@@ -245,6 +245,9 @@ pub async fn install_update(app: tauri::AppHandle) -> CmdResult<UpdateOutcome> {
     Ok(outcome)
 }
 
+/// Passive, restart EzReader after, and run as an update of the installed version.
+const INSTALLER_ARGS: [&str; 3] = ["/P", "/R", "/UPDATE"];
+
 fn run_update(channel: Channel, version: &str) -> CmdResult<UpdateOutcome> {
     #[cfg(target_os = "windows")]
     if channel == Channel::Store {
@@ -267,7 +270,9 @@ fn run_update(channel: Channel, version: &str) -> CmdResult<UpdateOutcome> {
         Channel::Installer => {
             let dest = std::env::temp_dir().join(&asset.name);
             download(asset, &dest, version)?;
-            quiet(&dest).args(["/P", "/R"]).spawn().map_err(|e| format!("could not start the installer ({e})"))?;
+            // /UPDATE: the old version's uninstaller then knows it is an
+            // update and keeps the user's choices (quick look with Space).
+            quiet(&dest).args(INSTALLER_ARGS).spawn().map_err(|e| format!("could not start the installer ({e})"))?;
             Ok(UpdateOutcome::Restarting)
         }
         Channel::Deb => install_deb(asset, version),

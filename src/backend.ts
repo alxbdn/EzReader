@@ -6,12 +6,10 @@ export interface Backend {
   savePdfDialog(suggested: string): Promise<string | null>;
   saveAsDialog(suggested: string, format: DocFormat): Promise<string | null>;
   pickDirectory(): Promise<string | null>;
-  pickImages(): Promise<string[]>;
 
   existingFiles(paths: string[]): Promise<string[]>;
   writeImageFile(path: string, data: string): Promise<void>;
 
-  imagesToPdf(paths: string[], output: string): Promise<void>;
   exportFlattenedPages(input: string, output: string, pages: number[]): Promise<void>;
   extractText(path: string, pages: number[], title: string): Promise<TextDoc>;
   convertText(doc: TextDoc, format: DocFormat, output: string): Promise<void>;

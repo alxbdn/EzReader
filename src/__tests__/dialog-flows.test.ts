@@ -151,15 +151,4 @@ describe("Export flow", () => {
     expect(backend.convertText).not.toHaveBeenCalled();
     expect(toasts).toEqual([{ text: messages.msg("msgNoTextFound"), isError: true }]);
   });
-
-  it("turns pictures into a new PDF", async () => {
-    const { backend } = fakeBackend();
-    const { ui } = fakeFeedback();
-    const { modal, run } = exportModal();
-    setUpExport({ session: fakeSession(), viewer, modal, pendingRename: () => null, messages, ui, backend });
-    run({ kind: "images", paths: ["/pics/scan.jpg"] });
-    await settle();
-    expect(backend.savePdfDialog).toHaveBeenCalledWith("scan.pdf");
-    expect(backend.imagesToPdf).toHaveBeenCalledWith(["/pics/scan.jpg"], "/out/saved.pdf");
-  });
 });

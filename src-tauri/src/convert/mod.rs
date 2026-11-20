@@ -145,7 +145,9 @@ pub fn blocks(page: &TextPage) -> Vec<Block> {
         if text.is_empty() {
             continue;
         }
-        if text.len() > 1 {
+        // A row with one filled cell, past the first column, stays in its table.
+        let lone_table_cell = !table.is_empty() && line.cells.iter().any(|c| c.col > 0);
+        if text.len() > 1 || lone_table_cell {
             table.push(line);
             open_para = false;
             continue;
@@ -240,6 +242,24 @@ pub(crate) mod tests {
                 },
             ]
         );
+    }
+
+    #[test]
+    fn a_row_with_one_cell_stays_in_its_table() {
+        let page = TextPage {
+            number: 1,
+            width: 100.0,
+            height: 100.0,
+            lines: vec![
+                row(&[("Date", 0), ("Debit", 1), ("Credit", 2)]),
+                row(&[("12/03", 0), ("1,05", 2)]),
+                TextLine { cells: vec![TextCell { text: "60,00".into(), col: 1 }], ..row(&[]) },
+                line("After the table.", 10.0, true, 0),
+            ],
+        };
+        let b = blocks(&page);
+        assert_eq!(b.len(), 2);
+        assert!(matches!(&b[0], Block::Table { rows } if rows.len() == 3 && rows[2][1] == "60,00"));
     }
 
     #[test]

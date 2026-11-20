@@ -31,7 +31,6 @@ describe("blockedWhileProtected", () => {
     { type: "zoom-in" },
     { type: "toggle-sidebar" },
     { type: "settings" },
-    { type: "images-to-pdf" },
     { type: "mode-change", mode: "read" },
     { type: "tool-change", tool: "select" },
   ])("allows $type, which only reads", (e) => {

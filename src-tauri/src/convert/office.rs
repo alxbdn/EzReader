@@ -141,8 +141,26 @@ fn column_name(mut i: usize) -> String {
     String::from_utf8(s).unwrap()
 }
 
+/// A cell that holds an amount: currency signs and thousands separators
+/// dropped, accounting brackets "(12.00)" and "−" read as negative.
 fn as_number(s: &str) -> Option<f64> {
-    let t: String = s.trim().chars().filter(|c| !matches!(c, ' ' | '\u{a0}' | '\u{202f}')).collect();
+    let t: String = s
+        .trim()
+        .chars()
+        .filter(|c| !matches!(c, ' ' | '\u{a0}' | '\u{202f}' | '\'' | '€' | '$' | '£' | '¥'))
+        .map(|c| if c == '\u{2212}' { '-' } else { c })
+        .collect();
+    if let Some(inner) = t.strip_prefix('(').and_then(|r| r.strip_suffix(')')) {
+        if inner.starts_with('-') {
+            return None;
+        }
+        return plain_number(inner).map(|v| -v);
+    }
+    plain_number(&t)
+}
+
+fn plain_number(t: &str) -> Option<f64> {
+    let t = t.to_string();
     if t.is_empty() || t.len() > 18 || !t.chars().all(|c| c.is_ascii_digit() || matches!(c, '-' | '.' | ',')) {
         return None;
     }
@@ -348,5 +366,17 @@ mod tests {
         assert_eq!(as_number("1,2,3"), None);
         assert_eq!(as_number("abc"), None);
         assert_eq!(as_number(""), None);
+    }
+
+    #[test]
+    fn reads_amounts_with_currency_and_brackets() {
+        assert_eq!(as_number("€ 4,99"), Some(4.99));
+        assert_eq!(as_number("1 250,00 €"), Some(1250.0));
+        assert_eq!(as_number("$1,234.50"), Some(1234.5));
+        assert_eq!(as_number("(12.00)"), Some(-12.0));
+        assert_eq!(as_number("\u{2212}3,5"), Some(-3.5));
+        assert_eq!(as_number("1'234.50"), Some(1234.5));
+        assert_eq!(as_number("€"), None);
+        assert_eq!(as_number("(-1)"), None);
     }
 }

@@ -50,7 +50,7 @@ import { SIGNATURE_INK } from "./signature-ink";
 import type { PageTextItem, ShapeAnnotation } from "./canvas-overlay";
 import { fitWithin, isImagePath, openKind, picturesDocument, type Picture } from "./pictures";
 import {
-  openPdfDialog,
+  openPagesDialog,
   openDocumentDialog,
   picturesToNewPdf,
   getPageCount,
@@ -1267,8 +1267,8 @@ function docStem(): string {
   return exportFlow.docStem();
 }
 
-function openExport(tab: "pdf" | "images"): void {
-  exportFlow.open(tab);
+function openExport(): void {
+  exportFlow.open();
 }
 
 async function editPassword(): Promise<void> {
@@ -1437,9 +1437,30 @@ pageSidebar.onInsertImages(async (after) => {
 });
 
 pageSidebar.onInsertPdf(async (after) => {
-  const path = await openPdfDialog();
-  if (path) await insertPdfAt(after, path);
+  const paths = await openPagesDialog();
+  await insertFiles(after, paths);
 });
+
+/** PDFs and pictures, in the order picked, in one step: each PDF brings all its pages, each picture one page. */
+async function insertFiles(after: number, paths: string[]): Promise<void> {
+  const slots: PageSlot[] = [];
+  for (const path of paths) {
+    if (isImagePath(path)) {
+      const pic = await readPicture(path);
+      if (pic) slots.push({ kind: "image", data: pic.data, rotation: 0 });
+    } else if (path.toLowerCase().endsWith(".pdf")) {
+      let count: number;
+      try {
+        count = await getPageCount(path);
+      } catch (err) {
+        showToast(msg("msgPagesFailed", { err: errText(err) }), true);
+        return;
+      }
+      for (let i = 1; i <= count; i++) slots.push({ kind: "imported", path, page: i, rotation: 0 });
+    }
+  }
+  if (slots.length > 0) await insertSlots(after, slots);
+}
 
 async function insertPdfAt(after: number, path: string): Promise<void> {
   let count: number;
@@ -1698,11 +1719,7 @@ toolbar.on(async (e) => {
       break;
 
     case "export":
-      openExport("pdf");
-      break;
-
-    case "images-to-pdf":
-      openExport("images");
+      openExport();
       break;
 
     case "ocr":

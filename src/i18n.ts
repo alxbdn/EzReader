@@ -473,8 +473,6 @@ export interface Translations {
   dlgCancel?: string;
   expTitle?: string;
   expOk?: string;
-  expTabPdf?: string;
-  expTabImages?: string;
   expFormat?: string;
   expPngSub?: string;
   expJpegSub?: string;
@@ -486,13 +484,7 @@ export interface Translations {
   expDpiPrint?: string;
   expKeepAnn?: string;
   expKeepAnnSub?: string;
-  expPickImages?: string;
-  expImagesHint?: string;
   expAllPages?: string;
-  expRemoveImage?: string;
-  expImagesNone?: string;
-  expImagesOne?: string;
-  expImagesMany?: string;
   expBadPages?: string;
   expWithAnn?: string;
   expWithoutAnn?: string;
@@ -561,7 +553,6 @@ export interface Translations {
   ttLockOn?: string;
   ttLockOff?: string;
   menuPassword?: string;
-  menuImagesToPdf?: string;
   msgProtected?: string;
   msgUnprotected?: string;
   msgProtectedReadOnly?: string;
@@ -569,7 +560,6 @@ export interface Translations {
   msgSavedProtected?: string;
   msgExportedOne?: string;
   msgExportedMany?: string;
-  msgImagesPdfSaved?: string;
   msgCompressTarget?: string;
   msgOverwrite?: string;
   msgOverwriteTitle?: string;
@@ -879,8 +869,8 @@ const EN: Translations = {
   nwPageMany: "{name} (pages {pages})",
   msgNewWindowFailed: "Couldn't open a new window: {err}",
   sbSave: "Save changes (Ctrl+S)",
-  sbAppendPdf: "Add a PDF",
-  sbAppendPdfHint: "Add the pages of another PDF at the end (to merge them)",
+  sbAppendPdf: "Add a file",
+  sbAppendPdfHint: "Add the pages of a PDF or pictures at the end (to merge them)",
   sbSearchPlaceholder: "Search in the document…",
   sbSearchPrev: "Previous match (Shift+Enter)",
   sbSearchNext: "Next match (Enter)",
@@ -1065,8 +1055,6 @@ const EN: Translations = {
   dlgCancel: "Cancel",
   expTitle: "Export & convert",
   expOk: "Export",
-  expTabPdf: "This PDF to…",
-  expTabImages: "Images to PDF",
   expFormat: "Format",
   expPngSub: "Lossless",
   expJpegSub: "Lighter",
@@ -1078,13 +1066,7 @@ const EN: Translations = {
   expDpiPrint: "300 dpi · print",
   expKeepAnn: "Keep annotations",
   expKeepAnnSub: "Highlights, sticky notes, drawings, signatures and stamps",
-  expPickImages: "Choose pictures…",
-  expImagesHint: "Each picture becomes a page, in this order, fitted to A4.",
   expAllPages: "All ({n})",
-  expRemoveImage: "Remove",
-  expImagesNone: "No pictures yet.",
-  expImagesOne: "1 picture → a PDF of 1 page.",
-  expImagesMany: "{n} pictures → a PDF of {n} pages.",
   expBadPages: "Pages: type for example 1-3, 5 (the document has {n}).",
   expWithAnn: "Annotations are included.",
   expWithoutAnn: "Without annotations.",
@@ -1153,7 +1135,6 @@ const EN: Translations = {
   ttLockOn: "Protected: remove the password",
   ttLockOff: "Protect with a password",
   menuPassword: "Password…",
-  menuImagesToPdf: "Images to PDF…",
   msgProtected: "Password set: it's applied when you save.",
   msgUnprotected: "Password removed: you can edit now. Save to keep the file unprotected.",
   msgProtectedReadOnly: "This file is password-protected, so it can only be read. Click the padlock to remove the password and edit or export it.",
@@ -1161,7 +1142,6 @@ const EN: Translations = {
   msgSavedProtected: "Saved with a password. The file is now read-only until the password is removed.",
   msgExportedOne: "1 picture exported",
   msgExportedMany: "{n} pictures exported",
-  msgImagesPdfSaved: "PDF made from {n} picture(s)",
   msgCompressTarget: "Couldn't get under {target}: the smallest result is {to}.",
   msgOverwrite: "{n} file(s) already exist in this folder. Replace them?",
   msgOverwriteTitle: "Replace files?",
@@ -1471,8 +1451,8 @@ const FR: Translations = {
   nwPageMany: "{name} (pages {pages})",
   msgNewWindowFailed: "Impossible d'ouvrir une nouvelle fenêtre : {err}",
   sbSave: "Enregistrer les modifications (Ctrl+S)",
-  sbAppendPdf: "Ajouter un PDF",
-  sbAppendPdfHint: "Ajouter les pages d'un autre PDF à la fin (pour les fusionner)",
+  sbAppendPdf: "Ajouter un fichier",
+  sbAppendPdfHint: "Ajouter les pages d'un PDF ou des images à la fin (pour les fusionner)",
   sbSearchPlaceholder: "Rechercher dans le document…",
   sbSearchPrev: "Résultat précédent (Maj+Entrée)",
   sbSearchNext: "Résultat suivant (Entrée)",
@@ -1657,8 +1637,6 @@ const FR: Translations = {
   dlgCancel: "Annuler",
   expTitle: "Exporter et convertir",
   expOk: "Exporter",
-  expTabPdf: "Ce PDF vers…",
-  expTabImages: "Images vers PDF",
   expFormat: "Format",
   expPngSub: "Sans perte",
   expJpegSub: "Plus léger",
@@ -1670,13 +1648,7 @@ const FR: Translations = {
   expDpiPrint: "300 dpi · impression",
   expKeepAnn: "Garder les annotations",
   expKeepAnnSub: "Surlignages, notes, dessins, signatures et tampons",
-  expPickImages: "Choisir des images…",
-  expImagesHint: "Chaque image devient une page, dans cet ordre, ajustée au format A4.",
   expAllPages: "Toutes ({n})",
-  expRemoveImage: "Retirer",
-  expImagesNone: "Aucune image pour l'instant.",
-  expImagesOne: "1 image → un PDF d'1 page.",
-  expImagesMany: "{n} images → un PDF de {n} pages.",
   expBadPages: "Pages : tapez par exemple 1-3, 5 (le document en a {n}).",
   expWithAnn: "Les annotations sont incluses.",
   expWithoutAnn: "Sans les annotations.",
@@ -1745,7 +1717,6 @@ const FR: Translations = {
   ttLockOn: "Protégé : retirer le mot de passe",
   ttLockOff: "Protéger par mot de passe",
   menuPassword: "Mot de passe…",
-  menuImagesToPdf: "Images vers PDF…",
   msgProtected: "Mot de passe défini : il est appliqué à l'enregistrement.",
   msgUnprotected: "Mot de passe retiré : vous pouvez modifier. Enregistrez pour garder le fichier sans protection.",
   msgProtectedReadOnly: "Ce fichier est protégé par un mot de passe : il est en lecture seule. Cliquez sur le cadenas pour retirer le mot de passe et le modifier ou l'exporter.",
@@ -1753,7 +1724,6 @@ const FR: Translations = {
   msgSavedProtected: "Enregistré avec un mot de passe. Le fichier est en lecture seule tant que le mot de passe n'est pas retiré.",
   msgExportedOne: "1 image exportée",
   msgExportedMany: "{n} images exportées",
-  msgImagesPdfSaved: "PDF créé à partir de {n} image(s)",
   msgCompressTarget: "Impossible de descendre sous {target} : le plus petit résultat fait {to}.",
   msgOverwrite: "{n} fichier(s) existe(nt) déjà dans ce dossier. Les remplacer ?",
   msgOverwriteTitle: "Remplacer les fichiers ?",

@@ -18,9 +18,7 @@ export function docFileName(stem: string, format: DocFormat): string {
 
 const DOC_KIND: Record<DocFormat, string> = { docx: "Word", xlsx: "Excel", rtf: "RTF", html: "HTML", txt: "Text", xml: "XML" };
 
-export type ExportRequest =
-  | { kind: "pages"; format: ExportFormat; pages: number[]; dpi: number; annotations: boolean }
-  | { kind: "images"; paths: string[] };
+export type ExportRequest = { kind: "pages"; format: ExportFormat; pages: number[]; dpi: number; annotations: boolean };
 
 const DPIS: [number, "expDpiLight" | "expDpiScreen" | "expDpiPrint", string][] = [
   [96, "expDpiLight", "96 dpi · light"],
@@ -34,18 +32,13 @@ export function pageFileName(stem: string, n: number, count: number, format: "pn
 }
 
 export class ExportModal extends Modal {
-  private tab: "pdf" | "images" = "pdf";
   private format: ExportFormat = "png";
   private dpi = 300;
   private pageCount = 0;
   private stem = "document";
-  private images: string[] = [];
   private handlers: ((r: ExportRequest) => void)[] = [];
-  private pickHandlers: (() => Promise<string[]>)[] = [];
 
-  private tabBtns = new Map<"pdf" | "images", HTMLButtonElement>();
   private pdfPane: HTMLElement;
-  private imagesPane: HTMLElement;
   private formatBtns = new Map<ExportFormat, HTMLButtonElement>();
   private pagesInput: HTMLInputElement;
   private dpiField: HTMLElement;
@@ -53,19 +46,9 @@ export class ExportModal extends Modal {
   private keep: HTMLInputElement;
   private keepRow: HTMLElement;
   private summary: HTMLElement;
-  private imageList: HTMLElement;
 
   constructor() {
     super("export-box", "expTitle", "Export & convert", "expOk", "Export", ICON_EXPORT);
-
-    const tabs = this.el("div", "toolbar-segment ez-tabs");
-    for (const [tab, key, fb] of [["pdf", "expTabPdf", "This PDF to…"], ["images", "expTabImages", "Images to PDF"]] as const) {
-      const b = this.el("button", "mode-btn", key, fb);
-      b.type = "button";
-      b.addEventListener("click", () => { this.tab = tab; this.refresh(); });
-      this.tabBtns.set(tab, b);
-      tabs.append(b);
-    }
 
     this.pdfPane = this.el("div", "ez-pane");
     const fmtLabel = this.el("span", "ez-label", "expPictures", "Pictures & PDF");
@@ -121,30 +104,17 @@ export class ExportModal extends Modal {
     this.keepRow = keep.row;
     this.pdfPane.append(fmtLabel, grid, docLabel, docGrid, row, keep.row);
 
-    this.imagesPane = this.el("div", "ez-pane");
-    const pick = this.el("button", "btn", "expPickImages", "Choose pictures…");
-    pick.type = "button";
-    pick.addEventListener("click", async () => {
-      for (const h of this.pickHandlers) this.images.push(...await h());
-      this.refresh();
-    });
-    this.imageList = this.el("div", "ez-filelist");
-    this.imagesPane.append(this.el("span", "ez-card-sub", "expImagesHint", "Each picture becomes a page, in this order, fitted to A4."), pick, this.imageList);
-
     this.summary = this.el("div", "ez-summary");
-    this.body.append(tabs, this.pdfPane, this.imagesPane, this.summary);
+    this.body.append(this.pdfPane, this.summary);
     this.okBtn.addEventListener("click", () => this.confirm());
   }
 
   onExport(cb: (r: ExportRequest) => void): void { this.handlers.push(cb); }
-  onPickImages(cb: () => Promise<string[]>): void { this.pickHandlers.push(cb); }
 
-  open(pageCount: number, stem: string, tab: "pdf" | "images"): void {
+  open(pageCount: number, stem: string): void {
     this.pageCount = pageCount;
     this.stem = stem;
     this.pagesInput.value = "";
-    this.images = [];
-    this.tab = pageCount > 0 ? tab : "images";
     this.refresh();
     this.show();
   }
@@ -155,28 +125,15 @@ export class ExportModal extends Modal {
 
   private confirm(): void {
     if (this.okBtn.disabled) return;
-    let req: ExportRequest;
-    if (this.tab === "images") {
-      req = { kind: "images", paths: [...this.images] };
-    } else {
-      const pages = this.pages();
-      if (!pages) return;
-      req = { kind: "pages", format: this.format, pages, dpi: this.dpi, annotations: this.keep.checked && !isDocFormat(this.format) };
-    }
+    const pages = this.pages();
+    if (!pages) return;
+    const req: ExportRequest = { kind: "pages", format: this.format, pages, dpi: this.dpi, annotations: this.keep.checked && !isDocFormat(this.format) };
     this.close();
     for (const h of this.handlers) h(req);
   }
 
   protected override refresh(): void {
     if (!this.pagesInput) return;
-    const hasDoc = this.pageCount > 0;
-    this.tabBtns.get("pdf")!.disabled = !hasDoc;
-    for (const [t, b] of this.tabBtns) {
-      b.classList.toggle("active", t === this.tab);
-      b.setAttribute("aria-pressed", String(t === this.tab));
-    }
-    this.pdfPane.hidden = this.tab !== "pdf";
-    this.imagesPane.hidden = this.tab !== "images";
     for (const [f, b] of this.formatBtns) b.classList.toggle("active", f === this.format);
     const doc = isDocFormat(this.format);
     this.dpiField.hidden = this.format === "pdf" || doc;
@@ -185,29 +142,6 @@ export class ExportModal extends Modal {
     this.pagesInput.placeholder = this.tr("expAllPages", "All ({n})").replace("{n}", String(this.pageCount));
 
     this.summary.classList.remove("error");
-    if (this.tab === "images") {
-      this.imageList.replaceChildren(...this.images.map((p, i) => {
-        const item = this.el("div", "ez-file");
-        const name = this.el("span", "ez-file-name");
-        name.textContent = p.split(/[\\/]/).pop() ?? p;
-        name.title = p;
-        const del = this.el("button", "icon-btn");
-        del.type = "button";
-        del.textContent = "×";
-        del.title = this.tr("expRemoveImage", "Remove");
-        del.setAttribute("aria-label", del.title);
-        del.addEventListener("click", () => { this.images.splice(i, 1); this.refresh(); });
-        item.append(name, del);
-        return item;
-      }));
-      const n = this.images.length;
-      this.summary.textContent = n === 0
-        ? this.tr("expImagesNone", "No pictures yet.")
-        : (n === 1 ? this.tr("expImagesOne", "1 picture → a PDF of 1 page.") : this.tr("expImagesMany", "{n} pictures → a PDF of {n} pages.").replaceAll("{n}", String(n)));
-      this.okBtn.disabled = n === 0;
-      return;
-    }
-
     const pages = this.pages();
     if (!pages) {
       this.summary.textContent = this.tr("expBadPages", "Pages: type for example 1-3, 5 (the document has {n}).").replace("{n}", String(this.pageCount));

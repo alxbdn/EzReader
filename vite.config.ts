@@ -7,10 +7,18 @@ export default defineConfig({
     environment: "node",
     testTimeout: 15000,
   },
+  resolve: {
+    // The legacy build of pdf.js ships the polyfills older WebKit needs
+    // (Promise.withResolvers, Map.getOrInsertComputed...). macOS keeps the
+    // WebKit of the Safari it came with, so Intel Macs stuck on macOS 12–14
+    // threw while loading the modern build and showed a black window.
+    alias: [{ find: /^pdfjs-dist$/, replacement: "pdfjs-dist/legacy/build/pdf.mjs" }],
+  },
   build: {
     outDir: "dist",
     emptyOutDir: true,
-    target: "esnext",
+    // macOS 11 is the oldest system the app installs on (Safari 14 WebKit).
+    target: ["es2020", "safari14"],
     rollupOptions: {
       input: resolve(import.meta.dirname, "index.html"),
     },

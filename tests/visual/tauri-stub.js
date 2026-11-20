@@ -15,7 +15,7 @@
     list_printers: () => [],
     ocr_languages: () => [{ tag: "en-US", name: "English" }],
     existing_files: () => [],
-    open_pdf_dialog: () => null,
+    open_pages_dialog: () => [],
     open_document_dialog: () => null,
     save_pdf_dialog: () => null,
     "plugin:path|resolve_directory": () => "/tmp",

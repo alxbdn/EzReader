@@ -17,12 +17,12 @@ export interface ExportDeps {
   messages: Messages;
   ui: Feedback;
   backend: Pick<Backend,
-    "savePdfDialog" | "saveAsDialog" | "pickDirectory" | "pickImages" | "existingFiles" | "writeImageFile"
-    | "imagesToPdf" | "exportFlattenedPages" | "extractText" | "convertText">;
+    "savePdfDialog" | "saveAsDialog" | "pickDirectory" | "existingFiles" | "writeImageFile"
+    | "exportFlattenedPages" | "extractText" | "convertText">;
 }
 
 export interface ExportFlow {
-  open(tab: "pdf" | "images"): void;
+  open(): void;
   docStem(): string;
 }
 
@@ -38,13 +38,6 @@ export function setUpExport(d: ExportDeps): ExportFlow {
 
   const run = async (req: ExportRequest): Promise<void> => {
     try {
-      if (req.kind === "images") {
-        const out = await backend.savePdfDialog(`${req.paths.length === 1 ? fileNameOf(req.paths[0]).replace(/\.[^.]+$/, "") : "Images"}.pdf`);
-        if (!out) return;
-        await backend.imagesToPdf(req.paths, out);
-        ui.notify(msg("msgImagesPdfSaved", { n: req.paths.length }));
-        return;
-      }
       if (!d.session.isOpen || !d.viewer.isLoaded()) return;
       if (isDocFormat(req.format)) {
         const input = await d.session.materialize({ annotations: false });
@@ -87,11 +80,10 @@ export function setUpExport(d: ExportDeps): ExportFlow {
     }
   };
 
-  d.modal.onPickImages(() => backend.pickImages());
   d.modal.onExport((req) => void run(req));
 
   return {
-    open: (tab) => d.modal.open(d.viewer.isLoaded() ? d.viewer.pageCount : 0, docStem(), tab),
+    open: () => { if (d.viewer.isLoaded()) d.modal.open(d.viewer.pageCount, docStem()); },
     docStem,
   };
 }
