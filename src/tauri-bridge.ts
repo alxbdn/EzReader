@@ -16,8 +16,9 @@ async function call<T>(cmd: string, args?: Record<string, unknown>): Promise<T> 
 
 import type { FormFieldValue, StoredAnnotation } from "./models";
 
-export async function openPdfDialog(): Promise<string | null> {
-  return call<string | null>("open_pdf_dialog");
+/** PDFs and pictures to add as pages, several at once. */
+export async function openPagesDialog(): Promise<string[]> {
+  return call<string[]>("open_pages_dialog");
 }
 
 export async function openDocumentDialog(): Promise<string | null> {
@@ -314,10 +315,6 @@ export async function decryptPdf(inputPath: string, outputPath: string, password
 
 export async function openImagesDialog(): Promise<string[]> {
   return call<string[]>("open_images_dialog");
-}
-
-export async function imagesToPdf(imagePaths: string[], outputPath: string): Promise<void> {
-  return call<void>("images_to_pdf", { imagePaths, outputPath });
 }
 
 export async function tempTag(): Promise<string> {

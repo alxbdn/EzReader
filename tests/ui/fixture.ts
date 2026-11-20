@@ -31,7 +31,7 @@ function answers(png: string) {
   const docs = ["unicode-links-outlines.pdf", "form-acroform.pdf", "encrypted-aes-256.pdf", "foreign-annotations.pdf", "scanned-jpeg.pdf"];
   const next = () => `/docs/${docs[opened++ % docs.length]}`;
   const extra: Record<string, () => unknown> = {
-    open_pdf_dialog: next,
+    open_pages_dialog: () => [next()],
     open_document_dialog: next,
     open_image_dialog: () => "/pics/stamp.png",
     open_images_dialog: () => ["/pics/a.png", "/pics/b.png"],

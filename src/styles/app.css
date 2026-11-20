@@ -3050,8 +3050,6 @@ body.mac .titlebar-logo { display: none !important; }
 .ez-modal-body { display: flex; flex-direction: column; gap: 12px; font-size: 13px; }
 .ez-modal-body [hidden] { display: none !important; }
 .ez-pane { display: flex; flex-direction: column; gap: 12px; }
-.ez-tabs { align-self: flex-start; }
-.ez-tabs .mode-btn:disabled { opacity: 0.45; cursor: default; }
 .ez-label { color: var(--muted-foreground); font-size: 12px; }
 .ez-intro { margin: 0; color: var(--muted-foreground); line-height: 1.5; }
 .ez-grid3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
@@ -3135,10 +3133,6 @@ body.mac .titlebar-logo { display: none !important; }
 .ocr-status.error { color: var(--destructive); }
 .ez-summary.error, .ez-error { color: var(--destructive); }
 .ez-error { font-size: 12px; }
-.ez-filelist { display: flex; flex-direction: column; gap: 4px; max-height: 180px; overflow-y: auto; }
-.ez-file { display: flex; align-items: center; gap: 8px; padding: 4px 4px 4px 10px; border: 1px solid var(--border); border-radius: var(--radius-md); }
-.ez-file-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.ez-file .icon-btn { width: 24px; height: 24px; }
 
 .btn-destructive { background: #E53935; border-color: #E53935; color: #ffffff; }
 .btn-destructive:hover { background: #c62828; border-color: #c62828; }

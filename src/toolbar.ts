@@ -49,7 +49,6 @@ export type ToolbarEvent =
   | { type: "export" }
   | { type: "compress" }
   | { type: "password" }
-  | { type: "images-to-pdf" }
   | { type: "ocr" }
   | { type: "rotate" }
   | { type: "zoom-in" }
@@ -110,7 +109,7 @@ interface MenuDef {
 }
 
 const GUARDED = new Set<ToolbarEvent["type"]>([
-  "open", "save", "save-as", "export", "compress", "password", "images-to-pdf", "ocr", "print", "settings", "split", "rotate",
+  "open", "save", "save-as", "export", "compress", "password", "ocr", "print", "settings", "split", "rotate",
   "insert-blank", "insert-pdf", "insert-image", "insert-image-page", "extract-pages", "present",
 ]);
 
@@ -463,7 +462,6 @@ export class Toolbar {
           { label: "menuProtect", action: go({ type: "password" }), requiresDoc: true },
           null,
           { label: "menuOcr", action: go({ type: "ocr" }) },
-          { label: "menuImagesToPdf", action: go({ type: "images-to-pdf" }) },
         ],
       },
     ];

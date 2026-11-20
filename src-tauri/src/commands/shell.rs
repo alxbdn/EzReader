@@ -1119,6 +1119,30 @@ mod quick_look {
             .is_ok()
     }
 
+    /// An update stops the helper, and Windows only starts it again at the
+    /// next sign-in; older installers also dropped its startup entry. So at
+    /// launch: start it if quick look is on, and turn it back on if it was on
+    /// before an update. A second copy exits at once (single-instance mutex).
+    pub fn resume(memo: &std::path::Path, version: &str) {
+        let Some(helper) = helper() else { return };
+        let remembered = std::fs::read_to_string(memo).ok();
+        match super::quick_look_after_launch(enabled(), remembered.as_deref(), version) {
+            super::QuickLookResume::Start => {
+                let _ = std::process::Command::new(&helper).spawn();
+                let _ = std::fs::write(memo, version);
+            }
+            super::QuickLookResume::TurnBackOn => {
+                if set(true, &helper).is_ok() {
+                    let _ = std::fs::write(memo, version);
+                }
+            }
+            super::QuickLookResume::Forget => {
+                let _ = std::fs::remove_file(memo);
+            }
+            super::QuickLookResume::Nothing => {}
+        }
+    }
+
     pub fn set(enabled: bool, helper: &std::path::Path) -> Result<(), String> {
         use windows::ApplicationModel::StartupTaskState;
         if super::is_packaged() {
@@ -1149,6 +1173,47 @@ mod quick_look {
     }
 }
 
+#[derive(Debug, PartialEq, Eq)]
+#[cfg_attr(not(target_os = "windows"), allow(dead_code))]
+pub enum QuickLookResume {
+    /// On: make sure the helper runs.
+    Start,
+    /// Was on before an update that turned it off: turn it on again.
+    TurnBackOn,
+    /// Turned off outside EzReader (Task Manager › Startup apps): respect it.
+    Forget,
+    Nothing,
+}
+
+/// `remembered` is the version written when quick look was last seen on.
+#[cfg_attr(not(target_os = "windows"), allow(dead_code))]
+pub fn quick_look_after_launch(enabled: bool, remembered: Option<&str>, version: &str) -> QuickLookResume {
+    match (enabled, remembered.map(str::trim)) {
+        (true, _) => QuickLookResume::Start,
+        (false, Some(v)) if v != version => QuickLookResume::TurnBackOn,
+        (false, Some(_)) => QuickLookResume::Forget,
+        (false, None) => QuickLookResume::Nothing,
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn quick_look_memo(app: &tauri::AppHandle) -> Option<std::path::PathBuf> {
+    use tauri::Manager;
+    let dir = app.path().app_local_data_dir().ok()?;
+    std::fs::create_dir_all(&dir).ok()?;
+    Some(dir.join("quick-look-on"))
+}
+
+/// Called at launch: keeps quick look with Space working after an update.
+pub fn resume_quick_look(app: tauri::AppHandle) {
+    #[cfg(target_os = "windows")]
+    if let Some(memo) = quick_look_memo(&app) {
+        quick_look::resume(&memo, &app.package_info().version.to_string());
+    }
+    #[cfg(not(target_os = "windows"))]
+    let _ = app;
+}
+
 #[tauri::command]
 pub fn quick_look_state() -> QuickLookState {
     #[cfg(target_os = "windows")]
@@ -1161,16 +1226,41 @@ pub fn quick_look_state() -> QuickLookState {
 }
 
 #[tauri::command]
-pub fn set_quick_look(enabled: bool) -> CmdResult<()> {
+pub fn set_quick_look(app: tauri::AppHandle, enabled: bool) -> CmdResult<()> {
     #[cfg(target_os = "windows")]
     {
         let helper = quick_look::helper().ok_or("quick-look-missing")?;
         quick_look::set(enabled, &helper)?;
+        if let Some(memo) = quick_look_memo(&app) {
+            if enabled {
+                let _ = std::fs::write(&memo, app.package_info().version.to_string());
+            } else {
+                let _ = std::fs::remove_file(&memo);
+            }
+        }
         Ok(())
     }
     #[cfg(not(target_os = "windows"))]
     {
-        let _ = enabled;
+        let _ = (app, enabled);
         Err("quick-look-missing".into())
+    }
+}
+
+#[cfg(test)]
+mod quick_look_tests {
+    use super::{quick_look_after_launch, QuickLookResume};
+
+    #[test]
+    fn quick_look_comes_back_after_an_update() {
+        assert_eq!(quick_look_after_launch(true, None, "1.2.0"), QuickLookResume::Start);
+        assert_eq!(quick_look_after_launch(true, Some("1.1.0"), "1.2.0"), QuickLookResume::Start);
+        assert_eq!(quick_look_after_launch(false, Some("1.1.0\n"), "1.2.0"), QuickLookResume::TurnBackOn);
+    }
+
+    #[test]
+    fn quick_look_stays_off_when_turned_off() {
+        assert_eq!(quick_look_after_launch(false, Some("1.2.0"), "1.2.0"), QuickLookResume::Forget);
+        assert_eq!(quick_look_after_launch(false, None, "1.2.0"), QuickLookResume::Nothing);
     }
 }

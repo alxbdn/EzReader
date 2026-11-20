@@ -7,7 +7,7 @@ function open(): { modal: ExportModal; requests: ExportRequest[] } {
   const modal = new ExportModal();
   const requests: ExportRequest[] = [];
   modal.onExport((r) => requests.push(r));
-  modal.open(4, "report", "pdf");
+  modal.open(4, "report");
   return { modal, requests };
 }
 

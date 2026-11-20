@@ -3,7 +3,7 @@ import { SAFE_PDF } from "./pdf-options";
 import { AnnotationMode } from "pdfjs-dist";
 import type { PDFDocumentProxy, PDFPageProxy, PageViewport, RenderTask } from "pdfjs-dist";
 import { convertFileSrc } from "@tauri-apps/api/core";
-import workerUrl from "pdfjs-dist/build/pdf.worker.min.mjs?url";
+import workerUrl from "pdfjs-dist/legacy/build/pdf.worker.min.mjs?url";
 import { CanvasOverlay } from "./canvas-overlay";
 import { createFieldControl, type WidgetData } from "./form-fields";
 import { ToolSelection } from "./tool-selection";

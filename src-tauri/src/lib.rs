@@ -100,6 +100,8 @@ pub fn run() {
         .setup(move |app| {
             std::thread::spawn(tempfiles::sweep_leftovers);
             std::thread::spawn(commands::update::remove_leftover);
+            let handle = app.handle().clone();
+            std::thread::spawn(move || commands::shell::resume_quick_look(handle));
             if let Some(path) = &startup_file {
                 allow_viewing(app, path);
             }
@@ -129,7 +131,7 @@ pub fn run() {
             commands::compress::estimate_compression,
             commands::security::encrypt_pdf,
             commands::security::decrypt_pdf,
-            commands::dialog::open_pdf_dialog,
+            commands::dialog::open_pages_dialog,
             commands::dialog::open_document_dialog,
             commands::dialog::save_pdf_dialog,
             commands::dialog::pick_directory_dialog,
@@ -155,7 +157,6 @@ pub fn run() {
             commands::pdf::split_pdf,
             commands::pdf::redact_pages,
             commands::pdf::adjust_pages,
-            commands::pdf::images_to_pdf,
             commands::shell::list_printers,
             commands::shell::print_pages,
             commands::shell::get_startup_args,

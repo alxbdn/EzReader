@@ -157,9 +157,9 @@ export class PageSidebar {
     this.addCard.className = "page-sidebar-add";
     this.addCard.innerHTML = ICON_PLUS_LG;
     const addLabel = document.createElement("span");
-    this.text(addLabel, "sbAppendPdf", "Add a PDF");
+    this.text(addLabel, "sbAppendPdf", "Add a file");
     this.addCard.append(addLabel);
-    this.title(this.addCard, "sbAppendPdfHint", "Add the pages of another PDF at the end");
+    this.title(this.addCard, "sbAppendPdfHint", "Add the pages of a PDF or pictures at the end");
     this.addCard.addEventListener("click", () => {
       if (this.canAct()) for (const cb of this.insertPdfHandlers) cb(this.thumbs.length);
     });

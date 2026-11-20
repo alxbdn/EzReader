@@ -11,12 +11,23 @@ fn filepath_to_string(p: FilePath) -> String {
 }
 
 #[tauri::command(async)]
-pub fn open_pdf_dialog(app: AppHandle) -> CmdResult<Option<String>> {
-    let result = app.dialog().file().add_filter("PDF Files", &["pdf"]).blocking_pick_file();
-
-    let picked = result.map(filepath_to_string);
-    if let Some(path) = &picked {
-        crate::allow_viewing(&app, path);
+pub fn open_pages_dialog(app: AppHandle) -> CmdResult<Vec<String>> {
+    let mut all = vec!["pdf"];
+    all.extend(IMAGE_EXTENSIONS);
+    let result = app
+        .dialog()
+        .file()
+        .add_filter("PDF and pictures", &all)
+        .add_filter("PDF Files", &["pdf"])
+        .add_filter("Images", &IMAGE_EXTENSIONS)
+        .blocking_pick_files();
+    let picked: Vec<String> = result.unwrap_or_default().into_iter().map(filepath_to_string).collect();
+    for path in &picked {
+        if path.to_ascii_lowercase().ends_with(".pdf") {
+            crate::allow_viewing(&app, path);
+        } else {
+            crate::grants::allow_file(path);
+        }
     }
     Ok(picked)
 }
