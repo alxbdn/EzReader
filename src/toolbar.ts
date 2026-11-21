@@ -11,6 +11,7 @@ import { ToolRow, type SignatureChip } from "./tool-row";
 import { getTranslations, type Translations } from "./i18n";
 import { isMac } from "./platform";
 import { MacMenu } from "./mac-menu";
+import { matchesShortcut, type KeyPress } from "./shortcuts";
 import {
   ICON_INFO,
   ICON_MORE,
@@ -97,6 +98,7 @@ interface MenuItemDef {
   label: keyof Translations;
   appMenu?: boolean;
   shortcut?: string;
+  command: ToolbarEvent;
   action: () => void;
   requiresDoc?: boolean;
   mark?: { id: string; kind: "radio" | "check" };
@@ -393,79 +395,96 @@ export class Toolbar {
   }
 
   private getMenuDefs(): MenuDef[] {
-    const go = (e: ToolbarEvent) => () => this.emit(e);
-    return [
+    const menus: { id: string; label: keyof Translations; items: (Omit<MenuItemDef, "action"> | null)[] }[] = [
       {
         id: "file",
         label: "menuFile",
         items: [
-          { label: "menuOpen", shortcut: "Ctrl+O", action: go({ type: "open" }) },
+          { label: "menuOpen", shortcut: "Ctrl+O", command: { type: "open" } },
           null,
-          { label: "btnSave", shortcut: "Ctrl+S", action: go({ type: "save" }), requiresDoc: true },
-          { label: "menuSaveAs", shortcut: "Ctrl+Shift+S", action: go({ type: "save-as" }), requiresDoc: true },
+          { label: "btnSave", shortcut: "Ctrl+S", command: { type: "save" }, requiresDoc: true },
+          { label: "menuSaveAs", shortcut: "Ctrl+Shift+S", command: { type: "save-as" }, requiresDoc: true },
           null,
-          { label: "menuExport", action: go({ type: "export" }), requiresDoc: true },
-          { label: "menuPrintDialog", shortcut: "Ctrl+P", action: go({ type: "print" }), requiresDoc: true },
+          { label: "menuExport", command: { type: "export" }, requiresDoc: true },
+          { label: "menuPrintDialog", shortcut: "Ctrl+P", command: { type: "print" }, requiresDoc: true },
           null,
-          { label: "menuSettingsDialog", shortcut: "Ctrl+,", action: go({ type: "settings" }), appMenu: true },
+          { label: "menuSettingsDialog", shortcut: "Ctrl+,", command: { type: "settings" }, appMenu: true },
         ],
       },
       {
         id: "edit",
         label: "menuEdit",
         items: [
-          { label: "menuUndo", shortcut: "Ctrl+Z", action: go({ type: "undo" }), requiresDoc: true },
-          { label: "menuRedo", shortcut: "Ctrl+Y", action: go({ type: "redo" }), requiresDoc: true },
+          { label: "menuUndo", shortcut: "Ctrl+Z", command: { type: "undo" }, requiresDoc: true },
+          { label: "menuRedo", shortcut: "Ctrl+Y", command: { type: "redo" }, requiresDoc: true },
           null,
-          { label: "menuFind", shortcut: "Ctrl+F", action: go({ type: "find" }), requiresDoc: true },
-          { label: "menuSelectAllPages", action: go({ type: "select-all-pages" }), requiresDoc: true },
+          { label: "menuFind", shortcut: "Ctrl+F", command: { type: "find" }, requiresDoc: true },
+          { label: "menuSelectAllPages", command: { type: "select-all-pages" }, requiresDoc: true },
           null,
-          { label: "menuInsertBlank", action: go({ type: "insert-blank" }), requiresDoc: true },
-          { label: "menuInsertPdf", action: go({ type: "insert-pdf" }), requiresDoc: true },
-          { label: "menuInsertImage", action: go({ type: "insert-image" }), requiresDoc: true },
-          { label: "menuInsertImagePage", action: go({ type: "insert-image-page" }), requiresDoc: true },
-          { label: "menuRotate90", action: go({ type: "rotate" }), requiresDoc: true },
+          { label: "menuInsertBlank", command: { type: "insert-blank" }, requiresDoc: true },
+          { label: "menuInsertPdf", command: { type: "insert-pdf" }, requiresDoc: true },
+          { label: "menuInsertImage", command: { type: "insert-image" }, requiresDoc: true },
+          { label: "menuInsertImagePage", command: { type: "insert-image-page" }, requiresDoc: true },
+          { label: "menuRotate90", command: { type: "rotate" }, requiresDoc: true },
           null,
-          { label: "menuExtractPages", action: go({ type: "extract-pages" }), requiresDoc: true },
-          { label: "menuSplit", action: go({ type: "split" }), requiresDoc: true },
+          { label: "menuExtractPages", command: { type: "extract-pages" }, requiresDoc: true },
+          { label: "menuSplit", command: { type: "split" }, requiresDoc: true },
         ],
       },
       {
         id: "view",
         label: "menuView",
         items: [
-          { label: "menuZoomIn", shortcut: "Ctrl++", action: go({ type: "zoom-in" }), requiresDoc: true },
-          { label: "menuZoomOut", shortcut: "Ctrl+-", action: go({ type: "zoom-out" }), requiresDoc: true },
-          { label: "menuActualSize", shortcut: "Ctrl+0", action: go({ type: "zoom-reset" }), requiresDoc: true },
+          { label: "menuZoomIn", shortcut: "Ctrl++", command: { type: "zoom-in" }, requiresDoc: true },
+          { label: "menuZoomOut", shortcut: "Ctrl+-", command: { type: "zoom-out" }, requiresDoc: true },
+          { label: "menuActualSize", shortcut: "Ctrl+0", command: { type: "zoom-reset" }, requiresDoc: true },
           null,
-          { label: "menuFitWidth", action: go({ type: "fit-width" }), requiresDoc: true },
-          { label: "menuFitHeight", action: go({ type: "fit-height" }), requiresDoc: true },
+          { label: "menuFitWidth", command: { type: "fit-width" }, requiresDoc: true },
+          { label: "menuFitHeight", command: { type: "fit-height" }, requiresDoc: true },
           null,
-          { label: "ttPages1", action: go({ type: "columns", n: 1, even: false }), requiresDoc: true, mark: { id: "cols-1", kind: "radio" } },
-          { label: "ttPages2", action: go({ type: "columns", n: 2, even: false }), requiresDoc: true, mark: { id: "cols-2", kind: "radio" } },
-          { label: "ttPages2Even", action: go({ type: "columns", n: 2, even: true }), requiresDoc: true, mark: { id: "cols-2-even", kind: "radio" } },
+          { label: "ttPages1", command: { type: "columns", n: 1, even: false }, requiresDoc: true, mark: { id: "cols-1", kind: "radio" } },
+          { label: "ttPages2", command: { type: "columns", n: 2, even: false }, requiresDoc: true, mark: { id: "cols-2", kind: "radio" } },
+          { label: "ttPages2Even", command: { type: "columns", n: 2, even: true }, requiresDoc: true, mark: { id: "cols-2-even", kind: "radio" } },
           null,
-          { label: "ttScrollVertical", action: go({ type: "scroll-mode", mode: "vertical" }), requiresDoc: true, mark: { id: "scroll-vertical", kind: "radio" } },
-          { label: "menuScrollHorizontal", action: go({ type: "scroll-mode", mode: "horizontal" }), requiresDoc: true, mark: { id: "scroll-horizontal", kind: "radio" } },
+          { label: "ttScrollVertical", command: { type: "scroll-mode", mode: "vertical" }, requiresDoc: true, mark: { id: "scroll-vertical", kind: "radio" } },
+          { label: "menuScrollHorizontal", command: { type: "scroll-mode", mode: "horizontal" }, requiresDoc: true, mark: { id: "scroll-horizontal", kind: "radio" } },
           null,
-          { label: "menuPageSidebar", action: go({ type: "toggle-sidebar" }), requiresDoc: true, mark: { id: "sidebar", kind: "check" } },
+          { label: "menuPageSidebar", command: { type: "toggle-sidebar" }, requiresDoc: true, mark: { id: "sidebar", kind: "check" } },
           null,
-          { label: "menuPresent", shortcut: "F5", action: go({ type: "present" }), requiresDoc: true },
-          { label: "menuFullscreen", shortcut: "F11", action: go({ type: "fullscreen" }) },
+          { label: "menuPresent", shortcut: "F5", command: { type: "present" }, requiresDoc: true },
+          { label: "menuFullscreen", shortcut: "F11", command: { type: "fullscreen" } },
         ],
       },
       {
         id: "tools",
         label: "menuTools",
         items: [
-          { label: "btnCompress", shortcut: "Ctrl+Shift+E", action: go({ type: "compress" }), requiresDoc: true },
-          { label: "menuProtect", action: go({ type: "password" }), requiresDoc: true },
+          { label: "btnCompress", shortcut: "Ctrl+Shift+E", command: { type: "compress" }, requiresDoc: true },
+          { label: "menuProtect", command: { type: "password" }, requiresDoc: true },
           null,
-          { label: "menuOcr", action: go({ type: "ocr" }) },
+          { label: "menuOcr", command: { type: "ocr" } },
         ],
       },
     ];
+    return menus.map((m) => ({ ...m, items: m.items.map((i) => i && { ...i, action: () => this.emit(i.command) }) }));
   }
+
+  /**
+   * The command a key press stands for, from the shortcuts the menus show, so a shortcut does
+   * exactly what its menu item does, through the same guards. Ctrl+Shift+Z is redo too.
+   */
+  commandForKey(e: KeyPress): ToolbarEvent | null {
+    this.shortcuts ??= this.getMenuDefs().flatMap((m) => m.items)
+      .filter((i): i is MenuItemDef & { shortcut: string } => !!i?.shortcut)
+      .map((i) => [i.shortcut, i.command] as [string, ToolbarEvent])
+      .concat([["Ctrl+Shift+Z", { type: "redo" }]]);
+    return this.shortcuts.find(([shortcut]) => matchesShortcut(shortcut, e))?.[1] ?? null;
+  }
+
+  private shortcuts: [string, ToolbarEvent][] | null = null;
+
+  /** Runs a command as if its button or menu item had been used. */
+  dispatch(e: ToolbarEvent): void { this.emit(e); }
 
   private buildMenuBar(): void {
     const menus = this.getMenuDefs();
