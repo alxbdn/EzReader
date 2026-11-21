@@ -2143,11 +2143,16 @@ kbd,
 .update-badge[data-state="current"] .update-badge-icon { color: var(--success); }
 .update-badge[data-state="outdated"] { color: var(--foreground); }
 .update-badge[data-state="outdated"] .update-badge-icon { color: var(--destructive); }
-.update-badge[data-state="installing"] .update-badge-icon svg { animation: update-spin 0.9s linear infinite; }
+.update-badge[data-state="installing"] .update-badge-icon svg,
+.update-badge[data-state="downloading"] .update-badge-icon svg { animation: update-spin 0.9s linear infinite; }
+.update-badge[data-state="ready"] { color: var(--foreground); }
+.update-badge[data-state="ready"] .update-badge-icon { color: var(--success); }
+.update-badge[data-state="ready"]:hover { background: var(--accent); color: var(--foreground); }
 .update-badge:not([hidden]) + .lang-picker { margin-left: 0; }
 @keyframes update-spin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) {
-  .update-badge[data-state="installing"] .update-badge-icon svg { animation: none; }
+  .update-badge[data-state="installing"] .update-badge-icon svg,
+  .update-badge[data-state="downloading"] .update-badge-icon svg { animation: none; }
 }
 
 .lang-picker { position: relative; margin-left: auto; }

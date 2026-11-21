@@ -124,6 +124,7 @@ pub fn run() {
             window_args: Mutex::new(HashMap::new()),
         })
         .manage(commands::compress::CompressCancel::default())
+        .manage(commands::update::PendingUpdate::default())
         .invoke_handler(tauri::generate_handler![
             commands::pdf::list_system_fonts,
             commands::compress::compress_pdf,
@@ -172,6 +173,7 @@ pub fn run() {
             commands::shell::set_quick_look,
             commands::update::check_for_update,
             commands::update::install_update,
+            commands::update::prepare_update,
             commands::window::open_pages_in_new_window,
             commands::window::extract_pages_to_temp,
             commands::window::open_file_in_new_window,
@@ -191,6 +193,7 @@ pub fn run() {
             }
             if let tauri::RunEvent::Exit = event {
                 tempfiles::remove_own();
+                commands::update::apply_on_exit(_app);
             }
         })
 }

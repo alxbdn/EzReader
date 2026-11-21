@@ -2,6 +2,8 @@ use crate::error::CmdResult;
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Mutex;
 use tauri::Manager;
 
 const LATEST_URL: &str = "https://api.github.com/repos/alxbdn/EzReader/releases/latest";
@@ -39,6 +41,51 @@ pub enum UpdateOutcome {
     Restarting,
     Opened,
     OtherWindows,
+}
+
+/// What a background check left ready for when EzReader closes.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub enum Prepared {
+    /// Downloaded (or already swapped in): it installs when EzReader closes.
+    Ready,
+    /// This kind of install cannot update itself silently: keep the button.
+    Manual,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum Pending {
+    /// The downloaded installer, run silently when EzReader closes.
+    Installer(PathBuf),
+    /// The portable file already holds the new version: it starts next time.
+    Swapped(PathBuf),
+    /// `brew upgrade` runs once EzReader has closed.
+    Homebrew,
+    /// The downloaded disk image, copied over the app when EzReader closes.
+    Dmg(PathBuf),
+}
+
+/// The update downloaded at launch, shared by every window.
+#[derive(Default)]
+pub struct PendingUpdate {
+    slot: Mutex<Option<Pending>>,
+    /// Held while one window downloads, so a second window does not download again.
+    busy: Mutex<()>,
+    relaunch: AtomicBool,
+}
+
+impl PendingUpdate {
+    fn take(&self) -> Option<Pending> {
+        self.slot.lock().unwrap_or_else(|e| e.into_inner()).take()
+    }
+
+    fn is_ready(&self) -> bool {
+        self.slot.lock().unwrap_or_else(|e| e.into_inner()).is_some()
+    }
+
+    fn set(&self, pending: Pending) {
+        *self.slot.lock().unwrap_or_else(|e| e.into_inner()) = Some(pending);
+    }
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -228,12 +275,112 @@ pub async fn check_for_update(app: tauri::AppHandle) -> CmdResult<UpdateStatus> 
     .map_err(|e| e.to_string())?
 }
 
+/// Called at launch when a newer version is out: downloads it in the
+/// background so it installs, without a click, when EzReader closes.
+#[tauri::command]
+pub async fn prepare_update(app: tauri::AppHandle) -> CmdResult<Prepared> {
+    // A development build must never replace itself with a release.
+    if cfg!(debug_assertions) {
+        return Ok(Prepared::Manual);
+    }
+    let current = app.package_info().version.to_string();
+    tauri::async_runtime::spawn_blocking(move || {
+        let pending = app.state::<PendingUpdate>();
+        let _one_at_a_time = pending.busy.lock().unwrap_or_else(|e| e.into_inner());
+        if pending.is_ready() {
+            return Ok(Prepared::Ready);
+        }
+        match stage(detect_channel(), &current)? {
+            Some(p) => {
+                pending.set(p);
+                Ok(Prepared::Ready)
+            }
+            None => Ok(Prepared::Manual),
+        }
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+/// Channels that can install an update without asking anything.
+fn installs_silently(channel: Channel) -> bool {
+    matches!(channel, Channel::Installer | Channel::Portable | Channel::Homebrew | Channel::Dmg)
+}
+
+fn stage(channel: Channel, version: &str) -> Result<Option<Pending>, String> {
+    if !installs_silently(channel) {
+        return Ok(None);
+    }
+    if channel == Channel::Homebrew {
+        return Ok(Some(Pending::Homebrew));
+    }
+    let release = fetch_latest(channel, version)?;
+    if !is_newer(&release.tag_name, version) {
+        return Ok(None);
+    }
+    let Some(asset) = pick_asset(&release.assets, channel, cfg!(target_os = "windows")) else { return Ok(None) };
+    match channel {
+        Channel::Portable => swap_self(asset, version).map(|exe| Some(Pending::Swapped(exe))),
+        Channel::Installer | Channel::Dmg => {
+            let dest = std::env::temp_dir().join(&asset.name);
+            download(asset, &dest, version)?;
+            Ok(Some(if channel == Channel::Dmg { Pending::Dmg(dest) } else { Pending::Installer(dest) }))
+        }
+        _ => Ok(None),
+    }
+}
+
+/// Called when EzReader exits: installs what `prepare_update` downloaded.
+pub fn apply_on_exit(app: &tauri::AppHandle) {
+    let Some(state) = app.try_state::<PendingUpdate>() else { return };
+    let Some(pending) = state.take() else { return };
+    let _ = apply(pending, state.relaunch.load(Ordering::SeqCst));
+}
+
+/// Silent, and run as an update of the installed version.
+const SILENT_INSTALLER_ARGS: [&str; 2] = ["/S", "/UPDATE"];
+
+fn apply(pending: Pending, relaunch: bool) -> Result<(), String> {
+    match pending {
+        Pending::Installer(path) => {
+            let args: &[&str] = if relaunch { &INSTALLER_ARGS } else { &SILENT_INSTALLER_ARGS };
+            quiet(&path).args(args).spawn().map_err(|e| format!("could not start the installer ({e})"))?;
+        }
+        Pending::Swapped(exe) => {
+            if relaunch {
+                quiet(&exe).spawn().map_err(|e| format!("could not restart EzReader ({e})"))?;
+            }
+        }
+        #[cfg(target_os = "macos")]
+        Pending::Homebrew => brew_upgrade_after_exit(relaunch)?,
+        #[cfg(target_os = "macos")]
+        Pending::Dmg(path) => {
+            let bundle = replace_bundle(&path)?;
+            if relaunch {
+                reopen(&bundle)?;
+            }
+        }
+        #[cfg(not(target_os = "macos"))]
+        Pending::Homebrew => {}
+        #[cfg(not(target_os = "macos"))]
+        Pending::Dmg(path) => drop(path),
+    }
+    Ok(())
+}
+
 #[tauri::command]
 pub async fn install_update(app: tauri::AppHandle) -> CmdResult<UpdateOutcome> {
     let channel = detect_channel();
     let restarts = !matches!(channel, Channel::Store | Channel::Dmg | Channel::Other);
-    if restarts && app.webview_windows().len() > 1 {
+    let ready = app.try_state::<PendingUpdate>().is_some_and(|p| p.is_ready());
+    if (restarts || ready) && app.webview_windows().len() > 1 {
         return Ok(UpdateOutcome::OtherWindows);
+    }
+    if ready {
+        // Already downloaded: quit, and the exit hook installs it and restarts.
+        app.state::<PendingUpdate>().relaunch.store(true, Ordering::SeqCst);
+        app.exit(0);
+        return Ok(UpdateOutcome::Restarting);
     }
     let current = app.package_info().version.to_string();
     let outcome = tauri::async_runtime::spawn_blocking(move || run_update(channel, &current))
@@ -287,25 +434,34 @@ fn run_update(channel: Channel, version: &str) -> CmdResult<UpdateOutcome> {
 }
 
 fn replace_self(asset: &Asset, version: &str) -> CmdResult<UpdateOutcome> {
+    let Ok(exe) = swap_self(asset, version) else { return open_release_page() };
+    quiet(&exe).spawn().map_err(|e| format!("could not restart EzReader ({e})"))?;
+    Ok(UpdateOutcome::Restarting)
+}
+
+/// Puts the new portable file in place of this one, which keeps running
+/// from its new `.old` name. Returns the path the next launch uses.
+fn swap_self(asset: &Asset, version: &str) -> Result<PathBuf, String> {
     let exe = current_exe().ok_or("could not find EzReader's own file")?;
     let new = with_suffix(&exe, ".new");
     let old = with_suffix(&exe, ".old");
-    if download(asset, &new, version).is_err() {
-        return open_release_page();
-    }
+    download(asset, &new, version)?;
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
         let _ = std::fs::set_permissions(&new, std::fs::Permissions::from_mode(0o755));
     }
     let _ = std::fs::remove_file(&old);
-    std::fs::rename(&exe, &old).map_err(|e| format!("could not replace EzReader ({e})"))?;
+    if let Err(e) = std::fs::rename(&exe, &old) {
+        let _ = std::fs::remove_file(&new);
+        return Err(format!("could not replace EzReader ({e})"));
+    }
     if let Err(e) = std::fs::rename(&new, &exe) {
         let _ = std::fs::rename(&old, &exe);
-        return Err(format!("could not replace EzReader ({e})").into());
+        let _ = std::fs::remove_file(&new);
+        return Err(format!("could not replace EzReader ({e})"));
     }
-    quiet(&exe).spawn().map_err(|e| format!("could not restart EzReader ({e})"))?;
-    Ok(UpdateOutcome::Restarting)
+    Ok(exe)
 }
 
 fn with_suffix(p: &Path, suffix: &str) -> PathBuf {
@@ -348,8 +504,7 @@ fn install_deb(_asset: &Asset, _version: &str) -> CmdResult<UpdateOutcome> {
 
 #[cfg(target_os = "macos")]
 fn brew_upgrade() -> CmdResult<UpdateOutcome> {
-    let brew = ["/opt/homebrew/bin/brew", "/usr/local/bin/brew"].into_iter().find(|p| Path::new(p).exists());
-    let Some(brew) = brew else { return open_release_page() };
+    let Some(brew) = find_brew() else { return open_release_page() };
     let out = Command::new(brew)
         .args(["upgrade", "--cask", BREW_CASK])
         .env("HOMEBREW_NO_ENV_HINTS", "1")
@@ -360,16 +515,112 @@ fn brew_upgrade() -> CmdResult<UpdateOutcome> {
             format!("Homebrew could not update EzReader ({})", String::from_utf8_lossy(&out.stderr).trim()).into()
         );
     }
-    let bundle = current_exe()
+    reopen(&running_bundle().unwrap_or_else(|| PathBuf::from("/Applications/EzReader.app")))?;
+    Ok(UpdateOutcome::Restarting)
+}
+
+#[cfg(target_os = "macos")]
+fn find_brew() -> Option<&'static str> {
+    ["/opt/homebrew/bin/brew", "/usr/local/bin/brew"].into_iter().find(|p| Path::new(p).exists())
+}
+
+/// Runs `brew upgrade` in the background, after EzReader has closed.
+#[cfg(target_os = "macos")]
+fn brew_upgrade_after_exit(relaunch: bool) -> Result<(), String> {
+    let brew = find_brew().ok_or("Homebrew not found")?;
+    let bundle = running_bundle().unwrap_or_else(|| PathBuf::from("/Applications/EzReader.app"));
+    // $0 = brew, $1 = cask, $2 = bundle to reopen (empty: do not reopen).
+    let script = r#""$0" upgrade --cask "$1" >/dev/null 2>&1; [ -n "$2" ] && /usr/bin/open -n "$2""#;
+    let reopen_arg = if relaunch { bundle.into_os_string() } else { Default::default() };
+    Command::new("/bin/sh")
+        .args(["-c", script, brew, BREW_CASK])
+        .arg(reopen_arg)
+        .env("HOMEBREW_NO_ENV_HINTS", "1")
+        .env("HOMEBREW_NO_INSTALL_CLEANUP", "1")
+        .spawn()
+        .map_err(|e| format!("could not run Homebrew ({e})"))?;
+    Ok(())
+}
+
+#[cfg(target_os = "macos")]
+fn running_bundle() -> Option<PathBuf> {
+    current_exe()
         .and_then(|e| e.ancestors().nth(3).map(Path::to_path_buf))
         .filter(|b| b.extension().is_some_and(|x| x == "app"))
-        .unwrap_or_else(|| PathBuf::from("/Applications/EzReader.app"));
+}
+
+#[cfg(target_os = "macos")]
+fn reopen(bundle: &Path) -> Result<(), String> {
     Command::new("/usr/bin/open")
         .arg("-n")
         .arg(bundle)
         .spawn()
         .map_err(|e| format!("could not restart EzReader ({e})"))?;
-    Ok(UpdateOutcome::Restarting)
+    Ok(())
+}
+
+/// A bundle that can be swapped in place: not run from the disk image itself
+/// nor from the read-only copy macOS makes of quarantined apps.
+#[cfg_attr(not(any(test, target_os = "macos")), allow(dead_code))]
+fn bundle_is_replaceable(bundle: &Path) -> bool {
+    let s = bundle.to_string_lossy();
+    !s.starts_with("/Volumes/") && !s.contains("/AppTranslocation/")
+}
+
+/// Copies the app out of the downloaded disk image over the running one.
+/// Called once every window has closed.
+#[cfg(target_os = "macos")]
+fn replace_bundle(dmg: &Path) -> Result<PathBuf, String> {
+    let bundle = running_bundle().ok_or("not running from an app bundle")?;
+    if !bundle_is_replaceable(&bundle) {
+        return Err("EzReader runs from a place it cannot replace".into());
+    }
+    let mount = std::env::temp_dir().join(format!("ezreader-update-{}", std::process::id()));
+    std::fs::create_dir_all(&mount).map_err(|e| e.to_string())?;
+    let attached = Command::new("/usr/bin/hdiutil")
+        .args(["attach", "-nobrowse", "-readonly", "-noautoopen", "-quiet", "-mountpoint"])
+        .arg(&mount)
+        .arg(dmg)
+        .status()
+        .is_ok_and(|s| s.success());
+    let result = if attached { copy_bundle_from(&mount, &bundle) } else { Err("could not open the disk image".into()) };
+    if attached {
+        let _ = Command::new("/usr/bin/hdiutil").args(["detach", "-quiet", "-force"]).arg(&mount).status();
+    }
+    let _ = std::fs::remove_dir(&mount);
+    let _ = std::fs::remove_file(dmg);
+    result.map(|()| bundle)
+}
+
+#[cfg(target_os = "macos")]
+fn copy_bundle_from(mount: &Path, bundle: &Path) -> Result<(), String> {
+    let source = std::fs::read_dir(mount)
+        .map_err(|e| e.to_string())?
+        .filter_map(Result::ok)
+        .map(|e| e.path())
+        .find(|p| p.extension().is_some_and(|x| x == "app"))
+        .ok_or("no app in the disk image")?;
+    let new = with_suffix(bundle, ".new");
+    let old = with_suffix(bundle, ".old");
+    let _ = std::fs::remove_dir_all(&new);
+    let _ = std::fs::remove_dir_all(&old);
+    let copied = Command::new("/usr/bin/ditto").arg(&source).arg(&new).status().is_ok_and(|s| s.success());
+    if !copied {
+        let _ = std::fs::remove_dir_all(&new);
+        return Err("could not copy the new version".into());
+    }
+    let _ = Command::new("/usr/bin/xattr").args(["-dr", "com.apple.quarantine"]).arg(&new).status();
+    if let Err(e) = std::fs::rename(bundle, &old) {
+        let _ = std::fs::remove_dir_all(&new);
+        return Err(format!("could not replace EzReader ({e})"));
+    }
+    if let Err(e) = std::fs::rename(&new, bundle) {
+        let _ = std::fs::rename(&old, bundle);
+        let _ = std::fs::remove_dir_all(&new);
+        return Err(format!("could not replace EzReader ({e})"));
+    }
+    let _ = std::fs::remove_dir_all(&old);
+    Ok(())
 }
 
 fn open_release_page() -> CmdResult<UpdateOutcome> {
@@ -525,6 +776,42 @@ mod tests {
         assert!(current_exe().is_some());
         remove_leftover();
         assert!(!with_suffix(&current_exe().unwrap(), ".old").exists());
+    }
+
+    #[test]
+    fn only_quiet_channels_update_on_their_own() {
+        for c in [Channel::Installer, Channel::Portable, Channel::Homebrew, Channel::Dmg] {
+            assert!(installs_silently(c), "{c:?}");
+        }
+        // The Store updates EzReader itself; a .deb needs the user's password.
+        for c in [Channel::Store, Channel::Deb, Channel::Other] {
+            assert!(!installs_silently(c), "{c:?}");
+            assert_eq!(stage(c, "1.0.0"), Ok(None));
+        }
+    }
+
+    #[test]
+    fn the_silent_installer_shows_nothing_and_keeps_settings() {
+        assert_eq!(SILENT_INSTALLER_ARGS, ["/S", "/UPDATE"]);
+        assert!(INSTALLER_ARGS.contains(&"/UPDATE"));
+    }
+
+    #[test]
+    fn an_update_waits_for_exit_and_runs_once() {
+        let state = PendingUpdate::default();
+        assert!(!state.is_ready());
+        state.set(Pending::Homebrew);
+        assert!(state.is_ready());
+        assert_eq!(state.take(), Some(Pending::Homebrew));
+        assert_eq!(state.take(), None);
+    }
+
+    #[test]
+    fn a_bundle_on_the_disk_image_is_left_alone() {
+        assert!(bundle_is_replaceable(Path::new("/Applications/EzReader.app")));
+        assert!(bundle_is_replaceable(Path::new("/Users/a/Applications/EzReader.app")));
+        assert!(!bundle_is_replaceable(Path::new("/Volumes/EzReader/EzReader.app")));
+        assert!(!bundle_is_replaceable(Path::new("/private/var/folders/x/AppTranslocation/1/d/EzReader.app")));
     }
 
     #[test]

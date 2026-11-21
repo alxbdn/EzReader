@@ -153,6 +153,9 @@ export interface Translations {
   updateStoreHint?: string;
   updateInstalling?: string;
   updateOpened?: string;
+  updateDownloading?: string;
+  updateReady?: string;
+  updateReadyHint?: string;
   updateOtherWindows?: string;
   updateFailed?: string;
   welcomeFeatHeading?: string;
@@ -736,6 +739,9 @@ const EN: Translations = {
   updateStoreHint:     "Version {v} is out (you have {cur}). Click to open the Microsoft Store.",
   updateInstalling:    "Updating\u2026",
   updateOpened:        "Finish the update in the window that just opened",
+  updateDownloading:   "Downloading {v}\u2026",
+  updateReady:         "Restart to update",
+  updateReadyHint:     "Version {v} is ready and installs when you close EzReader. Click to restart now.",
   updateOtherWindows:  "Close your other EzReader windows first, then update",
   updateFailed:        "Couldn't update: {err}",
   welcomeFeatHeading:       "What you can do with EzReader",
@@ -1319,6 +1325,9 @@ const FR: Translations = {
   updateStoreHint:     "La version {v} est sortie (vous avez {cur}). Cliquez pour ouvrir le Microsoft Store.",
   updateInstalling:    "Mise \u00e0 jour\u2026",
   updateOpened:        "Terminez la mise \u00e0 jour dans la fen\u00eatre qui vient de s'ouvrir",
+  updateDownloading:   "T\u00e9l\u00e9chargement de {v}\u2026",
+  updateReady:         "Red\u00e9marrer pour mettre \u00e0 jour",
+  updateReadyHint:     "La version {v} est pr\u00eate et s'installe \u00e0 la fermeture d'EzReader. Cliquez pour red\u00e9marrer maintenant.",
   updateOtherWindows:  "Fermez d'abord vos autres fen\u00eatres EzReader, puis mettez \u00e0 jour",
   updateFailed:        "Impossible de mettre \u00e0 jour : {err}",
   welcomeFeatHeading:       "Ce que vous pouvez faire avec EzReader",

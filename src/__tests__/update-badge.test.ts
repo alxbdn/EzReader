@@ -14,6 +14,7 @@ function setUp(over: Partial<UpdateBadgeDeps> = {}) {
     t: () => getTranslations("fr"),
     check: vi.fn(async () => status()),
     install: vi.fn(async () => "restarting" as const),
+    prepare: vi.fn(async () => "manual" as const),
     notify: vi.fn(),
     ...over,
   };
@@ -93,5 +94,52 @@ describe("update badge", () => {
     await flush();
     expect(check).toHaveBeenCalledTimes(2);
     expect(deps.install).not.toHaveBeenCalled();
+  });
+
+  it("downloads the update at launch and offers a restart", async () => {
+    let done!: (v: "ready") => void;
+    const prepare = vi.fn(() => new Promise<"ready">((r) => { done = r; }));
+    const { badge, el, deps } = setUp({ prepare });
+    const refreshed = badge.refresh();
+    await flush();
+    expect(prepare).toHaveBeenCalledOnce();
+    expect(el.dataset["state"]).toBe("downloading");
+    expect(el.disabled).toBe(true);
+    expect(el.textContent).toBe("Téléchargement de 1.1.0…");
+    done("ready");
+    await refreshed;
+    expect(el.dataset["state"]).toBe("ready");
+    expect(el.textContent).toBe("Redémarrer pour mettre à jour");
+    expect(el.title).toContain("fermeture");
+    el.click();
+    expect(deps.install).toHaveBeenCalledOnce();
+  });
+
+  it("keeps the install button when the download fails", async () => {
+    const { badge, el } = setUp({ prepare: async () => { throw "offline"; } });
+    await badge.refresh();
+    expect(el.dataset["state"]).toBe("outdated");
+  });
+
+  it("stays ready when another window is still open", async () => {
+    const { badge, el, deps } = setUp({ prepare: async () => "ready", install: async () => "otherWindows" });
+    await badge.refresh();
+    el.click();
+    await flush();
+    expect(deps.notify).toHaveBeenCalledWith(expect.stringContaining("autres fenêtres"), true);
+    expect(el.dataset["state"]).toBe("ready");
+  });
+
+  it.each(["store", "deb", "other"] as const)("leaves %s updates to a click", async (channel) => {
+    const { badge, el, deps } = setUp({ check: async () => status({ channel }) });
+    await badge.refresh();
+    expect(deps.prepare).not.toHaveBeenCalled();
+    expect(el.dataset["state"]).toBe("outdated");
+  });
+
+  it("does not download when up to date", async () => {
+    const { badge, deps } = setUp({ check: async () => status({ upToDate: true }) });
+    await badge.refresh();
+    expect(deps.prepare).not.toHaveBeenCalled();
   });
 });

@@ -81,6 +81,7 @@ import {
   isDefaultPdfReader,
   checkForUpdate,
   installUpdate,
+  prepareUpdate,
   registerPdfHandler,
   registerPrintVerb,
   unregisterPdfHandler,
@@ -1443,6 +1444,7 @@ const updateBadge = new UpdateBadge(welcomePrefs.root, {
   t: () => getTranslations(settingsModal.getSettings().language),
   check: () => checkForUpdate(),
   install: () => installUpdate(),
+  prepare: () => prepareUpdate(),
   notify: (text, isError) => showToast(text, isError),
 });
 void updateBadge.refresh();
