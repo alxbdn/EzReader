@@ -32,7 +32,7 @@ import { SplitModal } from "./split-modal";
 import { getTranslations, applyTranslationsToDOM, fmt, type Translations } from "./i18n";
 import { DocumentSession, uniqueTempName, isMicrosoftPrintToPdf } from "./document-session";
 import { AnnotationSession } from "./annotation-session";
-import { PageHistory } from "./page-history";
+import { PageEditor } from "./page-editor";
 import { ToolSelection } from "./tool-selection";
 import {
   type Annotation,
@@ -158,10 +158,22 @@ const annotations: AnnotationSession = new AnnotationSession({
   gateEnabled: () => false,
   isDirty: (): boolean => session.isDirty,
 });
-annotations.onChange(() => { setDirty(true); pageHistory.clearRedo(); });
+annotations.onChange(() => { setDirty(true); pageEditor.history.clearRedo(); });
 annotations.onPendingChange((pending) => toolbar.setPending(pending));
-const pageHistory = new PageHistory();
-let pageEditBusy = false;
+const pageEditor = new PageEditor({
+  ready: () => session.isOpen && viewer.isLoaded(),
+  refused: () => refuseIfProtected() || !toolbar.allowed(),
+  current: async () => ({ path: await session.materialize(), page: viewer.currentPage, dirty: session.isDirty }),
+  show: async (path) => {
+    const workingCopy = await showInViewer(path, true);
+    session.replacedWorkingCopy(workingCopy ?? path);
+    dropStaleSelection();
+  },
+  setDirty: (dirty) => setDirty(dirty),
+  goToPage: (page) => { if (page !== viewer.currentPage) viewer.goToPage(Math.min(page, viewer.pageCount), "instant"); },
+  setBusy: (busy) => pageSidebar.setBusy(busy),
+  failed: (kind, err) => showToast(msg(kind === "adjust" ? "msgAdjustFailed" : "msgPagesFailed", { err: errText(err) }), true),
+});
 const compressModal      = new CompressModal();
 const exportModal        = new ExportModal();
 const ocrModal = new OcrModal({
@@ -648,24 +660,7 @@ async function undoRedo(redo: boolean): Promise<void> {
     setDirty(true);
     return;
   }
-  if (!(redo ? pageHistory.canRedo : pageHistory.canUndo) || pageEditBusy) return;
-  pageEditBusy = true;
-  pageSidebar.setBusy(true);
-  try {
-    const current = { path: await session.materialize(), page: viewer.currentPage, dirty: session.isDirty };
-    const target = redo ? pageHistory.redo(current) : pageHistory.undo(current);
-    if (!target) return;
-    const workingCopy = await showInViewer(target.path, true);
-    session.replacedWorkingCopy(workingCopy ?? target.path);
-    dropStaleSelection();
-    setDirty(target.dirty);
-    if (target.page !== viewer.currentPage) viewer.goToPage(Math.min(target.page, viewer.pageCount), "instant");
-  } catch (err) {
-    showToast(msg("msgPagesFailed", { err: errText(err) }), true);
-  } finally {
-    pageEditBusy = false;
-    pageSidebar.setBusy(false);
-  }
+  await pageEditor.step(redo);
 }
 
 function discardDraft(): void {
@@ -776,7 +771,7 @@ async function openProtected(fp: string, password?: string | null): Promise<void
   }
   try {
     const workingCopy = await showInViewer(plain);
-    pageHistory.clear();
+    pageEditor.history.clear();
     session.opened(fp, workingCopy ?? plain, used);
     syncProtection();
     setDirty(false);
@@ -876,7 +871,7 @@ async function loadPdf(path: string, password?: string | null): Promise<void> {
   if (password) { await openProtected(path, password); return; }
   try {
     const workingCopy = await showInViewer(path);
-    pageHistory.clear();
+    pageEditor.history.clear();
     session.opened(path, workingCopy);
     syncProtection();
     setDirty(false);
@@ -985,7 +980,7 @@ function parkActive(): void {
   tab.parked = {
     session: session.snapshot(),
     annotations: annotations.snapshot(),
-    history: pageHistory.snapshot(),
+    history: pageEditor.history.snapshot(),
     forms: [...formValues.entries()],
     shownPath,
     rotation: viewer.rotation,
@@ -1004,7 +999,7 @@ async function showTab(tab: DocTab<ParkedDoc>): Promise<void> {
   tab.parked = null;
   session.restore(p.session);
   annotations.restoreParked(p.annotations);
-  pageHistory.restore(p.history);
+  pageEditor.history.restore(p.history);
   formValues.clear();
   for (const [name, value] of p.forms) formValues.set(name, value);
   dropStaleSelection();
@@ -1036,7 +1031,7 @@ async function showTab(tab: DocTab<ParkedDoc>): Promise<void> {
 async function switchTab(id: number): Promise<void> {
   await tabsSettled();
   const tab = docTabs.get(id);
-  if (!tab || tab === docTabs.active || pageEditBusy || !toolbar.allowed()) { renderTabs(); return; }
+  if (!tab || tab === docTabs.active || pageEditor.busy || !toolbar.allowed()) { renderTabs(); return; }
   const run = (async () => {
     parkActive();
     await showTab(tab);
@@ -1087,7 +1082,7 @@ async function dropActiveTab(): Promise<void> {
 
 async function closeDocument(): Promise<void> {
   annotations.clear();
-  pageHistory.clear();
+  pageEditor.history.clear();
   formValues.clear();
   session.restore(null);
   shownPath = null;
@@ -1122,7 +1117,7 @@ async function settleAllTabs(): Promise<boolean> {
 async function detachTab(id: number, x: number, y: number): Promise<void> {
   await tabsSettled();
   const tab = docTabs.get(id);
-  if (!tab || tab !== docTabs.active || !session.isOpen || pageEditBusy || !toolbar.allowed()) {
+  if (!tab || tab !== docTabs.active || !session.isOpen || pageEditor.busy || !toolbar.allowed()) {
     void tabDragEnd().catch(() => {});
     return;
   }
@@ -1303,36 +1298,18 @@ async function renderForPrint(pages: number[]): Promise<string[]> {
   return viewer.renderFileForPrint(await session.materialize(), pages, 200);
 }
 
-async function applyPageLayout({ slots, keepPage, select }: PagePlan): Promise<boolean> {
+async function editPages({ slots, keepPage, select }: PagePlan): Promise<boolean> {
   const source = session.sourcePath;
   if (!source) return false;
-  try {
-    const input   = await session.materialize();
-    const before  = { path: input, page: viewer.currentPage, dirty: session.isDirty };
-    const tmpPath = await newTempPath(`pages-${await basename(source)}`);
-    await rearrangePages(input, tmpPath, slots);
-    const workingCopy = await showInViewer(tmpPath, true);
-    session.replacedWorkingCopy(workingCopy ?? tmpPath);
-    pageHistory.record(before);
-    setDirty(true);
-    if (keepPage !== null && keepPage !== viewer.currentPage) viewer.goToPage(keepPage, "instant");
-    pageSidebar.setSelection(select);
-    return true;
-  } catch (err) {
-    showToast(msg("msgPagesFailed", { err: errText(err) }), true);
-    return false;
-  }
-}
-
-async function editPages(plan: PagePlan): Promise<boolean> {
-  if (!session.isOpen || !viewer.isLoaded() || pageEditBusy) return false;
-  if (refuseIfProtected() || !toolbar.allowed()) return false;
-  pageSidebar.setBusy(true);
-  try {
-    return await applyPageLayout(plan);
-  } finally {
-    pageSidebar.setBusy(false);
-  }
+  const done = await pageEditor.apply(async (input) => {
+    const out = await newTempPath(`pages-${await basename(source)}`);
+    await rearrangePages(input, out, slots);
+    return out;
+  });
+  if (!done) return false;
+  if (keepPage !== null && keepPage !== viewer.currentPage) viewer.goToPage(keepPage, "instant");
+  pageSidebar.setSelection(select);
+  return true;
 }
 
 async function insertSlots(after: number, inserted: PageSlot[]): Promise<void> {
@@ -1356,11 +1333,10 @@ async function applyAdjust(settings: PageSetting[]): Promise<boolean> {
   const doc = viewer.document;
   if (!source || !doc) return false;
   if (settings.length === 0) return true;
-  try {
+  const done = await pageEditor.apply(async (input) => {
     const { crops, warps } = await buildPageAdjustments(doc, viewer.rotation, settings);
     const name = await basename(source);
-    let out = await session.materialize();
-    const before = { path: out, page: viewer.currentPage, dirty: session.isDirty };
+    let out = input;
     if (crops.length > 0) {
       const tmp = await newTempPath(`adjust-${name}`);
       await adjustPages(out, tmp, crops);
@@ -1374,19 +1350,14 @@ async function applyAdjust(settings: PageSetting[]): Promise<boolean> {
       await straightenPages(out, tmp, pictures);
       out = tmp;
     }
-    const workingCopy = await showInViewer(out, true);
-    session.replacedWorkingCopy(workingCopy ?? out);
-    pageHistory.record(before);
-    setDirty(true);
-    const pages = settings.map((s) => s.page);
-    viewer.goToPage(pages[0], "instant");
-    pageSidebar.setSelection(pages);
-    showToast(pages.length === 1 ? msg("msgPageAdjusted") : msg("msgPagesAdjusted", { n: pages.length }));
-    return true;
-  } catch (err) {
-    showToast(msg("msgAdjustFailed", { err: errText(err) }), true);
-    return false;
-  }
+    return out;
+  }, { kind: "adjust", guarded: false });
+  if (!done) return false;
+  const pages = settings.map((s) => s.page);
+  viewer.goToPage(pages[0], "instant");
+  pageSidebar.setSelection(pages);
+  showToast(pages.length === 1 ? msg("msgPageAdjusted") : msg("msgPagesAdjusted", { n: pages.length }));
+  return true;
 }
 
 pageSidebar.onGoTo((page, instant) => viewer.goToPage(page, instant ? "instant" : "smooth"));
