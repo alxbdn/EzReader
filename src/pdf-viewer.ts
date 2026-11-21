@@ -5,6 +5,7 @@ import type { PDFDocumentProxy, PDFPageProxy, PageViewport, RenderTask } from "p
 import { convertFileSrc } from "@tauri-apps/api/core";
 import workerUrl from "pdfjs-dist/legacy/build/pdf.worker.min.mjs?url";
 import { CanvasOverlay } from "./canvas-overlay";
+import { OverlayEvents } from "./overlay-events";
 import { createFieldControl, type WidgetData } from "./form-fields";
 import { ToolSelection } from "./tool-selection";
 import { AnnotationSession } from "./annotation-session";
@@ -182,7 +183,13 @@ export class PdfPageView {
   private _renderedRotation = -1;
   private _renderedDpr = 0;
 
-  constructor(pageNum: number, tools: ToolSelection, annotations: AnnotationSession, private liveText: LiveText | null = null) {
+  constructor(
+    pageNum: number,
+    tools: ToolSelection,
+    annotations: AnnotationSession,
+    private liveText: LiveText | null = null,
+    events: OverlayEvents = new OverlayEvents(),
+  ) {
     this.pageNum = pageNum;
 
     this.wrapper = document.createElement("div");
@@ -216,7 +223,7 @@ export class PdfPageView {
       this.annotationCanvas
     );
     for (const c of [this.canvas, this.highlightCanvas, this.annotationCanvas]) { c.width = 0; c.height = 0; }
-    this.overlay = new CanvasOverlay(this.annotationCanvas, this.wrapper, tools, annotations, this.highlightCanvas);
+    this.overlay = new CanvasOverlay(this.annotationCanvas, this.wrapper, tools, annotations, this.highlightCanvas, events);
   }
 
   destroy(): void {
@@ -750,6 +757,9 @@ export class PdfViewer {
     goToPage: (page) => this.goToPage(page),
   };
 
+  /** What the annotation overlays of every page report; listen here once, not per page. */
+  readonly overlayEvents = new OverlayEvents();
+
   pageDimensions: Array<{ width: number; height: number }> = [];
   pageViews: PdfPageView[] = [];
   columnCount = 1;
@@ -951,7 +961,7 @@ export class PdfViewer {
       const rowEl = document.createElement("div");
       rowEl.className = "page-row";
       for (const pageNum of row) {
-        const view = new PdfPageView(pageNum, this._tools, this._annotations, this.liveText);
+        const view = new PdfPageView(pageNum, this._tools, this._annotations, this.liveText, this.overlayEvents);
         const dim  = this.pageDimensions[pageNum - 1];
         if (dim) view.setPlaceholderSize(
           (swapped ? dim.height : dim.width) * this._scale,

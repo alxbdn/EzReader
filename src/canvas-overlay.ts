@@ -1,3 +1,4 @@
+import { OverlayEvents } from "./overlay-events";
 import {
   canvasToPdf,
   fontCss,
@@ -73,9 +74,6 @@ interface PdfViewport {
   rotation: number;
 }
 
-type TextAnnotationSelectedHandler      = (ann: TextAnnotation | null) => void;
-type ShapeAnnotationSelectedHandler     = (ann: ShapeAnnotation | null) => void;
-type HighlightAnnotationSelectedHandler = (ann: HighlightAnnotation | null) => void;
 type ResizeHandle = "nw" | "n" | "ne" | "e" | "se" | "s" | "sw" | "w";
 
 const HANDLE_R = 4;
@@ -142,9 +140,7 @@ export class CanvasOverlay implements SelectionOwner {
   private viewport: PdfViewport | null = null;
   private viewportRotation = 0;
 
-  private textSelectedHandlers:      TextAnnotationSelectedHandler[]      = [];
-  private shapeSelectedHandlers:     ShapeAnnotationSelectedHandler[]     = [];
-  private highlightSelectedHandlers: HighlightAnnotationSelectedHandler[] = [];
+  private readonly stopKeys: () => void;
   private hlPopover: HTMLElement | null = null;
   private containerDownPos: { x: number; y: number } | null = null;
 
@@ -162,6 +158,7 @@ export class CanvasOverlay implements SelectionOwner {
     private readonly tools: ToolSelection,
     private readonly session: AnnotationSession,
     private readonly highlightCanvas: HTMLCanvasElement | null = null,
+    private readonly events: OverlayEvents = new OverlayEvents(),
   ) {
     this.canvas = canvas;
     this.container = container;
@@ -174,7 +171,7 @@ export class CanvasOverlay implements SelectionOwner {
     this.canvas.addEventListener("mouseleave",   this.onMouseLeave);
     this.canvas.addEventListener("dblclick",     this.onDblClick);
     this.canvas.addEventListener("contextmenu",  this.onContextMenu);
-    window.addEventListener("keydown", this.onKeyDown);
+    this.stopKeys = events.listenForKeys(this.onKeyDown);
 
     CanvasOverlay.byContainer.set(container, this);
     container.addEventListener("mousemove", this.onContainerMouseMove);
@@ -185,21 +182,14 @@ export class CanvasOverlay implements SelectionOwner {
     this.applyPointerEvents(this.activeTool);
   }
 
-  onTextAnnotationSelected     (h: TextAnnotationSelectedHandler):      void { this.textSelectedHandlers.push(h); }
-  onShapeAnnotationSelected    (h: ShapeAnnotationSelectedHandler):     void { this.shapeSelectedHandlers.push(h); }
-  onHighlightAnnotationSelected(h: HighlightAnnotationSelectedHandler): void { this.highlightSelectedHandlers.push(h); }
-
   private notifyChangeOnce(): void {
     if (this.changeNotified) return;
     this.changeNotified = true;
     this.session.beginEdit();
   }
-  private emitTextSelected     (a: TextAnnotation | null):      void { this.textSelectedHandlers.forEach(h => h(a)); }
-  private emitShapeSelected    (a: ShapeAnnotation | null):     void { this.shapeSelectedHandlers.forEach(h => h(a)); }
-  private emitHighlightSelected(a: HighlightAnnotation | null): void { this.highlightSelectedHandlers.forEach(h => h(a)); }
-
-  private pickHandlers: ((ann: Annotation) => void)[] = [];
-  onPick(h: (ann: Annotation) => void): void { this.pickHandlers.push(h); }
+  private emitTextSelected     (a: TextAnnotation | null):      void { this.events.textSelected(a); }
+  private emitShapeSelected    (a: ShapeAnnotation | null):     void { this.events.shapeSelected(a); }
+  private emitHighlightSelected(a: HighlightAnnotation | null): void { this.events.highlightSelected(a); }
 
   select(ann: Annotation): void {
     if (!this.committed.includes(ann)) return;
@@ -292,7 +282,7 @@ export class CanvasOverlay implements SelectionOwner {
   }
 
   destroy(): void {
-    window.removeEventListener("keydown", this.onKeyDown);
+    this.stopKeys();
   }
 
   hide(): void {
@@ -1238,12 +1228,12 @@ export class CanvasOverlay implements SelectionOwner {
     if (!this.isDrawing) return;
     this.isDrawing = false;
 
-    if (!this.lassoing && Math.hypot(e.offsetX - this.startX, e.offsetY - this.startY) < 4 && this.pickHandlers.length > 0) {
+    if (!this.lassoing && Math.hypot(e.offsetX - this.startX, e.offsetY - this.startY) < 4 && this.events.hasPickListeners) {
       const hit = this.hitTest(this.startX, this.startY);
       if (hit) {
         this.inkPts = [];
         this.redrawCommitted();
-        this.pickHandlers.forEach(h => h(hit));
+        this.events.picked(hit, this);
         return;
       }
     }
@@ -1815,7 +1805,7 @@ export class CanvasOverlay implements SelectionOwner {
         this.session.edited();
       }
       this.redrawCommitted();
-      if (fresh) this.pickHandlers.forEach(h => h(ann));
+      if (fresh) this.events.picked(ann, this);
     };
     const outside = (ev: MouseEvent): void => {
       if (ev.target === area) return;
