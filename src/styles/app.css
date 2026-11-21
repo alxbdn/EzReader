@@ -2551,6 +2551,11 @@ label.settings-row { cursor: pointer; }
 }
 
 .toast.hidden { display: none; }
+
+/* The "update ready" note: stays until Restart or Later. */
+.update-toast { pointer-events: auto; max-width: min(560px, calc(100vw - 40px)); padding: 8px 8px 8px 16px; }
+.update-toast-text { flex: 1; }
+.update-toast .btn { flex-shrink: 0; }
 .toast.error { border-color: color-mix(in srgb, var(--destructive) 45%, var(--border)); color: var(--destructive); }
 .toast.error::before { background: var(--destructive); }
 
