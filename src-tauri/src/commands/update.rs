@@ -63,6 +63,9 @@ enum Pending {
     Homebrew,
     /// The downloaded disk image, copied over the app when EzReader closes.
     Dmg(PathBuf),
+    /// Downloaded by the Microsoft Store, installed when EzReader closes.
+    #[cfg_attr(not(target_os = "windows"), allow(dead_code))]
+    Store,
 }
 
 /// The update downloaded at launch, shared by every window.
@@ -304,7 +307,7 @@ pub async fn prepare_update(app: tauri::AppHandle) -> CmdResult<Prepared> {
 
 /// Channels that can install an update without asking anything.
 fn installs_silently(channel: Channel) -> bool {
-    matches!(channel, Channel::Installer | Channel::Portable | Channel::Homebrew | Channel::Dmg)
+    matches!(channel, Channel::Installer | Channel::Portable | Channel::Homebrew | Channel::Dmg | Channel::Store)
 }
 
 fn stage(channel: Channel, version: &str) -> Result<Option<Pending>, String> {
@@ -313,6 +316,14 @@ fn stage(channel: Channel, version: &str) -> Result<Option<Pending>, String> {
     }
     if channel == Channel::Homebrew {
         return Ok(Some(Pending::Homebrew));
+    }
+    if channel == Channel::Store {
+        // Asks the Store for the newest version straight away, without
+        // waiting for the Store's own schedule or for it to be open.
+        #[cfg(target_os = "windows")]
+        return store::download().map(|ready| ready.then_some(Pending::Store));
+        #[cfg(not(target_os = "windows"))]
+        return Ok(None);
     }
     let release = fetch_latest(channel, version)?;
     if !is_newer(&release.tag_name, version) {
@@ -364,6 +375,10 @@ fn apply(pending: Pending, relaunch: bool) -> Result<(), String> {
         Pending::Homebrew => {}
         #[cfg(not(target_os = "macos"))]
         Pending::Dmg(path) => drop(path),
+        #[cfg(target_os = "windows")]
+        Pending::Store => store::install(relaunch)?,
+        #[cfg(not(target_os = "windows"))]
+        Pending::Store => {}
     }
     Ok(())
 }
@@ -623,6 +638,63 @@ fn copy_bundle_from(mount: &Path, bundle: &Path) -> Result<(), String> {
     Ok(())
 }
 
+/// Microsoft Store updates through `StoreContext`: silent, so no window is
+/// needed, and always to the newest published version.
+#[cfg(target_os = "windows")]
+mod store {
+    use windows::core::Interface;
+    use windows_collections::IIterable;
+    use windows::Services::Store::{StoreContext, StorePackageUpdate, StorePackageUpdateState};
+
+    fn msg(e: windows::core::Error) -> String {
+        e.message()
+    }
+
+    fn context() -> Result<StoreContext, String> {
+        // SAFETY: joins this thread to the multithreaded apartment; a second
+        // call on the same thread only returns an error we can ignore.
+        unsafe {
+            let _ = windows::Win32::System::WinRT::RoInitialize(windows::Win32::System::WinRT::RO_INIT_MULTITHREADED);
+        }
+        StoreContext::GetDefault().map_err(msg)
+    }
+
+    fn pending_updates(ctx: &StoreContext) -> Result<Option<IIterable<StorePackageUpdate>>, String> {
+        let list = ctx.GetAppAndOptionalStorePackageUpdatesAsync().and_then(|op| op.join()).map_err(msg)?;
+        if list.Size().map_err(msg)? == 0 {
+            return Ok(None);
+        }
+        list.cast::<IIterable<StorePackageUpdate>>().map(Some).map_err(msg)
+    }
+
+    /// Downloads every pending update. False when there is none, or when the
+    /// user turned off automatic updates (metered connection, Store settings).
+    pub fn download() -> Result<bool, String> {
+        let ctx = context()?;
+        if !ctx.CanSilentlyDownloadStorePackageUpdates().map_err(msg)? {
+            return Ok(false);
+        }
+        let Some(updates) = pending_updates(&ctx)? else { return Ok(false) };
+        let result = ctx.TrySilentDownloadStorePackageUpdatesAsync(&updates).and_then(|op| op.join()).map_err(msg)?;
+        Ok(result.OverallState().map_err(msg)? == StorePackageUpdateState::Completed)
+    }
+
+    /// Installs what `download` fetched. Windows ends this process to do it.
+    pub fn install(relaunch: bool) -> Result<(), String> {
+        if relaunch {
+            use windows::Win32::System::Recovery::{RegisterApplicationRestart, REGISTER_APPLICATION_RESTART_FLAGS};
+            // SAFETY: a null command line means "same arguments as now".
+            unsafe {
+                let _ = RegisterApplicationRestart(windows::core::PCWSTR::null(), REGISTER_APPLICATION_RESTART_FLAGS(0));
+            }
+        }
+        let ctx = context()?;
+        let Some(updates) = pending_updates(&ctx)? else { return Ok(()) };
+        ctx.TrySilentDownloadAndInstallStorePackageUpdatesAsync(&updates).and_then(|op| op.join()).map_err(msg)?;
+        Ok(())
+    }
+}
+
 fn open_release_page() -> CmdResult<UpdateOutcome> {
     crate::commands::shell::open_url(RELEASE_PAGE.into())?;
     Ok(UpdateOutcome::Opened)
@@ -780,11 +852,14 @@ mod tests {
 
     #[test]
     fn only_quiet_channels_update_on_their_own() {
-        for c in [Channel::Installer, Channel::Portable, Channel::Homebrew, Channel::Dmg] {
+        for c in [Channel::Installer, Channel::Portable, Channel::Homebrew, Channel::Dmg, Channel::Store] {
             assert!(installs_silently(c), "{c:?}");
         }
-        // The Store updates EzReader itself; a .deb needs the user's password.
-        for c in [Channel::Store, Channel::Deb, Channel::Other] {
+        // Outside Windows there is no Store to ask.
+        #[cfg(not(target_os = "windows"))]
+        assert_eq!(stage(Channel::Store, "1.0.0"), Ok(None));
+        // A .deb needs the user's password.
+        for c in [Channel::Deb, Channel::Other] {
             assert!(!installs_silently(c), "{c:?}");
             assert_eq!(stage(c, "1.0.0"), Ok(None));
         }

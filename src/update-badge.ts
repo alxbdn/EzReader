@@ -13,8 +13,8 @@ export interface UpdateBadgeDeps {
 
 type State = "hidden" | "current" | "outdated" | "downloading" | "ready" | "installing";
 
-/** Installs that update themselves without a click; the Store does it on its own. */
-const SILENT: ReadonlySet<UpdateChannel> = new Set(["installer", "portable", "homebrew", "dmg"]);
+/** Installs that update themselves without a click. */
+const SILENT: ReadonlySet<UpdateChannel> = new Set(["installer", "portable", "homebrew", "dmg", "store"]);
 
 export class UpdateBadge {
   readonly el: HTMLButtonElement;

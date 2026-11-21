@@ -130,7 +130,7 @@ describe("update badge", () => {
     expect(el.dataset["state"]).toBe("ready");
   });
 
-  it.each(["store", "deb", "other"] as const)("leaves %s updates to a click", async (channel) => {
+  it.each(["deb", "other"] as const)("leaves %s updates to a click", async (channel) => {
     const { badge, el, deps } = setUp({ check: async () => status({ channel }) });
     await badge.refresh();
     expect(deps.prepare).not.toHaveBeenCalled();

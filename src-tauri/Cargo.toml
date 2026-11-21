@@ -41,6 +41,8 @@ sha2 = "0.11"
 [target.'cfg(windows)'.dependencies]
 winreg = "0.56"
 winapi = { version = "0.3", features = ["winspool", "wingdi", "winnt", "shellapi", "processthreadsapi", "handleapi", "minwinbase", "minwindef", "errhandlingapi", "winerror", "winuser", "commctrl", "windef", "basetsd", "libloaderapi"] }
+# The collection types the Store API hands back (same version `windows` uses).
+windows-collections = "0.3"
 # Text recognition with the OCR engine built into Windows (Windows.Media.Ocr):
 # same version Tauri already builds, nothing to bundle.
 windows = { version = "0.62", features = [
@@ -50,8 +52,12 @@ windows = { version = "0.62", features = [
   "Globalization",
   "Graphics_Imaging",
   "Media_Ocr",
+  # Microsoft Store updates downloaded and installed from the app (StoreContext).
+  "Services_Store",
   "Storage_Streams",
   "Win32_System_Com",
+  # Reopen EzReader after a Store update it asked for ("Restart to update").
+  "Win32_System_Recovery",
   "Win32_System_WinRT",
   # The "How do you want to open .pdf files?" picker (SHOpenWithDialog).
   "Win32_UI_Shell",
