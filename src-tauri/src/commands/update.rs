@@ -643,8 +643,8 @@ fn copy_bundle_from(mount: &Path, bundle: &Path) -> Result<(), String> {
 #[cfg(target_os = "windows")]
 mod store {
     use windows::core::Interface;
-    use windows_collections::IIterable;
     use windows::Services::Store::{StoreContext, StorePackageUpdate, StorePackageUpdateState};
+    use windows_collections::IIterable;
 
     fn msg(e: windows::core::Error) -> String {
         e.message()
@@ -685,7 +685,8 @@ mod store {
             use windows::Win32::System::Recovery::{RegisterApplicationRestart, REGISTER_APPLICATION_RESTART_FLAGS};
             // SAFETY: a null command line means "same arguments as now".
             unsafe {
-                let _ = RegisterApplicationRestart(windows::core::PCWSTR::null(), REGISTER_APPLICATION_RESTART_FLAGS(0));
+                let _ =
+                    RegisterApplicationRestart(windows::core::PCWSTR::null(), REGISTER_APPLICATION_RESTART_FLAGS(0));
             }
         }
         let ctx = context()?;
