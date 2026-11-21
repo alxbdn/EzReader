@@ -9,12 +9,14 @@ export interface UpdateBadgeDeps {
   /** Downloads the update in the background so it installs when EzReader closes. */
   prepare(): Promise<UpdatePrepared>;
   notify(text: string, isError?: boolean): void;
+  /** Called once when the download finishes, to offer a restart. */
+  onReady?(status: UpdateStatus): void;
 }
 
 type State = "hidden" | "current" | "outdated" | "downloading" | "ready" | "installing";
 
-/** Installs that update themselves without a click; the Store does it on its own. */
-const SILENT: ReadonlySet<UpdateChannel> = new Set(["installer", "portable", "homebrew", "dmg"]);
+/** Installs that update themselves without a click. */
+const SILENT: ReadonlySet<UpdateChannel> = new Set(["installer", "portable", "homebrew", "dmg", "store"]);
 
 export class UpdateBadge {
   readonly el: HTMLButtonElement;
@@ -51,6 +53,12 @@ export class UpdateBadge {
       this.state = "outdated";
     }
     this.render();
+    if (this.state === "ready" && this.status) this.deps.onReady?.(this.status);
+  }
+
+  /** Restarts into the downloaded version (the toast's "Restart"). */
+  restartNow(): Promise<void> {
+    return this.onClick();
   }
 
   render(): void {

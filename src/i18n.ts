@@ -156,6 +156,9 @@ export interface Translations {
   updateDownloading?: string;
   updateReady?: string;
   updateReadyHint?: string;
+  updateReadyToast?: string;
+  updateRestart?: string;
+  updateLater?: string;
   updateOtherWindows?: string;
   updateFailed?: string;
   welcomeFeatHeading?: string;
@@ -742,6 +745,9 @@ const EN: Translations = {
   updateDownloading:   "Downloading {v}\u2026",
   updateReady:         "Restart to update",
   updateReadyHint:     "Version {v} is ready and installs when you close EzReader. Click to restart now.",
+  updateReadyToast:    "EzReader {v} is ready to install.",
+  updateRestart:       "Restart",
+  updateLater:         "Later",
   updateOtherWindows:  "Close your other EzReader windows first, then update",
   updateFailed:        "Couldn't update: {err}",
   welcomeFeatHeading:       "What you can do with EzReader",
@@ -1328,6 +1334,9 @@ const FR: Translations = {
   updateDownloading:   "T\u00e9l\u00e9chargement de {v}\u2026",
   updateReady:         "Red\u00e9marrer pour mettre \u00e0 jour",
   updateReadyHint:     "La version {v} est pr\u00eate et s'installe \u00e0 la fermeture d'EzReader. Cliquez pour red\u00e9marrer maintenant.",
+  updateReadyToast:    "EzReader {v} est pr\u00eat \u00e0 \u00eatre install\u00e9.",
+  updateRestart:       "Red\u00e9marrer",
+  updateLater:         "Plus tard",
   updateOtherWindows:  "Fermez d'abord vos autres fen\u00eatres EzReader, puis mettez \u00e0 jour",
   updateFailed:        "Impossible de mettre \u00e0 jour : {err}",
   welcomeFeatHeading:       "Ce que vous pouvez faire avec EzReader",

@@ -10,6 +10,7 @@ import { mountWelcomeDots } from "./welcome-dots";
 import { pdfjsLib } from "./pdfjs";
 import { WelcomePrefs } from "./welcome-prefs";
 import { UpdateBadge } from "./update-badge";
+import { UpdateToast } from "./update-toast";
 import { PdfViewer, PdfPageView, renderRedactedPages, renderStraightenedPages } from "./pdf-viewer";
 import { AdjustView, type PageSetting } from "./adjust-view";
 import { Toolbar } from "./toolbar";
@@ -1440,12 +1441,24 @@ const welcomePrefs = new WelcomePrefs(document.getElementById("welcome-screen")!
   },
 });
 void welcomePrefs.refresh();
-const updateBadge = new UpdateBadge(welcomePrefs.root, {
+const updateToast = new UpdateToast();
+const updateBadge: UpdateBadge = new UpdateBadge(welcomePrefs.root, {
   t: () => getTranslations(settingsModal.getSettings().language),
   check: () => checkForUpdate(),
   install: () => installUpdate(),
   prepare: () => prepareUpdate(),
   notify: (text, isError) => showToast(text, isError),
+  onReady: (status) => {
+    const t = getTranslations(settingsModal.getSettings().language);
+    updateToast.show(
+      {
+        message: (t.updateReadyToast ?? "EzReader {v} is ready to install.").replace("{v}", status.latest),
+        restart: t.updateRestart ?? "Restart",
+        later: t.updateLater ?? "Later",
+      },
+      () => void updateBadge.restartNow(),
+    );
+  },
 });
 void updateBadge.refresh();
 settingsModal.onChange(() => {

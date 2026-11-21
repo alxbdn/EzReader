@@ -130,7 +130,7 @@ describe("update badge", () => {
     expect(el.dataset["state"]).toBe("ready");
   });
 
-  it.each(["store", "deb", "other"] as const)("leaves %s updates to a click", async (channel) => {
+  it.each(["deb", "other"] as const)("leaves %s updates to a click", async (channel) => {
     const { badge, el, deps } = setUp({ check: async () => status({ channel }) });
     await badge.refresh();
     expect(deps.prepare).not.toHaveBeenCalled();
@@ -141,5 +141,27 @@ describe("update badge", () => {
     const { badge, deps } = setUp({ check: async () => status({ upToDate: true }) });
     await badge.refresh();
     expect(deps.prepare).not.toHaveBeenCalled();
+  });
+
+  it("announces the downloaded update once", async () => {
+    const onReady = vi.fn();
+    const { badge } = setUp({ prepare: async () => "ready", onReady });
+    await badge.refresh();
+    expect(onReady).toHaveBeenCalledOnce();
+    expect(onReady).toHaveBeenCalledWith(expect.objectContaining({ latest: "1.1.0" }));
+  });
+
+  it("does not announce an update it could not download", async () => {
+    const onReady = vi.fn();
+    const { badge } = setUp({ onReady });
+    await badge.refresh();
+    expect(onReady).not.toHaveBeenCalled();
+  });
+
+  it("restarts from the announcement", async () => {
+    const { badge, deps } = setUp({ prepare: async () => "ready" });
+    await badge.refresh();
+    await badge.restartNow();
+    expect(deps.install).toHaveBeenCalledOnce();
   });
 });
