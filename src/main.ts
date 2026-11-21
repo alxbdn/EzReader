@@ -450,62 +450,53 @@ function onFormChange(name: string, val: string): void {
 
 viewer.setup(tools, annotations, formValues, onFormChange);
 
-function wirePageOverlay(pv: PdfPageView): void {
-  const ov = pv.overlay;
+viewer.overlayEvents.onPick((ann, ov) => {
+  if (toolState.tool !== "select") toolbar.clearActiveTool();
+  ov.select(ann);
+});
 
-  ov.onPick((ann) => {
-    if (toolState.tool !== "select") toolbar.clearActiveTool();
-    ov.select(ann);
-  });
+viewer.overlayEvents.onTextSelected((ann) => {
+  editingTextAnn = ann;
+  if (ann) {
+    editingShapeAnn = null;
+    editingHighlightAnn = null;
+    toolbar.showTextStyles(ann);
+    toolbar.hideShapeStyles();
+    toolbar.hideHighlightStyles();
+  } else {
+    toolbar.hideTextStyles();
+  }
+});
 
-  ov.onTextAnnotationSelected((ann: TextAnnotation | null) => {
-    editingTextAnn = ann;
-    if (ann) {
-      editingShapeAnn = null;
-      editingHighlightAnn = null;
-      toolbar.showTextStyles(ann);
-      toolbar.hideShapeStyles();
-      toolbar.hideHighlightStyles();
-    } else {
-      toolbar.hideTextStyles();
-    }
-  });
+viewer.overlayEvents.onShapeSelected((ann) => {
+  editingShapeAnn = ann;
+  if (ann) {
+    editingTextAnn = null;
+    editingHighlightAnn = null;
+    toolbar.showShapeStyles(ann, ann.kind === "ink" && !ann.arrow ? "pencil" : "shapes");
+    toolbar.hideTextStyles();
+    toolbar.hideHighlightStyles();
+  } else {
+    toolbar.hideShapeStyles();
+  }
+});
 
-  ov.onShapeAnnotationSelected((ann: ShapeAnnotation | null) => {
-    editingShapeAnn = ann;
-    if (ann) {
-      editingTextAnn = null;
-      editingHighlightAnn = null;
-      toolbar.showShapeStyles(ann, ann.kind === "ink" && !ann.arrow ? "pencil" : "shapes");
-      toolbar.hideTextStyles();
-      toolbar.hideHighlightStyles();
-    } else {
-      toolbar.hideShapeStyles();
-    }
-  });
+viewer.overlayEvents.onHighlightSelected((ann) => {
+  editingHighlightAnn = ann;
+  if (ann) {
+    editingTextAnn = null;
+    editingShapeAnn = null;
+    toolbar.showHighlightStyles(ann);
+    toolbar.hideTextStyles();
+    toolbar.hideShapeStyles();
+  } else {
+    toolbar.hideHighlightStyles();
+  }
+});
 
-  ov.onHighlightAnnotationSelected((ann: HighlightAnnotation | null) => {
-    editingHighlightAnn = ann;
-    if (ann) {
-      editingTextAnn = null;
-      editingShapeAnn = null;
-      toolbar.showHighlightStyles(ann);
-      toolbar.hideTextStyles();
-      toolbar.hideShapeStyles();
-    } else {
-      toolbar.hideHighlightStyles();
-    }
-  });
-}
-
-const wiredOverlays = new WeakSet<object>();
 viewer.onLayoutChanged((pageViews) => {
   toolbar.updateLayout(viewer.forcedColumns, viewer.scrollMode, viewer.columnCount, viewer.evenSpread);
   for (const pv of pageViews) {
-    if (!wiredOverlays.has(pv.overlay)) {
-      wirePageOverlay(pv);
-      wiredOverlays.add(pv.overlay);
-    }
     pv.overlay.setTool(tools.tool);
     pv.overlay.refreshStyle();
   }
