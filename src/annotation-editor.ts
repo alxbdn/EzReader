@@ -1,0 +1,134 @@
+import type { ActiveToolState, Annotation, HighlightAnnotation, RgbColor, SignatureAnnotation, TextAnnotation } from "./models";
+import type { CanvasOverlay, ShapeAnnotation } from "./canvas-overlay";
+import { SIGNATURE_INK } from "./signature-ink";
+
+type Styled =
+  | { kind: "text"; ann: TextAnnotation }
+  | { kind: "shape"; ann: ShapeAnnotation }
+  | { kind: "highlight"; ann: HighlightAnnotation };
+
+export type StylePanel = Styled["kind"] | "signature";
+
+/** The toolbar panels that show and change the selected annotation's style. */
+export interface StylePanels {
+  showText(ann: TextAnnotation): void;
+  showShape(ann: ShapeAnnotation, panel: "pencil" | "shapes"): void;
+  showHighlight(ann: HighlightAnnotation): void;
+  showSignature(color: RgbColor): void;
+  hide(panel: StylePanel): void;
+}
+
+export interface EditedDocument {
+  /** The overlay of `page`, built if needed; null when the page is not laid out. */
+  overlayOf(page: number): CanvasOverlay | null;
+  /** Draws `page`'s annotations again, if its overlay is built. */
+  redraw(page: number): void;
+  has(ann: Annotation): boolean;
+  beginEdit(): void;
+  edited(): void;
+  markDirty(): void;
+}
+
+/**
+ * The annotation whose style the toolbar is showing, and what changing that style does to it.
+ *
+ * Text boxes, shapes and highlights take turns: selecting one stops editing the others. A drawn
+ * signature is tracked on its own, from the tool selection, because its only style is its ink.
+ */
+export class AnnotationEditor {
+  private styled: Styled | null = null;
+  private signature: SignatureAnnotation | null = null;
+
+  constructor(private readonly doc: EditedDocument, private readonly panels: StylePanels) {}
+
+  /** The annotation being styled (text box, shape or highlight), if any. */
+  get editing(): TextAnnotation | ShapeAnnotation | HighlightAnnotation | null { return this.styled?.ann ?? null; }
+
+  textSelected(ann: TextAnnotation | null): void {
+    if (ann) this.take({ kind: "text", ann });
+    else this.leave("text");
+  }
+
+  shapeSelected(ann: ShapeAnnotation | null): void {
+    if (ann) this.take({ kind: "shape", ann });
+    else this.leave("shape");
+  }
+
+  highlightSelected(ann: HighlightAnnotation | null): void {
+    if (ann) this.take({ kind: "highlight", ann });
+    else this.leave("highlight");
+  }
+
+  /** The tool selection changed: a drawn signature shows its ink colour. */
+  selectionChanged(ann: Annotation | null): void {
+    if (ann?.kind === "signature" && ann.vector) {
+      this.signature = ann;
+      this.panels.showSignature(ann.color ?? SIGNATURE_INK);
+    } else if (this.signature) {
+      this.signature = null;
+      this.panels.hide("signature");
+    }
+  }
+
+  /** Stops editing and hides the style panels (the document changed under the selection). */
+  drop(): void {
+    this.styled = null;
+    this.panels.hide("text");
+    this.panels.hide("shape");
+    this.panels.hide("highlight");
+  }
+
+  /** Stops editing without touching the panels: another tool takes over the toolbar. */
+  release(): void {
+    this.styled = null;
+  }
+
+  /** `ann` was deleted: stop editing it. */
+  removed(ann: Annotation): void {
+    if (this.styled?.ann === ann) {
+      this.panels.hide(this.styled.kind);
+      this.styled = null;
+    }
+  }
+
+  /** The toolbar's style changed: apply it to the annotation being edited. */
+  restyle(style: ActiveToolState): void {
+    const s = this.styled;
+    if (s) {
+      const overlay = this.doc.overlayOf(s.ann.page);
+      if (s.kind === "text") overlay?.applyTextAnnotationStyle(s.ann, style);
+      else if (s.kind === "shape") overlay?.applyShapeAnnotationStyle(s.ann, style.shapeColor, style.strokeWidth, style.fillColor, style.opacity);
+      else overlay?.applyHighlightAnnotationStyle(s.ann, style.highlightColor, style.highlightOpacity);
+      this.doc.markDirty();
+      return;
+    }
+    const ann = this.signature;
+    if (!ann || !this.doc.has(ann)) return;
+    const c = style.signatureColor;
+    if (ann.color && ann.color.r === c.r && ann.color.g === c.g && ann.color.b === c.b) return;
+    this.doc.beginEdit();
+    ann.color = { ...c };
+    this.doc.redraw(ann.page);
+    this.doc.edited();
+  }
+
+  /** Moves the text box or shape being edited above or below the others. */
+  reorder(dir: "up" | "down"): void {
+    const s = this.styled;
+    if (!s || s.kind === "highlight") return;
+    this.doc.overlayOf(s.ann.page)?.reorderAnnotation(s.ann, dir);
+  }
+
+  private take(next: Styled): void {
+    this.styled = next;
+    if (next.kind === "text") this.panels.showText(next.ann);
+    else if (next.kind === "shape") this.panels.showShape(next.ann, next.ann.kind === "ink" && !next.ann.arrow ? "pencil" : "shapes");
+    else this.panels.showHighlight(next.ann);
+    for (const kind of ["text", "shape", "highlight"] as const) if (kind !== next.kind) this.panels.hide(kind);
+  }
+
+  private leave(kind: Styled["kind"]): void {
+    if (this.styled?.kind === kind) this.styled = null;
+    this.panels.hide(kind);
+  }
+}

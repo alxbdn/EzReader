@@ -38,17 +38,13 @@ import { ToolSelection } from "./tool-selection";
 import {
   type Annotation,
   type FormFieldValue,
-  type HighlightAnnotation,
-  type TextAnnotation,
   type FontFamilyValue,
   type RgbColor,
   CSS_UNITS,
   type InkVector,
-  type SignatureAnnotation,
 } from "./models";
 import { StudioPanel } from "./studio-panel";
-import { SIGNATURE_INK } from "./signature-ink";
-import type { PageTextItem, ShapeAnnotation } from "./canvas-overlay";
+import type { PageTextItem } from "./canvas-overlay";
 import { fitWithin, isImagePath, openKind, picturesDocument, type Picture } from "./pictures";
 import {
   openPagesDialog,
@@ -97,6 +93,7 @@ import {
   type StartupArgs,
 } from "./tauri-bridge";
 import { DocWorkspace } from "./doc-workspace";
+import { AnnotationEditor } from "./annotation-editor";
 import { isLinux, isMac, macShortcuts } from "./platform";
 import { TabStrip } from "./tab-strip";
 import type { SessionSnapshot } from "./document-session";
@@ -121,10 +118,6 @@ const formValues = new Map<string, string>();
 let guardRegistering = false;
 let pendingSignature: string | null = null;
 let pendingSignatureVector: InkVector | undefined;
-let editingTextAnn:      TextAnnotation | null = null;
-let editingShapeAnn:     ShapeAnnotation | null = null;
-let editingHighlightAnn: HighlightAnnotation | null = null;
-let editingSignatureAnn: SignatureAnnotation | null = null;
 
 const viewer = new PdfViewer();
 viewer.liveText.setRecognizer((data) => ocrImage(data, ocrLanguage()));
@@ -167,6 +160,26 @@ const annotations: AnnotationSession = new AnnotationSession({
   isDirty: (): boolean => session.isDirty,
 });
 annotations.onChange(() => { setDirty(true); pageEditor.history.clearRedo(); });
+
+const editor = new AnnotationEditor({
+  overlayOf: (page) => viewer.pageViews.find((p) => p.pageNum === page)?.overlay ?? null,
+  redraw: (page) => viewer.pageViews.find((p) => p.pageNum === page)?.builtOverlay?.redrawCommitted(),
+  has: (ann) => annotations.has(ann),
+  beginEdit: () => annotations.beginEdit(),
+  edited: () => annotations.edited(),
+  markDirty: () => setDirty(true),
+}, {
+  showText: (ann) => toolbar.showTextStyles(ann),
+  showShape: (ann, panel) => toolbar.showShapeStyles(ann, panel),
+  showHighlight: (ann) => toolbar.showHighlightStyles(ann),
+  showSignature: (color) => toolbar.showSignatureStyles(color),
+  hide: (panel) => {
+    if (panel === "text") toolbar.hideTextStyles();
+    else if (panel === "shape") toolbar.hideShapeStyles();
+    else if (panel === "highlight") toolbar.hideHighlightStyles();
+    else toolbar.hideSignatureStyles();
+  },
+});
 annotations.onPendingChange((pending) => toolbar.setPending(pending));
 const pageEditor = new PageEditor({
   ready: () => session.isOpen && viewer.isLoaded(),
@@ -235,13 +248,7 @@ toolbar.onToolOptions((title, mode) => {
 annotations.onContentChange(() => studio.refresh());
 tools.onSelect((ann) => {
   studio.setSelected(ann);
-  if (ann?.kind === "signature" && ann.vector) {
-    editingSignatureAnn = ann;
-    toolbar.showSignatureStyles(ann.color ?? SIGNATURE_INK);
-  } else if (editingSignatureAnn) {
-    editingSignatureAnn = null;
-    toolbar.hideSignatureStyles();
-  }
+  editor.selectionChanged(ann);
 });
 
 function pickAnnotation(ann: Annotation): void {
@@ -263,9 +270,7 @@ function pickAnnotation(ann: Annotation): void {
 function removeAnnotation(ann: Annotation): void {
   if (!annotations.has(ann)) return;
   if (tools.selected === ann) tools.select(null);
-  if (editingTextAnn === ann) { editingTextAnn = null; toolbar.hideTextStyles(); }
-  if (editingShapeAnn === ann) { editingShapeAnn = null; toolbar.hideShapeStyles(); }
-  if (editingHighlightAnn === ann) { editingHighlightAnn = null; toolbar.hideHighlightStyles(); }
+  editor.removed(ann);
   annotations.remove(ann);
   viewer.pageViews.find((p) => p.pageNum === ann.page)?.builtOverlay?.redrawCommitted();
 }
@@ -450,44 +455,9 @@ viewer.overlayEvents.onPick((ann, ov) => {
   ov.select(ann);
 });
 
-viewer.overlayEvents.onTextSelected((ann) => {
-  editingTextAnn = ann;
-  if (ann) {
-    editingShapeAnn = null;
-    editingHighlightAnn = null;
-    toolbar.showTextStyles(ann);
-    toolbar.hideShapeStyles();
-    toolbar.hideHighlightStyles();
-  } else {
-    toolbar.hideTextStyles();
-  }
-});
-
-viewer.overlayEvents.onShapeSelected((ann) => {
-  editingShapeAnn = ann;
-  if (ann) {
-    editingTextAnn = null;
-    editingHighlightAnn = null;
-    toolbar.showShapeStyles(ann, ann.kind === "ink" && !ann.arrow ? "pencil" : "shapes");
-    toolbar.hideTextStyles();
-    toolbar.hideHighlightStyles();
-  } else {
-    toolbar.hideShapeStyles();
-  }
-});
-
-viewer.overlayEvents.onHighlightSelected((ann) => {
-  editingHighlightAnn = ann;
-  if (ann) {
-    editingTextAnn = null;
-    editingShapeAnn = null;
-    toolbar.showHighlightStyles(ann);
-    toolbar.hideTextStyles();
-    toolbar.hideShapeStyles();
-  } else {
-    toolbar.hideHighlightStyles();
-  }
-});
+viewer.overlayEvents.onTextSelected((ann) => editor.textSelected(ann));
+viewer.overlayEvents.onShapeSelected((ann) => editor.shapeSelected(ann));
+viewer.overlayEvents.onHighlightSelected((ann) => editor.highlightSelected(ann));
 
 viewer.onLayoutChanged((pageViews) => {
   toolbar.updateLayout(viewer.forcedColumns, viewer.scrollMode, viewer.columnCount, viewer.evenSpread);
@@ -620,12 +590,7 @@ function setDirty(val: boolean): void {
 }
 
 function dropStaleSelection(): void {
-  editingTextAnn = null;
-  editingShapeAnn = null;
-  editingHighlightAnn = null;
-  toolbar.hideTextStyles();
-  toolbar.hideShapeStyles();
-  toolbar.hideHighlightStyles();
+  editor.drop();
 }
 
 async function undoRedo(redo: boolean): Promise<void> {
@@ -1572,47 +1537,19 @@ toolbar.on(async (e) => {
       document.getElementById("viewer-scroll")!.classList.toggle("etext-mode", e.tool === "etext");
       updateHandMode();
       for (const pv of viewer.pageViews) pv.builtOverlay?.setTool(e.tool);
-      editingTextAnn      = null;
-      editingShapeAnn     = null;
-      editingHighlightAnn = null;
+      editor.release();
       if (e.tool !== "signature") cancelSignaturePlacement();
       break;
 
     case "style-change":
       tools.setStyle(e.style);
       for (const pv of viewer.pageViews) pv.builtOverlay?.refreshStyle();
-      if (editingTextAnn) {
-        const pv = viewer.pageViews.find(p => p.pageNum === editingTextAnn!.page);
-        pv?.overlay.applyTextAnnotationStyle(editingTextAnn, e.style);
-        setDirty(true);
-      } else if (editingShapeAnn) {
-        const pv = viewer.pageViews.find(p => p.pageNum === editingShapeAnn!.page);
-        pv?.overlay.applyShapeAnnotationStyle(editingShapeAnn, e.style.shapeColor, e.style.strokeWidth, e.style.fillColor, e.style.opacity);
-        setDirty(true);
-      } else if (editingHighlightAnn) {
-        const pv = viewer.pageViews.find(p => p.pageNum === editingHighlightAnn!.page);
-        pv?.overlay.applyHighlightAnnotationStyle(editingHighlightAnn, e.style.highlightColor, e.style.highlightOpacity);
-        setDirty(true);
-      } else if (editingSignatureAnn && annotations.has(editingSignatureAnn)) {
-        const ann = editingSignatureAnn;
-        const c = e.style.signatureColor;
-        if (!ann.color || ann.color.r !== c.r || ann.color.g !== c.g || ann.color.b !== c.b) {
-          annotations.beginEdit();
-          ann.color = { ...c };
-          viewer.pageViews.find(p => p.pageNum === ann.page)?.builtOverlay?.redrawCommitted();
-          annotations.edited();
-        }
-      }
+      editor.restyle(e.style);
       break;
 
-    case "layer-change": {
-      const ann = editingTextAnn ?? editingShapeAnn;
-      if (ann) {
-        const pv = viewer.pageViews.find(p => p.pageNum === ann.page);
-        pv?.overlay.reorderAnnotation(ann, e.dir);
-      }
+    case "layer-change":
+      editor.reorder(e.dir);
       break;
-    }
 
     case "signature":
       sigModal.open();
