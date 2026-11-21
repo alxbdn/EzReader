@@ -20,6 +20,13 @@ const ICON_DOWN   = svg(`<path d="m6 9 6 6 6-6"/>`, 13, 2.5);
 const HOLD_DELAY_MS = 500;
 const HOLD_REPEAT_MS = 45;
 
+/** Width of a thumbnail's frame (`.page-sidebar-frame`). */
+const THUMB_WIDTH = 120;
+/** Gap between frame and page number plus the number row's height (`.page-sidebar-thumb`, `.page-sidebar-rotate`). */
+const THUMB_META_HEIGHT = 6 + 24;
+/** Padding a card has around its content, matched by a negative margin (`.page-sidebar-thumb`). */
+const CARD_BLEED = 6;
+
 interface Thumb {
   page: number;
   card: HTMLElement;
@@ -150,6 +157,7 @@ export class PageSidebar {
     this.list.className = "page-sidebar-list";
     this.list.tabIndex = 0;
     this.list.addEventListener("keydown", (e) => this.handleKeydown(e));
+    this.listenToCards();
     this.dropIndicator = document.createElement("div");
     this.dropIndicator.className = "page-sidebar-drop hidden";
 
@@ -261,8 +269,9 @@ export class PageSidebar {
     this.doc = doc;
     this.rotation = rotation;
     const frag = document.createDocumentFragment();
+    const template = this.buildCardTemplate();
     for (let i = 0; i < dims.length; i++) {
-      const thumb = this.createThumb(i + 1, dims[i]);
+      const thumb = this.createThumb(i + 1, dims[i], template);
       this.thumbs.push(thumb);
       frag.appendChild(thumb.card);
     }
@@ -270,7 +279,8 @@ export class PageSidebar {
     frag.appendChild(this.dropIndicator);
     this.list.appendChild(frag);
     for (const t of this.thumbs) this.observer.observe(t.card);
-    this.list.scrollTop = scrollTop;
+    // Writing scrollTop lays the whole list out at once; a fresh list is already at the top.
+    if (scrollTop > 0) this.list.scrollTop = scrollTop;
     if (this.outlineMode) void this.ensureOutline();
     this.updateHeader();
   }
@@ -636,13 +646,14 @@ export class PageSidebar {
     return this.thumbs.length > 0 && this.selected.size === this.thumbs.length;
   }
 
-  private createThumb(page: number, dim: { width: number; height: number } | undefined): Thumb {
+  /** One card with every part a thumbnail has, cloned for each page: much cheaper than building 5,000 cards. */
+  private buildCardTemplate(): HTMLElement {
     const card = document.createElement("div");
     card.className = "page-sidebar-thumb";
-    card.dataset.page = String(page);
 
     const frame = document.createElement("div");
     frame.className = "page-sidebar-frame";
+    frame.title = this.t("sbToggleHint", "Click to show · check box or Ctrl+click to select");
     const canvas = document.createElement("canvas");
     frame.appendChild(canvas);
     const check = document.createElement("span");
@@ -651,30 +662,62 @@ export class PageSidebar {
     const hits = document.createElement("span");
     hits.className = "page-sidebar-hits";
     frame.append(check, hits);
-    frame.addEventListener("click", (e) => this.handleClick(page, e));
-    frame.addEventListener("pointerdown", (e) => this.handlePointerDown(page, e));
 
     const meta = document.createElement("div");
     meta.className = "page-sidebar-meta";
     const num = document.createElement("button");
     num.className = "page-sidebar-label";
-    num.addEventListener("click", () => { for (const cb of this.goToHandlers) cb(page, false); });
+    num.title = this.t("sbShowPage", "Show this page");
     const rotate = document.createElement("button");
     rotate.className = "page-sidebar-rotate";
     rotate.innerHTML = ICON_ROTATE_LEFT;
-    rotate.addEventListener("click", () => {
-      if (!this.canAct()) return;
-      const pages = this.selected.has(page) ? this.sortedSelection() : [page];
-      for (const cb of this.rotateHandlers) cb(pages, -1);
-    });
+    rotate.title = this.t("sbRotateLeft", "Rotate left");
     meta.append(num, rotate);
 
     card.append(frame, meta);
+    return card;
+  }
+
+  private createThumb(page: number, dim: { width: number; height: number } | undefined, template: HTMLElement): Thumb {
+    const card = template.cloneNode(true) as HTMLElement;
+    card.dataset.page = String(page);
+    const frame = card.firstElementChild as HTMLElement;
+    const canvas = frame.firstElementChild as HTMLCanvasElement;
+    (card.lastElementChild!.firstElementChild as HTMLElement).textContent = String(page);
 
     const thumb: Thumb = { page, card, canvas, rendered: false, task: null };
     this.sizePlaceholder(thumb, dim);
-    this.labelThumb(thumb);
     return thumb;
+  }
+
+  /** Clicks and presses on any card, handled once for the list instead of four listeners per card. */
+  private listenToCards(): void {
+    const target = (e: Event): { page: number; part: Element; kind: "frame" | "label" | "rotate" } | null => {
+      const el = e.target as Element | null;
+      const card = el?.closest<HTMLElement>(".page-sidebar-thumb");
+      if (!el || !card || card.parentElement !== this.list) return null;
+      const page = Number(card.dataset.page);
+      for (const kind of ["frame", "label", "rotate"] as const) {
+        const part = el.closest(`.page-sidebar-${kind}`);
+        if (part && card.contains(part)) return { page, part, kind };
+      }
+      return null;
+    };
+    this.list.addEventListener("click", (e) => {
+      const hit = target(e);
+      if (!hit) return;
+      if (hit.kind === "frame") this.handleClick(hit.page, e, hit.part);
+      else if (hit.kind === "label") for (const cb of this.goToHandlers) cb(hit.page, false);
+      else {
+        if (!this.canAct()) return;
+        const pages = this.selected.has(hit.page) ? this.sortedSelection() : [hit.page];
+        for (const cb of this.rotateHandlers) cb(pages, -1);
+      }
+    });
+    this.list.addEventListener("pointerdown", (e) => {
+      const hit = target(e);
+      if (hit?.kind === "frame") this.handlePointerDown(hit.page, e, hit.part);
+    });
   }
 
   private labelThumb(thumb: Thumb): void {
@@ -695,6 +738,9 @@ export class PageSidebar {
     const h = dim?.height ?? 842;
     const swap = this.rotation % 180 !== 0;
     thumb.canvas.style.aspectRatio = swap ? `${h} / ${w}` : `${w} / ${h}`;
+    // The size a card has once laid out, so cards off screen take their real room without being laid out.
+    const frameHeight = THUMB_WIDTH * (swap ? w / h : h / w);
+    thumb.card.style.containIntrinsicSize = `${THUMB_WIDTH}px ${frameHeight + THUMB_META_HEIGHT}px`;
   }
 
   private onIntersect(entries: IntersectionObserverEntry[]): void {
@@ -781,12 +827,12 @@ export class PageSidebar {
     }
   }
 
-  private handleClick(page: number, e: MouseEvent): void {
+  private handleClick(page: number, e: MouseEvent, frame: Element): void {
     if (this.suppressClick) {
       this.suppressClick = false;
       return;
     }
-    const box = (e.currentTarget as HTMLElement | null)?.querySelector(".page-sidebar-check")?.getBoundingClientRect();
+    const box = frame.querySelector(".page-sidebar-check")?.getBoundingClientRect();
     const pad = 6;
     const onCheck = !!box && e.clientX >= box.left - pad && e.clientX <= box.right + pad
       && e.clientY >= box.top - pad && e.clientY <= box.bottom + pad;
@@ -878,7 +924,7 @@ export class PageSidebar {
     for (const cb of handlers) cb(pages);
   }
 
-  private handlePointerDown(page: number, e: PointerEvent): void {
+  private handlePointerDown(page: number, e: PointerEvent, frame: Element): void {
     if (e.button !== 0 || !this.canAct() || e.shiftKey || e.ctrlKey || e.metaKey) return;
     this.cancelDrag();
     this.drag = {
@@ -893,7 +939,7 @@ export class PageSidebar {
       ghost: null,
       scrollRaf: 0,
     };
-    try { (e.currentTarget as Element | null)?.setPointerCapture(e.pointerId); } catch {}
+    try { frame.setPointerCapture(e.pointerId); } catch {}
     window.addEventListener("pointermove", this.onPointerMove);
     window.addEventListener("pointerup", this.onPointerUp);
     window.addEventListener("pointercancel", this.onPointerUp);
@@ -1016,8 +1062,8 @@ export class PageSidebar {
     const ref = this.thumbs[at] ?? this.thumbs[at - 1];
     if (!ref) return;
     const top = at < this.thumbs.length
-      ? ref.card.offsetTop - gap
-      : ref.card.offsetTop + ref.card.offsetHeight + gap;
+      ? ref.card.offsetTop + CARD_BLEED - gap
+      : ref.card.offsetTop + ref.card.offsetHeight - CARD_BLEED + gap;
     this.dropIndicator.style.top = `${top - 1}px`;
     this.dropIndicator.classList.remove("hidden");
   }

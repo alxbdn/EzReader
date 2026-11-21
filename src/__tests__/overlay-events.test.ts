@@ -14,6 +14,7 @@ describe("OverlayEvents", () => {
     const tools = new ToolSelection();
     const session = new AnnotationSession();
     const views = Array.from({ length: 50 }, (_, i) => new PdfPageView(i + 1, tools, session, null, events));
+    for (const v of views) void v.overlay;
     expect(add.mock.calls.filter(([type]) => type === "keydown")).toHaveLength(1);
     for (const v of views) v.destroy();
     add.mockRestore();
@@ -52,5 +53,24 @@ describe("OverlayEvents", () => {
     events.textSelected(null);
     expect(text).toHaveBeenCalledWith(null);
     expect(pick).not.toHaveBeenCalled();
+  });
+});
+
+describe("PdfPageView before it is drawn", () => {
+  it("is one empty box until its overlay is used, then picks up the current tool", () => {
+    const tools = new ToolSelection();
+    const view = new PdfPageView(1, tools, new AnnotationSession());
+    view.setPlaceholderSize(200, 300);
+    view.clear();
+    expect(view.wrapper.childElementCount).toBe(0);
+    expect(view.builtOverlay).toBeNull();
+    expect(view.hasPixels).toBe(false);
+    expect(view.highlight("x", 0)).toBeNull();
+
+    tools.setTool("rect");
+    expect(view.overlay.currentTool).toBe("rect");
+    expect(view.builtOverlay).toBe(view.overlay);
+    expect(view.wrapper.querySelector(".page-canvas")).not.toBeNull();
+    view.destroy();
   });
 });
