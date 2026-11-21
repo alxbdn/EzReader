@@ -24,11 +24,8 @@ pub fn save_annotated_pdf(
 ) -> CmdResult<()> {
     crate::grants::check_all([&input_path, &output_path])?;
     if annotations.is_empty() && rotation_delta == 0 && form_fields.is_empty() {
-        let prev_meta_empty = Document::load(&input_path)
-            .map(|d| {
-                let m = writer::load_meta(&d);
-                m.annotations.is_empty() && m.stream_ids.is_empty()
-            })
+        let prev_meta_empty = load_stored(&input_path)
+            .map(|stored| stored.is_none_or(|s| s.meta.annotations.is_empty() && s.meta.stream_ids.is_empty()))
             .unwrap_or(true);
         if prev_meta_empty {
             fsutil::copy_atomic(&input_path, &output_path)?;
@@ -191,26 +188,77 @@ fn clone_acroform_tree(inc: &mut IncrementalDocument, cat_id: ObjectId) -> lopdf
     Ok(())
 }
 
-#[tauri::command(async)]
-pub fn strip_annotation_streams(input_path: String, output_path: String) -> CmdResult<bool> {
-    crate::grants::check_all([&input_path, &output_path])?;
-    let meta_empty = Document::load(&input_path).map(|d| writer::load_meta(&d).stream_ids.is_empty()).unwrap_or(true);
-    if meta_empty {
-        fsutil::copy_atomic(&input_path, &output_path)?;
+/// EzReader's annotation record in a file, with the document it was read from.
+struct Stored {
+    bytes: Vec<u8>,
+    doc: Document,
+    meta: writer::AnnotationMeta,
+}
+
+/// Reads EzReader's annotation record, parsing the file only when its bytes can hold one, so
+/// opening a file EzReader never annotated costs a read, not a parse of every object.
+fn load_stored(path: &str) -> Result<Option<Stored>, String> {
+    let bytes = std::fs::read(path).map_err(|e| e.to_string())?;
+    if !writer::may_hold_meta(&bytes) {
+        return Ok(None);
+    }
+    let doc = Document::load_mem(&bytes).map_err(|e| e.to_string())?;
+    let meta = writer::load_meta(&doc);
+    Ok(Some(Stored { bytes, doc, meta }))
+}
+
+/// Writes `stored` without the drawn layer of its annotations to `output_path`, so the viewer
+/// shows them once, as editable objects. False, and nothing written, when there is no layer.
+fn write_without_layer(stored: Stored, output_path: &str) -> CmdResult<bool> {
+    if stored.meta.stream_ids.is_empty() {
         return Ok(false);
     }
-
-    let mut inc = fsutil::load_incremental(&input_path)?;
-    let meta = writer::load_meta(inc.get_prev_documents());
-    for arr in meta.stream_ids.values() {
+    let mut inc = fsutil::incremental_from(stored.bytes, stored.doc)?;
+    for arr in stored.meta.stream_ids.values() {
         let sid = (arr[0], arr[1] as u16);
         inc.opt_clone_object_to_new_document(sid).map_err(|e| e.to_string())?;
         if let Ok(Object::Stream(s)) = inc.new_document.get_object_mut(sid) {
             writer::set_raw_content(s, vec![]);
         }
     }
-    fsutil::save_incremental(&mut inc, &output_path)?;
+    fsutil::save_incremental(&mut inc, output_path)?;
     Ok(true)
+}
+
+#[tauri::command(async)]
+pub fn strip_annotation_streams(input_path: String, output_path: String) -> CmdResult<bool> {
+    crate::grants::check_all([&input_path, &output_path])?;
+    let stripped = match load_stored(&input_path) {
+        Ok(Some(stored)) => write_without_layer(stored, &output_path)?,
+        _ => false,
+    };
+    if !stripped {
+        fsutil::copy_atomic(&input_path, &output_path)?;
+    }
+    Ok(stripped)
+}
+
+/// What the viewer needs to show a file: the annotations EzReader stored in it, and whether
+/// a working copy without their drawn layer was written (the viewer then shows that copy).
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DisplayCopy {
+    pub annotations: Vec<Annotation>,
+    pub working_copy: bool,
+}
+
+/// One read of a file being opened: replaces `read_annotations` followed by
+/// `strip_annotation_streams`, which parsed the file up to three times before the viewer could
+/// start. `working_path` is written only when `working_copy` comes back true.
+#[tauri::command(async)]
+pub fn open_for_display(file_path: String, working_path: String) -> CmdResult<DisplayCopy> {
+    crate::grants::check_all([&file_path, &working_path])?;
+    let Some(mut stored) = load_stored(&file_path)? else {
+        return Ok(DisplayCopy { annotations: Vec::new(), working_copy: false });
+    };
+    let annotations = std::mem::take(&mut stored.meta.annotations);
+    let working_copy = write_without_layer(stored, &working_path)?;
+    Ok(DisplayCopy { annotations, working_copy })
 }
 
 #[tauri::command(async)]
@@ -244,8 +292,7 @@ pub fn straighten_pages(
 #[tauri::command(async)]
 pub fn read_annotations(file_path: String) -> CmdResult<Vec<Annotation>> {
     crate::grants::check(&file_path)?;
-    let doc = Document::load(&file_path).map_err(|e| e.to_string())?;
-    Ok(writer::load_meta(&doc).annotations)
+    Ok(load_stored(&file_path)?.map(|s| s.meta.annotations).unwrap_or_default())
 }
 
 #[derive(Debug, Deserialize, Clone)]
@@ -817,6 +864,52 @@ mod tests {
         for p in [annotated, out] {
             std::fs::remove_file(p).ok();
         }
+    }
+
+    #[test]
+    fn open_for_display_reads_a_plain_file_without_writing_a_copy() {
+        let working = tmp("display-plain.pdf");
+        std::fs::remove_file(&working).ok();
+        let shown = open_for_display(fixture("objstm-indirect-length.pdf"), working.clone()).unwrap();
+        assert!(shown.annotations.is_empty());
+        assert!(!shown.working_copy);
+        assert!(!std::path::Path::new(&working).exists(), "nothing to strip, nothing written");
+    }
+
+    #[test]
+    fn open_for_display_strips_the_drawn_layer_in_one_read() {
+        let annotated = tmp("display-annotated.pdf");
+        let working = tmp("display-working.pdf");
+        save_annotated_pdf(fixture("objstm-indirect-length.pdf"), annotated.clone(), vec![rect(1, 40.0)], 0, vec![])
+            .unwrap();
+
+        let shown = open_for_display(annotated.clone(), working.clone()).unwrap();
+        assert_eq!(shown.annotations.len(), 1);
+        assert!(shown.working_copy);
+        crate::test_util::assert_lengths_consistent(&working);
+
+        let doc = Document::load(&working).unwrap();
+        let meta = writer::load_meta(&doc);
+        for ids in meta.stream_ids.values() {
+            let layer = doc.get_object((ids[0], ids[1] as u16)).unwrap().as_stream().unwrap();
+            assert!(layer.content.is_empty(), "the viewer draws the annotations, not the page");
+        }
+        assert_eq!(read_annotations(working.clone()).unwrap().len(), 1, "the copy keeps the record");
+
+        for p in [annotated, working] {
+            std::fs::remove_file(p).ok();
+        }
+    }
+
+    #[test]
+    fn meta_marker_is_found_only_in_files_ezreader_annotated() {
+        let plain = std::fs::read(fixture("objstm-indirect-length.pdf")).unwrap();
+        assert!(!writer::may_hold_meta(&plain));
+        let annotated = tmp("marker-annotated.pdf");
+        save_annotated_pdf(fixture("objstm-indirect-length.pdf"), annotated.clone(), vec![rect(1, 40.0)], 0, vec![])
+            .unwrap();
+        assert!(writer::may_hold_meta(&std::fs::read(&annotated).unwrap()));
+        std::fs::remove_file(annotated).ok();
     }
 
     #[test]

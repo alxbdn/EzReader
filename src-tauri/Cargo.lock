@@ -1003,6 +1003,7 @@ dependencies = [
  "getrandom 0.4.3",
  "image",
  "lopdf",
+ "memchr",
  "objc2",
  "objc2-core-foundation",
  "objc2-foundation",

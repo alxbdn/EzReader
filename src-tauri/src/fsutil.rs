@@ -23,15 +23,22 @@ where
 }
 
 pub fn load_incremental(path: impl AsRef<Path>) -> Result<IncrementalDocument, String> {
-    let inc = IncrementalDocument::load(path.as_ref()).map_err(|e| e.to_string())?;
-    if inc.get_prev_documents().xref_recovery.is_none() {
-        return Ok(inc);
+    let bytes = std::fs::read(path.as_ref()).map_err(|e| e.to_string())?;
+    let doc = Document::load_mem(&bytes).map_err(|e| e.to_string())?;
+    incremental_from(bytes, doc)
+}
+
+/// An incremental update on top of `doc`, parsed from `bytes`, so a caller that already parsed
+/// the file does not parse it again. A file whose cross-reference data had to be repaired is
+/// rewritten first, so the update does not point back at the broken table.
+pub fn incremental_from(bytes: Vec<u8>, mut doc: Document) -> Result<IncrementalDocument, String> {
+    if doc.xref_recovery.is_none() {
+        return Ok(IncrementalDocument::create_from(bytes, doc));
     }
-    let mut doc = Document::load(path.as_ref()).map_err(|e| e.to_string())?;
-    let mut bytes = Vec::new();
-    doc.save_to(&mut bytes).map_err(|e| e.to_string())?;
-    let prev = Document::load_mem(&bytes).map_err(|e| e.to_string())?;
-    Ok(IncrementalDocument::create_from(bytes, prev))
+    let mut fresh = Vec::new();
+    doc.save_to(&mut fresh).map_err(|e| e.to_string())?;
+    let prev = Document::load_mem(&fresh).map_err(|e| e.to_string())?;
+    Ok(IncrementalDocument::create_from(fresh, prev))
 }
 
 pub fn copy_atomic(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> Result<(), String> {

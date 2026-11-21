@@ -27,12 +27,24 @@ fn catalog_id(doc: &Document) -> Result<ObjectId, String> {
         .map_err(|_| "Root is not a reference".to_string())
 }
 
+/// The catalog entry that points at EzReader's annotation record.
+const META_KEY: &[u8] = b"CCAnnot";
+
+/// Whether a file's bytes can hold an EzReader annotation record, found without parsing them.
+///
+/// EzReader writes the catalog as a plain object, never inside an object stream, and an
+/// incremental update keeps every earlier revision byte for byte, so a file EzReader annotated
+/// always contains the entry's name. A file without it needs no parse to know it has no record.
+pub fn may_hold_meta(bytes: &[u8]) -> bool {
+    memchr::memmem::find(bytes, b"/CCAnnot").is_some()
+}
+
 pub fn load_meta(doc: &Document) -> AnnotationMeta {
     let Ok(cat_id) = catalog_id(doc) else { return AnnotationMeta::default() };
     let Ok(cat) = doc.get_object(cat_id) else { return AnnotationMeta::default() };
     let Ok(dict) = cat.as_dict() else { return AnnotationMeta::default() };
 
-    let Ok(Object::Reference(meta_ref)) = dict.get(b"CCAnnot") else {
+    let Ok(Object::Reference(meta_ref)) = dict.get(META_KEY) else {
         return AnnotationMeta::default();
     };
     let Ok(obj) = doc.get_object(*meta_ref) else { return AnnotationMeta::default() };
@@ -51,7 +63,7 @@ pub fn save_meta(doc: &mut Document, meta: &AnnotationMeta) -> Result<(), String
     let cat_id = catalog_id(doc)?;
     let catalog = doc.get_object_mut(cat_id).map_err(|e| e.to_string())?;
     if let Object::Dictionary(d) = catalog {
-        d.set("CCAnnot", Object::Reference(stream_id));
+        d.set(META_KEY, Object::Reference(stream_id));
     }
     Ok(())
 }

@@ -61,7 +61,7 @@ import {
   stripAnnotationStreams,
   ocrImage,
   ocrLanguages,
-  readAnnotations,
+  openForDisplay,
   getStartupArgs,
   printPages,
   extractPdfPages,
@@ -863,14 +863,10 @@ async function showInViewer(path: string, reload = false): Promise<string | null
   annotations.clear();
   formValues.clear();
 
-  const saved = await readAnnotations(path);
-  annotations.load(saved);
-
-  let workingCopy: string | null = null;
-  if (saved.length > 0) {
-    workingCopy = await newTempPath(`display-${await basename(path)}`);
-    await stripAnnotationStreams(path, workingCopy);
-  }
+  const working = await newTempPath(`display-${fileNameOf(path)}`);
+  const shown = await openForDisplay(path, working);
+  annotations.load(shown.annotations);
+  const workingCopy = shown.workingCopy ? working : null;
 
   if (reload) await viewer.reload(workingCopy ?? path);
   else await viewer.load(workingCopy ?? path);
