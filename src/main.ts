@@ -96,7 +96,7 @@ import {
   moveTab,
   type StartupArgs,
 } from "./tauri-bridge";
-import { DocTabs, type DocTab } from "./doc-tabs";
+import { DocWorkspace } from "./doc-workspace";
 import { isLinux, isMac, macShortcuts } from "./platform";
 import { TabStrip } from "./tab-strip";
 import type { SessionSnapshot } from "./document-session";
@@ -131,14 +131,32 @@ viewer.liveText.setRecognizer((data) => ocrImage(data, ocrLanguage()));
 const tools = new ToolSelection();
 const toolState = tools.state;
 const toolbar   = new Toolbar();
-const docTabs = new DocTabs<ParkedDoc>();
 let shownPath: string | null = null;
-let tabSwitch: Promise<void> | null = null;
+const docs = new DocWorkspace<ParkedDoc>({
+  isOpen: () => session.isOpen,
+  title: () => session.displayName,
+  isDirty: () => session.isDirty,
+  canLeave: () => !pageEditor.busy && toolbar.allowed(),
+  canOpen: () => toolbar.allowed(),
+  fileOf: (p) => {
+    const s = p ? p.session : null;
+    if (s) return s.unsavedCopy ? null : s.sourcePath;
+    return session.isUnsavedCopy ? null : session.sourcePath;
+  },
+  park: parkShown,
+  show: showParked,
+  clear: () => session.restore(null),
+  close: closeDocument,
+  settleUnsaved: () => settleUnsaved("msgSaveBeforeClose"),
+}, {
+  render: (tabs, activeId) => tabStrip.render(tabs, activeId),
+  dirtyChanged: () => setDirty(session.isDirty),
+}, samePath);
 
 const tabStrip = new TabStrip(document.getElementById("menubar-row")!, toolbar.titleElement, {
-  activate: (id) => void switchTab(id),
-  close: (id) => void closeTab(id),
-  move: (id, index) => { docTabs.move(id, index); renderTabs(); },
+  activate: (id) => void docs.switchTo(id),
+  close: (id) => void docs.close(id),
+  move: (id, index) => docs.move(id, index),
   hover: (x, y) => tabDragHover(x, y),
   hoverEnd: () => void tabDragEnd().catch(() => {}),
   detach: (id, x, y) => void detachTab(id, x, y),
@@ -355,7 +373,7 @@ async function fitWindowToDocument(): Promise<boolean> {
   try {
     await setLauncherRatioLock(false);
     if (!autoFitWindow) return true;
-    if (fullscreen || docTabs.count > 1 || await appWindow.isMaximized()) return preferredZoomShowsPage(pref);
+    if (fullscreen || docs.count > 1 || await appWindow.isMaximized()) return preferredZoomShowsPage(pref);
     const monitor = await currentMonitor();
     if (!monitor) return preferredZoomShowsPage(pref);
     const sf = monitor.scaleFactor || 1;
@@ -606,9 +624,8 @@ function showToast(msg: string, isError = false): void {
 function setDirty(val: boolean): void {
   session.markDirty(val);
   toolbar.setDocTitle(session.displayName, val);
-  if (session.isOpen && !docTabs.active) docTabs.add();
-  syncActiveTab();
-  if (docTabs.anyDirty) { void registerCloseGuard(); }
+  docs.sync();
+  if (docs.anyDirty) { void registerCloseGuard(); }
   else                  { unregisterCloseGuard(); }
 }
 
@@ -647,7 +664,7 @@ async function registerCloseGuard(): Promise<void> {
   guardRegistering = true;
   try {
     unlistenClose = await appWindow.onCloseRequested(async (event) => {
-      if (!docTabs.anyDirty) { return; }
+      if (!docs.anyDirty) { return; }
       if (savingBeforeLeaving) { event.preventDefault(); return; }
       if (closeGuardBusy) {
         setDirty(false);
@@ -657,7 +674,7 @@ async function registerCloseGuard(): Promise<void> {
       event.preventDefault();
       closeGuardBusy = true;
       try {
-        const ok = await settleAllTabs();
+        const ok = await docs.settleAll();
         if (ok) {
           setDirty(false);
           await appWindow.destroy();
@@ -863,13 +880,13 @@ async function openFile(): Promise<void> {
 
 async function openPath(path: string): Promise<void> {
   if (openKind(path) === "pictures") { await openPictures([path]); return; }
-  const open = tabShowing(path);
-  if (open) { await switchTab(open.id); return; }
-  await inNewTab(() => loadPdf(path));
+  const open = docs.showing(path);
+  if (open) { await docs.switchTo(open.id); return; }
+  await docs.inNewTab(() => loadPdf(path));
 }
 
 async function openPictures(paths: string[]): Promise<void> {
-  await inNewTab(() => picturesToTab(paths));
+  await docs.inNewTab(() => picturesToTab(paths));
 }
 
 async function picturesToTab(paths: string[]): Promise<void> {
@@ -906,26 +923,6 @@ function tabCloseLabel(t: { tabClose?: string }): string | undefined {
   return t.tabClose && (isMac ? macShortcuts(t.tabClose) : t.tabClose);
 }
 
-function renderTabs(): void {
-  tabStrip.render(docTabs.tabs, docTabs.active?.id ?? null);
-}
-
-function syncActiveTab(): void {
-  const tab = docTabs.active;
-  if (tab && session.isOpen) {
-    tab.title = session.displayName ?? "";
-    tab.dirty = session.isDirty;
-  }
-  renderTabs();
-}
-
-function tabShowing(path: string): DocTab<ParkedDoc> | null {
-  const same = (p: string | null | undefined) => !!p && samePath(p, path);
-  return docTabs.tabs.find((t) => t.parked
-    ? same(t.parked.session.sourcePath) && !t.parked.session.unsavedCopy
-    : same(session.sourcePath) && !session.isUnsavedCopy) ?? null;
-}
-
 function samePath(a: string, b: string): boolean {
   const norm = (p: string) => p.replace(/\\/g, "/");
   return isMac || navigator.userAgent.includes("Windows")
@@ -933,19 +930,13 @@ function samePath(a: string, b: string): boolean {
     : norm(a) === norm(b);
 }
 
-async function tabsSettled(): Promise<void> {
-  while (tabSwitch) await tabSwitch;
-}
-
-function parkActive(): void {
-  const tab = docTabs.active;
-  if (!tab || !session.isOpen || !shownPath || !viewer.isLoaded()) return;
+/** The shown document's state, kept while another tab is shown. */
+function parkShown(): ParkedDoc | null {
+  if (!shownPath || !viewer.isLoaded()) return null;
   annotations.apply();
   dropStaleSelection();
   cancelSignaturePlacement();
-  tab.title = session.displayName ?? tab.title;
-  tab.dirty = session.isDirty;
-  tab.parked = {
+  return {
     session: session.snapshot(),
     annotations: annotations.snapshot(),
     history: pageEditor.history.snapshot(),
@@ -960,11 +951,7 @@ function parkActive(): void {
   };
 }
 
-async function showTab(tab: DocTab<ParkedDoc>): Promise<void> {
-  const p = tab.parked;
-  docTabs.activate(tab.id);
-  if (!p) return;
-  tab.parked = null;
+async function showParked(p: ParkedDoc): Promise<boolean> {
   session.restore(p.session);
   annotations.restoreParked(p.annotations);
   pageEditor.history.restore(p.history);
@@ -976,10 +963,7 @@ async function showTab(tab: DocTab<ParkedDoc>): Promise<void> {
     await viewer.load(p.shownPath, p.rotation);
   } catch (err) {
     showToast(msg("msgOpenFailed", { err: String(err) }), true);
-    const next = docTabs.remove(tab.id);
-    if (next) await showTab(next);
-    else await closeDocument();
-    return;
+    return false;
   }
   showThumbnails();
   setWelcomeVisible(false);
@@ -990,58 +974,7 @@ async function showTab(tab: DocTab<ParkedDoc>): Promise<void> {
   syncProtection();
   setDirty(session.isDirty);
   if (infoPanel.isOpen) await showInfo();
-}
-
-async function switchTab(id: number): Promise<void> {
-  await tabsSettled();
-  const tab = docTabs.get(id);
-  if (!tab || tab === docTabs.active || pageEditor.busy || !toolbar.allowed()) { renderTabs(); return; }
-  const run = (async () => {
-    parkActive();
-    await showTab(tab);
-  })();
-  tabSwitch = run;
-  try { await run; } finally { tabSwitch = null; renderTabs(); }
-}
-
-async function inNewTab(open: () => Promise<void>): Promise<void> {
-  await tabsSettled();
-  if (!toolbar.allowed()) return;
-  const before = session.isOpen ? docTabs.active : null;
-  if (before) parkActive();
-  const tab = docTabs.add();
-  session.restore(null);
-  renderTabs();
-  try {
-    await open();
-  } finally {
-    if (!session.isOpen) {
-      docTabs.remove(tab.id);
-      if (before) await showTab(before);
-      else renderTabs();
-    }
-  }
-}
-
-async function closeTab(id: number): Promise<void> {
-  await tabsSettled();
-  const tab = docTabs.get(id);
-  if (!tab) return;
-  if (tab !== docTabs.active) {
-    if (!tab.dirty) { docTabs.remove(id); renderTabs(); setDirty(session.isDirty); return; }
-    await switchTab(id);
-    if (docTabs.active !== tab) return;
-  }
-  if (!await settleUnsaved("msgSaveBeforeClose")) return;
-  await dropActiveTab();
-}
-
-async function dropActiveTab(): Promise<void> {
-  const tab = docTabs.active;
-  if (!tab) return;
-  const next = docTabs.remove(tab.id);
-  if (next) await showTab(next);
-  else await closeDocument();
+  return true;
 }
 
 async function closeDocument(): Promise<void> {
@@ -1064,31 +997,17 @@ async function closeDocument(): Promise<void> {
   setDirty(false);
 }
 
-async function settleAllTabs(): Promise<boolean> {
-  await tabsSettled();
-  for (const tab of [...docTabs.tabs]) {
-    if (!tab.dirty) continue;
-    if (tab !== docTabs.active) {
-      await switchTab(tab.id);
-      if (docTabs.active !== tab) return false;
-    }
-    if (!await settleUnsaved("msgSaveBeforeClose")) return false;
-    tab.dirty = false;
-  }
-  return true;
-}
-
 async function detachTab(id: number, x: number, y: number): Promise<void> {
-  await tabsSettled();
-  const tab = docTabs.get(id);
-  if (!tab || tab !== docTabs.active || !session.isOpen || pageEditor.busy || !toolbar.allowed()) {
+  await docs.settled();
+  const tab = docs.active;
+  if (!tab || tab.id !== id || !session.isOpen || pageEditor.busy || !toolbar.allowed()) {
     void tabDragEnd().catch(() => {});
     return;
   }
   let result: "merged" | "window" | "stayed";
   try {
     const { args, name } = await transferOfActive();
-    result = await moveTab(x, y, args, name, docTabs.count > 1);
+    result = await moveTab(x, y, args, name, docs.count > 1);
   } catch (err) {
     void tabDragEnd().catch(() => {});
     showToast(msg("msgOpenFailed", { err: errText(err) }), true);
@@ -1097,8 +1016,8 @@ async function detachTab(id: number, x: number, y: number): Promise<void> {
   if (result === "stayed") return;
   session.markDirty(false);
   tab.dirty = false;
-  if (docTabs.count > 1) {
-    await dropActiveTab();
+  if (docs.count > 1) {
+    await docs.dropActive();
   } else {
     unregisterCloseGuard();
     await appWindow.destroy();
@@ -1127,10 +1046,10 @@ async function openTransferred(t: StartupArgs): Promise<void> {
   const file = t.filePath;
   if (!file) return;
   if (!t.unsaved && !t.dirty && !t.savePath) {
-    const open = tabShowing(file);
-    if (open) { await switchTab(open.id); return; }
+    const open = docs.showing(file);
+    if (open) { await docs.switchTo(open.id); return; }
   }
-  await inNewTab(async () => {
+  await docs.inNewTab(async () => {
     await loadPdf(file, t.password ?? null);
     if (!session.isOpen) return;
     if (t.unsaved) session.markUnsavedCopy();
@@ -1915,15 +1834,15 @@ document.addEventListener("keydown", async (e) => {
   }
   if (ctrl && !shift && e.key.toLowerCase() === "w") {
     e.preventDefault();
-    const tab = docTabs.active;
-    if (tab && toolbar.allowed()) await closeTab(tab.id);
+    const tab = docs.active;
+    if (tab && toolbar.allowed()) await docs.close(tab.id);
     return;
   }
   if (ctrl && (e.key === "Tab" || e.key === "PageDown" || e.key === "PageUp")) {
     e.preventDefault();
     const back = e.key === "PageUp" || (e.key === "Tab" && shift);
-    const next = docTabs.neighbour(back ? -1 : 1);
-    if (next) await switchTab(next.id);
+    const next = docs.neighbour(back ? -1 : 1);
+    if (next) await docs.switchTo(next.id);
     return;
   }
   if (ctrl && shift && e.key === "S") {
