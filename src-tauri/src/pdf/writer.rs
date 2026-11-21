@@ -9,64 +9,11 @@ use super::models::{
     RectAnnotation, RgbColor, SignatureAnnotation, StampAnnotation, StampMark, TextAlignment, TextAnnotation,
 };
 
-use serde::{Deserialize, Serialize};
-
 use super::sysfont;
 
-#[derive(Serialize, Deserialize, Clone, Default)]
-pub struct AnnotationMeta {
-    pub annotations: Vec<Annotation>,
-    pub stream_ids: HashMap<u32, [u32; 2]>,
-}
-
-fn catalog_id(doc: &Document) -> Result<ObjectId, String> {
-    doc.trailer
-        .get(b"Root")
-        .map_err(|_| "No Root in trailer".to_string())?
-        .as_reference()
-        .map_err(|_| "Root is not a reference".to_string())
-}
-
-/// The catalog entry that points at EzReader's annotation record.
-const META_KEY: &[u8] = b"CCAnnot";
-
-/// Whether a file's bytes can hold an EzReader annotation record, found without parsing them.
-///
-/// EzReader writes the catalog as a plain object, never inside an object stream, and an
-/// incremental update keeps every earlier revision byte for byte, so a file EzReader annotated
-/// always contains the entry's name. A file without it needs no parse to know it has no record.
-pub fn may_hold_meta(bytes: &[u8]) -> bool {
-    memchr::memmem::find(bytes, b"/CCAnnot").is_some()
-}
-
-pub fn load_meta(doc: &Document) -> AnnotationMeta {
-    let Ok(cat_id) = catalog_id(doc) else { return AnnotationMeta::default() };
-    let Ok(cat) = doc.get_object(cat_id) else { return AnnotationMeta::default() };
-    let Ok(dict) = cat.as_dict() else { return AnnotationMeta::default() };
-
-    let Ok(Object::Reference(meta_ref)) = dict.get(META_KEY) else {
-        return AnnotationMeta::default();
-    };
-    let Ok(obj) = doc.get_object(*meta_ref) else { return AnnotationMeta::default() };
-    let Object::Stream(stream) = obj else { return AnnotationMeta::default() };
-    let Ok(json) = String::from_utf8(stream.content.clone()) else {
-        return AnnotationMeta::default();
-    };
-    serde_json::from_str(&json).unwrap_or_default()
-}
-
-pub fn save_meta(doc: &mut Document, meta: &AnnotationMeta) -> Result<(), String> {
-    let json = serde_json::to_string(meta).map_err(|e| e.to_string())?;
-    let stream = Stream::new(dictionary! {}, json.into_bytes());
-    let stream_id = doc.add_object(Object::Stream(stream));
-
-    let cat_id = catalog_id(doc)?;
-    let catalog = doc.get_object_mut(cat_id).map_err(|e| e.to_string())?;
-    if let Object::Dictionary(d) = catalog {
-        d.set(META_KEY, Object::Reference(stream_id));
-    }
-    Ok(())
-}
+#[cfg(test)]
+use super::annotation_layer::catalog_id;
+pub use super::annotation_layer::{load_meta, may_hold_meta, save_meta, AnnotationMeta};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Alpha {
@@ -871,8 +818,7 @@ pub(crate) fn set_raw_content(s: &mut lopdf::Stream, content: Vec<u8>) {
 
 #[cfg(test)]
 fn clear_annotation_streams(doc: &mut Document, meta: &AnnotationMeta) -> Result<(), String> {
-    for arr in meta.stream_ids.values() {
-        let sid = (arr[0], arr[1] as u16);
+    for (_, sid) in meta.layers() {
         if let Ok(Object::Stream(s)) = doc.get_object_mut(sid) {
             set_raw_content(s, vec![]);
         }
@@ -1643,13 +1589,13 @@ mod tests {
         });
 
         let mut meta = load_meta(&doc);
-        let existing = meta.stream_ids.get(&1).map(|arr| (arr[0], arr[1] as u16));
+        let existing = meta.layer(1);
         let sid = write_annotations_for_page(&mut doc, page_id, std::slice::from_ref(&ann), existing)
             .unwrap()
             .expect("should return a stream id");
 
         meta.annotations = vec![ann];
-        meta.stream_ids.insert(1, [sid.0, sid.1 as u32]);
+        meta.set_layers([(1, sid)]);
         save_meta(&mut doc, &meta).unwrap();
 
         let tmp = std::env::temp_dir().join("test_roundtrip.pdf");
@@ -1658,17 +1604,17 @@ mod tests {
 
         let meta2 = load_meta(&doc2);
         assert_eq!(meta2.annotations.len(), 1, "should read back 1 annotation");
-        assert!(meta2.stream_ids.contains_key(&1), "should have stream id for page 1");
+        assert!(meta2.layer(1).is_some(), "should have stream id for page 1");
 
-        let sid2 = meta2.stream_ids.get(&1).unwrap();
-        let stream_obj = doc2.get_object((sid2[0], sid2[1] as u16)).unwrap();
+        let sid2 = meta2.layer(1).unwrap();
+        let stream_obj = doc2.get_object(sid2).unwrap();
         let stream = stream_obj.as_stream().unwrap();
         assert!(!stream.content.is_empty(), "annotation stream should have content before strip");
 
         let mut doc3 = Document::load(&tmp).unwrap();
         let meta3 = load_meta(&doc3);
         clear_annotation_streams(&mut doc3, &meta3).unwrap();
-        let stream_obj3 = doc3.get_object((sid2[0], sid2[1] as u16)).unwrap();
+        let stream_obj3 = doc3.get_object(sid2).unwrap();
         let stream3 = stream_obj3.as_stream().unwrap();
         assert!(stream3.content.is_empty(), "annotation stream should be empty after strip");
 
@@ -1715,10 +1661,10 @@ mod tests {
         });
 
         let mut meta = load_meta(&doc);
-        let existing = meta.stream_ids.get(&1).map(|arr| (arr[0], arr[1] as u16));
+        let existing = meta.layer(1);
         let sid = write_annotations_for_page(&mut doc, page_id, std::slice::from_ref(&ann), existing).unwrap().unwrap();
         meta.annotations = vec![ann.clone()];
-        meta.stream_ids.insert(1, [sid.0, sid.1 as u32]);
+        meta.set_layers([(1, sid)]);
         save_meta(&mut doc, &meta).unwrap();
 
         let tmp = std::env::temp_dir().join("test_double_save.pdf");
@@ -1728,11 +1674,10 @@ mod tests {
         let meta2 = load_meta(&doc2);
         let pages2 = doc2.get_pages();
         let page_id2 = *pages2.get(&1).unwrap();
-        let existing2 = meta2.stream_ids.get(&1).map(|arr| (arr[0], arr[1] as u16));
+        let existing2 = meta2.layer(1);
         let sid2 =
             write_annotations_for_page(&mut doc2, page_id2, std::slice::from_ref(&ann), existing2).unwrap().unwrap();
-        let new_meta =
-            AnnotationMeta { annotations: vec![ann], stream_ids: HashMap::from([(1, [sid2.0, sid2.1 as u32])]) };
+        let new_meta = AnnotationMeta::new(vec![ann], [(1, sid2)]);
         save_meta(&mut doc2, &new_meta).unwrap();
         doc2.save(&tmp).unwrap();
 
@@ -1757,8 +1702,8 @@ mod tests {
         let meta4 = load_meta(&doc4);
         assert_eq!(meta4.annotations.len(), 1);
         clear_annotation_streams(&mut doc4, &meta4).unwrap();
-        let sid4 = meta4.stream_ids.get(&1).unwrap();
-        let s = doc4.get_object((sid4[0], sid4[1] as u16)).unwrap().as_stream().unwrap();
+        let sid4 = meta4.layer(1).unwrap();
+        let s = doc4.get_object(sid4).unwrap().as_stream().unwrap();
         assert!(s.content.is_empty(), "annotation stream should be empty after strip");
 
         let _ = std::fs::remove_file(&tmp);

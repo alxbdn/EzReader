@@ -508,8 +508,9 @@ mountWindowControls(document.getElementById("menubar-row")!, () => {
   };
 });
 
-{
-  const t = getTranslations(settingsModal.getSettings().language);
+/** Shows every part of the window in `language`. */
+function applyLanguage(language: string): void {
+  const t = getTranslations(language);
   toolbar.applyTranslations(t);
   studio.applyTranslations(t);
   compressModal.applyTranslations(t);
@@ -523,6 +524,7 @@ mountWindowControls(document.getElementById("menubar-row")!, () => {
   tabStrip.applyTranslations({ close: tabCloseLabel(t), dragNew: t.sbDragOut, dragMerge: t.tabDragMerge });
   applyTranslationsToDOM(t);
 }
+applyLanguage(settingsModal.getSettings().language);
 toolbar.brightness.value = settingsModal.getSettings().pageBrightness;
 toolbar.brightness.onInput((v) => applyPageBrightness(v));
 toolbar.brightness.onCommit((v) => settingsModal.setPageBrightness(v));
@@ -532,19 +534,7 @@ pageSidebar.setOutlineExpanded(settingsModal.getSettings().outlineExpanded);
 settingsModal.onChange(s => {
   toolbar.brightness.value = s.pageBrightness;
   pageSidebar.setOutlineExpanded(s.outlineExpanded);
-  const t = getTranslations(s.language);
-  toolbar.applyTranslations(t);
-  studio.applyTranslations(t);
-  compressModal.applyTranslations(t);
-  exportModal.applyTranslations(t);
-  ocrModal.applyTranslations(t);
-  passwordModal.applyTranslations(t);
-  pageSidebar.applyTranslations(t);
-  printModal.applyTranslations(t);
-  splitModal.applyTranslations(t);
-  adjustView.applyTranslations(t);
-  tabStrip.applyTranslations({ close: tabCloseLabel(t), dragNew: t.sbDragOut, dragMerge: t.tabDragMerge });
-  applyTranslationsToDOM(t);
+  applyLanguage(s.language);
 });
 
 (async () => {
