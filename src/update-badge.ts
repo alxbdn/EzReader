@@ -1,15 +1,20 @@
-import { ICON_CIRCLE_CHECK, ICON_CIRCLE_X, ICON_LOADER } from "./icons";
+import { ICON_CIRCLE_CHECK, ICON_CIRCLE_X, ICON_LOADER, ICON_ROTATE_CW } from "./icons";
 import type { Translations } from "./i18n";
-import type { UpdateOutcome, UpdateStatus } from "./tauri-bridge";
+import type { UpdateChannel, UpdateOutcome, UpdatePrepared, UpdateStatus } from "./tauri-bridge";
 
 export interface UpdateBadgeDeps {
   t(): Translations;
   check(): Promise<UpdateStatus>;
   install(): Promise<UpdateOutcome>;
+  /** Downloads the update in the background so it installs when EzReader closes. */
+  prepare(): Promise<UpdatePrepared>;
   notify(text: string, isError?: boolean): void;
 }
 
-type State = "hidden" | "current" | "outdated" | "installing";
+type State = "hidden" | "current" | "outdated" | "downloading" | "ready" | "installing";
+
+/** Installs that update themselves without a click; the Store does it on its own. */
+const SILENT: ReadonlySet<UpdateChannel> = new Set(["installer", "portable", "homebrew", "dmg"]);
 
 export class UpdateBadge {
   readonly el: HTMLButtonElement;
@@ -34,6 +39,18 @@ export class UpdateBadge {
       this.state = "hidden";
     }
     this.render();
+    if (this.state === "outdated" && SILENT.has(this.status!.channel)) await this.prepare();
+  }
+
+  private async prepare(): Promise<void> {
+    this.state = "downloading";
+    this.render();
+    try {
+      this.state = (await this.deps.prepare()) === "ready" ? "ready" : "outdated";
+    } catch {
+      this.state = "outdated";
+    }
+    this.render();
   }
 
   render(): void {
@@ -41,7 +58,7 @@ export class UpdateBadge {
     const s = this.status;
     this.el.hidden = this.state === "hidden" || !s;
     this.el.dataset["state"] = this.state;
-    this.el.disabled = this.state === "installing";
+    this.el.disabled = this.state === "installing" || this.state === "downloading";
     if (!s) return;
     const fill = (text: string | undefined, fallback: string) =>
       (text ?? fallback).replace("{v}", s.latest).replace("{cur}", s.current);
@@ -55,6 +72,14 @@ export class UpdateBadge {
       hint = s.channel === "store"
         ? fill(t.updateStoreHint, "Version {v} is out (you have {cur}). Click to open the Microsoft Store.")
         : fill(t.updateAvailableHint, "Version {v} is out (you have {cur}). Click to install it.");
+    } else if (this.state === "downloading") {
+      icon = ICON_LOADER;
+      label = fill(t.updateDownloading, "Downloading {v}…");
+      hint = label;
+    } else if (this.state === "ready") {
+      icon = ICON_ROTATE_CW;
+      label = t.updateReady ?? "Restart to update";
+      hint = fill(t.updateReadyHint, "Version {v} is ready and installs when you close EzReader. Click to restart now.");
     } else if (this.state === "installing") {
       icon = ICON_LOADER;
       label = t.updateInstalling ?? "Updating…";
@@ -70,14 +95,15 @@ export class UpdateBadge {
       await this.refresh();
       return;
     }
-    if (this.state !== "outdated") return;
+    if (this.state !== "outdated" && this.state !== "ready") return;
+    const before = this.state;
     const t = this.deps.t();
     this.state = "installing";
     this.render();
     try {
       const outcome = await this.deps.install();
       if (outcome === "restarting") return;
-      this.state = "outdated";
+      this.state = before;
       this.deps.notify(
         outcome === "otherWindows"
           ? t.updateOtherWindows ?? "Close your other EzReader windows first, then update"
@@ -85,7 +111,7 @@ export class UpdateBadge {
         outcome === "otherWindows",
       );
     } catch (err) {
-      this.state = "outdated";
+      this.state = before;
       this.deps.notify((t.updateFailed ?? "Couldn't update: {err}").replace("{err}", String(err)), true);
     }
     this.render();

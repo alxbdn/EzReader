@@ -212,6 +212,13 @@ export async function installUpdate(): Promise<UpdateOutcome> {
   return call<UpdateOutcome>("install_update");
 }
 
+/** "ready": downloaded, installs when EzReader closes. "manual": needs a click. */
+export type UpdatePrepared = "ready" | "manual";
+
+export async function prepareUpdate(): Promise<UpdatePrepared> {
+  return call<UpdatePrepared>("prepare_update");
+}
+
 export type PageSlot =
   | { kind: "original"; page: number; rotation: number }
   | { kind: "blank"; width: number; height: number; rotation: number }
