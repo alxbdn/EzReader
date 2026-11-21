@@ -8,6 +8,7 @@
     get_page_count: () => opts.pages ?? 1,
     list_system_fonts: () => opts.fonts ?? [],
     read_annotations: () => [],
+    open_for_display: () => ({ annotations: [], workingCopy: false }),
     strip_annotation_streams: () => false,
     temp_tag: () => "visual",
     is_default_pdf_reader: () => true,

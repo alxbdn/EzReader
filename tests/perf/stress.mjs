@@ -43,6 +43,7 @@ const tauriStub = ({ origin, pdfPath }) => {
   const answers = {
     get_startup_args: { filePath: pdfPath, shouldPrint: false },
     read_annotations: [],
+    open_for_display: { annotations: [], workingCopy: false },
     "plugin:window|inner_size": { width: 1280, height: 800 },
     "plugin:window|outer_size": { width: 1280, height: 800 },
     "plugin:window|scale_factor": window.devicePixelRatio,

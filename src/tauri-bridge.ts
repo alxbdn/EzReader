@@ -72,10 +72,15 @@ export async function stripAnnotationStreams(
   return call<boolean>("strip_annotation_streams", { inputPath, outputPath });
 }
 
-export async function readAnnotations(
-  filePath: string
-): Promise<StoredAnnotation[]> {
-  return call<StoredAnnotation[]>("read_annotations", { filePath });
+export interface DisplayCopy {
+  annotations: StoredAnnotation[];
+  /** True when `workingPath` now holds the file without the drawn layer of its annotations. */
+  workingCopy: boolean;
+}
+
+/** Reads a file being opened once: its stored annotations, and a working copy when needed. */
+export async function openForDisplay(filePath: string, workingPath: string): Promise<DisplayCopy> {
+  return call<DisplayCopy>("open_for_display", { filePath, workingPath });
 }
 
 export interface StartupArgs {

@@ -150,6 +150,7 @@ pub fn run() {
             commands::pdf::save_annotated_pdf,
             commands::pdf::strip_annotation_streams,
             commands::pdf::read_annotations,
+            commands::pdf::open_for_display,
             commands::pdf::rearrange_pages,
             commands::pdf::extract_pdf_pages,
             commands::pdf::export_flattened_pages,
