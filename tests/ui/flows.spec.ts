@@ -546,4 +546,40 @@ test.describe("annotations", () => {
     await page.keyboard.press("Control+z");
     await page.keyboard.press("Control+y");
   });
+  test("copy, paste and duplicate annotations", async ({ page, context }) => {
+    await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+    await start(page, { doc: true });
+    await page.click("[data-mode=annotate]");
+    const box = await pageBox(page);
+    const rows = page.locator(".studio-ann");
+
+    await tryClick(page.locator("[data-group=note]"));
+    await page.mouse.click(box.x + 120, box.y + 140);
+    await settle(page, 300);
+    await page.keyboard.type("Copy me");
+    await page.mouse.click(box.x + 10, box.y + box.height - 10);
+    await settle(page, 300);
+    await expect(rows).toHaveCount(1);
+
+    await page.mouse.click(box.x + 125, box.y + 145);
+    await settle(page, 200);
+    await page.keyboard.press("Control+d");
+    await expect(rows).toHaveCount(2);
+
+    await page.keyboard.press("Control+c");
+    await settle(page, 200);
+    await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe("Copy me");
+    await page.keyboard.press("Control+v");
+    await expect(rows).toHaveCount(3);
+    await page.keyboard.press("Control+v");
+    await expect(rows).toHaveCount(4);
+
+    await page.keyboard.press("Control+z");
+    await expect(rows).toHaveCount(3);
+
+    await page.evaluate(() => navigator.clipboard.writeText("copied elsewhere"));
+    await page.keyboard.press("Control+v");
+    await settle(page, 300);
+    await expect(rows).toHaveCount(3);
+  });
 });

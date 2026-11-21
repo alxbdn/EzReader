@@ -318,6 +318,7 @@ export interface Translations {
   menuInsertPdf?: string;
   menuExtractPages?: string;
   menuSelectAllPages?: string;
+  menuDuplicate?: string;
   menuPages3?: string;
   menuTools?: string;
   menuWindow?: string;
@@ -900,6 +901,7 @@ const EN: Translations = {
   menuInsertPdf: "Insert PDF…",
   menuExtractPages: "Extract selected pages…",
   menuSelectAllPages: "Select all pages",
+  menuDuplicate: "Duplicate",
   menuPages3: "Three pages per row",
   menuTools: "Tools",
   menuWindow: "Window",
@@ -1482,6 +1484,7 @@ const FR: Translations = {
   menuInsertPdf: "Insérer un PDF…",
   menuExtractPages: "Extraire les pages sélectionnées…",
   menuSelectAllPages: "Sélectionner toutes les pages",
+  menuDuplicate: "Dupliquer",
   menuPages3: "3 pages par ligne",
   menuTools: "Outils",
   menuWindow: "Fenêtre",
