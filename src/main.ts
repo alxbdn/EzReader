@@ -1732,31 +1732,12 @@ document.addEventListener("keydown", async (e) => {
   const ctrl  = e.ctrlKey || e.metaKey;
   const shift = e.shiftKey;
 
-  if (e.key === "F11") {
+  // Menu shortcuts run their menu command, guards included. Zoom in and out are left to the
+  // window listener below, which also takes them from text fields.
+  const command = toolbar.commandForKey(e);
+  if (command && command.type !== "zoom-in" && command.type !== "zoom-out") {
     e.preventDefault();
-    await toggleFullscreen();
-    return;
-  }
-  if (e.key === "F5") {
-    e.preventDefault();
-    if (!shift && !ctrl && toolbar.allowed()) await startPresentation();
-    return;
-  }
-
-  if (ctrl && !shift && e.key === "z") {
-    e.preventDefault();
-    void undoRedo(false);
-    return;
-  }
-  if (ctrl && (e.key === "y" || (shift && e.key === "Z"))) {
-    e.preventDefault();
-    void undoRedo(true);
-    return;
-  }
-  if (ctrl && !shift && e.key === "o") {
-    e.preventDefault();
-    if (!toolbar.allowed()) return;
-    await openFile();
+    toolbar.dispatch(command);
     return;
   }
   if (ctrl && !shift && e.key.toLowerCase() === "w") {
@@ -1770,45 +1751,6 @@ document.addEventListener("keydown", async (e) => {
     const back = e.key === "PageUp" || (e.key === "Tab" && shift);
     const next = docs.neighbour(back ? -1 : 1);
     if (next) await docs.switchTo(next.id);
-    return;
-  }
-  if (ctrl && shift && e.key === "S") {
-    e.preventDefault();
-    if (!toolbar.allowed()) return;
-    await saveFile(true);
-    return;
-  }
-  if (ctrl && !shift && e.key === "s") {
-    e.preventDefault();
-    if (!toolbar.allowed()) return;
-    await saveFile(false);
-    return;
-  }
-  if (ctrl && !shift && e.key === "p") {
-    e.preventDefault();
-    if (!toolbar.allowed()) return;
-    if (viewer.isLoaded()) printModal.open(viewer.pageCount, viewer.currentPage, { w: viewer.pageWidthPt, h: viewer.pageHeightPt });
-    return;
-  }
-  if (ctrl && !shift && e.key === ",") {
-    e.preventDefault();
-    if (toolbar.allowed()) settingsModal.open();
-    return;
-  }
-  if (ctrl && !shift && e.key.toLowerCase() === "f") {
-    e.preventDefault();
-    if (viewer.isLoaded()) toolbar.search.open();
-    return;
-  }
-  if (ctrl && shift && e.key === "E") {
-    e.preventDefault();
-    if (!toolbar.allowed()) return;
-    await openCompress();
-    return;
-  }
-  if (ctrl && e.key === "0") {
-    e.preventDefault();
-    await applyDefaultZoom();
     return;
   }
   if (!ctrl && (e.key === "ArrowRight" || e.key === "PageDown")) {
@@ -1929,10 +1871,11 @@ document.addEventListener("mousedown", (e: MouseEvent) => {
 window.addEventListener("keydown", async (e: KeyboardEvent) => {
   if (menuOwnsKey(e)) return;
   // The one place Ctrl/Cmd + and - zoom, ahead of the typing check so they work from any field.
-  if ((e.ctrlKey || e.metaKey) && (e.key === "+" || e.key === "=" || e.key === "-")) {
+  const command = toolbar.commandForKey(e);
+  if (command?.type === "zoom-in" || command?.type === "zoom-out") {
     if (!viewer.isLoaded()) return;
     e.preventDefault();
-    await zoom.step(e.key === "-" ? -1 : 1);
+    toolbar.dispatch(command);
     return;
   }
   const active = document.activeElement as HTMLElement | null;
