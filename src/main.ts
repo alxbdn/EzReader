@@ -103,24 +103,14 @@ import type { AnnotationSnapshot } from "./annotation-session";
 import type { DocState } from "./page-history";
 import { currentMonitor, getCurrentWindow } from "@tauri-apps/api/window";
 import { LogicalSize, PhysicalPosition, PhysicalSize } from "@tauri-apps/api/dpi";
-import { keepCentred, pageFitScale, planWindowFit, VIEWER_PADDING } from "./window-fit";
+import { keepCentred, pageFitScale, planWindowFit } from "./window-fit";
 import { mountWindowControls } from "./window-controls";
 import { menuOwnsKey } from "./mac-menu";
 import { InfoPanel } from "./info-panel";
 import { SmoothWheelScroller, normalizeWheelDelta } from "./wheel-scroll";
 import { tempDir, basename } from "@tauri-apps/api/path";
 import { ask } from "@tauri-apps/plugin-dialog";
-
-const ZOOM_LEVELS = [0.1, 0.15, 0.2, 0.25, 0.33, 0.5, 0.67, 0.75, 0.9, 1.0, 1.1, 1.25, 1.5, 1.75, 2.0, 2.5, 3.0, 4.0, 5.0, 6.0, 8.0]
-  .map(z => Math.round(z * CSS_UNITS * 1000) / 1000);
-
-function snapZoom(current: number, dir: 1 | -1): number {
-  if (dir === 1) {
-    return ZOOM_LEVELS.find(z => z > current + 0.005) ?? ZOOM_LEVELS[ZOOM_LEVELS.length - 1];
-  } else {
-    return [...ZOOM_LEVELS].reverse().find(z => z < current - 0.005) ?? ZOOM_LEVELS[0];
-  }
-}
+import { ViewZoom, type FitMode } from "./view-zoom";
 
 const appWindow = getCurrentWindow();
 let unlistenClose: (() => void) | null = null;
@@ -128,7 +118,6 @@ let unlistenClose: (() => void) | null = null;
 const formValues = new Map<string, string>();
 
 let guardRegistering = false;
-let fitMode: "none" | "fit-width" | "fit-height" | "fit-page" = "none";
 let pendingSignature: string | null = null;
 let pendingSignatureVector: InkVector | undefined;
 let editingTextAnn:      TextAnnotation | null = null;
@@ -330,37 +319,17 @@ function pageRoom(): { width: number; height: number } {
   };
 }
 
-async function applyFitMode(): Promise<void> {
-  if (!viewer.isLoaded() || fitMode === "none") return;
-  const room = pageRoom();
-  const page = firstPageShown();
-  let scale: number;
-  if (fitMode === "fit-width") {
-    scale = (room.width - VIEWER_PADDING) / page.width;
-  } else if (fitMode === "fit-page") {
-    scale = pageFitScale(page, room);
-  } else {
-    scale = (room.height - VIEWER_PADDING) / page.height;
-  }
-  if (Math.abs(viewer.clampScale(scale) - viewer.scale) > 1e-6) await viewer.setScale(scale);
-  else viewer.reflow();
-  toolbar.updateZoom(viewer.scale);
-}
+const zoom = new ViewZoom(viewer, {
+  showFitMode: (mode) => toolbar.updateFitMode(mode),
+  showZoom: (scale) => toolbar.updateZoom(scale),
+  room: pageRoom,
+  page: firstPageShown,
+  center: viewerCenter,
+  pixelsPerInch: () => settingsModal.getSettings().pxPerInch,
+});
 
-async function applyDefaultZoom(): Promise<void> {
-  if (!viewer.isLoaded()) return;
-  const pref = settingsModal.getSettings().defaultZoom;
-  if (pref === "fit-width" || pref === "fit-page") {
-    fitMode = pref === "fit-width" ? "fit-width" : "fit-page";
-    toolbar.updateFitMode(fitMode);
-    await applyFitMode();
-  } else {
-    fitMode = "none";
-    toolbar.updateFitMode(fitMode);
-    const pct = parseFloat(pref);
-    await viewer.setScale((Number.isFinite(pct) ? pct : 100) / 100 * CSS_UNITS);
-  }
-  toolbar.updateZoom(viewer.scale);
+function applyDefaultZoom(): Promise<void> {
+  return zoom.applyPreference(settingsModal.getSettings().defaultZoom);
 }
 
 function firstPageShown(): { width: number; height: number } {
@@ -443,16 +412,11 @@ async function showOpenedDocument(): Promise<void> {
   if (await fitWindowToDocument()) {
     await applyDefaultZoom();
   } else {
-    fitMode = "fit-page";
-    toolbar.updateFitMode(fitMode);
-    await applyFitMode();
+    await zoom.fit("fit-page");
   }
 }
 
-viewer.onResizeCb = async () => {
-  if (fitMode !== "none") await applyFitMode();
-  else viewer.reflow();
-};
+viewer.onResizeCb = () => zoom.refit();
 
 function onFormChange(name: string, val: string): void {
   if (refuseIfProtected()) return;
@@ -928,7 +892,7 @@ interface ParkedDoc {
   shownPath: string;
   rotation: number;
   scale: number;
-  fitMode: "none" | "fit-width" | "fit-height" | "fit-page";
+  fitMode: FitMode;
   page: number;
   scrollTop: number;
   scrollLeft: number;
@@ -985,7 +949,7 @@ function parkActive(): void {
     shownPath,
     rotation: viewer.rotation,
     scale: viewer.scale,
-    fitMode,
+    fitMode: zoom.fitMode,
     page: viewer.currentPage,
     scrollTop: viewerScroll.scrollTop,
     scrollLeft: viewerScroll.scrollLeft,
@@ -1016,11 +980,7 @@ async function showTab(tab: DocTab<ParkedDoc>): Promise<void> {
   showThumbnails();
   setWelcomeVisible(false);
   toolbar.setLoaded(true);
-  fitMode = p.fitMode;
-  toolbar.updateFitMode(fitMode);
-  if (fitMode !== "none") await applyFitMode();
-  else await viewer.setScale(p.scale);
-  toolbar.updateZoom(viewer.scale);
+  await zoom.restore(p.fitMode, p.scale);
   viewerScroll.scrollTop = p.scrollTop;
   viewerScroll.scrollLeft = p.scrollLeft;
   syncProtection();
@@ -1616,11 +1576,7 @@ toolbar.on(async (e) => {
 
     case "zoom-in":
     case "zoom-out":
-      if (viewer.isLoaded()) {
-        fitMode = "none"; toolbar.updateFitMode(fitMode);
-        await viewer.setScale(snapZoom(viewer.scale, e.type === "zoom-in" ? 1 : -1), viewerCenter());
-        toolbar.updateZoom(viewer.scale);
-      }
+      await zoom.step(e.type === "zoom-in" ? 1 : -1);
       break;
 
     case "zoom-reset":
@@ -1628,36 +1584,16 @@ toolbar.on(async (e) => {
       break;
 
     case "zoom-set":
-      if (viewer.isLoaded()) {
-        fitMode = "none"; toolbar.updateFitMode(fitMode);
-        await viewer.setScale(e.scale, viewerCenter());
-        toolbar.updateZoom(viewer.scale);
-      }
+      await zoom.set(e.scale);
       break;
 
     case "fit-width":
-      if (viewer.isLoaded()) {
-        fitMode = fitMode === "fit-width" ? "none" : "fit-width";
-        toolbar.updateFitMode(fitMode);
-        if (fitMode === "fit-width") await applyFitMode();
-      }
-      break;
-
     case "fit-height":
-      if (viewer.isLoaded()) {
-        fitMode = fitMode === "fit-height" ? "none" : "fit-height";
-        toolbar.updateFitMode(fitMode);
-        if (fitMode === "fit-height") await applyFitMode();
-      }
+      await zoom.toggleFit(e.type);
       break;
 
     case "zoom-real":
-      if (viewer.isLoaded()) {
-        fitMode = "none"; toolbar.updateFitMode(fitMode);
-        const ppi = settingsModal.getSettings().pxPerInch;
-        await viewer.setScale((Number.isFinite(ppi) && ppi > 0 ? ppi : 96) / 72);
-        toolbar.updateZoom(viewer.scale);
-      }
+      await zoom.actualSize();
       break;
 
     case "columns":
@@ -2020,16 +1956,6 @@ document.addEventListener("keydown", async (e) => {
     await openCompress();
     return;
   }
-  if (ctrl && (e.key === "+" || e.key === "=")) {
-    e.preventDefault();
-    if (viewer.isLoaded()) { fitMode = "none"; toolbar.updateFitMode(fitMode); await viewer.setScale(snapZoom(viewer.scale, 1));  toolbar.updateZoom(viewer.scale); }
-    return;
-  }
-  if (ctrl && e.key === "-") {
-    e.preventDefault();
-    if (viewer.isLoaded()) { fitMode = "none"; toolbar.updateFitMode(fitMode); await viewer.setScale(snapZoom(viewer.scale, -1)); toolbar.updateZoom(viewer.scale); }
-    return;
-  }
   if (ctrl && e.key === "0") {
     e.preventDefault();
     await applyDefaultZoom();
@@ -2152,12 +2078,11 @@ document.addEventListener("mousedown", (e: MouseEvent) => {
 
 window.addEventListener("keydown", async (e: KeyboardEvent) => {
   if (menuOwnsKey(e)) return;
-  if (e.ctrlKey && (e.key === "+" || e.key === "=" || e.key === "-")) {
+  // The one place Ctrl/Cmd + and - zoom, ahead of the typing check so they work from any field.
+  if ((e.ctrlKey || e.metaKey) && (e.key === "+" || e.key === "=" || e.key === "-")) {
     if (!viewer.isLoaded()) return;
     e.preventDefault();
-    fitMode = "none"; toolbar.updateFitMode(fitMode);
-    await viewer.setScale(snapZoom(viewer.scale, e.key === "-" ? -1 : 1), viewerCenter());
-    toolbar.updateZoom(viewer.scale);
+    await zoom.step(e.key === "-" ? -1 : 1);
     return;
   }
   const active = document.activeElement as HTMLElement | null;
@@ -2391,39 +2316,8 @@ viewerScrollEl.addEventListener("wheel", async (e: WheelEvent) => {
   wheelScroller?.cancel();
   e.preventDefault();
   const px = e.deltaMode === 1 ? e.deltaY * 40 : e.deltaMode === 2 ? e.deltaY * 400 : e.deltaY;
-  wheelZoom.factor *= Math.min(1.25, Math.max(0.8, Math.exp(-px * 0.0015)));
-  wheelZoom.anchor = { x: e.clientX, y: e.clientY };
-  wheelZoom.settleMs = Math.abs(px) < 50 ? WHEEL_ZOOM_SETTLE_SMOOTH_MS : WHEEL_ZOOM_SETTLE_NOTCH_MS;
-  if (fitMode !== "none") { fitMode = "none"; toolbar.updateFitMode(fitMode); }
-  if (!wheelZoom.raf) wheelZoom.raf = requestAnimationFrame(applyWheelZoom);
+  zoom.wheelBy(px, { x: e.clientX, y: e.clientY });
 }, { passive: false });
-
-const WHEEL_ZOOM_SETTLE_SMOOTH_MS = 80;
-const WHEEL_ZOOM_SETTLE_NOTCH_MS = 130;
-
-const wheelZoom = {
-  factor: 1,
-  anchor: { x: 0, y: 0 },
-  settleMs: WHEEL_ZOOM_SETTLE_NOTCH_MS,
-  raf: 0,
-  timer: null as ReturnType<typeof setTimeout> | null,
-};
-
-function applyWheelZoom(): void {
-  wheelZoom.raf = 0;
-  if (!viewer.isLoaded()) { wheelZoom.factor = 1; return; }
-  const anchor = wheelZoom.anchor;
-  const target = viewer.clampScale(viewer.shownScale * wheelZoom.factor);
-  wheelZoom.factor = 1;
-  viewer.previewScale(target, anchor);
-  toolbar.updateZoom(target);
-  if (wheelZoom.timer) clearTimeout(wheelZoom.timer);
-  wheelZoom.timer = setTimeout(async () => {
-    wheelZoom.timer = null;
-    await viewer.setScale(viewer.shownScale, anchor);
-    toolbar.updateZoom(viewer.scale);
-  }, wheelZoom.settleMs);
-}
 
 function viewerCenter(): { x: number; y: number } {
   const r = document.getElementById("viewer-scroll")!.getBoundingClientRect();
