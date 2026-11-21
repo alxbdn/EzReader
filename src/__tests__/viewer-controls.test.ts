@@ -16,15 +16,15 @@ describe("formatPageSize", () => {
 });
 
 describe("formatPdfDate", () => {
-  it("parses PDF date strings", () => {
-    const out = formatPdfDate("D:20240131120000Z", "en");
+  it("parses PDF date strings", async () => {
+    const out = await formatPdfDate("D:20240131120000Z", "en");
     expect(out).toContain("2024");
     expect(out).toContain("January");
   });
 
-  it("returns null for missing or invalid dates", () => {
-    expect(formatPdfDate(undefined, "en")).toBeNull();
-    expect(formatPdfDate("", "en")).toBeNull();
-    expect(formatPdfDate("not a date", "en")).toBeNull();
+  it("returns null for missing or invalid dates", async () => {
+    expect(await formatPdfDate(undefined, "en")).toBeNull();
+    expect(await formatPdfDate("", "en")).toBeNull();
+    expect(await formatPdfDate("not a date", "en")).toBeNull();
   });
 });

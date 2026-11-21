@@ -1,9 +1,7 @@
-import * as pdfjs from "pdfjs-dist";
+import { pdfjsLib } from "./pdfjs";
 import { SAFE_PDF } from "./pdf-options";
-import { AnnotationMode } from "pdfjs-dist";
 import type { PDFDocumentProxy, PDFPageProxy, PageViewport, RenderTask } from "pdfjs-dist";
 import { convertFileSrc } from "@tauri-apps/api/core";
-import workerUrl from "pdfjs-dist/legacy/build/pdf.worker.min.mjs?url";
 import { CanvasOverlay } from "./canvas-overlay";
 import { OverlayEvents } from "./overlay-events";
 import { createFieldControl, type WidgetData } from "./form-fields";
@@ -15,7 +13,8 @@ import { openUrl, type RedactedPage, type StraightenedPage } from "./tauri-bridg
 import { moveTextRuns, pageMap, reproject, warpToRect, type Point } from "./page-adjustment";
 import { LiveText, hasRealText, layoutOcr, renderOcrLayer } from "./live-text";
 
-pdfjs.GlobalWorkerOptions.workerSrc = workerUrl;
+/** pdf.js AnnotationMode.ENABLE_FORMS: widgets are drawn by our form controls, not into the page. */
+const ENABLE_FORMS = 2;
 
 export function toViewportRect(
   viewport: Pick<PageViewport, "convertToViewportPoint">,
@@ -322,7 +321,7 @@ export class PdfPageView {
       const sx = pxW / viewport.width;
       const sy = pxH / viewport.height;
       const transform = sx !== 1 || sy !== 1 ? [sx, 0, 0, sy, 0, 0] : undefined;
-      this._renderTask = page.render({ canvas: bufCtx.canvas, viewport, transform, annotationMode: AnnotationMode.ENABLE_FORMS });
+      this._renderTask = page.render({ canvas: bufCtx.canvas, viewport, transform, annotationMode: ENABLE_FORMS });
       try {
         await this._renderTask.promise;
       } catch (err) {
@@ -933,7 +932,7 @@ export class PdfViewer {
     if (this._scrollHandler) { this.scrollEl.removeEventListener("scroll", this._scrollHandler); this._scrollHandler = null; }
 
     this.liveText.reset();
-    const loadingTask = pdfjs.getDocument(password ? { ...SAFE_PDF, url, password } : { ...SAFE_PDF, url });
+    const loadingTask = (await pdfjsLib()).getDocument(password ? { ...SAFE_PDF, url, password } : { ...SAFE_PDF, url });
     this.pdfDoc = await loadingTask.promise;
     this._pageCount   = this.pdfDoc.numPages;
     this._currentPage = 1;
@@ -1525,7 +1524,7 @@ export class PdfViewer {
   }
 
   async renderFileForPrint(filePath: string, pageNumbers: number[], dpi = 200): Promise<string[]> {
-    const doc = await pdfjs.getDocument({ ...SAFE_PDF, url: convertFileSrc(filePath) + `?t=${Date.now()}` }).promise;
+    const doc = await (await pdfjsLib()).getDocument({ ...SAFE_PDF, url: convertFileSrc(filePath) + `?t=${Date.now()}` }).promise;
     try {
       return await renderDocPages(doc, pageNumbers, dpi, 0);
     } finally {
@@ -1540,7 +1539,7 @@ export class PdfViewer {
     type: "image/png" | "image/jpeg",
     onPage: (dataUrl: string, page: number) => Promise<void>,
   ): Promise<void> {
-    const doc = await pdfjs.getDocument({ ...SAFE_PDF, url: convertFileSrc(filePath) + `?t=${Date.now()}` }).promise;
+    const doc = await (await pdfjsLib()).getDocument({ ...SAFE_PDF, url: convertFileSrc(filePath) + `?t=${Date.now()}` }).promise;
     try {
       for (const n of pageNumbers) {
         if (n < 1 || n > doc.numPages) continue;
@@ -1637,7 +1636,7 @@ export async function renderRedactedPages(
   const byPage = new Map<number, RedactAnnotation[]>();
   for (const r of redactions) byPage.set(r.page, [...(byPage.get(r.page) ?? []), r]);
 
-  const doc = await pdfjs.getDocument({ ...SAFE_PDF, url: convertFileSrc(filePath) + `?t=${Date.now()}` }).promise;
+  const doc = await (await pdfjsLib()).getDocument({ ...SAFE_PDF, url: convertFileSrc(filePath) + `?t=${Date.now()}` }).promise;
   try {
     const out: RedactedPage[] = [];
     for (const [pageNum, areas] of [...byPage.entries()].sort((a, b) => a[0] - b[0])) {
@@ -1703,7 +1702,7 @@ export async function renderStraightenedPages(
   items: { page: number; quad: [Point, Point, Point, Point] }[],
   dpi = 200,
 ): Promise<StraightenedPage[]> {
-  const doc = await pdfjs.getDocument({ ...SAFE_PDF, url: convertFileSrc(filePath) + `?t=${Date.now()}` }).promise;
+  const doc = await (await pdfjsLib()).getDocument({ ...SAFE_PDF, url: convertFileSrc(filePath) + `?t=${Date.now()}` }).promise;
   try {
     const out: StraightenedPage[] = [];
     for (const { page: pageNum, quad } of items) {

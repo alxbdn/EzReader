@@ -6,6 +6,19 @@ type ConfirmHandler = (level: CompressLevel, targetBytes?: number) => void;
 
 const MB = 1024 * 1024;
 
+// A number format is costly to build (toLocaleString with options builds one per call), and the
+// dialog formats a dozen sizes each time it refreshes, translations at startup included.
+const formats = new Map<string, Intl.NumberFormat>();
+function formatNumber(n: number, lang: string, digits: number): string {
+  const key = `${lang}|${digits}`;
+  let f = formats.get(key);
+  if (!f) {
+    f = new Intl.NumberFormat(lang, { maximumFractionDigits: digits, minimumFractionDigits: digits });
+    formats.set(key, f);
+  }
+  return f.format(n);
+}
+
 export function wontShrink(level: CompressLevel, estimate: CompressEstimate | null, currentBytes: number): boolean {
   if (!estimate || level === "target" || currentBytes <= 0) return false;
   const size = level === "lossless" ? estimate.losslessBytes
@@ -166,7 +179,7 @@ export class CompressModal extends Modal {
 
   size(bytes: number): string {
     const lang = document.documentElement.lang || "en";
-    const nf = (n: number, d: number) => n.toLocaleString(lang, { maximumFractionDigits: d, minimumFractionDigits: d });
+    const nf = (n: number, d: number) => formatNumber(n, lang, d);
     return bytes >= MB / 10
       ? `${nf(bytes / MB, 1)} ${this.tr("unitMB", "MB")}`
       : `${nf(Math.max(1, Math.round(bytes / 1024)), 0)} ${this.tr("unitKB", "KB")}`;
