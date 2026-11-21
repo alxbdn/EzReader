@@ -36,6 +36,8 @@ export type ShapeAnnotation = RectAnnotation | CircleAnnotation | InkAnnotation;
 
 const NOTE_W = 150;
 const NOTE_H = 100;
+/** How far, in points, each pasted or duplicated annotation moves from the one before. */
+const COPY_NUDGE_PT = 12;
 const NOTE_FONT = 10;
 const NOTE_PAD = 6;
 const noteScroll = new WeakMap<NoteAnnotation, number>();
@@ -1856,6 +1858,20 @@ export class CanvasOverlay implements SelectionOwner {
     this.selected = ann;
     this.redrawCommitted();
     return ann;
+  }
+
+  /**
+   * Adds `ann`, a copy made for this page, nudged `steps` times down and right and kept on the
+   * page, then selects it. Returns false when the page is not shown.
+   */
+  placeCopy(ann: Annotation, steps: number): boolean {
+    if (!this.shown) return false;
+    ann.page = this.currentPage;
+    const d = steps * COPY_NUDGE_PT * this.scale;
+    this.shiftBy(ann, d, d);
+    this.addInside(ann);
+    this.select(ann);
+    return true;
   }
 
   get pageSizePt(): { width: number; height: number } {

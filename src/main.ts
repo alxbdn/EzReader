@@ -94,6 +94,7 @@ import {
 } from "./tauri-bridge";
 import { DocWorkspace } from "./doc-workspace";
 import { AnnotationEditor } from "./annotation-editor";
+import { AnnotationClipboard, copyable } from "./annotation-clipboard";
 import { isLinux, isMac, macShortcuts } from "./platform";
 import { TabStrip } from "./tab-strip";
 import type { SessionSnapshot } from "./document-session";
@@ -274,6 +275,55 @@ function removeAnnotation(ann: Annotation): void {
   annotations.remove(ann);
   viewer.pageViews.find((p) => p.pageNum === ann.page)?.builtOverlay?.redrawCommitted();
 }
+
+const clipboard = new AnnotationClipboard();
+
+function typingInField(): boolean {
+  const el = document.activeElement as HTMLElement | null;
+  return !!el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.tagName === "SELECT" || el.isContentEditable);
+}
+
+/** The selected annotation, when it can be copied and no page text is selected instead. */
+function copyableSelection(): Annotation | null {
+  const ann = tools.selected;
+  if (!ann || !annotations.has(ann) || !copyable(ann) || typingInField()) return null;
+  return window.getSelection()?.isCollapsed === false ? null : ann;
+}
+
+/** Copies the selected annotation; false when there is none, so the key copies as usual. */
+function copyAnnotation(): boolean {
+  const ann = copyableSelection();
+  if (!ann) return false;
+  void navigator.clipboard.writeText(clipboard.copy(ann)).catch(() => {});
+  return true;
+}
+
+/** Pastes the annotation copied last onto the page in view, and selects it. */
+function pasteAnnotation(): void {
+  if (refuseIfProtected() || !toolbar.allowed()) return;
+  toolbar.setMode("annotate");
+  if (toolbar.currentMode !== "annotate") return;
+  const pv = viewer.pageViews.find((p) => p.pageNum === viewer.currentPage);
+  const next = pv ? clipboard.next(pv.pageNum) : null;
+  if (!pv || !next) return;
+  if (toolState.tool !== "select") toolbar.clearActiveTool();
+  pv.overlay.placeCopy(next.ann, next.steps);
+}
+
+/** Puts a copy of the selected annotation just below and right of it, and selects the copy. */
+function duplicateAnnotation(): void {
+  const ann = copyableSelection();
+  const pv = ann && viewer.pageViews.find((p) => p.pageNum === ann.page);
+  if (ann && pv) pv.overlay.placeCopy(structuredClone(ann), 1);
+}
+
+// The Edit menu's Copy (macOS) lands here; Ctrl/Cmd+C is taken earlier, in the key handler.
+document.addEventListener("copy", (e) => {
+  const ann = copyableSelection();
+  if (!ann || !e.clipboardData) return;
+  e.preventDefault();
+  e.clipboardData.setData("text/plain", clipboard.copy(ann));
+});
 
 let tempPrefix: Promise<[string, string]> | null = null;
 
@@ -1622,6 +1672,10 @@ toolbar.on(async (e) => {
     case "redo":
       await undoRedo(true);
       break;
+
+    case "duplicate":
+      duplicateAnnotation();
+      break;
   }
 });
 
@@ -1738,6 +1792,10 @@ document.addEventListener("keydown", async (e) => {
   if (command && command.type !== "zoom-in" && command.type !== "zoom-out") {
     e.preventDefault();
     toolbar.dispatch(command);
+    return;
+  }
+  if (ctrl && !shift && !e.altKey && e.key.toLowerCase() === "c" && copyAnnotation()) {
+    e.preventDefault();
     return;
   }
   if (ctrl && !shift && e.key.toLowerCase() === "w") {
@@ -2018,7 +2076,13 @@ document.addEventListener("paste", async (e) => {
   if (el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.isContentEditable)) return;
   const item = Array.from(e.clipboardData?.items ?? []).find((i) => i.kind === "file" && i.type.startsWith("image/"));
   const file = item?.getAsFile();
-  if (!file || !viewer.isLoaded()) return;
+  if (!viewer.isLoaded()) return;
+  if (!file) {
+    if (!clipboard.holds(e.clipboardData?.getData("text/plain") ?? "")) return;
+    e.preventDefault();
+    pasteAnnotation();
+    return;
+  }
   e.preventDefault();
   if (!toolbar.allowed()) return;
   const pic = await clipboardPicture(file);

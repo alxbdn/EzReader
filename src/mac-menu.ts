@@ -33,7 +33,7 @@ export function menuOwnsKey(e: KeyboardEvent): boolean {
   return OWNED_KEYS.has(e.key.toLowerCase());
 }
 
-const OWNED_KEYS = new Set(["o", "s", "p", ",", "z", "f", "e", "+", "=", "-", "0"]);
+const OWNED_KEYS = new Set(["o", "s", "p", ",", "z", "f", "e", "d", "+", "=", "-", "0"]);
 let menuUp = false;
 
 function editing(): boolean {

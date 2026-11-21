@@ -88,6 +88,7 @@ export type ToolbarEvent =
   | { type: "settings" }
   | { type: "undo" }
   | { type: "redo" }
+  | { type: "duplicate" }
   | { type: "find" }
   | { type: "insert-image" }
   | { type: "insert-image-page" };
@@ -417,6 +418,7 @@ export class Toolbar {
         items: [
           { label: "menuUndo", shortcut: "Ctrl+Z", command: { type: "undo" }, requiresDoc: true },
           { label: "menuRedo", shortcut: "Ctrl+Y", command: { type: "redo" }, requiresDoc: true },
+          { label: "menuDuplicate", shortcut: "Ctrl+D", command: { type: "duplicate" }, requiresDoc: true },
           null,
           { label: "menuFind", shortcut: "Ctrl+F", command: { type: "find" }, requiresDoc: true },
           { label: "menuSelectAllPages", command: { type: "select-all-pages" }, requiresDoc: true },
