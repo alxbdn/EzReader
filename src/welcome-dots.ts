@@ -268,6 +268,6 @@ export function mountWelcomeDots(screen: HTMLElement): void {
   new MutationObserver(() => { readColors(); redraw(); })
     .observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
   window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => { readColors(); redraw(); });
-
-  layout();
+  // No layout() here: the observer's first call lays the dots out with the page's own layout,
+  // where calling it now would force one more layout while the app is still being built.
 }

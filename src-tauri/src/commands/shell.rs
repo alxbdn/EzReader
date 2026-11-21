@@ -49,8 +49,19 @@ fn desktop_entry_exists() -> bool {
         || std::path::Path::new("/usr/share/applications/EzReader.desktop").exists()
 }
 
+/// Runs a probe of the system off the main thread. A command without `async` runs on the main
+/// thread, where a slow registry, WinRT or `xdg-mime` call holds up every other command the window
+/// sends at launch, `get_startup_args` among them, and so the first paint.
+async fn off_main_thread<T: Send + Default + 'static>(probe: fn() -> T) -> T {
+    tauri::async_runtime::spawn_blocking(probe).await.unwrap_or_default()
+}
+
 #[tauri::command]
-pub fn check_pdf_association() -> bool {
+pub async fn check_pdf_association() -> bool {
+    off_main_thread(pdf_association).await
+}
+
+fn pdf_association() -> bool {
     #[cfg(target_os = "windows")]
     {
         if is_packaged() {
@@ -107,7 +118,11 @@ fn prog_id_is_ours(prog_id: &str, exe_name: &str, app_user_model_id: Option<&str
 }
 
 #[tauri::command]
-pub fn is_default_pdf_reader() -> bool {
+pub async fn is_default_pdf_reader() -> bool {
+    off_main_thread(default_pdf_reader).await
+}
+
+fn default_pdf_reader() -> bool {
     #[cfg(target_os = "windows")]
     {
         use winreg::enums::{HKEY_CLASSES_ROOT, HKEY_CURRENT_USER};
@@ -137,7 +152,7 @@ pub fn is_default_pdf_reader() -> bool {
     }
     #[cfg(not(target_os = "windows"))]
     {
-        check_pdf_association()
+        pdf_association()
     }
 }
 
@@ -1215,7 +1230,11 @@ pub fn resume_quick_look(app: tauri::AppHandle) {
 }
 
 #[tauri::command]
-pub fn quick_look_state() -> QuickLookState {
+pub async fn quick_look_state() -> QuickLookState {
+    off_main_thread(quick_look_probe).await
+}
+
+fn quick_look_probe() -> QuickLookState {
     #[cfg(target_os = "windows")]
     {
         if quick_look::helper().is_some() {

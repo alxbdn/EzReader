@@ -1,4 +1,4 @@
-import { PDFDateString } from "pdfjs-dist";
+import { pdfjsLib } from "./pdfjs";
 import type { PDFDocumentProxy } from "pdfjs-dist";
 import type { Translations } from "./i18n";
 
@@ -21,9 +21,9 @@ export function formatPageSize(wPt: number, hPt: number, lang: string): string {
   return named ? `${size} (${named.name})` : size;
 }
 
-export function formatPdfDate(raw: unknown, lang: string): string | null {
+export async function formatPdfDate(raw: unknown, lang: string): Promise<string | null> {
   if (typeof raw !== "string" || !raw) return null;
-  const d = PDFDateString.toDateObject(raw);
+  const d = (await pdfjsLib()).PDFDateString.toDateObject(raw);
   if (!d || Number.isNaN(d.getTime())) return null;
   return new Intl.DateTimeFormat(lang, { dateStyle: "long", timeStyle: "short" }).format(d);
 }
@@ -116,8 +116,8 @@ export class InfoPanel {
       [t.infoKeywords ?? "Keywords", clean(info.Keywords)],
       [t.infoProducer ?? "PDF producer", clean(info.Producer)],
       [t.infoCreator ?? "Content creator", clean(info.Creator)],
-      [t.infoCreated ?? "Created", formatPdfDate(info.CreationDate, lang)],
-      [t.infoModified ?? "Modified", formatPdfDate(info.ModDate, lang)],
+      [t.infoCreated ?? "Created", await formatPdfDate(info.CreationDate, lang)],
+      [t.infoModified ?? "Modified", await formatPdfDate(info.ModDate, lang)],
     ];
 
     this.body.replaceChildren();

@@ -1,10 +1,11 @@
-import * as pdfjs from "pdfjs-dist";
+import { pdfjsLib } from "./pdfjs";
 import { SAFE_PDF } from "./pdf-options";
 import type { TextItem } from "pdfjs-dist/types/src/display/api";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { bodySize, layoutPage, normalizeHeadings, type TextDoc, type TextRun } from "./text-layout";
 
 export async function extractText(filePath: string, pages: number[], title: string): Promise<TextDoc> {
+  const pdfjs = await pdfjsLib();
   const doc = await pdfjs.getDocument({ ...SAFE_PDF, url: convertFileSrc(filePath) + `?t=${Date.now()}` }).promise;
   try {
     const read: { n: number; runs: TextRun[]; width: number; height: number }[] = [];

@@ -7,6 +7,7 @@ import type { Feedback } from "./backend";
 import { tauriBackend } from "./tauri-backend";
 import { fileNameOf } from "./file-paths";
 import { mountWelcomeDots } from "./welcome-dots";
+import { pdfjsLib } from "./pdfjs";
 import { WelcomePrefs } from "./welcome-prefs";
 import { UpdateBadge } from "./update-badge";
 import { PdfViewer, PdfPageView, renderRedactedPages, renderStraightenedPages } from "./pdf-viewer";
@@ -559,7 +560,10 @@ settingsModal.onChange(s => {
     const startup = await getStartupArgs();
     if (!startup.filePath) {
       reveal();
+      // Load pdf.js once the welcome screen is up, so the first document opens as fast as before.
+      requestAnimationFrame(() => setTimeout(() => void pdfjsLib(), 0));
     } else {
+      void pdfjsLib();
       setWelcomeVisible(false);
       const slow = setTimeout(reveal, 1500);
       try {
