@@ -96,8 +96,7 @@ pub(crate) fn with_annotation_layer(
     content_id: ObjectId,
 ) -> Vec<Object> {
     let mut contents = vec![Object::Reference(content_id)];
-    if let Some(arr) = meta.stream_ids.get(&page) {
-        let sid = (arr[0], arr[1] as u16);
+    if let Some(sid) = meta.layer(page) {
         if doc.get_object(sid).is_ok() {
             contents.push(Object::Reference(sid));
         }

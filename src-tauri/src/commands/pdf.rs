@@ -5,7 +5,7 @@ use lopdf::{Document, IncrementalDocument, Object, ObjectId};
 use serde::{Deserialize, Serialize};
 
 use crate::fsutil;
-use crate::pdf::{models::Annotation, redact, writer, writer::FormFieldValue};
+use crate::pdf::{annotation_layer, models::Annotation, redact, writer, writer::FormFieldValue};
 
 #[tauri::command(async)]
 pub fn get_page_count(file_path: String) -> CmdResult<u32> {
@@ -24,9 +24,8 @@ pub fn save_annotated_pdf(
 ) -> CmdResult<()> {
     crate::grants::check_all([&input_path, &output_path])?;
     if annotations.is_empty() && rotation_delta == 0 && form_fields.is_empty() {
-        let prev_meta_empty = load_stored(&input_path)
-            .map(|stored| stored.is_none_or(|s| s.meta.annotations.is_empty() && s.meta.stream_ids.is_empty()))
-            .unwrap_or(true);
+        let prev_meta_empty =
+            load_stored(&input_path).map(|stored| stored.is_none_or(|s| s.meta.is_empty())).unwrap_or(true);
         if prev_meta_empty {
             fsutil::copy_atomic(&input_path, &output_path)?;
             return Ok(());
@@ -55,12 +54,12 @@ pub fn save_annotated_pdf(
     }
 
     let pages = inc.get_prev_documents().get_pages();
-    let mut new_stream_ids: HashMap<u32, [u32; 2]> = HashMap::new();
+    let mut layers: HashMap<u32, ObjectId> = HashMap::new();
 
     for (&page_num, anns) in &by_page {
         let page_id = pages.get(&page_num).copied().ok_or_else(|| format!("page {page_num} not found in document"))?;
 
-        let existing = meta.stream_ids.get(&page_num).map(|arr| (arr[0], arr[1] as u16));
+        let existing = meta.layer(page_num);
 
         inc.opt_clone_object_to_new_document(page_id).map_err(|e| e.to_string())?;
         inline_page_resources(&mut inc, page_id)?;
@@ -69,22 +68,16 @@ pub fn save_annotated_pdf(
         }
 
         if let Some(sid) = writer::write_annotations_for_page(&mut inc.new_document, page_id, anns, existing)? {
-            new_stream_ids.insert(page_num, [sid.0, sid.1 as u32]);
+            layers.insert(page_num, sid);
         }
     }
 
-    for (&page_num, arr) in &meta.stream_ids {
-        if !by_page.contains_key(&page_num) {
-            let sid = (arr[0], arr[1] as u16);
-            inc.opt_clone_object_to_new_document(sid).map_err(|e| e.to_string())?;
-            if let Ok(Object::Stream(s)) = inc.new_document.get_object_mut(sid) {
-                writer::set_raw_content(s, vec![]);
-            }
-        }
-    }
+    let unused: Vec<ObjectId> =
+        meta.layers().filter(|(page, _)| !by_page.contains_key(page)).map(|(_, sid)| sid).collect();
+    annotation_layer::blank_layers(&mut inc, unused)?;
 
     meta.annotations = annotations;
-    meta.stream_ids = new_stream_ids;
+    meta.set_layers(layers);
 
     let cat_id = inc
         .get_prev_documents()
@@ -210,17 +203,12 @@ fn load_stored(path: &str) -> Result<Option<Stored>, String> {
 /// Writes `stored` without the drawn layer of its annotations to `output_path`, so the viewer
 /// shows them once, as editable objects. False, and nothing written, when there is no layer.
 fn write_without_layer(stored: Stored, output_path: &str) -> CmdResult<bool> {
-    if stored.meta.stream_ids.is_empty() {
+    if !stored.meta.has_layers() {
         return Ok(false);
     }
+    let layers: Vec<ObjectId> = stored.meta.layers().map(|(_, sid)| sid).collect();
     let mut inc = fsutil::incremental_from(stored.bytes, stored.doc)?;
-    for arr in stored.meta.stream_ids.values() {
-        let sid = (arr[0], arr[1] as u16);
-        inc.opt_clone_object_to_new_document(sid).map_err(|e| e.to_string())?;
-        if let Ok(Object::Stream(s)) = inc.new_document.get_object_mut(sid) {
-            writer::set_raw_content(s, vec![]);
-        }
-    }
+    annotation_layer::blank_layers(&mut inc, layers)?;
     fsutil::save_incremental(&mut inc, output_path)?;
     Ok(true)
 }
@@ -324,7 +312,7 @@ pub fn adjust_pages(input_path: String, output_path: String, pages: Vec<PageAdju
             .filter(|b| b[2] > b[0] && b[3] > b[1])
             .unwrap_or(media);
         let contents = content_refs(prev, page_id);
-        let ann_stream = meta.stream_ids.get(&adj.page).map(|ids| (ids[0], ids[1] as u16));
+        let ann_stream = meta.layer(adj.page);
 
         inc.opt_clone_object_to_new_document(page_id).map_err(|e| e.to_string())?;
         let mut new_contents = contents.clone();
@@ -621,14 +609,7 @@ fn rewrite_pages(inc: &mut IncrementalDocument, slots: &[PageSlot]) -> CmdResult
     root.remove(b"Parent");
 
     let mut meta = writer::load_meta(inc.get_prev_documents());
-    meta.annotations.retain(|ann| renumber.contains_key(&ann.page()));
-    for ann in &mut meta.annotations {
-        ann.set_page(renumber[&ann.page()]);
-    }
-    meta.stream_ids = std::mem::take(&mut meta.stream_ids)
-        .into_iter()
-        .filter_map(|(page, ids)| renumber.get(&page).map(|&p| (p, ids)))
-        .collect();
+    meta.renumber(&renumber);
 
     inc.opt_clone_object_to_new_document(cat_id).map_err(|e| e.to_string())?;
     writer::save_meta(&mut inc.new_document, &meta)?;
@@ -829,7 +810,7 @@ mod tests {
         let out = tmp("adjust-out.pdf");
         save_annotated_pdf(fixture("objstm-indirect-length.pdf"), annotated.clone(), vec![rect(1, 200.0)], 0, vec![])
             .unwrap();
-        let layer = writer::load_meta(&Document::load(&annotated).unwrap()).stream_ids[&1];
+        let layer = writer::load_meta(&Document::load(&annotated).unwrap()).layer(1).unwrap();
 
         adjust_pages(
             annotated.clone(),
@@ -857,7 +838,7 @@ mod tests {
             .unwrap_or_else(|_| doc.get_object(first).unwrap().as_stream().unwrap().content.clone());
         assert!(String::from_utf8_lossy(&pre).starts_with("q -1 0 0 1 "), "mirror comes first");
         let last = contents.last().unwrap().as_reference().unwrap();
-        assert_eq!(last, (layer[0], layer[1] as u16), "the annotation layer stays outside the mirror");
+        assert_eq!(last, layer, "the annotation layer stays outside the mirror");
         assert!(doc.extract_text(&[1]).unwrap().contains("Page 1"), "text stays text");
         assert_eq!(read_annotations(out.clone()).unwrap().len(), 1);
 
@@ -890,8 +871,8 @@ mod tests {
 
         let doc = Document::load(&working).unwrap();
         let meta = writer::load_meta(&doc);
-        for ids in meta.stream_ids.values() {
-            let layer = doc.get_object((ids[0], ids[1] as u16)).unwrap().as_stream().unwrap();
+        for (_, sid) in meta.layers() {
+            let layer = doc.get_object(sid).unwrap().as_stream().unwrap();
             assert!(layer.content.is_empty(), "the viewer draws the annotations, not the page");
         }
         assert_eq!(read_annotations(working.clone()).unwrap().len(), 1, "the copy keeps the record");
