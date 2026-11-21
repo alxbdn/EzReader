@@ -247,7 +247,7 @@ function removeAnnotation(ann: Annotation): void {
   if (editingShapeAnn === ann) { editingShapeAnn = null; toolbar.hideShapeStyles(); }
   if (editingHighlightAnn === ann) { editingHighlightAnn = null; toolbar.hideHighlightStyles(); }
   annotations.remove(ann);
-  viewer.pageViews.find((p) => p.pageNum === ann.page)?.overlay.redrawCommitted();
+  viewer.pageViews.find((p) => p.pageNum === ann.page)?.builtOverlay?.redrawCommitted();
 }
 
 let tempPrefix: Promise<[string, string]> | null = null;
@@ -497,8 +497,8 @@ viewer.overlayEvents.onHighlightSelected((ann) => {
 viewer.onLayoutChanged((pageViews) => {
   toolbar.updateLayout(viewer.forcedColumns, viewer.scrollMode, viewer.columnCount, viewer.evenSpread);
   for (const pv of pageViews) {
-    pv.overlay.setTool(tools.tool);
-    pv.overlay.refreshStyle();
+    pv.builtOverlay?.setTool(tools.tool);
+    pv.builtOverlay?.refreshStyle();
   }
 });
 
@@ -1751,7 +1751,7 @@ toolbar.on(async (e) => {
       tools.setTool(e.tool);
       document.getElementById("viewer-scroll")!.classList.toggle("etext-mode", e.tool === "etext");
       updateHandMode();
-      for (const pv of viewer.pageViews) pv.overlay.setTool(e.tool);
+      for (const pv of viewer.pageViews) pv.builtOverlay?.setTool(e.tool);
       editingTextAnn      = null;
       editingShapeAnn     = null;
       editingHighlightAnn = null;
@@ -1760,7 +1760,7 @@ toolbar.on(async (e) => {
 
     case "style-change":
       tools.setStyle(e.style);
-      for (const pv of viewer.pageViews) pv.overlay.refreshStyle();
+      for (const pv of viewer.pageViews) pv.builtOverlay?.refreshStyle();
       if (editingTextAnn) {
         const pv = viewer.pageViews.find(p => p.pageNum === editingTextAnn!.page);
         pv?.overlay.applyTextAnnotationStyle(editingTextAnn, e.style);
@@ -1779,7 +1779,7 @@ toolbar.on(async (e) => {
         if (!ann.color || ann.color.r !== c.r || ann.color.g !== c.g || ann.color.b !== c.b) {
           annotations.beginEdit();
           ann.color = { ...c };
-          viewer.pageViews.find(p => p.pageNum === ann.page)?.overlay.redrawCommitted();
+          viewer.pageViews.find(p => p.pageNum === ann.page)?.builtOverlay?.redrawCommitted();
           annotations.edited();
         }
       }
@@ -2263,7 +2263,7 @@ document.getElementById("viewer-scroll")!.addEventListener("click", (e: MouseEve
     bold: false, italic: false, underline: false, fontFamily: item.family, backgroundColor: null,
   };
   tools.setStyle({ ...style, textBackground: null });
-  for (const p of viewer.pageViews) p.overlay.refreshStyle();
+  for (const p of viewer.pageViews) p.builtOverlay?.refreshStyle();
   toolbar.showTextStyles(style);
   pv.overlay.replaceText(item);
 });
@@ -2362,8 +2362,8 @@ document.getElementById("viewer-scroll")!.addEventListener("mouseup", () => {
       seen.add(key);
       const cx = r.left + r.width / 2, cy = r.top + r.height / 2;
       const pv = viewer.pageViews.find((p) => {
-        const b = p.overlay.screenRect;
-        return cx >= b.left && cx <= b.right && cy >= b.top && cy <= b.bottom;
+        const b = p.builtOverlay?.screenRect;
+        return !!b && cx >= b.left && cx <= b.right && cy >= b.top && cy <= b.bottom;
       });
       if (!pv) continue;
       const b = pv.overlay.screenRect;

@@ -165,16 +165,20 @@ export async function resolveDestination(
 export class PdfPageView {
   readonly pageNum: number;
   readonly wrapper: HTMLElement;
-  readonly overlay: CanvasOverlay;
   rendered = false;
   rendering = false;
 
-  private canvas: HTMLCanvasElement;
-  private textLayer: HTMLElement;
-  private linkLayer: HTMLElement;
-  private formLayer: HTMLElement;
-  private annotationCanvas: HTMLCanvasElement;
-  private highlightCanvas: HTMLCanvasElement;
+  // A page only gets its canvases, layers and annotation overlay when it is first drawn or its
+  // overlay is first used: until then it is one sized box, so laying out a 5,000-page document
+  // creates 5,000 elements instead of 35,000 and no overlay at all.
+  private _built = false;
+  private _overlay: CanvasOverlay | null = null;
+  private canvas!: HTMLCanvasElement;
+  private textLayer!: HTMLElement;
+  private linkLayer!: HTMLElement;
+  private formLayer!: HTMLElement;
+  private annotationCanvas!: HTMLCanvasElement;
+  private highlightCanvas!: HTMLCanvasElement;
   private _viewport: PageViewport | null = null;
   private _generation = 0;
   private _renderTask: RenderTask | null = null;
@@ -185,16 +189,30 @@ export class PdfPageView {
 
   constructor(
     pageNum: number,
-    tools: ToolSelection,
-    annotations: AnnotationSession,
+    private readonly tools: ToolSelection,
+    private readonly annotations: AnnotationSession,
     private liveText: LiveText | null = null,
-    events: OverlayEvents = new OverlayEvents(),
+    private readonly events: OverlayEvents = new OverlayEvents(),
   ) {
     this.pageNum = pageNum;
 
     this.wrapper = document.createElement("div");
     this.wrapper.className = "page-wrapper";
     this.wrapper.dataset.page = String(pageNum);
+  }
+
+  /** The page's annotation overlay, built with the page's layers on first use, on the current tool. */
+  get overlay(): CanvasOverlay {
+    this.build();
+    return this._overlay!;
+  }
+
+  /** The overlay if the page has one yet: for changes that a page built later picks up anyway. */
+  get builtOverlay(): CanvasOverlay | null { return this._overlay; }
+
+  private build(): void {
+    if (this._built) return;
+    this._built = true;
 
     this.canvas = document.createElement("canvas");
     this.canvas.className = "page-canvas";
@@ -223,24 +241,26 @@ export class PdfPageView {
       this.annotationCanvas
     );
     for (const c of [this.canvas, this.highlightCanvas, this.annotationCanvas]) { c.width = 0; c.height = 0; }
-    this.overlay = new CanvasOverlay(this.annotationCanvas, this.wrapper, tools, annotations, this.highlightCanvas, events);
+    this._overlay = new CanvasOverlay(this.annotationCanvas, this.wrapper, this.tools, this.annotations, this.highlightCanvas, this.events);
+    this._overlay.setTool(this.tools.tool);
+    this._overlay.refreshStyle();
   }
 
   destroy(): void {
     this.clear();
-    this.overlay.destroy();
+    this._overlay?.destroy();
   }
 
   get viewport(): PageViewport | null { return this._viewport; }
 
-  get hasPixels(): boolean { return this.canvas.width > 0; }
+  get hasPixels(): boolean { return this._built && this.canvas.width > 0; }
 
   get renderedRotation(): number { return this._renderedRotation; }
 
   isRenderedAt(scale: number, rotation: number, dpr = window.devicePixelRatio || 1): boolean {
     return (
       this.rendered &&
-      this.canvas.width > 0 &&
+      this.hasPixels &&
       Math.abs(this._renderedScale - scale) < 1e-6 &&
       this._renderedRotation === rotation &&
       Math.abs(this._renderedDpr - dpr) < 1e-4
@@ -260,7 +280,7 @@ export class PdfPageView {
     const h = `${Math.round(height)}px`;
     this.wrapper.style.width  = w;
     this.wrapper.style.height = h;
-    if (keepStretchedCanvas && this.canvas.width > 0) {
+    if (keepStretchedCanvas && this.hasPixels) {
       this.canvas.style.width  = w;
       this.canvas.style.height = h;
     }
@@ -276,6 +296,7 @@ export class PdfPageView {
     onPainted?: () => void
   ): Promise<void> {
     if (this.rendering) return;
+    this.build();
     this.rendering = true;
     const generation = this._generation;
     const stale = () => generation !== this._generation;
@@ -359,13 +380,15 @@ export class PdfPageView {
     this._generation++;
     this._renderTask?.cancel();
     this._renderTask = null;
-    for (const c of [this.canvas, this.highlightCanvas, this.annotationCanvas]) { c.width = 0; c.height = 0; }
     this._page?.cleanup();
     this._page = null;
-    this.textLayer.innerHTML  = "";
-    this.linkLayer.innerHTML  = "";
-    this.formLayer.innerHTML  = "";
-    this.overlay.hide();
+    if (this._built) {
+      for (const c of [this.canvas, this.highlightCanvas, this.annotationCanvas]) { c.width = 0; c.height = 0; }
+      this.textLayer.innerHTML  = "";
+      this.linkLayer.innerHTML  = "";
+      this.formLayer.innerHTML  = "";
+      this._overlay!.hide();
+    }
     this._renderedScale = 0;
     this._renderedRotation = -1;
     this._renderedDpr = 0;
@@ -449,6 +472,7 @@ export class PdfPageView {
   }
 
   highlight(query: string, active: number): HTMLElement | null {
+    if (!this._built) return null;
     const needle = query.toLocaleLowerCase();
     let n = 0;
     let activeMark: HTMLElement | null = null;

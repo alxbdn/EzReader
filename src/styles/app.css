@@ -1588,6 +1588,13 @@ input[type="color"].color-picker.is-off::-webkit-color-swatch {
   align-items: center;
   gap: 6px;
   user-select: none;
+  /* Cards off screen are not laid out or painted (their size comes from contain-intrinsic-size,
+     set from the page's shape). The bleed keeps the frame's outline and shadow inside the card,
+     which clips its painting, without moving anything: CARD_BLEED in page-sidebar.ts. */
+  content-visibility: auto;
+  flex-shrink: 0;
+  padding: 6px;
+  margin: -6px;
 }
 
 .page-sidebar-frame {
