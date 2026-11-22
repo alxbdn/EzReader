@@ -53,6 +53,7 @@ import {
   picturesToNewPdf,
   getPageCount,
   listSystemFonts,
+  listPdfFonts,
   savePdfDialog,
   loadPictureFile,
   saveAnnotatedPdf,
@@ -546,7 +547,9 @@ async function showInfo(): Promise<void> {
   const s = settingsModal.getSettings();
   const name = session.displayName ?? "";
   toolbar.setInfoOpen(true);
-  await infoPanel.show(doc, name, getTranslations(s.language), s.language);
+  const path = session.sourcePath;
+  const fonts = async () => (path ? await listPdfFonts(path, session.filePassword) : []);
+  await infoPanel.show(doc, name, getTranslations(s.language), s.language, fonts);
 }
 
 mountWindowControls(document.getElementById("menubar-row")!, () => {

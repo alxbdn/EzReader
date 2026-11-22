@@ -79,7 +79,10 @@ export class InfoPanel {
     this.el.setAttribute("aria-hidden", "true");
   }
 
-  async show(doc: PDFDocumentProxy, fileName: string, t: Translations, lang: string): Promise<void> {
+  async show(
+    doc: PDFDocumentProxy, fileName: string, t: Translations, lang: string,
+    fonts: () => Promise<string[]> = async () => [],
+  ): Promise<void> {
     this._open = true;
     const bar = document.getElementById("toolbar-container");
     if (bar) this.el.style.setProperty("--info-top", `${Math.round(bar.getBoundingClientRect().bottom) + 12}px`);
@@ -88,9 +91,10 @@ export class InfoPanel {
     this.titleEl.textContent = t.infoTitle ?? "Document info";
 
     const token = ++this.renderToken;
-    const [meta, page] = await Promise.all([
+    const [meta, page, fontNames] = await Promise.all([
       doc.getMetadata().catch(() => null),
       doc.getPage(1).catch(() => null),
+      fonts().catch(() => [] as string[]),
     ]);
     if (token !== this.renderToken) return;
 
@@ -118,6 +122,7 @@ export class InfoPanel {
       [t.infoCreator ?? "Content creator", clean(info.Creator)],
       [t.infoCreated ?? "Created", await formatPdfDate(info.CreationDate, lang)],
       [t.infoModified ?? "Modified", await formatPdfDate(info.ModDate, lang)],
+      [t.infoFonts ?? "Fonts", fontNames.length ? fontNames.join("\n") : null],
     ];
 
     this.body.replaceChildren();

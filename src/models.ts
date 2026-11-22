@@ -123,6 +123,16 @@ export const SYSTEM_FONTS: { name: string; fallback: FontFamilyValue }[] = [
   { name: "Optima", fallback: "helvetica" },
   { name: "Baskerville", fallback: "times" },
   { name: "Menlo", fallback: "courier" },
+  { name: "Aptos", fallback: "helvetica" },
+  { name: "Calibri Light", fallback: "helvetica" },
+  { name: "Arial Narrow", fallback: "helvetica" },
+  { name: "Century Schoolbook", fallback: "times" },
+  { name: "Bookman Old Style", fallback: "times" },
+  { name: "Lucida Sans Unicode", fallback: "helvetica" },
+  { name: "Microsoft Sans Serif", fallback: "helvetica" },
+  { name: "Myriad Pro", fallback: "helvetica" },
+  { name: "Roboto", fallback: "helvetica" },
+  { name: "Open Sans", fallback: "helvetica" },
 ];
 
 export function fontCss(family: FontFamilyValue | undefined, name?: string | null): string {

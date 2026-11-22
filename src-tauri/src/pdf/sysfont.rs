@@ -5,7 +5,7 @@ use std::sync::{Arc, Mutex, OnceLock};
 use lopdf::{dictionary, Document, Object, ObjectId, Stream};
 use subsetter::GlyphRemapper;
 
-pub const FAMILIES: [&str; 30] = [
+pub const FAMILIES: [&str; 40] = [
     "Arial",
     "Arial Black",
     "Verdana",
@@ -36,9 +36,19 @@ pub const FAMILIES: [&str; 30] = [
     "Optima",
     "Baskerville",
     "Menlo",
+    "Aptos",
+    "Calibri Light",
+    "Arial Narrow",
+    "Century Schoolbook",
+    "Bookman Old Style",
+    "Lucida Sans Unicode",
+    "Microsoft Sans Serif",
+    "Myriad Pro",
+    "Roboto",
+    "Open Sans",
 ];
 
-const FILE_ALIASES: [&str; 8] = ["ariblk", "trebuc", "pala", "bkant", "gara", "gothic", "framd", "lucon"];
+const FILE_ALIASES: [&str; 9] = ["ariblk", "trebuc", "pala", "bkant", "gara", "gothic", "framd", "lucon", "l10646"];
 
 const NAME_FAMILY: u16 = 1;
 const NAME_SUBFAMILY: u16 = 2;
@@ -379,20 +389,30 @@ fn build_index(dirs: &[PathBuf]) -> HashMap<String, Vec<FaceRef>> {
             let Some(face) = Face::parse(&data, index) else { continue };
             let mut families = face.names(NAME_TYPO_FAMILY);
             families.extend(face.names(NAME_FAMILY));
-            let Some(family) = families.iter().map(|f| f.to_ascii_lowercase()).find(|f| wanted.contains_key(f)) else {
+            // A face can belong to two listed families ("Calibri Light" is also "Calibri").
+            let mut matched: Vec<String> =
+                families.iter().map(|f| f.to_ascii_lowercase()).filter(|f| wanted.contains_key(f)).collect();
+            matched.dedup();
+            if matched.is_empty() {
                 continue;
-            };
+            }
             let styles: Vec<String> =
                 face.names(NAME_TYPO_SUBFAMILY).into_iter().chain(face.names(NAME_SUBFAMILY)).collect();
             let plain_style =
                 styles.iter().any(|s| matches!(s.as_str(), "Regular" | "Bold" | "Italic" | "Bold Italic"));
-            out.entry(family).or_default().push(FaceRef {
-                path: path.clone(),
-                index,
-                bold: face.is_bold(),
-                italic: face.is_italic(),
-                plain_style,
-            });
+            for family in matched {
+                let faces = out.entry(family).or_default();
+                if faces.iter().any(|f| f.path == path && f.index == index) {
+                    continue;
+                }
+                faces.push(FaceRef {
+                    path: path.clone(),
+                    index,
+                    bold: face.is_bold(),
+                    italic: face.is_italic(),
+                    plain_style,
+                });
+            }
         }
     }
     out

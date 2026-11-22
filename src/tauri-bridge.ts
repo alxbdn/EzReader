@@ -45,6 +45,11 @@ export async function listSystemFonts(): Promise<string[]> {
   return call<string[]>("list_system_fonts", {});
 }
 
+/** The fonts a PDF uses, one name each, sorted. */
+export async function listPdfFonts(filePath: string, password: string | null): Promise<string[]> {
+  return call<string[]>("list_pdf_fonts", { filePath, password });
+}
+
 export async function getPageCount(filePath: string): Promise<number> {
   return call<number>("get_page_count", { filePath });
 }

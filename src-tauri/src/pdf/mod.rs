@@ -1,6 +1,8 @@
 pub mod annotation_layer;
 pub mod compress;
+pub mod erase_text;
 pub mod flatten;
+pub mod fonts;
 pub mod forms;
 pub mod models;
 pub mod redact;

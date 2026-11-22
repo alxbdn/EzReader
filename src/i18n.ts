@@ -262,6 +262,7 @@ export interface Translations {
   infoCreator?: string;
   infoCreated?: string;
   infoModified?: string;
+  infoFonts?: string;
   infoKeywords?: string;
   settingsRealSize?: string;
   settingsRealSizeHint?: string;
@@ -866,6 +867,7 @@ const EN: Translations = {
   infoCreator:          "Content creator",
   infoCreated:          "Created",
   infoModified:         "Modified",
+  infoFonts:            "Fonts",
   infoKeywords:         "Keywords",
   settingsRealSize:     "Actual size calibration",
   settingsBrightness: "Page brightness",
@@ -1470,6 +1472,7 @@ const FR: Translations = {
   infoCreator:          "Créateur du contenu",
   infoCreated:          "Création",
   infoModified:         "Modification",
+  infoFonts:            "Polices",
   infoKeywords:         "Mots-clés",
   settingsRealSize:     "Calibrage de la taille réelle",
   settingsBrightness: "Luminosité des pages",
