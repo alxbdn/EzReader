@@ -1,12 +1,14 @@
 import { EpubBook, ResourceUrls, tocIndexFor, type Chapter } from "./epub-book";
 import type { Translations } from "./i18n";
-import { ICON_CHEVRON_LEFT, ICON_CHEVRON_RIGHT, ICON_CLOSE, ICON_TEXT_LARGER, ICON_TEXT_SMALLER, ICON_TOC } from "./icons";
+import { ICON_CHEVRON_LEFT, ICON_CHEVRON_RIGHT, ICON_CLOSE, ICON_EXPORT, ICON_TEXT_LARGER, ICON_TEXT_SMALLER, ICON_TOC } from "./icons";
 
 export interface EpubReaderDeps {
   openUrl(url: string): void;
   /** The book's title while one is open, null once it is closed. */
   titleChanged(title: string | null): void;
   closeRequested(): void;
+  /** "Save as PDF…" was pressed. */
+  convertRequested(): void;
   /** Keys the reader doesn't use, typed while the book has the focus (menu shortcuts…). */
   forwardKey(e: KeyboardEvent): void;
 }
@@ -31,7 +33,7 @@ const TOKENS: [string, string][] = [
 ];
 
 /** Defaults the book's own styles can change. */
-const BASE_CSS = `
+export const BASE_CSS = `
 html { font-family: Georgia, "Iowan Old Style", "Palatino Linotype", Cambria, serif; line-height: 1.6; }
 img, svg, video { max-width: 100%; }
 img { height: auto; }
@@ -119,6 +121,7 @@ export class EpubReader {
   private readonly largerBtn: HTMLButtonElement;
   private readonly scaleLabel: HTMLElement;
   private readonly closeBtn: HTMLButtonElement;
+  private readonly pdfBtn: HTMLButtonElement;
   private readonly toc: HTMLElement;
   private readonly tocTitle: HTMLElement;
   private readonly tocList: HTMLElement;
@@ -151,9 +154,10 @@ export class EpubReader {
     this.scaleLabel = document.createElement("span");
     this.scaleLabel.className = "epub-scale";
     this.closeBtn = button("icon-btn", ICON_CLOSE);
-    const divider = document.createElement("span");
-    divider.className = "epub-divider";
-    right.append(this.smallerBtn, this.scaleLabel, this.largerBtn, divider, this.closeBtn);
+    this.pdfBtn = button("icon-btn", ICON_EXPORT);
+    this.pdfBtn.hidden = true;
+    const divider = () => { const d = document.createElement("span"); d.className = "epub-divider"; return d; };
+    right.append(this.smallerBtn, this.scaleLabel, this.largerBtn, divider(), this.pdfBtn, this.closeBtn);
     this.bar.append(left, pill, right);
 
     const body = document.createElement("div");
@@ -177,6 +181,7 @@ export class EpubReader {
     this.smallerBtn.addEventListener("click", () => this.zoom(-1));
     this.largerBtn.addEventListener("click", () => this.zoom(1));
     this.closeBtn.addEventListener("click", () => this.deps.closeRequested());
+    this.pdfBtn.addEventListener("click", () => this.deps.convertRequested());
     this.tocList.addEventListener("click", (e) => {
       const a = (e.target as HTMLElement).closest<HTMLElement>("[data-index]");
       if (!a || !this.book) return;
@@ -190,6 +195,15 @@ export class EpubReader {
   }
 
   get isOpen(): boolean { return this.book !== null; }
+  get current(): EpubBook | null { return this.book; }
+
+  /** Shows "Save as PDF…" where the system can print to PDF. */
+  setCanConvert(can: boolean): void { this.pdfBtn.hidden = !can; }
+
+  setConverting(busy: boolean): void {
+    this.pdfBtn.disabled = busy;
+    this.root.classList.toggle("converting", busy);
+  }
   get title(): string { return this.book?.info.title || this.path.split(/[\\/]/).pop() || ""; }
 
   applyTranslations(t: Translations): void {
@@ -200,8 +214,9 @@ export class EpubReader {
     this.smallerBtn.title = t.ttEpubSmaller ?? "Smaller text (Ctrl+-)";
     this.largerBtn.title = t.ttEpubLarger ?? "Larger text (Ctrl++)";
     this.closeBtn.title = t.ttEpubClose ?? "Close book (Ctrl+W)";
+    this.pdfBtn.title = t.ttEpubToPdf ?? "Save as PDF…";
     this.tocTitle.textContent = t.epubToc ?? "Contents";
-    for (const b of [this.tocBtn, this.prevBtn, this.nextBtn, this.smallerBtn, this.largerBtn, this.closeBtn]) b.setAttribute("aria-label", b.title);
+    for (const b of [this.tocBtn, this.prevBtn, this.nextBtn, this.smallerBtn, this.largerBtn, this.pdfBtn, this.closeBtn]) b.setAttribute("aria-label", b.title);
     const end = this.frame.contentDocument?.querySelector(".ez-end button");
     if (end) end.textContent = this.nextLabel();
   }

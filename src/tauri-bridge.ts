@@ -1,4 +1,4 @@
-import { invoke } from "@tauri-apps/api/core";
+import { Channel, invoke } from "@tauri-apps/api/core";
 import { toCommandError } from "./errors";
 import { listen } from "@tauri-apps/api/event";
 import type { Mat3, TextRun } from "./page-adjustment";
@@ -96,6 +96,27 @@ export interface StartupArgs {
 /** Unpacks one deflated ZIP entry in the back end (raw bytes both ways). */
 export async function inflateRaw(data: Uint8Array): Promise<Uint8Array> {
   return new Uint8Array(await call<ArrayBuffer>("inflate_raw", data as unknown as Record<string, unknown>));
+}
+
+export async function canPrintHtmlToPdf(): Promise<boolean> {
+  return call<boolean>("can_print_html_to_pdf");
+}
+
+/** Prints each HTML page to its own PDF with the system webview; `done` gets the count after each page. */
+export async function printHtmlPages(pages: string[], done: (n: number) => void): Promise<string[]> {
+  const progress = new Channel<number>();
+  progress.onmessage = done;
+  return call<string[]>("print_html_pages", { pages, progress });
+}
+
+export async function finishBookPdf(
+  input: string,
+  output: string,
+  bookmarks: { title: string; page: number; depth: number }[],
+  title: string,
+  author: string,
+): Promise<void> {
+  return call<void>("finish_book_pdf", { input, output, bookmarks, title, author });
 }
 
 export async function openFileInNewWindow(path: string): Promise<void> {

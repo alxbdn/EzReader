@@ -4,6 +4,7 @@ import { spawn } from "node:child_process";
 import { copyFileSync, mkdtempSync, readFileSync, rmSync, writeFileSync, mkdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import { deflateRawSync } from "node:zlib";
 import { Builder, By, Key } from "selenium-webdriver";
 import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
 
@@ -182,6 +183,65 @@ async function pdfInfo(path) {
   return info;
 }
 
+/** A small EPUB: three chapters, a table of contents with a section, a style sheet. */
+function makeEpub() {
+  const para = "Il était une fois, au bord d'une rivière tranquille, un petit voyageur qui rêvait de voir le monde. ".repeat(6);
+  const chapter = (title, extra = "") =>
+    `<?xml version="1.0" encoding="utf-8"?><html xmlns="http://www.w3.org/1999/xhtml"><head><link rel="stylesheet" href="s.css"/></head>` +
+    `<body><h1>${title}</h1>${`<p>${para}</p>`.repeat(8)}${extra}${`<p>${para}</p>`.repeat(4)}</body></html>`;
+  const files = {
+    mimetype: "application/epub+zip",
+    "META-INF/container.xml": `<?xml version="1.0"?><container version="1.0" xmlns="urn:oasis:names:tc:opendocument:xmlns:container"><rootfiles><rootfile full-path="OEBPS/content.opf" media-type="application/oebps-package+xml"/></rootfiles></container>`,
+    "OEBPS/content.opf": `<?xml version="1.0"?><package xmlns="http://www.idpf.org/2007/opf" version="3.0"><metadata xmlns:dc="http://purl.org/dc/elements/1.1/"><dc:title>Le Petit Voyageur</dc:title><dc:creator>Jeanne Martin</dc:creator><dc:language>fr</dc:language></metadata>` +
+      `<manifest><item id="nav" href="nav.xhtml" media-type="application/xhtml+xml" properties="nav"/><item id="css" href="s.css" media-type="text/css"/>` +
+      `<item id="c0" href="c0.xhtml" media-type="application/xhtml+xml"/><item id="c1" href="c1.xhtml" media-type="application/xhtml+xml"/><item id="c2" href="c2.xhtml" media-type="application/xhtml+xml"/></manifest>` +
+      `<spine><itemref idref="c0"/><itemref idref="c1"/><itemref idref="c2"/></spine></package>`,
+    "OEBPS/nav.xhtml": `<html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops"><body><nav epub:type="toc"><ol>` +
+      `<li><a href="c0.xhtml">Le départ</a><ol><li><a href="c0.xhtml#port">Au port</a></li></ol></li><li><a href="c1.xhtml">La forêt</a></li><li><a href="c2.xhtml">Le retour</a></li></ol></nav></body></html>`,
+    "OEBPS/s.css": "h1 { text-align: center } p { text-indent: 1.5em; margin: 0 }",
+    "OEBPS/c0.xhtml": chapter("Le départ", `<h2 id="port">Au port</h2>`),
+    "OEBPS/c1.xhtml": chapter("La forêt"),
+    "OEBPS/c2.xhtml": chapter("Le retour"),
+  };
+  const locals = [];
+  const central = [];
+  let offset = 0;
+  for (const [name, text] of Object.entries(files)) {
+    const data = Buffer.from(text, "utf8");
+    const stored = name === "mimetype";
+    const packed = stored ? data : deflateRawSync(data);
+    const n = Buffer.from(name, "utf8");
+    const local = Buffer.alloc(30 + n.length);
+    local.writeUInt32LE(0x04034b50, 0);
+    local.writeUInt16LE(stored ? 0 : 8, 8);
+    local.writeUInt32LE(packed.length, 18);
+    local.writeUInt32LE(data.length, 22);
+    local.writeUInt16LE(n.length, 26);
+    n.copy(local, 30);
+    const cd = Buffer.alloc(46 + n.length);
+    cd.writeUInt32LE(0x02014b50, 0);
+    cd.writeUInt16LE(stored ? 0 : 8, 10);
+    cd.writeUInt32LE(packed.length, 20);
+    cd.writeUInt32LE(data.length, 24);
+    cd.writeUInt16LE(n.length, 28);
+    cd.writeUInt32LE(offset, 42);
+    n.copy(cd, 46);
+    locals.push(local, packed);
+    central.push(cd);
+    offset += local.length + packed.length;
+  }
+  const cdSize = central.reduce((s, c) => s + c.length, 0);
+  const end = Buffer.alloc(22);
+  end.writeUInt32LE(0x06054b50, 0);
+  end.writeUInt16LE(central.length, 8);
+  end.writeUInt16LE(central.length, 10);
+  end.writeUInt32LE(cdSize, 12);
+  end.writeUInt32LE(offset, 16);
+  const path = join(work, `${Date.now()}-book.epub`);
+  writeFileSync(path, Buffer.concat([...locals, ...central, end]));
+  return path;
+}
+
 describe("launcher", () => {
   test("starts on the launcher with an Open button and the menus", async () => {
     await launch();
@@ -346,5 +406,55 @@ describe("menus", () => {
       s.dispatchEvent(new Event("change", { bubbles: true }));
     });
     await waitFor("the dark theme", () => document.documentElement.dataset.theme === "dark");
+  });
+});
+
+describe("books", () => {
+  test("opens an EPUB given on the command line and moves between chapters", async () => {
+    await launch(makeEpub());
+    await waitFor("the book", () => !document.getElementById("epub-reader").hidden);
+    assert.ok(await driver.executeScript(() => document.getElementById("welcome-screen").classList.contains("hidden")));
+    await waitFor("chapter 1", () => document.querySelector(".epub-frame").contentDocument?.querySelector("h1")?.textContent === "Le départ");
+    assert.equal(await driver.executeScript(() => document.querySelector(".epub-position").textContent), "1 / 3");
+    await click(".epub-nav .page-nav-step:last-child");
+    await waitFor("chapter 2", () => document.querySelector(".epub-frame").contentDocument?.querySelector("h1")?.textContent === "La forêt");
+    assert.match(await driver.executeScript(() => document.getElementById("menubar-row").textContent), /Le Petit Voyageur/);
+  });
+
+  test("prints chapters to PDF and puts them together with bookmarks", async (t) => {
+    await launch();
+    if (!(await invoke("can_print_html_to_pdf", {}))) return t.skip("no webview printing here");
+    const page = (title) => `<!doctype html><html><head><meta charset="utf-8"></head><body><h1>${title}</h1>${"<p>Bonjour tout le monde.</p>".repeat(80)}</body></html>`;
+    const parts = await driver.executeAsyncScript((pages, done) => {
+      const id = window.__TAURI_INTERNALS__.transformCallback(() => {});
+      window.__TAURI_INTERNALS__.invoke("print_html_pages", { pages, progress: `__CHANNEL__:${id}` }).then(done, (e) => done({ error: String(e) }));
+    }, [page("Un"), page("Deux")]);
+    assert.ok(Array.isArray(parts), JSON.stringify(parts));
+    assert.equal(parts.length, 2);
+    const counts = [];
+    for (const p of parts) counts.push(await invoke("get_page_count", { filePath: p }));
+    assert.ok(counts.every((n) => n >= 2), `pages per chapter: ${counts}`);
+    const merged = join(tmpdir(), `ezreader-e2e-${Date.now()}-merged.pdf`);
+    const slots = [
+      ...Array.from({ length: counts[0] }, (_, k) => ({ kind: "original", page: k + 1, rotation: 0 })),
+      ...Array.from({ length: counts[1] }, (_, k) => ({ kind: "imported", path: parts[1], page: k + 1, rotation: 0 })),
+    ];
+    assert.equal(await invoke("rearrange_pages", { inputPath: parts[0], outputPath: merged, slots }), null);
+    const out = join(tmpdir(), `ezreader-e2e-${Date.now()}-book.pdf`);
+    const bookmarks = [{ title: "Un", page: 1, depth: 0 }, { title: "Deux", page: counts[0] + 1, depth: 0 }];
+    assert.equal(await invoke("finish_book_pdf", { input: merged, output: out, bookmarks, title: "Livre", author: "Moi" }), null);
+    const task = getDocument({ data: new Uint8Array(readFileSync(out)), isEvalSupported: false, verbosity: 0 });
+    const doc = await task.promise;
+    try {
+      assert.equal(doc.numPages, counts[0] + counts[1]);
+      assert.deepEqual((await doc.getOutline()).map((o) => o.title), ["Un", "Deux"]);
+      const text = (await (await doc.getPage(counts[0] + 1)).getTextContent()).items.map((i) => i.str).join(" ");
+      assert.match(text, /Deux/);
+      assert.equal((await doc.getMetadata()).info.Title, "Livre");
+    } finally {
+      await task.destroy();
+      rmSync(merged, { force: true });
+      rmSync(out, { force: true });
+    }
   });
 });
