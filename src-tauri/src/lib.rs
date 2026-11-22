@@ -127,6 +127,7 @@ pub fn run() {
         .manage(commands::update::PendingUpdate::default())
         .invoke_handler(tauri::generate_handler![
             commands::pdf::list_system_fonts,
+            commands::pdf::list_pdf_fonts,
             commands::compress::compress_pdf,
             commands::compress::cancel_compression,
             commands::compress::estimate_compression,

@@ -44,3 +44,12 @@ describe("textColorFrom", () => {
     expect(textColorFrom(px([255, 255, 255]), white)).toEqual({ r: 0, g: 0, b: 0 });
   });
 });
+
+describe("matchPdfFont with the newer fonts", () => {
+  it("knows Calibri Light, Aptos and Myriad Pro", () => {
+    const installed = ["Calibri Light", "Aptos", "Myriad Pro"];
+    expect(matchPdfFont({ name: "ABCDEF+CalibriLight" }, installed).fontName).toBe("Calibri Light");
+    expect(matchPdfFont({ name: "Aptos-Bold" }, installed)).toMatchObject({ fontName: "Aptos", bold: true });
+    expect(matchPdfFont({ name: "MyriadPro-Regular" }, installed).fontName).toBe("Myriad Pro");
+  });
+});

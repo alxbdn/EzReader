@@ -5,7 +5,7 @@ use lopdf::{Document, IncrementalDocument, Object, ObjectId};
 use serde::{Deserialize, Serialize};
 
 use crate::fsutil;
-use crate::pdf::{annotation_layer, models::Annotation, redact, writer, writer::FormFieldValue};
+use crate::pdf::{annotation_layer, erase_text, models::Annotation, redact, writer, writer::FormFieldValue};
 
 #[tauri::command(async)]
 pub fn get_page_count(file_path: String) -> CmdResult<u32> {
@@ -76,6 +76,7 @@ pub fn save_annotated_pdf(
         meta.layers().filter(|(page, _)| !by_page.contains_key(page)).map(|(_, sid)| sid).collect();
     annotation_layer::blank_layers(&mut inc, unused)?;
 
+    let covers = replaced_text_areas(&annotations);
     meta.annotations = annotations;
     meta.set_layers(layers);
 
@@ -93,8 +94,36 @@ pub fn save_annotated_pdf(
         writer::write_form_fields(&mut inc.new_document, &form_fields)?;
     }
 
-    fsutil::save_incremental(&mut inc, &output_path)?;
+    if covers.is_empty() {
+        fsutil::save_incremental(&mut inc, &output_path)?;
+        return Ok(());
+    }
+    // Replaced text is destructive, like a redaction: the original words are removed from
+    // the page, and the file is rewritten whole so no earlier revision still holds them.
+    let mut doc = fsutil::compacted(&mut inc)?;
+    let keep: HashSet<ObjectId> = writer::load_meta(&doc).layers().map(|(_, sid)| sid).collect();
+    let pages = doc.get_pages();
+    for (page_num, areas) in &covers {
+        if let Some(&page_id) = pages.get(page_num) {
+            erase_text::erase_text(&mut doc, page_id, areas, &keep)?;
+        }
+    }
+    doc.prune_objects();
+    fsutil::save_document(&mut doc, &output_path)?;
     Ok(())
+}
+
+/// The white patches of replaced text, by page.
+fn replaced_text_areas(annotations: &[Annotation]) -> HashMap<u32, Vec<erase_text::Area>> {
+    let mut out: HashMap<u32, Vec<erase_text::Area>> = HashMap::new();
+    for ann in annotations {
+        if let Annotation::Text(t) = ann {
+            if let Some(c) = &t.cover {
+                out.entry(t.page).or_default().push(erase_text::Area::new(c.x, c.y, c.width, c.height));
+            }
+        }
+    }
+    out
 }
 
 fn inline_page_resources(inc: &mut IncrementalDocument, page_id: ObjectId) -> Result<(), String> {
@@ -736,6 +765,67 @@ impl Importer {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn replaced_text_is_removed_from_the_saved_file() {
+        use crate::pdf::models::{FontFamily, RgbColor, TextAlignment, TextAnnotation, TextCover};
+        use lopdf::{dictionary, Stream};
+
+        let mut doc = Document::with_version("1.7");
+        let font_id = doc.add_object(dictionary! { "Type" => "Font", "Subtype" => "Type1", "BaseFont" => "Helvetica" });
+        let content = b"BT /F1 12 Tf 100 500 Td (SecretWord) Tj 0 -30 Td (OtherLine) Tj ET".to_vec();
+        let content_id = doc.add_object(Stream::new(dictionary! {}, content));
+        let pages_id = doc.new_object_id();
+        let page_id = doc.add_object(dictionary! {
+            "Type" => "Page", "Parent" => pages_id,
+            "MediaBox" => vec![0.into(), 0.into(), 600.into(), 800.into()],
+            "Resources" => dictionary! { "Font" => dictionary! { "F1" => font_id } },
+            "Contents" => content_id,
+        });
+        doc.objects.insert(
+            pages_id,
+            Object::Dictionary(dictionary! { "Type" => "Pages", "Kids" => vec![page_id.into()], "Count" => 1 }),
+        );
+        let cat = doc.add_object(dictionary! { "Type" => "Catalog", "Pages" => pages_id });
+        doc.trailer.set("Root", cat);
+        let input = crate::test_util::tmp("replace-in.pdf");
+        let output = crate::test_util::tmp("replace-out.pdf");
+        doc.save(&input).unwrap();
+
+        let replaced = Annotation::Text(TextAnnotation {
+            page: 1,
+            x: 100.0,
+            y: 500.0,
+            width: 60.0,
+            content: "Hello".into(),
+            color: RgbColor { r: 0, g: 0, b: 0 },
+            font_size: 12.0,
+            bold: false,
+            italic: false,
+            underline: false,
+            alignment: TextAlignment::Left,
+            font_family: FontFamily::Helvetica,
+            font_name: None,
+            background_color: None,
+            cover: Some(TextCover {
+                x: 99.0,
+                y: 496.6,
+                width: 62.0,
+                height: 14.2,
+                color: RgbColor { r: 255, g: 255, b: 255 },
+            }),
+        });
+        save_annotated_pdf(input.clone(), output.clone(), vec![replaced], 0, vec![]).unwrap();
+
+        let saved = Document::load(&output).unwrap();
+        let page = *saved.get_pages().get(&1).unwrap();
+        let text = String::from_utf8_lossy(&saved.get_page_content(page)).into_owned();
+        assert!(!text.contains("SecretWord"), "original words are gone: {text}");
+        assert!(text.contains("OtherLine"), "the next line stays: {text}");
+        let raw = std::fs::read(&output).unwrap();
+        assert!(!raw.windows(10).any(|w| w == b"SecretWord"), "no earlier revision keeps them");
+        assert_eq!(read_annotations(output).unwrap().len(), 1, "the replacement stays editable");
+    }
 
     #[test]
     fn images_become_a_pdf_one_page_each() {
@@ -1584,6 +1674,23 @@ fn unique_path(dir: &std::path::Path, stem: &str, ext: &str) -> std::path::PathB
         }
     }
     dir.join(format!("{stem}-conflict.{ext}"))
+}
+
+/// The fonts the document uses, one name each, for the document info panel.
+#[tauri::command(async)]
+pub fn list_pdf_fonts(file_path: String, password: Option<String>) -> CmdResult<Vec<String>> {
+    crate::grants::check(&file_path)?;
+    let doc = match password.as_deref().filter(|p| !p.is_empty()) {
+        Some(p) => {
+            let mut doc = Document::load_with_password(&file_path, p).map_err(|e| e.to_string())?;
+            if doc.is_encrypted() {
+                doc.decrypt(p).map_err(|e| e.to_string())?;
+            }
+            doc
+        }
+        None => Document::load(&file_path).map_err(|e| e.to_string())?,
+    };
+    Ok(crate::pdf::fonts::font_names(&doc))
 }
 
 #[tauri::command]

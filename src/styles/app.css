@@ -2833,6 +2833,7 @@ body.mac .titlebar-logo { display: none !important; }
   margin: 0;
   color: var(--foreground);
   overflow-wrap: anywhere;
+  white-space: pre-line;
 }
 
 #viewer-scroll.horizontal {
