@@ -140,6 +140,7 @@ pub fn run() {
             commands::dialog::open_images_dialog,
             commands::files::rename_file,
             commands::files::load_picture,
+            commands::files::inflate_raw,
             commands::files::existing_files,
             commands::files::write_image_file,
             commands::files::temp_tag,

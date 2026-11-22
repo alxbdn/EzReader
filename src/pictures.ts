@@ -10,8 +10,9 @@ export function isImagePath(path: string): boolean {
   return IMAGE_EXT.test(path);
 }
 
-export function openKind(path: string): "pdf" | "pictures" | null {
+export function openKind(path: string): "pdf" | "epub" | "pictures" | null {
   if (/\.pdf$/i.test(path)) return "pdf";
+  if (/\.epub$/i.test(path)) return "epub";
   return isImagePath(path) ? "pictures" : null;
 }
 

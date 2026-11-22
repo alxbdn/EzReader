@@ -311,3 +311,48 @@ mod export_tests {
         let _ = std::fs::remove_dir_all(d);
     }
 }
+
+/// Largest entry an EPUB may unpack to (same limit as the interface's ZIP reader).
+const MAX_INFLATED: u64 = 64 * 1024 * 1024;
+
+/// Unpacks one deflated ZIP entry of an EPUB, for webviews without `DecompressionStream`
+/// (the WebKit of macOS 11 to 13). Raw bytes in, raw bytes out.
+#[tauri::command]
+pub fn inflate_raw(request: tauri::ipc::Request<'_>) -> CmdResult<tauri::ipc::Response> {
+    let tauri::ipc::InvokeBody::Raw(data) = request.body() else {
+        return Err(PdfError::new(ErrorCode::Other, "expected raw bytes"));
+    };
+    inflate_limited(data).map(tauri::ipc::Response::new)
+}
+
+pub(crate) fn inflate_limited(data: &[u8]) -> CmdResult<Vec<u8>> {
+    use std::io::Read;
+    let mut out = Vec::new();
+    flate2::read::DeflateDecoder::new(data)
+        .take(MAX_INFLATED + 1)
+        .read_to_end(&mut out)
+        .map_err(|e| PdfError::new(ErrorCode::Other, e.to_string()))?;
+    if out.len() as u64 > MAX_INFLATED {
+        return Err(PdfError::new(ErrorCode::TooLarge, "entry too large"));
+    }
+    Ok(out)
+}
+
+#[cfg(test)]
+mod inflate_tests {
+    use super::inflate_limited;
+    use std::io::Write;
+
+    #[test]
+    fn inflates_a_deflated_entry() {
+        let mut enc = flate2::write::DeflateEncoder::new(Vec::new(), flate2::Compression::default());
+        enc.write_all(b"<html>chapter one</html>").unwrap();
+        let packed = enc.finish().unwrap();
+        assert_eq!(inflate_limited(&packed).unwrap(), b"<html>chapter one</html>");
+    }
+
+    #[test]
+    fn refuses_garbage() {
+        assert!(inflate_limited(&[0xff, 0xff, 0xff, 0xff]).is_err());
+    }
+}

@@ -34,13 +34,14 @@ pub fn open_pages_dialog(app: AppHandle) -> CmdResult<Vec<String>> {
 
 #[tauri::command(async)]
 pub fn open_document_dialog(app: AppHandle) -> CmdResult<Option<String>> {
-    let mut all = vec!["pdf"];
+    let mut all = vec!["pdf", "epub"];
     all.extend(IMAGE_EXTENSIONS);
     let result = app
         .dialog()
         .file()
-        .add_filter("PDF and pictures", &all)
+        .add_filter("PDF, EPUB and pictures", &all)
         .add_filter("PDF Files", &["pdf"])
+        .add_filter("EPUB Books", &["epub"])
         .add_filter("Images", &IMAGE_EXTENSIONS)
         .blocking_pick_file();
 

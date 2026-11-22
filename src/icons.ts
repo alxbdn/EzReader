@@ -128,3 +128,7 @@ export const ICON_TRASH = lucide(`<path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1
 export const ICON_COPY = lucide(`<rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/>`);
 export const ICON_PANEL_RIGHT = lucide(`<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M15 3v18"/>`);
 export const ICON_IMAGE_SMALL = lucide(`<rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="m21 15-5-5-9 9"/>`);
+
+export const ICON_TOC = lucide(`<path d="M3 6h.01"/><path d="M3 12h.01"/><path d="M3 18h.01"/><path d="M8 6h13"/><path d="M8 12h13"/><path d="M8 18h13"/>`);
+export const ICON_TEXT_SMALLER = lucide(`<path d="M3.5 13h6"/><path d="m2 16 4.5-9 4.5 9"/><path d="M18 7v9"/><path d="m14 12 4 4 4-4"/>`);
+export const ICON_TEXT_LARGER = lucide(`<path d="M3.5 13h6"/><path d="m2 16 4.5-9 4.5 9"/><path d="M18 16V7"/><path d="m14 11 4-4 4 4"/>`);

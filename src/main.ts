@@ -112,6 +112,11 @@ import { SmoothWheelScroller, normalizeWheelDelta } from "./wheel-scroll";
 import { tempDir, basename } from "@tauri-apps/api/path";
 import { ask } from "@tauri-apps/plugin-dialog";
 import { ViewZoom, type FitMode } from "./view-zoom";
+import { EpubReader } from "./epub-reader";
+import { EpubError } from "./epub-book";
+import { convertFileSrc } from "@tauri-apps/api/core";
+import { openUrl as openExternalUrl, openFileInNewWindow as openInNewWindow, inflateRaw } from "./tauri-bridge";
+import { setInflateFallback } from "./epub-zip";
 
 const appWindow = getCurrentWindow();
 let unlistenClose: (() => void) | null = null;
@@ -548,9 +553,55 @@ mountWindowControls(document.getElementById("menubar-row")!, () => {
   };
 });
 
+setInflateFallback(inflateRaw);
+const epubReader = new EpubReader(document.getElementById("epub-reader")!, {
+  openUrl: (url) => void openExternalUrl(url).catch(() => {}),
+  titleChanged: (title) => {
+    if (title) {
+      toolbar.setDocTitle(title, false, false);
+      document.title = `${title} – EzReader`;
+    } else {
+      setDirty(session.isDirty);
+    }
+  },
+  closeRequested: () => closeEpub(),
+  forwardKey: (e) => {
+    document.dispatchEvent(new KeyboardEvent("keydown", {
+      key: e.key, code: e.code, ctrlKey: e.ctrlKey, metaKey: e.metaKey, shiftKey: e.shiftKey, altKey: e.altKey, bubbles: true, cancelable: true,
+    }));
+  },
+});
+
+function closeEpub(): void {
+  epubReader.close();
+  if (!session.isOpen) setWelcomeVisible(true);
+}
+
+/** Opens a book here when the window shows nothing, in a new window otherwise. */
+async function openEpub(path: string): Promise<void> {
+  if (session.isOpen || docs.count > 0 || epubReader.isOpen) {
+    try {
+      await openInNewWindow(path);
+    } catch (err) {
+      showToast(msg("msgEpubFailed", { err: errText(err) }), true);
+    }
+    return;
+  }
+  try {
+    const res = await fetch(convertFileSrc(path));
+    if (!res.ok) throw new Error(res.statusText || String(res.status));
+    await epubReader.open(path, new Uint8Array(await res.arrayBuffer()));
+    setWelcomeVisible(false);
+  } catch (err) {
+    const drm = err instanceof EpubError && err.kind === "drm";
+    showToast(drm ? msg("msgEpubDrm") : msg("msgEpubFailed", { err: errText(err) }), true);
+  }
+}
+
 /** Shows every part of the window in `language`. */
 function applyLanguage(language: string): void {
   const t = getTranslations(language);
+  epubReader.applyTranslations(t);
   toolbar.applyTranslations(t);
   studio.applyTranslations(t);
   compressModal.applyTranslations(t);
@@ -600,7 +651,7 @@ settingsModal.onChange(s => {
         await openStartupFile(startup);
       } finally {
         clearTimeout(slow);
-        if (!session.isOpen) setWelcomeVisible(true);
+        if (!session.isOpen && !epubReader.isOpen) setWelcomeVisible(true);
         reveal();
       }
     }
@@ -621,6 +672,8 @@ async function openStartupFile(startup: StartupArgs): Promise<void> {
     await appWindow.close();
   } else if (openKind(file) === "pictures") {
     await openPictures([file]);
+  } else if (openKind(file) === "epub") {
+    await openEpub(file);
   } else {
     await openTransferred(startup);
   }
@@ -886,6 +939,12 @@ async function openFile(): Promise<void> {
 }
 
 async function openPath(path: string): Promise<void> {
+  if (openKind(path) === "epub") { await openEpub(path); return; }
+  if (epubReader.isOpen) {
+    // The book keeps this window: the document gets its own.
+    try { await openInNewWindow(path); } catch (err) { showToast(msg("msgOpenFailed", { err: errText(err) }), true); }
+    return;
+  }
   if (openKind(path) === "pictures") { await openPictures([path]); return; }
   const open = docs.showing(path);
   if (open) { await docs.switchTo(open.id); return; }
@@ -1794,6 +1853,12 @@ async function startPresentation(): Promise<void> {
 
 document.addEventListener("keydown", async (e) => {
   if (menuOwnsKey(e)) return;
+  const typingHere = (document.activeElement as HTMLElement | null)?.matches?.("input, textarea, select, [contenteditable]") ?? false;
+  if (epubReader.isOpen && !typingHere && !e.defaultPrevented && document.querySelector(".modal-backdrop:not(.hidden)") === null && epubReader.handleKey(e)) {
+    e.preventDefault();
+    e.stopPropagation();
+    return;
+  }
   const tag = (document.activeElement as HTMLElement)?.tagName ?? "";
   if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" ||
       (document.activeElement as HTMLElement)?.isContentEditable) return;
@@ -2199,6 +2264,12 @@ function viewerCenter(): { x: number; y: number } {
 async function handleDrop(paths: string[], at: { x: number; y: number } | null, gap: number | null): Promise<void> {
   const pdfs = paths.filter((p) => p.toLowerCase().endsWith(".pdf"));
   const images = paths.filter(isImagePath);
+  const books = paths.filter((p) => openKind(p) === "epub");
+  if (books.length > 0) {
+    for (const book of books) await openEpub(book);
+    for (const pdf of pdfs) await openPath(pdf);
+    return;
+  }
   if (pdfs.length === 0 && images.length === 0) {
     if (paths.length > 0) showToast(msg("msgOnlyPdf"), true);
     return;

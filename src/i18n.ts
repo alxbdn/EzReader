@@ -181,6 +181,16 @@ export interface Translations {
   msgWrongPassword?: string;
   msgOpenFailed?: string;
   msgOnlyPdf?: string;
+  epubToc?: string;
+  epubNextChapter?: string;
+  ttEpubToc?: string;
+  ttEpubPrev?: string;
+  ttEpubNext?: string;
+  ttEpubSmaller?: string;
+  ttEpubLarger?: string;
+  ttEpubClose?: string;
+  msgEpubDrm?: string;
+  msgEpubFailed?: string;
   msgSaved?: string;
   msgSaveFailed?: string;
   msgCompressed?: string;
@@ -769,7 +779,17 @@ const EN: Translations = {
   msgPasswordPrompt:      "This PDF is password-protected. Enter password:",
   msgWrongPassword:       "Wrong password or could not open file.",
   msgOpenFailed:          "Could not open file: {err}",
-  msgOnlyPdf:             "Only PDF files and pictures can be dropped here.",
+  msgOnlyPdf:             "Only PDF and EPUB files and pictures can be dropped here.",
+  epubToc:                "Contents",
+  epubNextChapter:        "Next chapter",
+  ttEpubToc:              "Contents",
+  ttEpubPrev:             "Previous chapter (←)",
+  ttEpubNext:             "Next chapter (→)",
+  ttEpubSmaller:          "Smaller text (Ctrl+-)",
+  ttEpubLarger:           "Larger text (Ctrl++)",
+  ttEpubClose:            "Close book (Ctrl+W)",
+  msgEpubDrm:             "This book is protected by DRM and can't be opened. Only DRM-free EPUB files can be read.",
+  msgEpubFailed:          "Couldn't open this book: {err}",
   msgSaved:               "Saved.",
   msgSaveFailed:          "Save failed: {err}",
   msgCompressed:          "Compressed: {from} MB → {to} MB ({pct}% smaller)",
@@ -1358,7 +1378,17 @@ const FR: Translations = {
   msgPasswordPrompt:      "Ce PDF est protégé par un mot de passe. Saisissez le mot de passe :",
   msgWrongPassword:       "Mot de passe incorrect ou fichier impossible à ouvrir.",
   msgOpenFailed:          "Impossible d'ouvrir le fichier : {err}",
-  msgOnlyPdf:             "Seuls les fichiers PDF et les images peuvent être déposés ici.",
+  msgOnlyPdf:             "Seuls les fichiers PDF, EPUB et les images peuvent être déposés ici.",
+  epubToc:                "Sommaire",
+  epubNextChapter:        "Chapitre suivant",
+  ttEpubToc:              "Sommaire",
+  ttEpubPrev:             "Chapitre précédent (←)",
+  ttEpubNext:             "Chapitre suivant (→)",
+  ttEpubSmaller:          "Texte plus petit (Ctrl+-)",
+  ttEpubLarger:           "Texte plus grand (Ctrl++)",
+  ttEpubClose:            "Fermer le livre (Ctrl+W)",
+  msgEpubDrm:             "Ce livre est protégé par un DRM et ne peut pas être ouvert. Seuls les EPUB sans DRM sont lisibles.",
+  msgEpubFailed:          "Impossible d'ouvrir ce livre : {err}",
   msgSaved:               "Enregistré.",
   msgSaveFailed:          "Échec de l'enregistrement : {err}",
   msgCompressed:          "Compressé : {from} Mo → {to} Mo ({pct} % plus léger)",
