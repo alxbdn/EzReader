@@ -12,7 +12,8 @@ describe("pictures", () => {
     expect(openKind("C:\\Docs\\Report.PDF")).toBe("pdf");
     expect(openKind("C:\\Photos\\Scan.png")).toBe("pictures");
     expect(openKind("/home/me/photo.jpeg")).toBe("pictures");
-    expect(openKind("/home/me/notes.txt")).toBeNull();
+    expect(openKind("/home/me/notes.txt")).toBe("epub");
+    expect(openKind("/home/me/notes.docx")).toBeNull();
   });
 
   it("names a picture's new document after it, in its folder", () => {

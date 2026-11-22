@@ -1,4 +1,5 @@
-import { EpubBook, ResourceUrls, tocIndexFor, type Chapter } from "./epub-book";
+import { ResourceUrls, tocIndexFor, type Book, type Chapter } from "./epub-book";
+import { openBook } from "./books";
 import type { Translations } from "./i18n";
 import { ICON_CHEVRON_LEFT, ICON_CHEVRON_RIGHT, ICON_CLOSE, ICON_EXPORT, ICON_TEXT_LARGER, ICON_TEXT_SMALLER, ICON_TOC } from "./icons";
 
@@ -75,6 +76,25 @@ html.ez-dark body *:not(img):not(svg):not(svg *) {
   background-color: transparent !important;
   border-color: var(--ez-border) !important;
 }
+html.ez-pictures { padding: 0 !important; }
+html.ez-pictures body {
+  max-width: none !important;
+  margin: 0 !important;
+  padding: 12px !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  text-align: center;
+}
+html.ez-pictures img {
+  display: block;
+  margin: 0 auto;
+  width: auto !important;
+  max-width: 100% !important;
+  max-height: calc((100vh - 24px) * var(--ez-scale)) !important;
+  box-shadow: var(--ez-shadow);
+  cursor: pointer;
+}
+html.ez-pictures .ez-end { display: none; }
 .ez-end { display: flex; justify-content: center; margin: 16px auto 40px; }
 .ez-end:empty { margin-bottom: 24px; }
 .ez-end button {
@@ -103,7 +123,7 @@ function button(cls: string, icon: string): HTMLButtonElement {
 
 /** Reads an EPUB: one chapter at a time, in a page that follows the app's theme and the chosen text size. */
 export class EpubReader {
-  private book: EpubBook | null = null;
+  private book: Book | null = null;
   private path = "";
   private urls = new ResourceUrls();
   private chapterIndex = 0;
@@ -195,7 +215,7 @@ export class EpubReader {
   }
 
   get isOpen(): boolean { return this.book !== null; }
-  get current(): EpubBook | null { return this.book; }
+  get current(): Book | null { return this.book; }
 
   /** Shows "Save as PDF…" where the system can print to PDF. */
   setCanConvert(can: boolean): void { this.pdfBtn.hidden = !can; }
@@ -223,7 +243,7 @@ export class EpubReader {
 
   /** Opens the book; throws an `EpubError` when it can't be read. */
   async open(path: string, bytes: Uint8Array): Promise<void> {
-    const book = await EpubBook.open(bytes);
+    const book = await openBook(path, bytes);
     this.close();
     this.book = book;
     this.path = path;
@@ -352,6 +372,7 @@ export class EpubReader {
     style(BASE_CSS);
     chapter.styles.forEach(style);
     style(READER_CSS);
+    d.documentElement.classList.toggle("ez-pictures", chapter.picture === true);
     if (chapter.bodyClass) d.body.className = chapter.bodyClass;
     for (const node of Array.from(chapter.body.childNodes)) d.body.append(d.importNode(node, true));
     const end = d.createElement("div");
@@ -391,7 +412,11 @@ export class EpubReader {
 
   private onClick(e: MouseEvent): void {
     const a = (e.target as Element | null)?.closest?.("a");
-    if (!a) return;
+    if (!a) {
+      // A comic page turns with a click on its picture.
+      if ((e.target as Element | null)?.localName === "img" && this.frame.contentDocument?.documentElement.classList.contains("ez-pictures")) void this.step(1);
+      return;
+    }
     e.preventDefault();
     const external = a.getAttribute("data-ez-external");
     if (external) { this.deps.openUrl(external); return; }

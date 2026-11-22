@@ -1,4 +1,4 @@
-import { DataUrls, type BookInfo, type Chapter, type EpubBook } from "./epub-book";
+import { DataUrls, type BookInfo, type Chapter, type Book } from "./epub-book";
 import { BASE_CSS } from "./epub-reader";
 
 /** Paper look: black text on white, no reader frame. Page size and margins come from the print settings. */
@@ -96,7 +96,7 @@ export interface BookPdfDeps {
 }
 
 /** Prints the whole book to one PDF with the table of contents as bookmarks. */
-export async function bookToPdf(book: EpubBook, deps: BookPdfDeps, progress: (done: number, total: number) => void): Promise<void> {
+export async function bookToPdf(book: Book, deps: BookPdfDeps, progress: (done: number, total: number) => void): Promise<void> {
   const { info } = book;
   const urls = new DataUrls();
   const total = info.spine.length;

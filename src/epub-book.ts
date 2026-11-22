@@ -48,7 +48,7 @@ function clean(s: string | null | undefined): string {
   return (s ?? "").replace(/\s+/g, " ").trim();
 }
 
-export class EpubBook {
+export class EpubBook implements Book, ContentSource {
   private constructor(
     private readonly zip: ZipArchive,
     readonly info: BookInfo,
@@ -133,86 +133,120 @@ export class EpubBook {
   async chapter(index: number, urls: ResourceUrls): Promise<Chapter> {
     const path = this.info.spine[index];
     if (path === undefined) throw new EpubError("invalid", "no such chapter");
-    const text = (await this.zip.text(path)).replace(/^﻿/, "");
+    const text = (await this.zip.text(path)).replace(/^\uFEFF/, "");
     let doc = new DOMParser().parseFromString(text, "application/xhtml+xml");
     if (doc.getElementsByTagName("parsererror").length > 0 || !doc.body) doc = new DOMParser().parseFromString(text, "text/html");
-    sanitize(doc);
-
-    const styles: string[] = [];
-    for (const el of Array.from(doc.querySelectorAll("link, style"))) {
-      if (el.localName === "style") styles.push(await this.rewriteCss(el.textContent ?? "", path, urls, 0));
-      else if (/\bstylesheet\b/i.test(el.getAttribute("rel") ?? "")) {
-        const href = resolveHref(path, el.getAttribute("href") ?? "").path;
-        if (this.zip.has(href)) styles.push(await this.rewriteCss(await this.zip.text(href), href, urls, 0));
-      }
-      el.remove();
-    }
-
-    for (const el of Array.from(doc.querySelectorAll("img[src], source[src]"))) {
-      el.setAttribute("src", await this.url(path, el.getAttribute("src")!, urls));
-      el.removeAttribute("srcset");
-    }
-    for (const el of Array.from(doc.getElementsByTagNameNS("http://www.w3.org/2000/svg", "image"))) {
-      const v = el.getAttribute("href") ?? el.getAttributeNS("http://www.w3.org/1999/xlink", "href");
-      if (v === null) continue;
-      const u = await this.url(path, v, urls);
-      el.setAttribute("href", u);
-      el.setAttributeNS("http://www.w3.org/1999/xlink", "xlink:href", u);
-    }
-    for (const el of Array.from(doc.querySelectorAll("[style]"))) {
-      el.setAttribute("style", await this.rewriteCss(el.getAttribute("style") ?? "", path, urls, 3));
-    }
-    for (const a of Array.from(doc.querySelectorAll("a[href]"))) {
-      const href = a.getAttribute("href")!;
-      if (/^[a-z][a-z0-9+.-]*:/i.test(href)) {
-        if (/^(https?|mailto):/i.test(href)) a.setAttribute("data-ez-external", href);
-      } else {
-        const to = resolveHref(path, href);
-        a.setAttribute("data-ez-target", `${to.path}#${to.fragment}`);
-      }
-      a.setAttribute("href", "#");
-    }
-
-    return {
-      path,
-      language: doc.documentElement.getAttribute("xml:lang") ?? doc.documentElement.getAttribute("lang") ?? this.info.language,
-      bodyClass: doc.body?.getAttribute("class") ?? "",
-      styles,
-      body: doc.body ?? doc.documentElement,
-    };
+    return prepareChapter(doc, path, this.info.language, this, urls);
   }
 
-  private async url(from: string, href: string, urls: ResourceUrls): Promise<string> {
+  resolve(from: string, href: string): { path: string; fragment: string } | null {
+    if (/^[a-z][a-z0-9+.-]*:/i.test(href)) return null;
+    return resolveHref(from, href);
+  }
+
+  async resource(path: string): Promise<Blob | null> {
+    if (!this.zip.has(path)) return null;
+    return new Blob([await this.zip.read(path) as BlobPart], { type: this.types.get(path) || guessType(path) });
+  }
+
+  async stylesheet(path: string): Promise<string | null> {
+    return this.zip.has(path) ? this.zip.text(path) : null;
+  }
+}
+
+/** A book of any format: its metadata and reading order, and each chapter ready to show. */
+export interface Book {
+  readonly info: BookInfo;
+  chapter(index: number, urls: ResourceUrls): Promise<Chapter>;
+}
+
+/** Where a chapter's pictures, stylesheets and links lead, for `prepareChapter`. */
+export interface ContentSource {
+  /** What `href`, written in `from`, points to: a path in the book and a fragment; null for anything outside it. */
+  resolve(from: string, href: string): { path: string; fragment: string } | null | Promise<{ path: string; fragment: string } | null>;
+  /** The bytes behind a path `resolve` gave, null when the book has none. */
+  resource(path: string): Promise<Blob | null>;
+  /** The text of a stylesheet, null when the book has none. */
+  stylesheet(path: string): Promise<string | null>;
+}
+
+/** Cleans a chapter of anything active and points its pictures, styles and links at the book's own content. */
+export async function prepareChapter(doc: Document, path: string, language: string, src: ContentSource, urls: ResourceUrls): Promise<Chapter> {
+  sanitize(doc);
+  const url = async (from: string, href: string): Promise<string> => {
     if (/^data:image\//i.test(href)) return href;
-    if (/^[a-z][a-z0-9+.-]*:/i.test(href)) return "";
-    const path = resolveHref(from, href).path;
-    if (!this.zip.has(path)) return "";
-    return urls.get(path, async () => {
-      const bytes = await this.zip.read(path);
-      return new Blob([bytes as BlobPart], { type: this.types.get(path) || guessType(path) });
+    const to = await src.resolve(from, href);
+    if (!to) return "";
+    return urls.get(to.path, async () => {
+      const blob = await src.resource(to.path);
+      if (!blob) throw new Error("missing");
+      return blob;
     });
-  }
-
-  private async rewriteCss(css: string, from: string, urls: ResourceUrls, depth: number): Promise<string> {
+  };
+  const rewriteCss = async (css: string, from: string, depth: number): Promise<string> => {
     let out = "";
     let last = 0;
     const imports = /@import\s+(?:url\(\s*)?["']?([^"')\s;]+)["']?\s*\)?[^;]*;/gi;
     for (const m of css.matchAll(imports)) {
       out += css.slice(last, m.index);
       last = m.index! + m[0].length;
-      const path = resolveHref(from, m[1]!).path;
-      if (depth < 3 && this.zip.has(path)) out += await this.rewriteCss(await this.zip.text(path), path, urls, depth + 1);
+      const to = depth < 3 ? await src.resolve(from, m[1]!) : null;
+      const text = to ? await src.stylesheet(to.path) : null;
+      if (to && text !== null) out += await rewriteCss(text, to.path, depth + 1);
     }
     out += css.slice(last);
     const parts: string[] = [];
     last = 0;
     for (const m of out.matchAll(/url\(\s*(["']?)([^"')]*)\1\s*\)/gi)) {
-      parts.push(out.slice(last, m.index), `url("${await this.url(from, m[2]!.trim(), urls)}")`);
+      parts.push(out.slice(last, m.index), `url("${await url(from, m[2]!.trim())}")`);
       last = m.index! + m[0].length;
     }
     parts.push(out.slice(last));
     return parts.join("");
+  };
+
+  const styles: string[] = [];
+  for (const el of Array.from(doc.querySelectorAll("link, style"))) {
+    if (el.localName === "style") styles.push(await rewriteCss(el.textContent ?? "", path, 0));
+    else if (/\bstylesheet\b/i.test(el.getAttribute("rel") ?? "")) {
+      const to = await src.resolve(path, el.getAttribute("href") ?? "");
+      const text = to ? await src.stylesheet(to.path) : null;
+      if (to && text !== null) styles.push(await rewriteCss(text, to.path, 0));
+    }
+    el.remove();
   }
+
+  for (const el of Array.from(doc.querySelectorAll("img[src], source[src]"))) {
+    el.setAttribute("src", await url(path, el.getAttribute("src")!));
+    el.removeAttribute("srcset");
+  }
+  for (const el of Array.from(doc.getElementsByTagNameNS("http://www.w3.org/2000/svg", "image"))) {
+    const v = el.getAttribute("href") ?? el.getAttributeNS("http://www.w3.org/1999/xlink", "href");
+    if (v === null) continue;
+    const u = await url(path, v);
+    el.setAttribute("href", u);
+    el.setAttributeNS("http://www.w3.org/1999/xlink", "xlink:href", u);
+  }
+  for (const el of Array.from(doc.querySelectorAll("[style]"))) {
+    el.setAttribute("style", await rewriteCss(el.getAttribute("style") ?? "", path, 3));
+  }
+  for (const a of Array.from(doc.querySelectorAll("a[href]"))) {
+    const href = a.getAttribute("href")!;
+    if (/^(https?|mailto):/i.test(href)) a.setAttribute("data-ez-external", href);
+    else {
+      const to = await src.resolve(path, href);
+      if (to) a.setAttribute("data-ez-target", `${to.path}#${to.fragment}`);
+    }
+    a.setAttribute("href", "#");
+  }
+
+  return {
+    path,
+    language: doc.documentElement.getAttribute("xml:lang") ?? doc.documentElement.getAttribute("lang") ?? language,
+    bodyClass: doc.body?.getAttribute("class") ?? "",
+    styles,
+    body: doc.body ?? doc.documentElement,
+  };
 }
 
 export interface Chapter {
@@ -221,6 +255,8 @@ export interface Chapter {
   bodyClass: string;
   styles: string[];
   body: Element;
+  /** A page that is one picture (a comic page): shown as large as the window allows. */
+  picture?: boolean;
 }
 
 /** Blob URLs for the archive's pictures, made once each and revoked with the book. */
@@ -257,7 +293,7 @@ export class DataUrls extends ResourceUrls {
   }
 }
 
-function guessType(path: string): string {
+export function guessType(path: string): string {
   const ext = path.slice(path.lastIndexOf(".") + 1).toLowerCase();
   return ({ jpg: "image/jpeg", jpeg: "image/jpeg", png: "image/png", gif: "image/gif", webp: "image/webp", svg: "image/svg+xml" } as Record<string, string>)[ext] ?? "application/octet-stream";
 }
