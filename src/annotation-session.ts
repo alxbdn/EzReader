@@ -108,6 +108,20 @@ export class AnnotationSession {
     return true;
   }
 
+  /** Moves `ann` to `index` in its page's stacking order (0 = bottom). */
+  moveTo(ann: Annotation, index: number): boolean {
+    const list = this.pages.get(ann.page);
+    const idx = list?.indexOf(ann) ?? -1;
+    if (!list || idx === -1) return false;
+    const to = Math.max(0, Math.min(list.length - 1, index));
+    if (to === idx) return false;
+    this.change(() => {
+      list.splice(idx, 1);
+      list.splice(to, 0, ann);
+    });
+    return true;
+  }
+
   beginEdit(): void {
     this.begin();
   }

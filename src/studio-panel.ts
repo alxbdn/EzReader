@@ -52,6 +52,22 @@ export interface StudioPanelHooks {
   selected(): Annotation | null;
   pick(ann: Annotation): void;
   remove(ann: Annotation): void;
+  /** Moves `ann` to `index` in its page's stacking order (0 = bottom). */
+  reorder(ann: Annotation, index: number): void;
+}
+
+/** Page order, then topmost first within a page (like a layers panel). */
+export function panelOrder(anns: Annotation[]): { ann: Annotation; layer: number; count: number }[] {
+  const byPage = new Map<number, Annotation[]>();
+  for (const a of anns) {
+    let l = byPage.get(a.page);
+    if (!l) byPage.set(a.page, (l = []));
+    l.push(a);
+  }
+  return [...byPage.keys()].sort((a, b) => a - b).flatMap((p) => {
+    const l = byPage.get(p)!;
+    return l.map((ann, layer) => ({ ann, layer, count: l.length })).reverse();
+  });
 }
 
 export class StudioPanel {
@@ -73,6 +89,8 @@ export class StudioPanel {
   private title: string | null = null;
   private renderQueued = false;
   private rows = new Map<Annotation, HTMLElement>();
+  private drag: { ann: Annotation; row: HTMLElement; startY: number; moved: boolean; target: number; id: number } | null = null;
+  private suppressClick = false;
 
   constructor(options: HTMLElement, private hooks: StudioPanelHooks) {
     this.el = document.createElement("aside");
@@ -181,14 +199,15 @@ export class StudioPanel {
   }
 
   private render(): void {
-    if (!this.shown) return;
-    const anns = [...this.hooks.list()].sort((a, b) => a.page - b.page);
+    if (!this.shown || this.drag) return;
+    const items = panelOrder(this.hooks.list());
     const selected = this.hooks.selected();
-    this.countEl.textContent = anns.length ? String(anns.length) : "";
-    this.noneEl.hidden = anns.length > 0;
+    this.countEl.textContent = items.length ? String(items.length) : "";
+    this.noneEl.hidden = items.length > 0;
     this.rows.clear();
     const pageAbbr = this.tr("studioPageAbbr", "p. {n}");
-    const rows = anns.map((ann) => {
+    const moveHint = this.tr("ttReorderAnnotation", "Drag to bring forward or send backward");
+    const rows = items.map(({ ann, layer, count }) => {
       const d = describeAnnotation(ann);
       const name = this.tr(d.key, d.fb);
       const quote = d.quote?.replace(/\s+/g, " ").trim();
@@ -196,11 +215,13 @@ export class StudioPanel {
       row.className = "studio-ann";
       row.setAttribute("role", "listitem");
       row.tabIndex = 0;
+      row.dataset["page"] = String(ann.page);
+      row.dataset["layer"] = String(layer);
       row.classList.toggle("on", ann === selected);
       const label = document.createElement("span");
       label.className = "studio-ann-label";
       label.textContent = quote ? `${name} « ${quote} »` : name;
-      label.title = label.textContent;
+      label.title = count > 1 ? `${label.textContent}\n${moveHint}` : label.textContent;
       const page = document.createElement("span");
       page.className = "studio-ann-page";
       page.textContent = pageAbbr.replace("{n}", String(ann.page));
@@ -213,16 +234,94 @@ export class StudioPanel {
       del.addEventListener("click", (e) => { e.stopPropagation(); this.hooks.remove(ann); });
       row.insertAdjacentHTML("afterbegin", d.icon);
       row.append(label, page, del);
-      row.addEventListener("click", () => this.hooks.pick(ann));
+      row.addEventListener("click", () => {
+        if (this.suppressClick) { this.suppressClick = false; return; }
+        this.hooks.pick(ann);
+      });
       row.addEventListener("keydown", (e) => {
         if (e.target !== row) return;
         if (e.key === "Enter" || e.key === " ") { e.preventDefault(); this.hooks.pick(ann); }
         if (e.key === "Delete" || e.key === "Backspace") { e.preventDefault(); e.stopPropagation(); this.hooks.remove(ann); }
+        if (e.altKey && (e.key === "ArrowUp" || e.key === "ArrowDown")) {
+          e.preventDefault();
+          e.stopPropagation();
+          this.hooks.reorder(ann, layer + (e.key === "ArrowUp" ? 1 : -1));
+          this.focusAfterRender(ann);
+        }
       });
+      if (count > 1) this.makeDraggable(row, ann);
       this.rows.set(ann, row);
       return row;
     });
     this.listEl.replaceChildren(...rows);
+  }
+
+  private focusAfterRender(ann: Annotation): void {
+    requestAnimationFrame(() => requestAnimationFrame(() => this.rows.get(ann)?.focus()));
+  }
+
+  /** Pointer-driven drag (HTML5 drag and drop is taken by the window's file drop). */
+  private makeDraggable(row: HTMLElement, ann: Annotation): void {
+    row.addEventListener("pointerdown", (e) => {
+      if (e.button !== 0 || (e.target as HTMLElement).closest(".studio-ann-del")) return;
+      this.drag = { ann, row, startY: e.clientY, moved: false, target: Number(row.dataset["layer"]), id: e.pointerId };
+    });
+    row.addEventListener("pointermove", (e) => {
+      const d = this.drag;
+      if (!d || d.row !== row || e.pointerId !== d.id) return;
+      if (!d.moved) {
+        if (Math.abs(e.clientY - d.startY) < 4) return;
+        d.moved = true;
+        row.setPointerCapture(e.pointerId);
+        row.classList.add("dragging");
+        this.listEl.classList.add("reordering");
+      }
+      row.style.transform = `translateY(${e.clientY - d.startY}px)`;
+      this.markDropTarget(e.clientY);
+    });
+    const end = (e: PointerEvent, commit: boolean) => {
+      const d = this.drag;
+      if (!d || d.row !== row || e.pointerId !== d.id) return;
+      this.drag = null;
+      if (!d.moved) return;
+      this.suppressClick = true;
+      setTimeout(() => { this.suppressClick = false; }, 0);
+      row.classList.remove("dragging");
+      row.style.transform = "";
+      this.listEl.classList.remove("reordering");
+      this.listEl.querySelectorAll(".drop-above, .drop-below").forEach((r) => r.classList.remove("drop-above", "drop-below"));
+      if (commit && d.target !== Number(row.dataset["layer"])) {
+        this.hooks.reorder(ann, d.target);
+        this.focusAfterRender(ann);
+      }
+      this.render();
+    };
+    row.addEventListener("pointerup", (e) => end(e, true));
+    row.addEventListener("pointercancel", (e) => end(e, false));
+    row.addEventListener("lostpointercapture", (e) => end(e, true));
+  }
+
+  /** Picks the slot on the dragged row's page closest to the pointer. */
+  private markDropTarget(y: number): void {
+    const d = this.drag!;
+    const page = d.row.dataset["page"];
+    const peers = [...this.listEl.querySelectorAll<HTMLElement>(`.studio-ann[data-page="${page}"]`)];
+    peers.forEach((r) => r.classList.remove("drop-above", "drop-below"));
+    const from = Number(d.row.dataset["layer"]);
+    let target = from;
+    let best = Infinity;
+    for (const r of peers) {
+      if (r === d.row) continue;
+      const box = r.getBoundingClientRect();
+      const mid = box.top + box.height / 2;
+      const dist = Math.abs(y - mid);
+      if (dist < best && Math.abs(y - mid) < box.height) { best = dist; target = Number(r.dataset["layer"]); }
+    }
+    d.target = target;
+    if (target === from) return;
+    const over = peers.find((r) => Number(r.dataset["layer"]) === target);
+    // Rows run topmost first: moving up the list raises the layer.
+    over?.classList.add(target > from ? "drop-above" : "drop-below");
   }
 
   private iconBtn(cls: string): HTMLButtonElement {

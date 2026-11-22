@@ -249,6 +249,9 @@ const studio = new StudioPanel(toolbar.toolOptions, {
   selected: () => tools.selected,
   pick: (ann) => pickAnnotation(ann),
   remove: (ann) => removeAnnotation(ann),
+  reorder: (ann, index) => {
+    if (annotations.moveTo(ann, index)) viewer.pageViews.find((p) => p.pageNum === ann.page)?.builtOverlay?.redrawCommitted();
+  },
 });
 document.getElementById("viewer-area")!.append(studio.el);
 let installedFonts: string[] = [];
