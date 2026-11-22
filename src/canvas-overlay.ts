@@ -25,6 +25,7 @@ import {
   type FontFamilyValue,
   DRAW_TOOLS,
   HIGHLIGHT_PRESETS,
+  type TextCover,
 } from "./models";
 import { ICON_CHECK, ICON_CHEVRON_DOWN, ICON_COPY, ICON_TRASH } from "./icons";
 import { textUnder, type Box } from "./highlight-text";
@@ -250,6 +251,9 @@ export class CanvasOverlay implements SelectionOwner {
     ann.italic    = style.italic;
     ann.underline = style.underline;
     ann.alignment = style.alignment;
+    // Replaced text is one line that grows with its font: kept at its old width,
+    // a bigger size would wrap it over the lines below.
+    if (ann.cover) ann.width = Math.max(1, this.fitTextWidth(ann.content, { ...ann, fontFamily: ann.fontFamily ?? "helvetica", fontName: ann.fontName }));
     this.redrawCommitted();
     this.session.edited();
   }
@@ -516,6 +520,12 @@ export class CanvasOverlay implements SelectionOwner {
     }
   }
 
+  private drawCover(cover: TextCover): void {
+    const c = this.boxOf(cover);
+    this.ctx.fillStyle = rgbToCss(cover.color);
+    this.ctx.fillRect(c.l, c.t, c.w, c.h);
+  }
+
   redrawCommitted(): void {
     const dpr = window.devicePixelRatio || 1;
     this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
@@ -525,7 +535,12 @@ export class CanvasOverlay implements SelectionOwner {
       this.hctx.clearRect(0, 0, this.highlightCanvas.width / dpr, this.highlightCanvas.height / dpr);
     }
     for (const ann of this.committed) {
-      if (ann === this.editingAnn) continue;
+      if (ann === this.editingAnn) {
+        // While replaced text is retyped, keep the patch over the original
+        // words: without it both texts show through the edit box.
+        if (ann.kind === "text" && ann.cover) this.drawCover(ann.cover);
+        continue;
+      }
       this.drawAnnotation(ann);
     }
     if (this.selected && this.committed.includes(this.selected)) {
@@ -785,11 +800,7 @@ export class CanvasOverlay implements SelectionOwner {
       this.drawNote(ann);
 
     } else if (ann.kind === "text") {
-      if (ann.cover) {
-        const c = this.boxOf(ann.cover);
-        ctx.fillStyle = rgbToCss(ann.cover.color);
-        ctx.fillRect(c.l, c.t, c.w, c.h);
-      }
+      if (ann.cover) this.drawCover(ann.cover);
       const [x, y] = this.toCanvas(ann.x, ann.y);
       const rotRad = (this.viewportRotation * Math.PI) / 180;
       ctx.save();
@@ -1702,18 +1713,22 @@ export class CanvasOverlay implements SelectionOwner {
     const input = document.createElement("div");
     input.contentEditable = "true";
     input.textContent = ann.content;
+    // The box's 4px padding is taken off its left edge so the typed text sits
+    // exactly where the drawn text was, and replaced text keeps an opaque
+    // background so the original words never show through.
+    const bg = ann.cover ? rgbToCss(ann.cover.color) : "transparent";
     input.style.cssText = `
       position: absolute;
-      left: ${canvasX}px; top: ${boxTop}px;
-      width: ${boxW}px;
+      left: ${canvasX - 4}px; top: ${boxTop}px;
+      ${ann.cover ? "min-width" : "width"}: ${boxW}px;
       font-size: ${ann.fontSize * scale}px; line-height: 1.2; font-family: ${fontCss(ann.fontFamily, ann.fontName)};
       font-weight: ${ann.bold ? "bold" : "300"};
       font-style: ${ann.italic ? "italic" : "normal"};
       text-decoration: ${ann.underline ? "underline" : "none"};
       text-align: ${ann.alignment};
       color: ${rgbToCss(ann.color)};
-      outline: 1px dashed #aaa; background: transparent;
-      padding: 2px 4px; white-space: pre-wrap; z-index: 10;
+      outline: 1px dashed #aaa; background: ${bg};
+      padding: 2px 4px; white-space: ${ann.cover ? "pre" : "pre-wrap"}; z-index: 10;
     `;
     const finish = (): void => {
       this.editingAnn = null;
@@ -1735,7 +1750,8 @@ export class CanvasOverlay implements SelectionOwner {
       if (content && content !== ann.content) {
         this.session.beginEdit();
         ann.content = content;
-        ann.width = Math.max(ann.width, this.fitTextWidth(content, { ...ann, fontFamily: ann.fontFamily ?? "helvetica", fontName: ann.fontName }));
+        const fitted = this.fitTextWidth(content, { ...ann, fontFamily: ann.fontFamily ?? "helvetica", fontName: ann.fontName });
+        ann.width = ann.cover ? Math.max(1, fitted) : Math.max(ann.width, fitted);
         this.session.edited();
       }
       this.redrawCommitted();
@@ -1912,7 +1928,15 @@ export class CanvasOverlay implements SelectionOwner {
 
   editTextAt(clientX: number, clientY: number): boolean {
     const r = this.canvas.getBoundingClientRect();
-    const hit = this.hitTest(clientX - r.left, clientY - r.top);
+    const cx = clientX - r.left, cy = clientY - r.top;
+    // A click on the patch of replaced text reopens that replacement, even past
+    // the end of a shorter new text: otherwise it would replace the hidden
+    // original a second time and stack two texts.
+    const hit = this.hitTest(cx, cy) ?? [...this.committed].reverse().find((a): a is TextAnnotation => {
+      if (a.kind !== "text" || !a.cover) return false;
+      const c = this.boxOf(a.cover);
+      return cx >= c.l && cx <= c.l + c.w && cy >= c.t && cy <= c.t + c.h;
+    }) ?? null;
     if (hit?.kind !== "text") return false;
     this.handleTextEdit(hit);
     return true;
@@ -1935,7 +1959,7 @@ export class CanvasOverlay implements SelectionOwner {
     input.textContent = item.text;
     input.style.cssText = `
       position: absolute; left: ${bx - 4}px; top: ${by - fs - 2}px; min-width: ${c.w + 8}px;
-      font-size: ${fs}px; line-height: 1.2; font-family: ${fontCss(st.fontFamily)};
+      font-size: ${fs}px; line-height: 1.2; font-family: ${fontCss(st.fontFamily, st.fontName)};
       font-weight: ${st.bold ? "bold" : "300"}; font-style: ${st.italic ? "italic" : "normal"};
       text-decoration: ${st.underline ? "underline" : "none"};
       color: ${rgbToCss(st.color)}; background: ${rgbToCss(item.background)};
@@ -1959,11 +1983,12 @@ export class CanvasOverlay implements SelectionOwner {
       const ann: TextAnnotation = {
         kind: "text", page: this.currentPage,
         x: item.x, y: item.y,
-        width: Math.max(1, this.fitTextWidth(content || " ", s2)),
+        width: Math.max(1, this.fitTextWidth(content || " ", { ...s2, fontName: s2.fontName })),
         content: content || " ",
         color: { ...s2.color }, fontSize: s2.fontSize,
         bold: s2.bold, italic: s2.italic, underline: s2.underline,
         alignment: "left", fontFamily: s2.fontFamily, backgroundColor: null,
+        ...(s2.fontName ? { fontName: s2.fontName } : {}),
         cover,
       };
       this.session.add(ann);

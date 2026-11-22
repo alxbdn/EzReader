@@ -16,6 +16,10 @@ import { LiveText, hasRealText, layoutOcr, renderOcrLayer } from "./live-text";
 /** pdf.js AnnotationMode.ENABLE_FORMS: widgets are drawn by our form controls, not into the page. */
 const ENABLE_FORMS = 2;
 
+// Keeps each font's real name, so editing a line of text can start in the font it was
+// written with.
+const VIEWER_FONTS = { fontExtraProperties: true } as const;
+
 export function toViewportRect(
   viewport: Pick<PageViewport, "convertToViewportPoint">,
   [x1, y1, x2, y2]: readonly number[] | Float32Array,
@@ -395,6 +399,19 @@ export class PdfPageView {
     this.rendering = false;
   }
 
+  /** What pdf.js knows about one of the page's fonts, by its id in the text content. */
+  fontFacts(id: string): { name: string | null; bold: boolean; italic: boolean } | null {
+    const objs = this._page?.commonObjs;
+    if (!objs?.has(id)) return null;
+    try {
+      const f = objs.get(id) as { name?: string; bold?: boolean; italic?: boolean } | null;
+      if (!f || typeof f !== "object") return null;
+      return { name: typeof f.name === "string" ? f.name : null, bold: !!f.bold, italic: !!f.italic };
+    } catch {
+      return null;
+    }
+  }
+
   private async buildTextLayer(page: PDFPageProxy, viewport: PageViewport, stale: () => boolean): Promise<boolean> {
     this.textLayer.innerHTML = "";
     this.textLayer.classList.remove("has-ocr");
@@ -437,6 +454,7 @@ export class PdfPageView {
       span.dataset.pdf = [tx, ty, Math.hypot(a, b), item.width].map((n) => n.toFixed(2)).join(",");
       const family = item.fontName ? textContent.styles[item.fontName]?.fontFamily : undefined;
       if (family) span.dataset.family = family;
+      if (item.fontName) span.dataset.font = item.fontName;
       span.style.setProperty("user-select",        "text");
       span.style.setProperty("-webkit-user-select", "text");
 
@@ -932,7 +950,7 @@ export class PdfViewer {
     if (this._scrollHandler) { this.scrollEl.removeEventListener("scroll", this._scrollHandler); this._scrollHandler = null; }
 
     this.liveText.reset();
-    const loadingTask = (await pdfjsLib()).getDocument(password ? { ...SAFE_PDF, url, password } : { ...SAFE_PDF, url });
+    const loadingTask = (await pdfjsLib()).getDocument(password ? { ...SAFE_PDF, ...VIEWER_FONTS, url, password } : { ...SAFE_PDF, ...VIEWER_FONTS, url });
     this.pdfDoc = await loadingTask.promise;
     this._pageCount   = this.pdfDoc.numPages;
     this._currentPage = 1;
