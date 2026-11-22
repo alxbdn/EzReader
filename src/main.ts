@@ -1686,6 +1686,10 @@ toolbar.on(async (e) => {
       await editPassword();
       break;
 
+    case "theme":
+      settingsModal.setTheme(e.dark ? "dark" : "light");
+      break;
+
     case "rename":
       if (!session.isOpen) break;
       if (!session.rename(e.stem)) { showToast(msg("msgRenameInvalid"), true); break; }

@@ -93,6 +93,13 @@ export class SettingsModal {
     if (code !== this.settings.language) this.set("language", code);
   }
 
+  setTheme(theme: ThemePref): void {
+    const sel = document.getElementById("settings-theme") as HTMLSelectElement | null;
+    if (sel) sel.value = theme;
+    applyTheme(theme);
+    if (theme !== this.settings.theme) this.set("theme", theme);
+  }
+
   setPageBrightness(pct: number): void {
     this.showBrightness(pct);
     if (pct !== this.settings.pageBrightness) this.set("pageBrightness", pct);

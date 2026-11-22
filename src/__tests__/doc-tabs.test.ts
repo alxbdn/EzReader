@@ -167,4 +167,24 @@ describe("TabStrip", () => {
     chip.dispatchEvent(down);
     expect(on.activate).toHaveBeenCalledWith(a.id);
   });
+
+  it("captures the pointer only once a tab is dragged, so the title still takes clicks", () => {
+    const { strip } = setUp();
+    const tabs = new DocTabs<null>();
+    const a = tabs.add("a.pdf");
+    strip.render(tabs.tabs, a.id);
+    const chip = strip.el.querySelector<HTMLElement>(`[data-tab="${a.id}"]`)!;
+    const capture = vi.fn();
+    chip.setPointerCapture = capture;
+    const pointer = (type: string, x: number) => {
+      const ev = new MouseEvent(type, { button: 0, clientX: x, clientY: 10, bubbles: true });
+      Object.defineProperty(ev, "pointerId", { value: 1 });
+      return ev;
+    };
+    chip.dispatchEvent(pointer("pointerdown", 10));
+    expect(capture).not.toHaveBeenCalled();
+    window.dispatchEvent(pointer("pointermove", 40));
+    expect(capture).toHaveBeenCalledWith(1);
+    window.dispatchEvent(pointer("pointerup", 40));
+  });
 });

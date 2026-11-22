@@ -150,6 +150,20 @@ test.describe("document", () => {
     await start(page, { doc: true });
     const more = page.locator(".tb-more");
     const menu = page.locator(".tb-more-menu");
+    // With room, the actions sit on the bar and the "…" button is hidden.
+    const inline = page.locator(".tb-actions .icon-btn");
+    await expect(inline).toHaveCount(5);
+    await expect(inline.first()).toBeVisible();
+    await expect(more).toBeHidden();
+    for (let i = 0; i < 5; i++) {
+      await inline.nth(i).click();
+      await settle(page, 300);
+      await dismiss(page);
+    }
+    // Narrow, they fold into the "…" menu.
+    await page.setViewportSize({ width: 760, height: 860 });
+    await expect(more).toBeVisible();
+    await expect(page.locator(".tb-actions")).toBeHidden();
     await more.click();
     await expect(menu).toHaveClass(/open/);
     await expect(more).toHaveAttribute("aria-expanded", "true");

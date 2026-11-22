@@ -128,7 +128,6 @@ export class TabStrip {
       id, el, pointerId: e.pointerId, startX: e.clientX, startY: e.clientY,
       dragging: false, outside: false, overWindow: false, ghost: null, asking: false, pending: null,
     };
-    try { el.setPointerCapture(e.pointerId); } catch {}
     window.addEventListener("pointermove", this.onMove);
     window.addEventListener("pointerup", this.onUp);
     window.addEventListener("pointercancel", this.onUp);
@@ -141,6 +140,10 @@ export class TabStrip {
     if (!d.dragging) {
       if (Math.hypot(e.clientX - d.startX, e.clientY - d.startY) < DRAG_THRESHOLD_PX) return;
       d.dragging = true;
+      // Captured only once the tab really moves: capturing on press would
+      // send the click to the tab instead of the title, so the file name
+      // could not be clicked to rename it.
+      try { d.el.setPointerCapture(d.pointerId); } catch {}
       d.el.classList.add("dragging");
       document.body.classList.add("tab-dragging");
     }

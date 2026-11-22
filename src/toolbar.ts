@@ -34,6 +34,8 @@ import {
   ICON_COMPRESS_LAYERS,
   ICON_LOCK,
   ICON_UNLOCK,
+  ICON_SUN,
+  ICON_MOON,
 } from "./icons";
 import { SearchPill } from "./search-pill";
 import { BrightnessButton } from "./brightness-button";
@@ -86,6 +88,7 @@ export type ToolbarEvent =
   | { type: "split" }
   | { type: "print" }
   | { type: "settings" }
+  | { type: "theme"; dark: boolean }
   | { type: "undo" }
   | { type: "redo" }
   | { type: "duplicate" }
@@ -154,6 +157,9 @@ export class Toolbar {
   private sidebarBtn!: HTMLButtonElement;
   private saveBtn!: HTMLButtonElement;
   private lockEntry!: HTMLButtonElement;
+  private lockBtn!: HTMLButtonElement;
+  private infoBtn!: HTMLButtonElement;
+  private themeSwitch!: HTMLButtonElement;
   private lockTexts = { on: "Remove the password…", off: "Protect with a password…" };
   private lockTitles = { on: "Protected: remove the password", off: "Protect with a password" };
   private locked = false;
@@ -293,6 +299,8 @@ export class Toolbar {
   setInfoOpen(open: boolean): void {
     this.infoEntry.classList.toggle("current", open);
     this.infoEntry.setAttribute("aria-current", String(open));
+    this.infoBtn.classList.toggle("active", open);
+    this.infoBtn.setAttribute("aria-pressed", String(open));
   }
 
   get titleElement(): HTMLElement { return this.docTitleEl; }
@@ -315,6 +323,16 @@ export class Toolbar {
     label!.textContent = on ? this.lockTexts.on : this.lockTexts.off;
     this.lockEntry.classList.toggle("on", on);
     this.lockEntry.title = on ? this.lockTitles.on : this.lockTitles.off;
+    this.lockBtn.innerHTML = on ? ICON_LOCK : ICON_UNLOCK;
+    this.lockBtn.classList.toggle("on", on);
+    this.lockBtn.title = this.lockEntry.title;
+  }
+
+  /** Shows the theme the window is in on the toolbar switch. */
+  private syncThemeSwitch(): void {
+    const dark = document.documentElement.dataset["theme"] === "dark";
+    this.themeSwitch.classList.toggle("on", dark);
+    this.themeSwitch.setAttribute("aria-checked", String(dark));
   }
 
   updateSidebar(visible: boolean): void {
@@ -378,6 +396,13 @@ export class Toolbar {
     const d = document.createElement("div");
     d.className = "toolbar-sep";
     return d;
+  }
+
+  private pointerSegment(): HTMLElement {
+    const seg = this.segment(...this.pointerBtns);
+    seg.classList.add("pointer-seg");
+    seg.setAttribute("role", "group");
+    return seg;
   }
 
   private segment(...children: HTMLElement[]): HTMLElement {
@@ -869,16 +894,54 @@ export class Toolbar {
     const moreWrap = document.createElement("div");
     moreWrap.className = "tb-more-wrap";
     moreWrap.append(this.moreBtn, this.moreMenu);
+
+    const action = (icon: string, title: string, key: keyof Translations, e: ToolbarEvent): HTMLButtonElement => {
+      const b = this.btn(icon, title, "icon-btn");
+      this.reg(b, undefined, key);
+      b.addEventListener("click", () => this.emit(e));
+      return b;
+    };
+    this.lockBtn = action(ICON_UNLOCK, this.lockTitles.off, "ttLockOff", { type: "password" });
+    this._i18nTitle.delete(this.lockBtn);
+    this.lockBtn.classList.add("tb-lock");
+    this.infoBtn = action(ICON_INFO, "Document info", "ttInfo", { type: "info" });
+    const actions = this.segment(
+      action(ICON_EXPORT, "Export or convert (pictures, Word, Excel…)", "ttExport", { type: "export" }),
+      action(ICON_COMPRESS_LAYERS, "Compress PDF", "ttCompress", { type: "compress" }),
+      this.lockBtn,
+      this.infoBtn,
+      action(ICON_PRESENT, "Present (F5)", "ttPresent", { type: "present" }),
+    );
+    actions.classList.add("tb-actions");
+
+    this.themeSwitch = document.createElement("button");
+    this.themeSwitch.className = "theme-switch";
+    this.themeSwitch.setAttribute("role", "switch");
+    this.themeSwitch.title = "Dark theme";
+    this.reg(this.themeSwitch, undefined, "ttDarkTheme");
+    this.themeSwitch.innerHTML =
+      `<span class="theme-switch-icon sun" aria-hidden="true">${ICON_SUN}</span>` +
+      `<span class="theme-switch-icon moon" aria-hidden="true">${ICON_MOON}</span>` +
+      `<span class="theme-switch-knob" aria-hidden="true"></span>`;
+    this.themeSwitch.addEventListener("click", () => {
+      this.emit({ type: "theme", dark: document.documentElement.dataset["theme"] !== "dark" });
+    });
+    this.syncThemeSwitch();
+    if (typeof MutationObserver !== "undefined") {
+      new MutationObserver(() => this.syncThemeSwitch())
+        .observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+    }
+
     const right = document.createElement("div");
     right.className = "toolbar-group tb-right";
-    right.append(moreWrap, this.sep(), this.search.el);
+    right.append(actions, moreWrap, this.themeSwitch, this.sep(), this.search.el);
 
     const left = document.createElement("div");
     left.className = "toolbar-group tb-left";
     left.append(
       this.sidebarBtn, modeSeg, this.sep(),
       this.saveBtn, this.segment(undo, redo), this.sep(),
-      this.segment(...this.pointerBtns),
+      this.pointerSegment(),
       this.segment(zoomOut, this.zoomLabel, this.zoomInput, zoomIn, realSizeBtn),
       brightnessSeg, columnsSeg,
     );
@@ -942,8 +1005,8 @@ export class Toolbar {
   }
 
   private fitMainRow(main: HTMLElement): void {
-    const levels = ["tb-compact", "tb-compact-2", "tb-compact-3"];
-    const searchOpen = [250, 190, 160, 120];
+    const levels = ["tb-fold", "tb-compact", "tb-compact-2", "tb-compact-3"];
+    const searchOpen = [250, 250, 190, 160, 120];
     const pill = this.search.el;
     const open = pill.classList.contains("open");
     const [left, right] = Array.from(main.children) as HTMLElement[];
