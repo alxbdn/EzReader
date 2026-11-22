@@ -115,7 +115,9 @@ import { ViewZoom, type FitMode } from "./view-zoom";
 import { EpubReader } from "./epub-reader";
 import { EpubError } from "./epub-book";
 import { convertFileSrc } from "@tauri-apps/api/core";
-import { openUrl as openExternalUrl, openFileInNewWindow as openInNewWindow, inflateRaw } from "./tauri-bridge";
+import { openUrl as openExternalUrl, openFileInNewWindow as openInNewWindow, inflateRaw, canPrintHtmlToPdf, printHtmlPages, finishBookPdf } from "./tauri-bridge";
+import { bookToPdf } from "./epub-pdf";
+import { SAFE_PDF } from "./pdf-options";
 import { setInflateFallback } from "./epub-zip";
 
 const appWindow = getCurrentWindow();
@@ -565,12 +567,66 @@ const epubReader = new EpubReader(document.getElementById("epub-reader")!, {
     }
   },
   closeRequested: () => closeEpub(),
+  convertRequested: () => void convertEpubToPdf(),
   forwardKey: (e) => {
     document.dispatchEvent(new KeyboardEvent("keydown", {
       key: e.key, code: e.code, ctrlKey: e.ctrlKey, metaKey: e.metaKey, shiftKey: e.shiftKey, altKey: e.altKey, bubbles: true, cancelable: true,
     }));
   },
 });
+
+void canPrintHtmlToPdf().then((can) => epubReader.setCanConvert(can)).catch(() => {});
+
+let convertingEpub = false;
+
+/** Prints the open book to a PDF the user picks, with its table of contents as bookmarks. */
+async function convertEpubToPdf(): Promise<void> {
+  const book = epubReader.current;
+  if (!book || convertingEpub) return;
+  const out = await savePdfDialog(`${epubReader.title.replace(/[\\/:*?"<>|]+/g, " ").trim() || "Book"}.pdf`);
+  if (!out) return;
+  convertingEpub = true;
+  epubReader.setConverting(true);
+  try {
+    await bookToPdf(book, {
+      printPages: printHtmlPages,
+      pageCount: getPageCount,
+      pageTexts: pdfPageTexts,
+      merge: async (parts) => {
+        if (parts.length === 1) return parts[0]!.path;
+        const merged = await newTempPath("book.pdf");
+        const slots: PageSlot[] = parts.flatMap((p, i) => Array.from({ length: p.pages }, (_, k): PageSlot =>
+          i === 0 ? { kind: "original", page: k + 1, rotation: 0 } : { kind: "imported", path: p.path, page: k + 1, rotation: 0 }));
+        await rearrangePages(parts[0]!.path, merged, slots);
+        return merged;
+      },
+      finish: (input, marks, title, author) => finishBookPdf(input, out, marks, title, author),
+    }, (done, total) => showToast(msg("msgEpubPdfProgress", { done, total })));
+    showToast(msg("msgEpubPdfDone", { name: fileNameOf(out) }));
+  } catch (err) {
+    showToast(msg("msgEpubPdfFailed", { err: errText(err) }), true);
+  } finally {
+    convertingEpub = false;
+    epubReader.setConverting(false);
+  }
+}
+
+/** The text of each page of a PDF, to find where a section starts. */
+async function pdfPageTexts(path: string): Promise<string[]> {
+  const doc = await (await pdfjsLib()).getDocument({ ...SAFE_PDF, url: convertFileSrc(path) + `?t=${Date.now()}` }).promise;
+  try {
+    const out: string[] = [];
+    for (let n = 1; n <= doc.numPages; n++) {
+      const page = await doc.getPage(n);
+      const content = await page.getTextContent();
+      out.push(content.items.map((it) => ("str" in it ? it.str : "")).join(" "));
+      page.cleanup();
+    }
+    return out;
+  } finally {
+    void doc.loadingTask.destroy();
+  }
+}
 
 function closeEpub(): void {
   epubReader.close();

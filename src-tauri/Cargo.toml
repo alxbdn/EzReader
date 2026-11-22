@@ -41,6 +41,8 @@ sha2 = "0.11"
 [target.'cfg(windows)'.dependencies]
 winreg = "0.56"
 winapi = { version = "0.3", features = ["winspool", "wingdi", "winnt", "shellapi", "processthreadsapi", "handleapi", "minwinbase", "minwindef", "errhandlingapi", "winerror", "winuser", "commctrl", "windef", "basetsd", "libloaderapi"] }
+# Prints EPUB chapters to PDF with the webview (the same version Tauri builds).
+webview2-com = "0.39"
 # The collection types the Store API hands back (same version `windows` uses).
 windows-collections = "0.3"
 # Text recognition with the OCR engine built into Windows (Windows.Media.Ocr):
@@ -69,6 +71,11 @@ windows = { version = "0.62", features = [
 # goes online for it.
 [target.'cfg(not(any(windows, target_os = "macos")))'.dependencies]
 ort = { version = "=2.0.0-rc.15", default-features = false, features = ["std", "api-17", "download-binaries", "tls-native"] }
+
+# Linux: prints EPUB chapters to PDF with WebKitGTK (the versions Tauri builds).
+[target.'cfg(target_os = "linux")'.dependencies]
+webkit2gtk = "2.0"
+gtk = "0.18"
 
 # macOS: AppKit calls for the window's proportions, and text recognition
 # with the engine built into macOS (Vision): nothing to bundle, and the same

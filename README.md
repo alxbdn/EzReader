@@ -125,7 +125,7 @@ EzReader opens on a home screen with a shortcut to each task: annotate, sign, re
 - Document info: page size, PDF version, author, producer, dates and keywords
 - Rename the open file by clicking its name in the toolbar
 - Open files by dropping them onto the window
-- **EPUB books**: read DRM-free `.epub` files chapter by chapter, with their table of contents, adjustable text size and the light or dark theme. Your place in each book is remembered
+- **EPUB books**: read DRM-free `.epub` files chapter by chapter, with their table of contents, adjustable text size and the light or dark theme. Your place in each book is remembered. Save a book as PDF (Windows and Linux): A5 pages, with its table of contents as bookmarks
 
 ### Annotate
 

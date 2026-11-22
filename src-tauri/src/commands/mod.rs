@@ -1,3 +1,4 @@
+pub mod book_pdf;
 pub mod compress;
 pub mod convert;
 pub mod dialog;
