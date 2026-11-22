@@ -14,8 +14,12 @@ use tauri::{AppHandle, Manager, WebviewUrl, WebviewWindow, WebviewWindowBuilder}
 
 const PRINT_WINDOW: &str = "book-print";
 /// A5, the size of a paperback, in inches, with 15 mm margins.
+// Only the Windows and Linux printers use these: macOS has no print-to-PDF here.
+#[cfg(any(windows, target_os = "linux"))]
 const PAGE_WIDTH_IN: f64 = 5.83;
+#[cfg(any(windows, target_os = "linux"))]
 const PAGE_HEIGHT_IN: f64 = 8.27;
+#[cfg(any(windows, target_os = "linux"))]
 const MARGIN_IN: f64 = 0.59;
 const STEP_TIMEOUT: Duration = Duration::from_secs(60);
 
