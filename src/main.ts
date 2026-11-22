@@ -39,12 +39,12 @@ import { ToolSelection } from "./tool-selection";
 import {
   type Annotation,
   type FormFieldValue,
-  type FontFamilyValue,
   type RgbColor,
   CSS_UNITS,
   type InkVector,
 } from "./models";
 import { StudioPanel } from "./studio-panel";
+import { matchPdfFont, textColorFrom } from "./font-match";
 import type { PageTextItem } from "./canvas-overlay";
 import { fitWithin, isImagePath, openKind, picturesDocument, type Picture } from "./pictures";
 import {
@@ -115,7 +115,9 @@ import { ViewZoom, type FitMode } from "./view-zoom";
 import { EpubReader } from "./epub-reader";
 import { EpubError } from "./epub-book";
 import { convertFileSrc } from "@tauri-apps/api/core";
-import { openUrl as openExternalUrl, openFileInNewWindow as openInNewWindow, inflateRaw } from "./tauri-bridge";
+import { openUrl as openExternalUrl, openFileInNewWindow as openInNewWindow, inflateRaw, canPrintHtmlToPdf, printHtmlPages, finishBookPdf } from "./tauri-bridge";
+import { bookToPdf } from "./epub-pdf";
+import { SAFE_PDF } from "./pdf-options";
 import { setInflateFallback } from "./epub-zip";
 
 const appWindow = getCurrentWindow();
@@ -248,7 +250,11 @@ const studio = new StudioPanel(toolbar.toolOptions, {
   remove: (ann) => removeAnnotation(ann),
 });
 document.getElementById("viewer-area")!.append(studio.el);
-void listSystemFonts().then((names) => toolbar.setSystemFonts(names ?? [])).catch(() => {});
+let installedFonts: string[] = [];
+void listSystemFonts().then((names) => {
+  installedFonts = names ?? [];
+  toolbar.setSystemFonts(installedFonts);
+}).catch(() => {});
 toolbar.onToolOptions((title, mode) => {
   studio.setOptions(title);
   studio.setShown(mode !== "read");
@@ -565,12 +571,66 @@ const epubReader = new EpubReader(document.getElementById("epub-reader")!, {
     }
   },
   closeRequested: () => closeEpub(),
+  convertRequested: () => void convertEpubToPdf(),
   forwardKey: (e) => {
     document.dispatchEvent(new KeyboardEvent("keydown", {
       key: e.key, code: e.code, ctrlKey: e.ctrlKey, metaKey: e.metaKey, shiftKey: e.shiftKey, altKey: e.altKey, bubbles: true, cancelable: true,
     }));
   },
 });
+
+void canPrintHtmlToPdf().then((can) => epubReader.setCanConvert(can)).catch(() => {});
+
+let convertingEpub = false;
+
+/** Prints the open book to a PDF the user picks, with its table of contents as bookmarks. */
+async function convertEpubToPdf(): Promise<void> {
+  const book = epubReader.current;
+  if (!book || convertingEpub) return;
+  const out = await savePdfDialog(`${epubReader.title.replace(/[\\/:*?"<>|]+/g, " ").trim() || "Book"}.pdf`);
+  if (!out) return;
+  convertingEpub = true;
+  epubReader.setConverting(true);
+  try {
+    await bookToPdf(book, {
+      printPages: printHtmlPages,
+      pageCount: getPageCount,
+      pageTexts: pdfPageTexts,
+      merge: async (parts) => {
+        if (parts.length === 1) return parts[0]!.path;
+        const merged = await newTempPath("book.pdf");
+        const slots: PageSlot[] = parts.flatMap((p, i) => Array.from({ length: p.pages }, (_, k): PageSlot =>
+          i === 0 ? { kind: "original", page: k + 1, rotation: 0 } : { kind: "imported", path: p.path, page: k + 1, rotation: 0 }));
+        await rearrangePages(parts[0]!.path, merged, slots);
+        return merged;
+      },
+      finish: (input, marks, title, author) => finishBookPdf(input, out, marks, title, author),
+    }, (done, total) => showToast(msg("msgEpubPdfProgress", { done, total })));
+    showToast(msg("msgEpubPdfDone", { name: fileNameOf(out) }));
+  } catch (err) {
+    showToast(msg("msgEpubPdfFailed", { err: errText(err) }), true);
+  } finally {
+    convertingEpub = false;
+    epubReader.setConverting(false);
+  }
+}
+
+/** The text of each page of a PDF, to find where a section starts. */
+async function pdfPageTexts(path: string): Promise<string[]> {
+  const doc = await (await pdfjsLib()).getDocument({ ...SAFE_PDF, url: convertFileSrc(path) + `?t=${Date.now()}` }).promise;
+  try {
+    const out: string[] = [];
+    for (let n = 1; n <= doc.numPages; n++) {
+      const page = await doc.getPage(n);
+      const content = await page.getTextContent();
+      out.push(content.items.map((it) => ("str" in it ? it.str : "")).join(" "));
+      page.cleanup();
+    }
+    return out;
+  } finally {
+    void doc.loadingTask.destroy();
+  }
+}
 
 function closeEpub(): void {
   epubReader.close();
@@ -2041,11 +2101,21 @@ window.addEventListener("keydown", async (e: KeyboardEvent) => {
   }
 });
 
-function familyOf(css: string | undefined): FontFamilyValue {
-  if (!css) return "helvetica";
-  if (/mono|courier/i.test(css)) return "courier";
-  if (/serif/i.test(css) && !/sans/i.test(css)) return "times";
-  return "helvetica";
+/** The colour of the text drawn inside `r` on the page canvas. */
+function inkAround(wrapper: HTMLElement, r: DOMRect, background: RgbColor): RgbColor {
+  const canvas = wrapper.querySelector<HTMLCanvasElement>(".page-canvas");
+  const ctx = canvas?.getContext("2d", { willReadFrequently: true });
+  if (!canvas || !ctx || r.width < 1 || r.height < 1) return { r: 0, g: 0, b: 0 };
+  const box = canvas.getBoundingClientRect();
+  const kx = canvas.width / box.width, ky = canvas.height / box.height;
+  const x = Math.max(0, Math.floor((r.left - box.left) * kx)), y = Math.max(0, Math.floor((r.top - box.top) * ky));
+  const w = Math.min(canvas.width - x, Math.ceil(r.width * kx)), h = Math.min(canvas.height - y, Math.ceil(r.height * ky));
+  if (w < 1 || h < 1) return { r: 0, g: 0, b: 0 };
+  try {
+    return textColorFrom(ctx.getImageData(x, y, w, h).data, background);
+  } catch {
+    return { r: 0, g: 0, b: 0 };
+  }
 }
 
 function backgroundAround(wrapper: HTMLElement, r: DOMRect): RgbColor {
@@ -2083,15 +2153,20 @@ document.getElementById("viewer-scroll")!.addEventListener("click", (e: MouseEve
   e.preventDefault();
   window.getSelection()?.removeAllRanges();
   const [x, y, fontSize, width] = span.dataset.pdf.split(",").map(Number);
+  const box = span.getBoundingClientRect();
+  const background = backgroundAround(wrapper, box);
+  const facts = span.dataset.font ? pv.fontFacts(span.dataset.font) : null;
+  const font = matchPdfFont({ ...facts, generic: span.dataset.family }, installedFonts);
   const item: PageTextItem = {
     text: span.dataset.text ?? span.textContent ?? "",
     x, y, width, fontSize,
-    family: familyOf(span.dataset.family),
-    background: backgroundAround(wrapper, span.getBoundingClientRect()),
+    family: font.fontFamily,
+    background,
   };
   const style = {
-    color: { r: 0, g: 0, b: 0 }, fontSize: Math.max(4, Math.round(fontSize)),
-    bold: false, italic: false, underline: false, fontFamily: item.family, backgroundColor: null,
+    color: inkAround(wrapper, box, background), fontSize: Math.max(4, Math.round(fontSize * 2) / 2),
+    bold: font.bold, italic: font.italic, underline: false,
+    fontFamily: font.fontFamily, fontName: font.fontName, backgroundColor: null,
   };
   tools.setStyle({ ...style, textBackground: null });
   for (const p of viewer.pageViews) p.builtOverlay?.refreshStyle();

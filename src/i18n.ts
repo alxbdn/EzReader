@@ -191,6 +191,10 @@ export interface Translations {
   ttEpubClose?: string;
   msgEpubDrm?: string;
   msgEpubFailed?: string;
+  ttEpubToPdf?: string;
+  msgEpubPdfProgress?: string;
+  msgEpubPdfDone?: string;
+  msgEpubPdfFailed?: string;
   msgSaved?: string;
   msgSaveFailed?: string;
   msgCompressed?: string;
@@ -791,6 +795,10 @@ const EN: Translations = {
   ttEpubClose:            "Close book (Ctrl+W)",
   msgEpubDrm:             "This book is protected by DRM and can't be opened. Only DRM-free EPUB files can be read.",
   msgEpubFailed:          "Couldn't open this book: {err}",
+  ttEpubToPdf:            "Save as PDF…",
+  msgEpubPdfProgress:     "Converting to PDF… {done} / {total}",
+  msgEpubPdfDone:         "Saved as {name}",
+  msgEpubPdfFailed:       "Couldn't convert the book: {err}",
   msgSaved:               "Saved.",
   msgSaveFailed:          "Save failed: {err}",
   msgCompressed:          "Compressed: {from} MB → {to} MB ({pct}% smaller)",
@@ -1391,6 +1399,10 @@ const FR: Translations = {
   ttEpubClose:            "Fermer le livre (Ctrl+W)",
   msgEpubDrm:             "Ce livre est protégé par un DRM et ne peut pas être ouvert. Seuls les EPUB sans DRM sont lisibles.",
   msgEpubFailed:          "Impossible d'ouvrir ce livre : {err}",
+  ttEpubToPdf:            "Enregistrer en PDF…",
+  msgEpubPdfProgress:     "Conversion en PDF… {done} / {total}",
+  msgEpubPdfDone:         "Enregistré sous {name}",
+  msgEpubPdfFailed:       "Impossible de convertir le livre : {err}",
   msgSaved:               "Enregistré.",
   msgSaveFailed:          "Échec de l'enregistrement : {err}",
   msgCompressed:          "Compressé : {from} Mo → {to} Mo ({pct} % plus léger)",

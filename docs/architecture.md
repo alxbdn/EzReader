@@ -29,7 +29,7 @@ flowchart LR
 
 ## Back end (`src-tauri/src/`)
 
-- `commands/` exposes the Tauri commands, grouped by area: `pdf.rs` (save annotations, rearrange, extract, split, straighten, redact, adjust), `security.rs` (password protection), `compress.rs`, `convert.rs` (Word, Excel, RTF, HTML, text, XML), `ocr.rs`, `files.rs`, `dialog.rs`, `shell.rs` (printing, links, default PDF app), `update.rs`, `window.rs`.
+- `commands/` exposes the Tauri commands, grouped by area: `pdf.rs` (save annotations, rearrange, extract, split, straighten, redact, adjust), `security.rs` (password protection), `compress.rs`, `convert.rs` (Word, Excel, RTF, HTML, text, XML), `ocr.rs`, `book_pdf.rs` (EPUB chapters printed to PDF by the webview, then bookmarked), `files.rs`, `dialog.rs`, `shell.rs` (printing, links, default PDF app), `update.rs`, `window.rs`.
 - `grants.rs` is the security gate: every command that touches a file checks the path against the files and folders the user opened or picked.
 - `pdf/` holds the PDF engines on top of [lopdf](https://github.com/J-F-Liu/lopdf): writing annotations, flattening, forms, redaction, compression, straightening.
 - `convert/` exports text and tables to office formats; `ocr.rs` and `rapid_ocr.rs` recognize text in scans (Windows and macOS system OCR, built-in models on Linux).

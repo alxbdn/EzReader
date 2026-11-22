@@ -230,16 +230,30 @@ export class ResourceUrls {
   get(path: string, blob: () => Promise<Blob>): Promise<string> {
     let url = this.made.get(path);
     if (!url) {
-      url = blob().then((b) => URL.createObjectURL(b)).catch(() => "");
+      url = blob().then((b) => this.toUrl(b)).catch(() => "");
       this.made.set(path, url);
     }
     return url;
   }
 
+  protected toUrl(b: Blob): Promise<string> { return Promise.resolve(URL.createObjectURL(b)); }
+
   async revokeAll(): Promise<void> {
     const all = [...this.made.values()];
     this.made.clear();
-    for (const u of await Promise.all(all)) if (u) URL.revokeObjectURL(u);
+    for (const u of await Promise.all(all)) if (u.startsWith("blob:")) URL.revokeObjectURL(u);
+  }
+}
+
+/** The pictures as data: URLs, for pages shown outside this window (printing to PDF). */
+export class DataUrls extends ResourceUrls {
+  protected override toUrl(b: Blob): Promise<string> {
+    return new Promise((resolve, reject) => {
+      const r = new FileReader();
+      r.onload = () => resolve(String(r.result));
+      r.onerror = () => reject(r.error);
+      r.readAsDataURL(b);
+    });
   }
 }
 
