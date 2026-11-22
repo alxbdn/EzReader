@@ -1001,6 +1001,7 @@ dependencies = [
  "crc32fast",
  "flate2",
  "getrandom 0.4.3",
+ "hayro-jpeg2000",
  "image",
  "lopdf",
  "memchr",
@@ -1038,6 +1039,12 @@ checksum = "1e6853b52649d4ac5c0bd02320cddc5ba956bdb407c4b75a2c6b75bf51500f8c"
 dependencies = [
  "simd-adler32",
 ]
+
+[[package]]
+name = "fearless_simd"
+version = "1.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "629c9d6b6f30b5604089e0980f4d924a013aacb1654a6cdf5d3d852224f68651"
 
 [[package]]
 name = "field-offset"
@@ -1513,6 +1520,17 @@ name = "hashbrown"
 version = "0.17.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4f467dd6dccf739c208452f8014c75c18bb8301b050ad1cfb27153803edb0f51"
+
+[[package]]
+name = "hayro-jpeg2000"
+version = "0.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6e5e5f2b3de970707fc22fd956d8f44211602939d5e4588603afa919cb7b3740"
+dependencies = [
+ "fearless_simd",
+ "image",
+ "moxcms",
+]
 
 [[package]]
 name = "heck"

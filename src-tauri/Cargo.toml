@@ -29,6 +29,9 @@ memchr = "2"
 subsetter = { version = "0.2", default-features = false }
 # Only the formats the app opens: fewer decoders a hostile file can reach.
 image = { version = "0.25", default-features = false, features = ["png", "jpeg", "webp", "gif", "bmp"] }
+# JPEG 2000 pictures (scanned books), decoded so Compress can re-encode them as JPEG.
+# Pure Rust and forbids unsafe code: a hostile file reaches no C decoder.
+hayro-jpeg2000 = { version = "0.5", default-features = false, features = ["std", "simd", "image"] }
 base64 = "0.23"
 url = "2"
 getrandom = "0.4"

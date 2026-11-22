@@ -72,11 +72,16 @@ fn mask_ids(doc: &Document) -> HashSet<ObjectId> {
     masks
 }
 
-fn decode_picture(stream: &lopdf::Stream) -> Option<DynamicImage> {
+/// `max_side` lets a JPEG 2000 picture skip the resolution levels that would be thrown away anyway.
+fn decode_picture(stream: &lopdf::Stream, max_side: u32) -> Option<DynamicImage> {
     let dict = &stream.dict;
     let int = |k: &[u8]| dict.get(k).ok().and_then(|o| o.as_i64().ok());
     if dict.get(b"ImageMask").ok().and_then(|o| o.as_bool().ok()) == Some(true) || dict.has(b"Decode") {
         return None;
+    }
+    let filter = single_filter(dict)?;
+    if filter == b"JPXDecode" {
+        return decode_jpx(stream, max_side);
     }
     let channels = match dict.get(b"ColorSpace").ok()?.as_name().ok()? {
         b"DeviceRGB" => 3,
@@ -87,7 +92,7 @@ fn decode_picture(stream: &lopdf::Stream) -> Option<DynamicImage> {
         return None;
     }
     let (w, h) = (u32::try_from(int(b"Width")?).ok()?, u32::try_from(int(b"Height")?).ok()?);
-    match single_filter(dict)?.as_slice() {
+    match filter.as_slice() {
         b"DCTDecode" => {
             let img = image::load_from_memory_with_format(&stream.content, image::ImageFormat::Jpeg).ok()?;
             Some(if channels == 1 {
@@ -109,6 +114,44 @@ fn decode_picture(stream: &lopdf::Stream) -> Option<DynamicImage> {
         }
         _ => None,
     }
+}
+
+/// A JPEG 2000 picture as plain gray or RGB, or `None` when re-encoding it could change how it
+/// looks: transparency inside the codestream, or a colour space other than gray / RGB.
+fn decode_jpx(stream: &lopdf::Stream, max_side: u32) -> Option<DynamicImage> {
+    let dict = &stream.dict;
+    let in_data_mask = dict.get(b"SMaskInData").ok().and_then(|o| o.as_i64().ok()).unwrap_or(0);
+    let declared = match dict.get(b"ColorSpace") {
+        Err(_) => None,
+        Ok(o) => Some(match o.as_name().ok()? {
+            b"DeviceRGB" => 3,
+            b"DeviceGray" => 1,
+            _ => return None,
+        }),
+    };
+    if in_data_mask != 0 {
+        return None;
+    }
+    let int = |k: &[u8]| dict.get(k).ok().and_then(|o| o.as_i64().ok()).and_then(|v| u32::try_from(v).ok());
+    let target_resolution = match (int(b"Width"), int(b"Height")) {
+        (Some(w), Some(h)) if w.max(h) > max_side => {
+            let k = f64::from(max_side) / f64::from(w.max(h));
+            Some(((f64::from(w) * k).ceil() as u32, (f64::from(h) * k).ceil() as u32))
+        }
+        _ => None,
+    };
+    let settings = hayro_jpeg2000::DecodeSettings { target_resolution, ..Default::default() };
+    let image = hayro_jpeg2000::Image::new(&stream.content, &settings).ok()?;
+    let channels = match image.color_space() {
+        hayro_jpeg2000::ColorSpace::Gray => 1,
+        hayro_jpeg2000::ColorSpace::RGB => 3,
+        _ => return None,
+    };
+    if image.has_alpha() || declared.is_some_and(|d| d != channels) {
+        return None;
+    }
+    let img = DynamicImage::from_decoder(image).ok()?;
+    Some(if channels == 1 { DynamicImage::ImageLuma8(img.to_luma8()) } else { DynamicImage::ImageRgb8(img.to_rgb8()) })
 }
 
 fn encode_jpeg(img: &DynamicImage, quality: u8) -> Option<Vec<u8>> {
@@ -148,7 +191,7 @@ pub fn compress_images(
             return Err(Cancelled);
         }
         let Some(Object::Stream(stream)) = doc.objects.get_mut(&id) else { continue };
-        let Some(mut img) = decode_picture(stream) else { continue };
+        let Some(mut img) = decode_picture(stream, max_side) else { continue };
         let original_size = stream.content.len() as u64;
         original_total += original_size;
 
@@ -166,6 +209,10 @@ pub fn compress_images(
                 stream.dict.set("Width", i64::from(img.width()));
                 stream.dict.set("Height", i64::from(img.height()));
                 stream.dict.set("BitsPerComponent", 8);
+                // A JPEG 2000 picture may leave these to its codestream; a JPEG one may not.
+                let space: &[u8] = if matches!(img, DynamicImage::ImageLuma8(_)) { b"DeviceGray" } else { b"DeviceRGB" };
+                stream.dict.set("ColorSpace", Object::Name(space.to_vec()));
+                stream.dict.remove(b"SMaskInData");
                 stream.set_content(bytes);
                 stream.allows_compression = false;
             }
@@ -241,12 +288,12 @@ mod tests {
             dictionary! { "ColorSpace" => "DeviceGray", "BitsPerComponent" => 8, "Width" => 2, "Height" => 2 },
             &[0, 64, 128, 255],
         );
-        assert_eq!(decode_picture(&gray).unwrap().width(), 2);
+        assert_eq!(decode_picture(&gray, u32::MAX).unwrap().width(), 2);
         let rgb = flate(
             dictionary! { "ColorSpace" => "DeviceRGB", "BitsPerComponent" => 8, "Width" => 1, "Height" => 2 },
             &[255, 0, 0, 0, 255, 0],
         );
-        assert_eq!(decode_picture(&rgb).unwrap().height(), 2);
+        assert_eq!(decode_picture(&rgb, u32::MAX).unwrap().height(), 2);
     }
 
     #[test]
@@ -255,22 +302,71 @@ mod tests {
             dictionary! { "ColorSpace" => "DeviceRGB", "BitsPerComponent" => 8, "Width" => 4, "Height" => 4 },
             &[1, 2, 3],
         );
-        assert!(decode_picture(&short).is_none());
+        assert!(decode_picture(&short, u32::MAX).is_none());
         let cmyk = flate(
             dictionary! { "ColorSpace" => "DeviceCMYK", "BitsPerComponent" => 8, "Width" => 1, "Height" => 1 },
             &[0, 0, 0, 0],
         );
-        assert!(decode_picture(&cmyk).is_none());
+        assert!(decode_picture(&cmyk, u32::MAX).is_none());
         let mask = flate(
             dictionary! { "ImageMask" => true, "ColorSpace" => "DeviceGray", "BitsPerComponent" => 8, "Width" => 1, "Height" => 1 },
             &[0],
         );
-        assert!(decode_picture(&mask).is_none());
+        assert!(decode_picture(&mask, u32::MAX).is_none());
         let one_bit = flate(
             dictionary! { "ColorSpace" => "DeviceGray", "BitsPerComponent" => 1, "Width" => 8, "Height" => 1 },
             &[0],
         );
-        assert!(decode_picture(&one_bit).is_none());
+        assert!(decode_picture(&one_bit, u32::MAX).is_none());
+    }
+
+    fn jpx(name: &str, dict: lopdf::Dictionary) -> Stream {
+        let mut dict = dict;
+        dict.set("Type", "XObject");
+        dict.set("Subtype", "Image");
+        dict.set("Filter", "JPXDecode");
+        let data = std::fs::read(crate::test_util::fixture(name)).unwrap();
+        let mut s = Stream::new(dict, data);
+        s.allows_compression = false;
+        s
+    }
+
+    #[test]
+    fn decodes_jpeg_2000_pictures_whose_colours_it_can_keep() {
+        // Colour space and depth left to the codestream, as JPXDecode allows.
+        let img = decode_picture(&jpx("red-8.jp2", dictionary! { "Width" => 8, "Height" => 8 }), u32::MAX).unwrap();
+        assert_eq!((img.width(), img.height()), (8, 8));
+        let p = img.to_rgb8().get_pixel(4, 4).0;
+        assert!(p[0] > 200 && p[1] < 40 && p[2] < 40, "{p:?}");
+
+        let says_gray = dictionary! { "ColorSpace" => "DeviceGray", "Width" => 8, "Height" => 8 };
+        assert!(decode_picture(&jpx("red-8.jp2", says_gray), u32::MAX).is_none());
+        let own_mask = dictionary! { "SMaskInData" => 1, "Width" => 8, "Height" => 8 };
+        assert!(decode_picture(&jpx("red-8.jp2", own_mask), u32::MAX).is_none());
+        let garbage = Stream::new(dictionary! { "Filter" => "JPXDecode", "Width" => 8, "Height" => 8 }, vec![0; 32]);
+        assert!(decode_picture(&garbage, u32::MAX).is_none());
+    }
+
+    #[test]
+    fn a_jpeg_2000_picture_becomes_a_jpeg_with_an_explicit_colour_space() {
+        let mut doc = Document::with_version("1.5");
+        let image = doc.add_object(jpx("noise-48.jp2", dictionary! { "Width" => 48, "Height" => 48, "SMaskInData" => 0 }));
+        let content = doc.add_object(Stream::new(dictionary! {}, b"q 48 0 0 48 0 0 cm /Im0 Do Q".to_vec()));
+        let pages = doc.new_object_id();
+        let page = doc.add_object(dictionary! {
+            "Type" => "Page", "Parent" => pages, "MediaBox" => vec![0.into(), 0.into(), 48.into(), 48.into()],
+            "Contents" => content, "Resources" => dictionary! { "XObject" => dictionary! { "Im0" => image } },
+        });
+        doc.objects.insert(pages, Object::Dictionary(dictionary! { "Type" => "Pages", "Kids" => vec![page.into()], "Count" => 1 }));
+        let catalog = doc.add_object(dictionary! { "Type" => "Catalog", "Pages" => pages });
+        doc.trailer.set("Root", catalog);
+
+        let (before, after) = compress_images(&mut doc, BALANCED, &mut |_, _| true).unwrap();
+        assert!(after < before, "{before} -> {after}");
+        let dict = &doc.get_object(image).unwrap().as_stream().unwrap().dict;
+        assert_eq!(dict.get(b"Filter").unwrap().as_name().unwrap(), b"DCTDecode");
+        assert_eq!(dict.get(b"ColorSpace").unwrap().as_name().unwrap(), b"DeviceRGB");
+        assert!(!dict.has(b"SMaskInData"));
     }
 
     #[test]
