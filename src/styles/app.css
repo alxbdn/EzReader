@@ -740,6 +740,61 @@ body.tab-dragging, body.tab-dragging * { cursor: grabbing !important; }
 .tb-compact-2 .tb-left > .toolbar-sep { display: none; }
 .tb-compact-2 .toolbar-group.tb-left { gap: 5px; }
 .tb-compact-3 .tb-columns { display: none; }
+
+/* Export, compress, protect, info and present sit on the bar; they fold
+   into the "…" menu only when the row runs out of room. */
+.tb-main:not(.tb-fold) .tb-more-wrap { display: none; }
+.tb-fold .tb-actions { display: none; }
+.tb-actions .icon-btn.tb-lock.on { color: #16a34a; }
+:root[data-theme="dark"] .tb-actions .icon-btn.tb-lock.on { color: #4ade80; }
+
+/* Hand / select: one toggle, the chosen tool filled, the other dimmed. */
+.pointer-seg .icon-btn { opacity: 0.55; transition: background-color 160ms ease, color 160ms ease, opacity 160ms ease; }
+.pointer-seg .icon-btn:hover { opacity: 0.85; }
+.pointer-seg .icon-btn.active {
+  opacity: 1;
+  background: var(--primary);
+  color: var(--primary-foreground);
+  box-shadow: none;
+}
+
+/* Light / dark pill switch. */
+.theme-switch {
+  margin-left: 2px;
+  position: relative;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 52px;
+  height: 28px;
+  padding: 0 7px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--muted);
+  color: var(--muted-foreground);
+  cursor: pointer;
+}
+.theme-switch:hover { border-color: var(--input); }
+.theme-switch-icon { position: relative; z-index: 1; display: inline-flex; transition: color 160ms ease; }
+.theme-switch-icon svg { width: 13px; height: 13px; display: block; }
+.theme-switch:not(.on) .theme-switch-icon.sun,
+.theme-switch.on .theme-switch-icon.moon { color: var(--foreground); }
+.theme-switch-knob {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 22px;
+  height: 22px;
+  border-radius: 999px;
+  background: var(--background);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12);
+  transition: transform 180ms ease-out;
+}
+.theme-switch.on .theme-switch-knob { transform: translateX(24px); }
+@media (prefers-reduced-motion: reduce) {
+  .theme-switch-knob, .pointer-seg .icon-btn { transition: none; }
+}
 .mode-btn.active { background: var(--primary); color: var(--primary-foreground); }
 .mode-segment .mode-btn.active { background: #E53935; color: #ffffff; }
 
@@ -3205,14 +3260,29 @@ body.read-only .page-form-layer { pointer-events: none; }
 .ez-progress { display: flex; flex-direction: column; gap: 6px; }
 .compress-box.running .ez-list, .compress-box.running .ez-compare, .compress-box.running .ez-warn { opacity: 0.5; pointer-events: none; }.ez-warn.hidden, .ez-progress.hidden { display: none; }
 
-.dim-pages .page-wrapper,
-.dim-pages .page-sidebar-frame canvas,
-.dim-pages .adj-page,
-.dim-pages .adj-thumb-pic canvas,
-.dim-pages .adj-loupe { filter: brightness(var(--page-brightness, 1)); }
+/* Brightness. In the dark theme only the pages are dimmed: the chrome is
+   already dark. In the light theme the whole window dims with them, so the
+   white bars around a dimmed page don't glare. */
+.dim-pages[data-theme="dark"] .page-wrapper,
+.dim-pages[data-theme="dark"] .page-sidebar-frame canvas,
+.dim-pages[data-theme="dark"] .adj-page,
+.dim-pages[data-theme="dark"] .adj-thumb-pic canvas,
+.dim-pages[data-theme="dark"] .adj-loupe { filter: brightness(var(--page-brightness, 1)); }
+.dim-pages:not([data-theme="dark"]) body::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 2147483647;
+  background: #000;
+  opacity: calc(1 - var(--page-brightness, 1));
+  pointer-events: none;
+}
 .settings-brightness { display: flex; align-items: center; gap: 8px; }
 .settings-brightness .settings-range { width: 140px; }
-@media print { .dim-pages .page-wrapper { filter: none; } }
+@media print {
+  .dim-pages .page-wrapper { filter: none; }
+  .dim-pages body::after { display: none; }
+}
 
 body.fullscreen .window-controls { display: none; }
 
@@ -3222,7 +3292,7 @@ body.fullscreen .window-controls { display: none; }
   position: absolute;
   top: calc(100% + 6px);
   left: 50%;
-  transform: translateX(-50%);
+  translate: -50% 0;
   align-items: center;
   gap: 8px;
   padding: 8px 12px;

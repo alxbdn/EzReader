@@ -35,7 +35,9 @@ export class BrightnessButton {
     this.pop.append(this.range, this.label);
     this.el.append(this.button, this.pop);
 
-    this.button.addEventListener("click", () => this.toggle());
+    // A mouse click leaves the focus on the button, so no focus ring flashes
+    // around the slider; the keyboard (detail 0) moves it to the slider.
+    this.button.addEventListener("click", (e) => this.toggle(e.detail === 0));
     this.range.addEventListener("input", () => {
       this.show(Number(this.range.value));
       this.inputHandlers.forEach((h) => h(this.value));
@@ -78,14 +80,14 @@ export class BrightnessButton {
   onInput(h: (v: number) => void): void { this.inputHandlers.push(h); }
   onCommit(h: (v: number) => void): void { this.commitHandlers.push(h); }
 
-  toggle(): void {
-    if (this.isOpen) this.close(); else this.open();
+  toggle(focusSlider = true): void {
+    if (this.isOpen) this.close(); else this.open(focusSlider);
   }
 
-  open(): void {
+  open(focusSlider = true): void {
     this.pop.classList.add("open");
     this.button.setAttribute("aria-expanded", "true");
-    this.range.focus();
+    if (focusSlider) this.range.focus();
   }
 
   close(): void {

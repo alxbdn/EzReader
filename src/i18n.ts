@@ -330,6 +330,7 @@ export interface Translations {
   ttSearch?: string;
   ttSearchClear?: string;
   ttRename?: string;
+  ttDarkTheme?: string;
   menuInsertBlank?: string;
   menuInsertPdf?: string;
   menuExtractPages?: string;
@@ -929,6 +930,7 @@ const EN: Translations = {
   ttSearch: "Search (Ctrl+F)",
   ttSearchClear: "Clear the search",
   ttRename: "Click to rename",
+  ttDarkTheme: "Dark theme",
   menuInsertBlank: "Insert blank page",
   menuInsertPdf: "Insert PDF…",
   menuExtractPages: "Extract selected pages…",
@@ -1528,6 +1530,7 @@ const FR: Translations = {
   ttSearch: "Rechercher (Ctrl+F)",
   ttSearchClear: "Effacer la recherche",
   ttRename: "Cliquer pour renommer",
+  ttDarkTheme: "Thème sombre",
   menuInsertBlank: "Insérer une page blanche",
   menuInsertPdf: "Insérer un PDF…",
   menuExtractPages: "Extraire les pages sélectionnées…",
