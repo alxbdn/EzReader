@@ -152,10 +152,11 @@ test.describe("document", () => {
     const menu = page.locator(".tb-more-menu");
     // With room, the actions sit on the bar and the "…" button is hidden.
     const inline = page.locator(".tb-actions .icon-btn");
-    await expect(inline).toHaveCount(5);
+    // Export, Compress, Password, Brightness, Page layout, Present, Info.
+    await expect(inline).toHaveCount(7);
     await expect(inline.first()).toBeVisible();
     await expect(more).toBeHidden();
-    for (let i = 0; i < 5; i++) {
+    for (let i = 0; i < 7; i++) {
       await inline.nth(i).click();
       await settle(page, 300);
       await dismiss(page);
@@ -163,7 +164,9 @@ test.describe("document", () => {
     // Narrow, they fold into the "…" menu.
     await page.setViewportSize({ width: 760, height: 860 });
     await expect(more).toBeVisible();
-    await expect(page.locator(".tb-actions")).toBeHidden();
+    // Brightness and page layout stay on the bar; the rest moves to the menu.
+    await expect(inline.first()).toBeHidden();
+    await expect(page.locator(".tb-actions .tb-pages")).toBeVisible();
     await more.click();
     await expect(menu).toHaveClass(/open/);
     await expect(more).toHaveAttribute("aria-expanded", "true");
@@ -273,11 +276,11 @@ test.describe("more", () => {
       await page.keyboard.press("Control+o");
       await settle(page, 800);
     }
-    for (const t of await visible(page, ".doc-tab")) {
+    for (const t of await visible(page, ".side-tab[data-tab]")) {
       await tryClick(t);
       await settle(page, 300);
     }
-    const tabs = await visible(page, ".doc-tab");
+    const tabs = await visible(page, ".side-tab[data-tab]");
     if (tabs.length > 1) {
       const a = await tabs[0]!.boundingBox({ timeout: 1000 }).catch(() => null);
       const b = await tabs[tabs.length - 1]!.boundingBox({ timeout: 1000 }).catch(() => null);
@@ -285,13 +288,13 @@ test.describe("more", () => {
       if (b) await drag(page, [b.x + 20, b.y + b.height / 2], [b.x + 20, b.y + 300]);
       await settle(page, 300);
     }
-    await tryClick(page.locator(".doc-tab").first(), { button: "right" });
+    await tryClick(page.locator(".side-tab[data-tab]").first(), { button: "right" });
     await dismiss(page);
     await page.keyboard.press("Control+Tab");
     await page.keyboard.press("Control+Shift+Tab");
     await page.keyboard.press("Control+w");
     await settle(page, 300);
-    for (const c of await visible(page, ".doc-tab-close")) {
+    for (const c of await visible(page, ".side-tab-close")) {
       await tryClick(c);
       await settle(page, 300);
       for (const b of await visible(page, ".modal-backdrop:not(.hidden) button")) if (!(await tryClick(b))) break;
@@ -472,9 +475,9 @@ test.describe("documents", () => {
     await expect(page.locator(".page-sidebar-ghost")).toHaveText("Release to open in a new tab");
     await expect(page.locator("#menubar-row")).toHaveClass(/tab-drop-target/);
     await page.mouse.up();
-    await expect(page.locator(".doc-tab")).toHaveCount(2);
+    await expect(page.locator(".side-tab[data-tab]")).toHaveCount(2);
     await expect(page.locator("#menubar-row")).not.toHaveClass(/tab-drop-target/);
-    await expect(page.locator(".doc-tab.active")).toContainText("(page 1)");
+    await expect(page.locator(".side-tab.active")).toContainText("(page 1)");
   });
 });
 

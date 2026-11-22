@@ -135,6 +135,7 @@ pub fn run() {
             commands::security::decrypt_pdf,
             commands::dialog::open_pages_dialog,
             commands::dialog::open_document_dialog,
+            commands::dialog::open_documents_dialog,
             commands::dialog::save_pdf_dialog,
             commands::dialog::pick_directory_dialog,
             commands::dialog::open_image_dialog,

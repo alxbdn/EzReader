@@ -18,6 +18,7 @@
     existing_files: () => [],
     open_pages_dialog: () => [],
     open_document_dialog: () => null,
+    open_documents_dialog: () => [],
     save_pdf_dialog: () => null,
     "plugin:path|resolve_directory": () => "/tmp",
     "plugin:path|basename": (a) => String(a.path).split(/[\\/]/).pop(),

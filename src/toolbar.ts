@@ -807,8 +807,6 @@ export class Toolbar {
     realSizeBtn.addEventListener("click", () => this.emit({ type: "zoom-real" }));
 
     this.reg(this.brightness.button, undefined, "settingsBrightness");
-    const brightnessSeg = this.segment(this.brightness.el);
-    brightnessSeg.classList.add("tb-brightness");
 
     this.pagesBtn = this.btn(ICON_PAGES_1, "Two pages (odd on left)", "icon-btn tb-pages");
     this.reg(this.pagesBtn, undefined, "ttPages2");
@@ -844,8 +842,6 @@ export class Toolbar {
       return b;
     });
     const modeSeg = this.segment(...this.modeBtns);
-    const columnsSeg = this.segment(this.pagesBtn);
-    columnsSeg.classList.add("tb-columns");
     modeSeg.classList.add("mode-segment");
 
     this.moreBtn = this.btn(ICON_MORE, "More tools", "icon-btn tb-square tb-more");
@@ -909,8 +905,10 @@ export class Toolbar {
       action(ICON_EXPORT, "Export or convert (pictures, Word, Excel…)", "ttExport", { type: "export" }),
       action(ICON_COMPRESS_LAYERS, "Compress PDF", "ttCompress", { type: "compress" }),
       this.lockBtn,
-      this.infoBtn,
+      this.brightness.el,
+      this.pagesBtn,
       action(ICON_PRESENT, "Present (F5)", "ttPresent", { type: "present" }),
+      this.infoBtn,
     );
     actions.classList.add("tb-actions");
 
@@ -934,7 +932,7 @@ export class Toolbar {
 
     const right = document.createElement("div");
     right.className = "toolbar-group tb-right";
-    right.append(actions, moreWrap, this.themeSwitch, this.sep(), this.search.el);
+    right.append(moreWrap, this.themeSwitch, this.search.el);
 
     const left = document.createElement("div");
     left.className = "toolbar-group tb-left";
@@ -943,7 +941,7 @@ export class Toolbar {
       this.saveBtn, this.segment(undo, redo), this.sep(),
       this.pointerSegment(),
       this.segment(zoomOut, this.zoomLabel, this.zoomInput, zoomIn, realSizeBtn),
-      brightnessSeg, columnsSeg,
+      actions,
     );
     main.append(left, right);
     this.updateLayout(null, "vertical");
