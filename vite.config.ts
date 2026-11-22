@@ -1,7 +1,32 @@
-import { defineConfig } from "vite";
+import { defineConfig, type Plugin } from "vite";
 import { resolve } from "path";
+import { readFileSync } from "fs";
+import { PDFJS_WASM_DIR, PDFJS_WASM_FILES } from "./src/pdf-wasm";
+
+const wasmSource = (name: string) => readFileSync(resolve(import.meta.dirname, "node_modules/pdfjs-dist/wasm", name));
+
+/** Ships pdf.js's image decoders (JPEG 2000, JBIG2, ICC) next to the app, at a fixed path. */
+function pdfjsWasm(): Plugin {
+  return {
+    name: "pdfjs-wasm",
+    configureServer(server) {
+      server.middlewares.use((req, res, next) => {
+        const name = req.url?.split("?")[0].replace(`/${PDFJS_WASM_DIR}`, "");
+        if (!req.url?.startsWith(`/${PDFJS_WASM_DIR}`) || !PDFJS_WASM_FILES.includes(name as never)) return next();
+        res.setHeader("Content-Type", "application/wasm");
+        res.end(wasmSource(name!));
+      });
+    },
+    generateBundle() {
+      for (const name of PDFJS_WASM_FILES) {
+        this.emitFile({ type: "asset", fileName: PDFJS_WASM_DIR + name, source: wasmSource(name) });
+      }
+    },
+  };
+}
 
 export default defineConfig({
+  plugins: [pdfjsWasm()],
   test: {
     include: ["src/__tests__/**/*.test.ts"],
     environment: "node",
