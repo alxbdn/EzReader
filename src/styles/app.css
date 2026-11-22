@@ -739,12 +739,12 @@ body.tab-dragging, body.tab-dragging * { cursor: grabbing !important; }
 .tb-compact-2 { gap: 5px; }
 .tb-compact-2 .tb-left > .toolbar-sep { display: none; }
 .tb-compact-2 .toolbar-group.tb-left { gap: 5px; }
-.tb-compact-3 .tb-columns { display: none; }
+.tb-compact-3 .tb-actions .tb-pages { display: none; }
 
 /* Export, compress, protect, info and present sit on the bar; they fold
    into the "…" menu only when the row runs out of room. */
 .tb-main:not(.tb-fold) .tb-more-wrap { display: none; }
-.tb-fold .tb-actions { display: none; }
+.tb-fold .tb-actions > :not(.brightness-wrap):not(.tb-pages) { display: none; }
 .tb-actions .icon-btn.tb-lock.on { color: #16a34a; }
 :root[data-theme="dark"] .tb-actions .icon-btn.tb-lock.on { color: #4ade80; }
 
@@ -3792,3 +3792,86 @@ body.fullscreen .window-controls { display: none; }
 @media (prefers-reduced-motion: reduce) {
   .epub-toc { animation: none; }
 }
+
+/* ══ Side tabs (open documents, on top of the page panel) ══ */
+.side-tabs {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 40%;
+  flex-shrink: 0;
+  padding: 8px;
+  border-bottom: 1px solid var(--border);
+  transition: background-color 0.12s ease-out;
+}
+.side-tabs[hidden] { display: none; }
+.side-tabs-list { display: flex; flex-direction: column; gap: 2px; min-height: 0; overflow-y: auto; scrollbar-width: thin; margin: 0 -8px; padding: 0 8px; }
+.side-tab {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 32px;
+  flex-shrink: 0;
+  padding: 0 4px 0 6px;
+  border: 1px solid transparent;
+  border-radius: var(--radius);
+  background: none;
+  color: var(--muted-foreground);
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+  white-space: nowrap;
+  cursor: default;
+  outline: none;
+}
+.side-tab:hover { background: color-mix(in srgb, var(--muted) 60%, var(--background)); color: var(--foreground); }
+.side-tab:focus-visible { border-color: var(--ring); }
+.side-tab.active { background: var(--muted); border-color: var(--border); color: var(--foreground); font-weight: 500; }
+.side-tab.active::before {
+  content: "";
+  position: absolute;
+  left: -9px;
+  top: 8px;
+  bottom: 8px;
+  width: 2px;
+  border-radius: 2px;
+  background: #E53935;
+}
+.side-tab-icon { position: relative; display: inline-flex; width: 20px; justify-content: center; flex-shrink: 0; }
+.side-tab-icon svg { width: 16px; height: 16px; }
+.side-tab.dirty .side-tab-icon::after {
+  content: "";
+  position: absolute;
+  top: -1px;
+  right: 0;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--muted-foreground);
+  box-shadow: 0 0 0 1.5px var(--background);
+}
+.side-tab-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.side-tab-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  flex-shrink: 0;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--muted-foreground);
+  visibility: hidden;
+}
+.side-tab-close svg { width: 13px; height: 13px; }
+.side-tab-close:hover { background: var(--accent); color: var(--foreground); }
+.side-tab.active .side-tab-close, .side-tab:hover .side-tab-close { visibility: visible; }
+.side-tab.dragging { z-index: 1; background: var(--popover); box-shadow: var(--shadow-md); }
+.side-tab.torn { opacity: 0.5; }
+.side-tab-open { cursor: pointer; }
+.side-tabs.drop-target { background: color-mix(in srgb, var(--muted) 70%, var(--background)); }
+.side-tabs.drop-target .side-tab-open { border: 1px dashed var(--ring); color: var(--foreground); }
+@media (prefers-reduced-motion: reduce) { .side-tabs { transition: none; } }

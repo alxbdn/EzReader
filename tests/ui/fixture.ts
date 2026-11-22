@@ -33,6 +33,7 @@ function answers(png: string) {
   const extra: Record<string, () => unknown> = {
     open_pages_dialog: () => [next()],
     open_document_dialog: next,
+    open_documents_dialog: () => [next()],
     open_image_dialog: () => "/pics/stamp.png",
     open_images_dialog: () => ["/pics/a.png", "/pics/b.png"],
     load_picture: () => ({ data: png, width: 4, height: 4 }),

@@ -384,6 +384,8 @@ export interface Translations {
   optNoOutline?: string;
   optEyedropper?: string;
   ttReorderAnnotation?: string;
+  tabsOpen?: string;
+  tabsOpenHint?: string;
   optThickness?: string;
   optFontsStandard?: string;
   optFontsInstalled?: string;
@@ -992,6 +994,8 @@ const EN: Translations = {
   optNoOutline: "No outline",
   optEyedropper: "Pick a color from the screen",
   ttReorderAnnotation: "Drag to bring forward or send backward (Alt+↑/↓)",
+  tabsOpen: "Open a PDF",
+  tabsOpenHint: "Open PDFs in new tabs, or drop them here (Ctrl+O)",
   optThickness: "Thickness",
   optFontsStandard: "Standard",
   optFontsInstalled: "On this computer",
@@ -1600,6 +1604,8 @@ const FR: Translations = {
   optNoOutline: "Sans contour",
   optEyedropper: "Prélever une couleur à l'écran",
   ttReorderAnnotation: "Glissez pour avancer ou reculer (Alt+↑/↓)",
+  tabsOpen: "Ouvrir un PDF",
+  tabsOpenHint: "Ouvrez des PDF dans de nouveaux onglets, ou déposez-les ici (Ctrl+O)",
   optThickness: "Épaisseur",
   optFontsStandard: "Standard",
   optFontsInstalled: "Sur cet ordinateur",

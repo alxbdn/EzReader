@@ -50,6 +50,7 @@ import { fitWithin, isImagePath, openKind, picturesDocument, type Picture } from
 import {
   openPagesDialog,
   openDocumentDialog,
+  openDocumentsDialog,
   picturesToNewPdf,
   getPageCount,
   listSystemFonts,
@@ -100,6 +101,7 @@ import { AnnotationEditor } from "./annotation-editor";
 import { AnnotationClipboard, copyable } from "./annotation-clipboard";
 import { isLinux, isMac, macShortcuts } from "./platform";
 import { TabStrip } from "./tab-strip";
+import { SideTabs } from "./side-tabs";
 import type { SessionSnapshot } from "./document-session";
 import type { AnnotationSnapshot } from "./annotation-session";
 import type { DocState } from "./page-history";
@@ -153,7 +155,12 @@ const docs = new DocWorkspace<ParkedDoc>({
   close: closeDocument,
   settleUnsaved: () => settleUnsaved("msgSaveBeforeClose"),
 }, {
-  render: (tabs, activeId) => tabStrip.render(tabs, activeId),
+  render: (tabs, activeId) => {
+    // The title bar keeps only the current document's name; the list lives in the page panel.
+    const active = tabs.find((t) => t.id === activeId);
+    tabStrip.render(active ? [active] : [], activeId);
+    sideTabs.render(tabs, activeId);
+  },
   dirtyChanged: () => setDirty(session.isDirty),
 }, samePath);
 
@@ -164,6 +171,14 @@ const tabStrip = new TabStrip(document.getElementById("menubar-row")!, toolbar.t
   hover: (x, y) => tabDragHover(x, y),
   hoverEnd: () => void tabDragEnd().catch(() => {}),
   detach: (id, x, y) => void detachTab(id, x, y),
+});
+
+const sideTabs = new SideTabs({
+  activate: (id) => void docs.switchTo(id),
+  close: (id) => void docs.close(id),
+  move: (id, index) => docs.move(id, index),
+  detach: (id, x, y) => void detachTab(id, x, y),
+  open: () => void openFiles(),
 });
 
 const annotations: AnnotationSession = new AnnotationSession({
@@ -236,6 +251,7 @@ const sigModal           = new SignatureModal(sigStore);
 const settingsModal      = new SettingsModal();
 const splitModal         = new SplitModal();
 const pageSidebar        = new PageSidebar(document.getElementById("page-sidebar")!);
+document.getElementById("page-sidebar")!.prepend(sideTabs.el);
 const docSearch          = new DocSearch();
 const appEl              = document.getElementById("app")!;
 const adjustView         = new AdjustView(appEl, applyAdjust, () => {
@@ -679,6 +695,7 @@ function applyLanguage(language: string): void {
   splitModal.applyTranslations(t);
   adjustView.applyTranslations(t);
   tabStrip.applyTranslations({ close: tabCloseLabel(t), dragNew: t.sbDragOut, dragMerge: t.tabDragMerge });
+  sideTabs.applyTranslations({ close: tabCloseLabel(t), open: t.tabsOpen, openHint: t.tabsOpenHint });
   applyTranslationsToDOM(t);
 }
 applyLanguage(settingsModal.getSettings().language);
@@ -1002,6 +1019,18 @@ async function openFile(): Promise<void> {
   const path = await openDocumentDialog();
   if (!path) return;
   await openPath(path);
+}
+
+/** "Open a PDF" in the tab list: several files at once, each in its own tab. */
+async function openFiles(): Promise<void> {
+  const paths = await openDocumentsDialog();
+  await openInTabs(paths);
+}
+
+async function openInTabs(paths: string[]): Promise<void> {
+  const images = paths.filter(isImagePath);
+  for (const p of paths) if (!isImagePath(p)) await openPath(p);
+  if (images.length > 0) await openPictures(images);
 }
 
 async function openPath(path: string): Promise<void> {
@@ -2388,14 +2417,20 @@ async function handleDrop(paths: string[], at: { x: number; y: number } | null, 
     await appWindow.onDragDropEvent(async (event) => {
       const p = event.payload;
       const at = "position" in p ? { x: p.position.x / devicePixelRatio, y: p.position.y / devicePixelRatio } : null;
+      const onTabs = !!at && sideTabs.contains(at.x, at.y);
       if (p.type === "over" || p.type === "enter") {
         document.body.classList.add("drag-over");
-        if (at && viewer.isLoaded()) pageSidebar.externalDropAt(at.x, at.y);
+        sideTabs.setDropTarget(onTabs);
+        if (onTabs) pageSidebar.hideExternalDrop();
+        else if (at && viewer.isLoaded()) pageSidebar.externalDropAt(at.x, at.y);
       } else if (p.type === "leave") {
         document.body.classList.remove("drag-over");
+        sideTabs.setDropTarget(false);
         pageSidebar.hideExternalDrop();
       } else if (p.type === "drop") {
         document.body.classList.remove("drag-over");
+        sideTabs.setDropTarget(false);
+        if (onTabs) { pageSidebar.hideExternalDrop(); await openInTabs(p.paths); return; }
         const gap = at && viewer.isLoaded() ? pageSidebar.externalDropAt(at.x, at.y) : null;
         pageSidebar.hideExternalDrop();
         await handleDrop(p.paths, at, gap);

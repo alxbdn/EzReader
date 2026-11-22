@@ -21,6 +21,11 @@ export async function openPagesDialog(): Promise<string[]> {
   return call<string[]>("open_pages_dialog");
 }
 
+/** Documents to open, several at once (each in its own tab). */
+export async function openDocumentsDialog(): Promise<string[]> {
+  return call<string[]>("open_documents_dialog");
+}
+
 export async function openDocumentDialog(): Promise<string | null> {
   return call<string | null>("open_document_dialog");
 }
