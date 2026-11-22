@@ -8,7 +8,10 @@ const DIST = Object.keys(
 );
 const available = (dir: string) => DIST.filter((p) => p.includes(`/pdfjs-dist/${dir}/`)).map((p) => p.split("/").pop()!);
 /** A path, not a file: URL: pdf.js reads these with fs in Node. */
-const url = (dir: PdfjsAssetDir) => decodeURIComponent(new URL(`../../node_modules/pdfjs-dist/${dir}/`, import.meta.url).pathname);
+const url = (dir: PdfjsAssetDir) =>
+  decodeURIComponent(new URL(`../../node_modules/pdfjs-dist/${dir}/`, import.meta.url).pathname)
+    // Windows: "/D:/a/..." is not a path fs can read.
+    .replace(/^\/([A-Za-z]:)/, "$1");
 const WASM_URL = url("wasm");
 
 /** A one-page PDF holding a 32×32 red square encoded as JPEG 2000 (JPXDecode). */
