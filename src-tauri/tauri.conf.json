@@ -61,6 +61,12 @@
         "name": "PDF Document",
         "description": "Portable Document Format",
         "role": "Editor"
+      },
+      {
+        "ext": ["epub"],
+        "name": "EPUB Book",
+        "description": "EPUB electronic book",
+        "role": "Viewer"
       }
     ]
   }

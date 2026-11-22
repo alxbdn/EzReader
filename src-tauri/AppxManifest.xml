@@ -62,6 +62,14 @@
             <desktop2:DesktopPreviewHandler Clsid="202348CF-BD0B-4EB3-91B2-C87E74F2FD32" />
           </uap:FileTypeAssociation>
         </uap:Extension>
+        <uap:Extension Category="windows.fileTypeAssociation">
+          <uap:FileTypeAssociation Name="epub">
+            <uap:SupportedFileTypes>
+              <uap:FileType>.epub</uap:FileType>
+            </uap:SupportedFileTypes>
+            <uap:DisplayName>EPUB Book</uap:DisplayName>
+          </uap:FileTypeAssociation>
+        </uap:Extension>
         <com:Extension Category="windows.comServer">
           <com:ComServer>
             <com:SurrogateServer DisplayName="EzReader PDF thumbnails and preview">

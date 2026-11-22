@@ -297,11 +297,11 @@ export class Toolbar {
 
   get titleElement(): HTMLElement { return this.docTitleEl; }
 
-  setDocTitle(name: string | null, dirty: boolean): void {
+  setDocTitle(name: string | null, dirty: boolean, renamable = true): void {
     this.docName = name;
     if (!this.docTitleEl.classList.contains("renaming")) this.docTitleName.textContent = name ?? "";
-    this.docTitleName.title = name ? this.renameTitle : "";
-    this.docTitleName.disabled = !name;
+    this.docTitleName.title = name && renamable ? this.renameTitle : "";
+    this.docTitleName.disabled = !name || !renamable;
     this.docTitleEl.classList.toggle("dirty", !!name && dirty);
     this.saveBtn.classList.toggle("dirty", !!name && dirty);
     document.title = name ? `${dirty ? "• " : ""}${name} – EzReader` : "EzReader";

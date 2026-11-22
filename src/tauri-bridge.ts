@@ -93,6 +93,11 @@ export interface StartupArgs {
   page?: number;
 }
 
+/** Unpacks one deflated ZIP entry in the back end (raw bytes both ways). */
+export async function inflateRaw(data: Uint8Array): Promise<Uint8Array> {
+  return new Uint8Array(await call<ArrayBuffer>("inflate_raw", data as unknown as Record<string, unknown>));
+}
+
 export async function openFileInNewWindow(path: string): Promise<void> {
   return call<void>("open_file_in_new_window", { path });
 }
