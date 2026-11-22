@@ -1,5 +1,69 @@
 import { hexToRgb, rgbToHex, type RgbColor } from "./models";
 
+const EYEDROPPER_ICON = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m2 22 1-1h3l9-9"/><path d="M3 21v-3l9-9"/><path d="m15 6 3.4-3.4a2.1 2.1 0 1 1 3 3L18 9l.4.4a2.1 2.1 0 1 1-3 3l-3.8-3.8a2.1 2.1 0 1 1 3-3l.4.4Z"/></svg>`;
+
+interface EyeDropperApi { open(): Promise<{ sRGBHex: string }> }
+
+/** Reads a color from the screen: the native EyeDropper where the webview has it
+ *  (WebView2 on Windows), otherwise the next click on a page or annotation canvas. */
+export function pickScreenColor(): Promise<string | null> {
+  const Native = (window as unknown as { EyeDropper?: new () => EyeDropperApi }).EyeDropper;
+  if (Native) {
+    return new Native().open().then((r) => normalizeHex(r.sRGBHex), () => null);
+  }
+  return new Promise((resolve) => {
+    document.documentElement.classList.add("eyedropping");
+    const done = (hex: string | null) => {
+      document.documentElement.classList.remove("eyedropping");
+      window.removeEventListener("pointerdown", onDown, true);
+      window.removeEventListener("keydown", onKey, true);
+      resolve(hex);
+    };
+    const onDown = (e: PointerEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      done(e.button === 0 ? sampleAt(e.clientX, e.clientY) : null);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      e.preventDefault();
+      e.stopPropagation();
+      done(null);
+    };
+    setTimeout(() => {
+      window.addEventListener("pointerdown", onDown, true);
+      window.addEventListener("keydown", onKey, true);
+    }, 0);
+  });
+}
+
+function normalizeHex(text: string): string | null {
+  const m = /^rgba?\((\d+),\s*(\d+),\s*(\d+)/i.exec(text);
+  if (m) return rgbToHex({ r: +m[1]!, g: +m[2]!, b: +m[3]! }).toLowerCase();
+  const c = parseHex(text);
+  return c ? rgbToHex(c).toLowerCase() : null;
+}
+
+/** Topmost opaque canvas pixel under the point, else the element's background color. */
+export function sampleAt(x: number, y: number): string | null {
+  for (const el of document.elementsFromPoint(x, y)) {
+    if (el instanceof HTMLCanvasElement) {
+      const r = el.getBoundingClientRect();
+      if (r.width === 0 || r.height === 0) continue;
+      const px = Math.floor((x - r.left) * el.width / r.width);
+      const py = Math.floor((y - r.top) * el.height / r.height);
+      try {
+        const d = el.getContext("2d")?.getImageData(px, py, 1, 1).data;
+        if (d && d[3]! > 0) return rgbToHex({ r: d[0]!, g: d[1]!, b: d[2]! }).toLowerCase();
+      } catch { /* tainted or not a 2D canvas */ }
+      continue;
+    }
+    const bg = getComputedStyle(el).backgroundColor;
+    if (bg && !/^rgba\(.*,\s*0\)$/.test(bg) && bg !== "transparent") return normalizeHex(bg);
+  }
+  return null;
+}
+
 const NONE_SWATCH = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M1 23 23 1" stroke="#E53935" stroke-width="1.8"/></svg>`;
 
 export interface ColorRowOptions {
@@ -8,6 +72,7 @@ export interface ColorRowOptions {
   presets: [string, string][];
   noneTitle?: string;
   customTitle: string;
+  eyedropperTitle?: string;
   onPick: (color: RgbColor | null) => void;
 }
 
@@ -62,7 +127,13 @@ export class ColorRow {
     this.customWrap.addEventListener("click", () => this.togglePicker());
     this.swatchRow.append(this.customWrap);
 
-    this.picker = new HsvPicker((c) => { this.set(c); opts.onPick(c); });
+    this.picker = new HsvPicker((c) => { this.set(c); opts.onPick(c); }, async () => {
+      const hex = await pickScreenColor();
+      if (!hex) return;
+      const c = hexToRgb(hex);
+      this.set(c);
+      opts.onPick(c);
+    });
     this.el.append(this.picker.el);
 
     this.hexWrap = document.createElement("label");
@@ -89,10 +160,10 @@ export class ColorRow {
       if (e.key === "Escape") { e.preventDefault(); this.showHex(); this.hexInput.blur(); }
     });
     this.el.append(this.hexWrap);
-    this.setTitles(opts.title, opts.presets.map(p => p[1]), opts.noneTitle, opts.customTitle);
+    this.setTitles(opts.title, opts.presets.map(p => p[1]), opts.noneTitle, opts.customTitle, opts.eyedropperTitle);
   }
 
-  setTitles(title: string, names: string[], noneTitle: string | undefined, customTitle: string): void {
+  setTitles(title: string, names: string[], noneTitle: string | undefined, customTitle: string, eyedropperTitle = "Pick a color from the screen"): void {
     this.icon.title = title;
     this.label.textContent = title;
     this.hexInput.setAttribute("aria-label", `${title} (hex)`);
@@ -100,7 +171,7 @@ export class ColorRow {
     if (this.noneBtn && noneTitle !== undefined) { this.noneBtn.title = noneTitle; this.noneBtn.setAttribute("aria-label", noneTitle); }
     this.customWrap.title = customTitle;
     this.customWrap.setAttribute("aria-label", customTitle);
-    this.picker.setLabel(customTitle);
+    this.picker.setLabel(customTitle, eyedropperTitle);
   }
 
   set(color: RgbColor | null): void {
@@ -217,7 +288,9 @@ class HsvPicker {
   private s = 1;
   private v = 1;
 
-  constructor(private onPick: (c: RgbColor) => void) {
+  private dropper: HTMLButtonElement;
+
+  constructor(private onPick: (c: RgbColor) => void, onDropper: () => void) {
     this.el = document.createElement("div");
     this.el.className = "color-picker-pop";
     this.el.hidden = true;
@@ -233,7 +306,15 @@ class HsvPicker {
     this.hue.min = "0";
     this.hue.max = "360";
     this.hue.addEventListener("input", () => { this.h = Number(this.hue.value); this.emit(); });
-    this.el.append(this.sv, this.hue);
+    this.dropper = document.createElement("button");
+    this.dropper.type = "button";
+    this.dropper.className = "cp-dropper";
+    this.dropper.innerHTML = EYEDROPPER_ICON;
+    this.dropper.addEventListener("click", onDropper);
+    const hueLine = document.createElement("div");
+    hueLine.className = "cp-hue-line";
+    hueLine.append(this.dropper, this.hue);
+    this.el.append(this.sv, hueLine);
 
     this.sv.addEventListener("pointerdown", (e) => {
       if (e.button !== 0) return;
@@ -261,9 +342,11 @@ class HsvPicker {
     });
   }
 
-  setLabel(text: string): void {
+  setLabel(text: string, dropper: string): void {
     this.sv.setAttribute("aria-label", text);
     this.hue.setAttribute("aria-label", text);
+    this.dropper.title = dropper;
+    this.dropper.setAttribute("aria-label", dropper);
   }
 
   setHex(hex: string): void {
