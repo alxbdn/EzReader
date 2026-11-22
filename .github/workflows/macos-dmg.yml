@@ -1,23 +1,17 @@
 name: macOS Disk Image
 
-# A universal .dmg (Intel and Apple Silicon), built as a check after merges to
-# main, and for each release by the Release workflow, which attaches it to the
+# A universal .dmg (Intel and Apple Silicon), built on demand
+# and for each release by the Release workflow, which attaches it to the
 # GitHub release. It is signed ad hoc only (no Apple Developer account): the
 # Homebrew cask (alxbdn/homebrew-ezreader) lifts the quarantine on install.
 
 # macOS runners are scarce on GitHub: jobs often wait in the queue and get
-# dropped ("job was not acquired by Runner"). So this build never runs on pull
-# requests, where a dropped job left every PR looking red. It runs for version
-# tags (after the security scans), on demand, and after a merge to main
-# that touches the native side or the dependencies. The cross-platform tests already run in CI on each PR.
+# dropped ("job was not acquired by Runner"), and a Mac minute costs ten Linux
+# ones. So this build runs only for releases (after the security scans) and on
+# demand. Its clippy and test steps still run before every release, so a
+# macOS-only error stops the release instead of shipping. The cross-platform
+# tests run in CI on each PR.
 on:
-  push:
-    branches: [main]
-    paths:
-      - 'src-tauri/**'
-      - 'package.json'
-      - 'package-lock.json'
-      - '.github/workflows/macos-dmg.yml'
   workflow_dispatch:
     inputs:
       publish_release:
