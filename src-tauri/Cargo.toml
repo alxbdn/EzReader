@@ -44,7 +44,7 @@ winapi = { version = "0.3", features = ["winspool", "wingdi", "winnt", "shellapi
 # Prints EPUB chapters to PDF with the webview (the same version Tauri builds).
 webview2-com = "0.39"
 # The collection types the Store API hands back (same version `windows` uses).
-windows-collections = "0.3"
+windows-collections = "0.100"
 # Text recognition with the OCR engine built into Windows (Windows.Media.Ocr):
 # same version Tauri already builds, nothing to bundle.
 windows = { version = "0.62", features = [
