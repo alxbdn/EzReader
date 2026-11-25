@@ -15,7 +15,6 @@ mod ocr;
 mod pdf;
 #[cfg(not(any(windows, target_os = "macos")))]
 mod rapid_ocr;
-mod ratio_lock;
 mod resize_border;
 mod tempfiles;
 #[cfg(test)]
@@ -186,7 +185,6 @@ pub fn run() {
             commands::window::tab_drag_hover,
             commands::window::tab_drag_end,
             commands::window::move_tab,
-            ratio_lock::set_launcher_ratio_lock,
             resize_border::set_resize_border,
         ])
         .build(tauri::generate_context!())
@@ -223,9 +221,6 @@ fn open_from_finder(app: &tauri::AppHandle, urls: &[url::Url]) {
         if !state.startup_taken.load(std::sync::atomic::Ordering::SeqCst) && startup.file_path.is_none() {
             startup.file_path = Some(first.clone());
             to_page = rest.to_vec();
-            if let Some(main) = app.get_webview_window("main") {
-                ratio_lock::set_ratio_lock(&main, false);
-            }
         }
     }
     if to_page.is_empty() {

@@ -130,7 +130,7 @@ async function ctrl(key) {
 }
 
 async function waitForDocument(pages) {
-  await waitFor("the launcher to close", () => document.getElementById("welcome-screen").classList.contains("hidden"));
+  await waitFor("the opening screen to close", () => document.getElementById("welcome-screen").classList.contains("hidden"));
   await waitFor(`${pages} pages`, (n) => document.querySelectorAll("#viewer-scroll .page-wrapper").length === n, 15000, pages);
   await waitFor("the first page to be drawn", () => {
     const c = document.querySelector("#viewer-scroll .page-canvas");
@@ -242,10 +242,10 @@ function makeEpub() {
   return path;
 }
 
-describe("launcher", () => {
-  test("starts on the launcher with an Open button and the menus", async () => {
+describe("opening screen", () => {
+  test("starts on the opening screen with an Open button and the menus", async () => {
     await launch();
-    assert.equal(await waitFor("the launcher", () => !document.getElementById("welcome-screen").classList.contains("hidden")), true);
+    assert.equal(await waitFor("the opening screen", () => !document.getElementById("welcome-screen").classList.contains("hidden")), true);
     assert.equal(await driver.findElement(By.css("#welcome-open-btn")).isDisplayed(), true);
     const menus = await driver.executeScript(() => [...document.querySelectorAll(".menubar-item")].map((b) => b.dataset.menuId));
     assert.deepEqual(menus, ["file", "edit", "view", "tools"]);
@@ -254,7 +254,7 @@ describe("launcher", () => {
     assert.equal(save, true);
   });
 
-  test("switching the language to French translates the launcher and the menus", async () => {
+  test("switching the language to French translates the opening screen and the menus", async () => {
     await launch();
     await ctrl(",");
     await waitFor("the settings", () => !document.getElementById("settings-modal").classList.contains("hidden"));

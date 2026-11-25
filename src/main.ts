@@ -79,7 +79,6 @@ import {
   encryptPdf,
   decryptPdf,
   tempTag,
-  setLauncherRatioLock,
   setResizeBorder,
   isDefaultPdfReader,
   checkForUpdate,
@@ -459,7 +458,6 @@ async function fitWindowToDocument(): Promise<boolean> {
   if (!("__TAURI_INTERNALS__" in window)) return true;
   const pref = parseFloat(settingsModal.getSettings().defaultZoom);
   try {
-    await setLauncherRatioLock(false);
     if (!autoFitWindow) return true;
     if (fullscreen || docs.count > 1 || await appWindow.isMaximized()) return preferredZoomShowsPage(pref);
     const monitor = await currentMonitor();

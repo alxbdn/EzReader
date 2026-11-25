@@ -88,7 +88,7 @@ async function everyMenuEntry(page: Page) {
   }
 }
 
-test.describe("launcher", () => {
+test.describe("opening screen", () => {
   test("menus and settings without a document", async ({ page }) => {
     await start(page);
     await everyMenuEntry(page);
@@ -483,7 +483,7 @@ test.describe("documents", () => {
 
 test.describe("motion", () => {
   test.use({ reducedMotion: "no-preference" });
-  test("launcher dots follow the mouse", async ({ page }) => {
+  test("opening screen dots follow the mouse", async ({ page }) => {
     await start(page);
     for (let i = 0; i < 20; i++) {
       await page.mouse.move(200 + i * 30, 300 + (i % 5) * 40);
