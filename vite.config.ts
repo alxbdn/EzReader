@@ -1,7 +1,7 @@
 import { defineConfig, type Plugin } from "vite";
 import { resolve } from "path";
 import { readFileSync, readdirSync } from "fs";
-import { PDFJS_ASSETS, PDFJS_ASSETS_DIR, shippedFiles, type PdfjsAssetDir } from "./src/pdf-assets";
+import { PDFJS_ASSETS, PDFJS_ASSETS_DIR, shippedFiles, type PdfjsAssetDir } from "./src/pdf-assets.ts";
 
 const PDFJS_DIST = resolve(import.meta.dirname, "node_modules/pdfjs-dist");
 const ASSET_DIRS = Object.keys(PDFJS_ASSETS) as PdfjsAssetDir[];
