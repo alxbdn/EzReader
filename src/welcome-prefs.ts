@@ -13,7 +13,7 @@ export interface WelcomePrefsDeps {
   setQuickLook?(on: boolean): Promise<void>;
 }
 
-class LauncherToggle {
+class PrefToggle {
   readonly el: HTMLButtonElement;
   private on = false;
   private busy = false;
@@ -77,8 +77,8 @@ export function menuLanguages(): { code: string; native: string }[] {
 
 export class WelcomePrefs {
   readonly root: HTMLElement;
-  private readonly check: LauncherToggle;
-  private readonly quick: LauncherToggle | null;
+  private readonly check: PrefToggle;
+  private readonly quick: PrefToggle | null;
   private readonly langBtn: HTMLButtonElement;
   private readonly menu: HTMLElement;
 
@@ -86,10 +86,10 @@ export class WelcomePrefs {
     this.root = document.createElement("div");
     this.root.className = "welcome-footer";
 
-    this.check = new LauncherToggle(() => deps.isDefault(), (on) => deps.setDefault(on));
+    this.check = new PrefToggle(() => deps.isDefault(), (on) => deps.setDefault(on));
     const { quickLook, setQuickLook } = deps;
     this.quick = quickLook && setQuickLook
-      ? new LauncherToggle(async () => {
+      ? new PrefToggle(async () => {
           const s = await quickLook();
           return s.available ? s.enabled : null;
         }, (on) => setQuickLook(on))

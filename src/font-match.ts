@@ -62,6 +62,28 @@ export function matchPdfFont(facts: PdfFontFacts, installed: readonly string[]):
 }
 
 /**
+ * The colour behind text, from the pixels inside its own box: the most common colour there.
+ * Glyphs cover only a small part of their box, so the cell or page colour wins even when
+ * the neighbouring rows or cells are another colour. Falls back to white.
+ */
+export function backgroundColorFrom(pixels: Uint8ClampedArray): { r: number; g: number; b: number } {
+  const counts = new Map<number, { n: number; r: number; g: number; b: number }>();
+  let best: { n: number; r: number; g: number; b: number } | null = null;
+  for (let i = 0; i + 3 < pixels.length; i += 4) {
+    if (pixels[i + 3] < 128) continue;
+    const r = pixels[i], g = pixels[i + 1], b = pixels[i + 2];
+    // Quantise a little so dithering and JPEG noise vote together.
+    const key = ((r >> 3) << 10) | ((g >> 3) << 5) | (b >> 3);
+    let bin = counts.get(key);
+    if (!bin) { bin = { n: 0, r: 0, g: 0, b: 0 }; counts.set(key, bin); }
+    bin.n++; bin.r += r; bin.g += g; bin.b += b;
+    if (!best || bin.n > best.n) best = bin;
+  }
+  if (!best) return { r: 255, g: 255, b: 255 };
+  return { r: Math.round(best.r / best.n), g: Math.round(best.g / best.n), b: Math.round(best.b / best.n) };
+}
+
+/**
  * The colour text is drawn in, from the pixels inside its box: the most common colour
  * that is clearly not the background. Falls back to black.
  */
