@@ -1978,8 +1978,11 @@ input[type="color"].color-picker.is-off::-webkit-color-swatch {
   display: none;
 }
 
+/* Opacity as well: a child with `visibility: visible` (a tab's close cross) would show through. */
 #app.booting {
   visibility: hidden;
+  opacity: 0;
+  pointer-events: none;
 }
 
 #app:has(#welcome-screen:not(.hidden)) #viewer-scroll {
