@@ -55,6 +55,13 @@ describe("DocWorkspace", () => {
     expect(state.shown?.file).toBe("a.pdf");
   });
 
+  it("names the new tab while its document is still loading", async () => {
+    const { ws } = setup();
+    let during = "";
+    await ws.inNewTab(async () => { during = ws.list[0]!.title; }, "a.pdf");
+    expect(during).toBe("a.pdf");
+  });
+
   it("refuses to switch while the document cannot be left", async () => {
     const { state, ws, open } = setup();
     await open("a.pdf");
