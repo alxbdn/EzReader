@@ -1,5 +1,5 @@
 # Advisories that OSV-based scanners (OpenSSF Scorecard's Vulnerabilities
-# check, osv-scanner) should not report for this lockfile. Both crates come
+# check, osv-scanner) should not report for this lockfile. The first two come
 # only from Tauri 2's GTK 3 stack on Linux (gtk-rs 0.18) and have no fixed
 # version that Tauri 2 can use. Review them when Tauri updates; keep in sync
 # with ../deny.toml and ../osv-scanner.toml.
@@ -11,3 +11,7 @@ reason = "glib 0.18 VariantStrIter unsoundness: fixed only in glib 0.20, which T
 [[IgnoredVulns]]
 id = "RUSTSEC-2024-0370"
 reason = "proc-macro-error is unmaintained, not vulnerable: a build-time macro of gtk-rs 0.18, used by Tauri on Linux."
+
+[[IgnoredVulns]]
+id = "RUSTSEC-2026-0543"
+reason = "chrono is unmaintained, not vulnerable. It is only listed in Cargo.lock as an optional dependency of serde_with (pulled in by Tauri); EzReader does not enable it, so `cargo tree -i chrono --target all -e all` prints nothing and cargo-deny does not see it."
