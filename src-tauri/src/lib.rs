@@ -107,7 +107,6 @@ pub fn run() {
             }
             if let Some(main) = app.get_webview_window("main") {
                 let _ = fit_to_screen(&main);
-                ratio_lock::set_ratio_lock(&main, startup_file.is_none());
             }
             Ok(())
         })

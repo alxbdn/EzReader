@@ -748,6 +748,7 @@ async function openStartupFile(startup: StartupArgs): Promise<void> {
   if (startup.shouldPrint) {
     autoFitWindow = false;
     document.getElementById("toolbar-container")!.style.display = "none";
+    document.getElementById("status-bar")!.style.display = "none";
     await loadPdf(file);
     document.getElementById("app")!.classList.remove("booting");
     const all = Array.from({ length: viewer.pageCount }, (_, i) => i + 1);
@@ -1568,7 +1569,7 @@ printModal.onConfirm(async (settings) => {
 
 mountWelcomeDots(document.getElementById("welcome-screen")!);
 
-const welcomePrefs = new WelcomePrefs(document.getElementById("welcome-screen")!, {
+const welcomePrefs = new WelcomePrefs(document.getElementById("status-bar")!, {
   language: () => settingsModal.getSettings().language,
   setLanguage: (code) => settingsModal.setLanguage(code),
   t: () => getTranslations(settingsModal.getSettings().language),

@@ -78,7 +78,6 @@ export class SideTabs {
     this.tabs = tabs;
     this.activeId = activeId;
     if (this.drag?.dragging) return;
-    this.el.hidden = tabs.length === 0;
     const items = tabs.map((tab) => {
       const active = tab.id === activeId;
       const item = document.createElement("div");
