@@ -185,113 +185,91 @@ fn plain_number(t: &str) -> Option<f64> {
     normalized.parse::<f64>().ok().filter(|v| v.is_finite())
 }
 
+/// Writes every page into a single sheet, one row per non-empty line, so a
+/// table that runs over several pages stays in one place.
 pub fn xlsx(doc: &TextDoc) -> Vec<u8> {
-    let mut sheets: Vec<(String, String)> = Vec::new();
-    for page in &doc.pages {
-        let mut rows = String::new();
-        let mut widths: Vec<usize> = Vec::new();
-        let mut r = 0;
-        for line in &page.lines {
-            if line.cells.iter().all(|c| c.text.trim().is_empty()) {
-                continue;
-            }
-            r += 1;
-            let _ = write!(rows, "<row r=\"{r}\">");
-            let mut cells: Vec<(usize, String)> = Vec::new();
-            for c in &line.cells {
-                let col = c.col as usize;
-                match cells.last_mut() {
-                    Some((last, text)) if *last >= col => {
-                        text.push(' ');
-                        text.push_str(c.text.trim());
-                    }
-                    _ => cells.push((col, c.text.trim().to_string())),
-                }
-            }
-            for (col, text) in cells {
-                if widths.len() <= col {
-                    widths.resize(col + 1, 0);
-                }
-                widths[col] = widths[col].max(text.chars().count());
-                let ref_ = format!("{}{r}", column_name(col));
-                match as_number(&text) {
-                    Some(v) => {
-                        let _ = write!(rows, "<c r=\"{ref_}\"><v>{v}</v></c>");
-                    }
-                    None => {
-                        let _ = write!(
-                            rows,
-                            "<c r=\"{ref_}\" t=\"inlineStr\"><is><t xml:space=\"preserve\">{}</t></is></c>",
-                            xml_escape(&text)
-                        );
-                    }
-                }
-            }
-            rows.push_str("</row>");
+    let mut rows = String::new();
+    let mut widths: Vec<usize> = Vec::new();
+    let mut r = 0;
+    for line in doc.pages.iter().flat_map(|p| &p.lines) {
+        if line.cells.iter().all(|c| c.text.trim().is_empty()) {
+            continue;
         }
-        let mut cols = String::new();
-        if !widths.is_empty() {
-            cols.push_str("<cols>");
-            for (i, w) in widths.iter().enumerate() {
-                let width = (*w as f32 * 1.1 + 2.0).clamp(8.0, 80.0);
-                let _ = write!(cols, "<col min=\"{0}\" max=\"{0}\" width=\"{width:.1}\" customWidth=\"1\"/>", i + 1);
+        r += 1;
+        let _ = write!(rows, "<row r=\"{r}\">");
+        let mut cells: Vec<(usize, String)> = Vec::new();
+        for c in &line.cells {
+            let col = c.col as usize;
+            match cells.last_mut() {
+                Some((last, text)) if *last >= col => {
+                    text.push(' ');
+                    text.push_str(c.text.trim());
+                }
+                _ => cells.push((col, c.text.trim().to_string())),
             }
-            cols.push_str("</cols>");
         }
-        let xml = format!(
-            "{XML_HEAD}<worksheet xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\">{cols}<sheetData>{rows}</sheetData></worksheet>"
-        );
-        sheets.push((format!("Page {}", page.number), xml));
+        for (col, text) in cells {
+            if widths.len() <= col {
+                widths.resize(col + 1, 0);
+            }
+            widths[col] = widths[col].max(text.chars().count());
+            let ref_ = format!("{}{r}", column_name(col));
+            match as_number(&text) {
+                Some(v) => {
+                    let _ = write!(rows, "<c r=\"{ref_}\"><v>{v}</v></c>");
+                }
+                None => {
+                    let _ = write!(
+                        rows,
+                        "<c r=\"{ref_}\" t=\"inlineStr\"><is><t xml:space=\"preserve\">{}</t></is></c>",
+                        xml_escape(&text)
+                    );
+                }
+            }
+        }
+        rows.push_str("</row>");
     }
-    if sheets.is_empty() {
-        sheets.push((
-            "Page 1".into(),
-            format!("{XML_HEAD}<worksheet xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\"><sheetData/></worksheet>"),
-        ));
+    let mut cols = String::new();
+    if !widths.is_empty() {
+        cols.push_str("<cols>");
+        for (i, w) in widths.iter().enumerate() {
+            let width = (*w as f32 * 1.1 + 2.0).clamp(8.0, 80.0);
+            let _ = write!(cols, "<col min=\"{0}\" max=\"{0}\" width=\"{width:.1}\" customWidth=\"1\"/>", i + 1);
+        }
+        cols.push_str("</cols>");
     }
-
-    let mut workbook = format!(
-        "{XML_HEAD}<workbook xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\" \
-         xmlns:r=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships\"><sheets>"
+    let sheet = format!(
+        "{XML_HEAD}<worksheet xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\">{cols}<sheetData>{rows}</sheetData></worksheet>"
     );
-    let mut wb_rels =
-        format!("{XML_HEAD}<Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\">");
-    let mut overrides = vec![(
-        "/xl/workbook.xml".to_string(),
-        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml",
-    )];
-    let mut names = Vec::new();
-    for (i, (name, _)) in sheets.iter().enumerate() {
-        let n = i + 1;
-        let _ = write!(workbook, "<sheet name=\"{}\" sheetId=\"{n}\" r:id=\"rId{n}\"/>", xml_escape(name));
-        let _ = write!(
-            wb_rels,
-            "<Relationship Id=\"rId{n}\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet\" Target=\"worksheets/sheet{n}.xml\"/>"
-        );
-        overrides.push((
-            format!("/xl/worksheets/sheet{n}.xml"),
-            "application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml",
-        ));
-        names.push(format!("xl/worksheets/sheet{n}.xml"));
-    }
-    workbook.push_str("</sheets></workbook>");
-    wb_rels.push_str("</Relationships>");
-    overrides.push(("/docProps/core.xml".into(), "application/vnd.openxmlformats-package.core-properties+xml"));
 
-    let types = content_types(&overrides);
+    let workbook = format!(
+        "{XML_HEAD}<workbook xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\" \
+         xmlns:r=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships\">\
+         <sheets><sheet name=\"Sheet1\" sheetId=\"1\" r:id=\"rId1\"/></sheets></workbook>"
+    );
+    let wb_rels = format!(
+        "{XML_HEAD}<Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\">\
+         <Relationship Id=\"rId1\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet\" Target=\"worksheets/sheet1.xml\"/>\
+         </Relationships>"
+    );
+    let types = content_types(&[
+        ("/xl/workbook.xml".into(), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"),
+        (
+            "/xl/worksheets/sheet1.xml".into(),
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml",
+        ),
+        ("/docProps/core.xml".into(), "application/vnd.openxmlformats-package.core-properties+xml"),
+    ]);
     let rels = rels_with_core("xl/workbook.xml");
     let core = core_props(&doc.title);
-    let mut entries: Vec<(&str, &[u8])> = vec![
+    zip(&[
         ("[Content_Types].xml", types.as_bytes()),
         ("_rels/.rels", rels.as_bytes()),
         ("xl/workbook.xml", workbook.as_bytes()),
         ("xl/_rels/workbook.xml.rels", wb_rels.as_bytes()),
         ("docProps/core.xml", core.as_bytes()),
-    ];
-    for (name, (_, xml)) in names.iter().zip(&sheets) {
-        entries.push((name.as_str(), xml.as_bytes()));
-    }
-    zip(&entries)
+        ("xl/worksheets/sheet1.xml", sheet.as_bytes()),
+    ])
 }
 
 #[cfg(test)]
@@ -321,23 +299,26 @@ mod tests {
     }
 
     #[test]
-    fn writes_an_excel_package() {
+    fn writes_every_page_onto_one_sheet() {
         let z = unzip(&xlsx(&sample()));
+        let names: Vec<_> = z.iter().map(|(n, _)| n.as_str()).collect();
+        assert!(!names.contains(&"xl/worksheets/sheet2.xml"));
         let wb = part(&z, "xl/workbook.xml");
-        assert!(wb.contains(
-            "<sheet name=\"Page 1\" sheetId=\"1\" r:id=\"rId1\"/><sheet name=\"Page 2\" sheetId=\"2\" r:id=\"rId2\"/>"
-        ));
+        assert_eq!(wb.matches("<sheet ").count(), 1);
+        assert!(wb.contains("<sheet name=\"Sheet1\" sheetId=\"1\" r:id=\"rId1\"/>"));
         let s1 = part(&z, "xl/worksheets/sheet1.xml");
         assert!(s1.contains("<row r=\"5\"><c r=\"A5\" t=\"inlineStr\"><is><t xml:space=\"preserve\">Name</t></is></c><c r=\"C5\" t=\"inlineStr\">"));
         assert!(s1.contains("<c r=\"B6\"><v>12</v></c><c r=\"C6\"><v>42.5</v></c>"));
-        assert!(part(&z, "[Content_Types].xml").contains("/xl/worksheets/sheet2.xml"));
-        assert!(part(&z, "xl/worksheets/sheet2.xml").contains("Été €"));
+        // Page 2 continues straight after page 1's last row.
+        assert!(s1.contains("<row r=\"7\"><c r=\"A7\" t=\"inlineStr\"><is><t xml:space=\"preserve\">Été €</t>"));
+        assert!(part(&z, "[Content_Types].xml").contains("/xl/worksheets/sheet1.xml"));
     }
 
     #[test]
     fn an_empty_document_still_has_a_sheet() {
         let z = unzip(&xlsx(&TextDoc { title: String::new(), pages: vec![] }));
-        assert!(part(&z, "xl/workbook.xml").contains("Page 1"));
+        assert!(part(&z, "xl/workbook.xml").contains("Sheet1"));
+        assert!(part(&z, "xl/worksheets/sheet1.xml").contains("<sheetData></sheetData>"));
     }
 
     #[test]
