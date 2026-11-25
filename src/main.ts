@@ -44,7 +44,7 @@ import {
   type InkVector,
 } from "./models";
 import { StudioPanel } from "./studio-panel";
-import { matchPdfFont, textColorFrom } from "./font-match";
+import { backgroundColorFrom, matchPdfFont, textColorFrom } from "./font-match";
 import type { PageTextItem } from "./canvas-overlay";
 import { fitWithin, isImagePath, openKind, picturesDocument, type Picture } from "./pictures";
 import {
@@ -2153,28 +2153,22 @@ function inkAround(wrapper: HTMLElement, r: DOMRect, background: RgbColor): RgbC
   }
 }
 
+/** The colour behind the text drawn inside `r` on the page canvas. */
 function backgroundAround(wrapper: HTMLElement, r: DOMRect): RgbColor {
+  const white = { r: 255, g: 255, b: 255 };
   const canvas = wrapper.querySelector<HTMLCanvasElement>(".page-canvas");
   const ctx = canvas?.getContext("2d", { willReadFrequently: true });
-  if (!canvas || !ctx) return { r: 255, g: 255, b: 255 };
+  if (!canvas || !ctx || r.width < 1 || r.height < 1) return white;
   const box = canvas.getBoundingClientRect();
   const kx = canvas.width / box.width, ky = canvas.height / box.height;
-  const counts = new Map<string, number>();
-  const points = [
-    [r.left - 3, r.top - 2], [r.right + 3, r.top - 2], [r.left - 3, r.bottom + 2], [r.right + 3, r.bottom + 2],
-    [r.left + r.width / 2, r.top - 2], [r.left + r.width / 2, r.bottom + 2],
-  ];
-  let best: RgbColor = { r: 255, g: 255, b: 255 }, bestN = 0;
-  for (const [x, y] of points) {
-    const px = Math.round((x - box.left) * kx), py = Math.round((y - box.top) * ky);
-    if (px < 0 || py < 0 || px >= canvas.width || py >= canvas.height) continue;
-    const [cr, cg, cb] = ctx.getImageData(px, py, 1, 1).data;
-    const key = `${cr},${cg},${cb}`;
-    const n = (counts.get(key) ?? 0) + 1;
-    counts.set(key, n);
-    if (n > bestN) { bestN = n; best = { r: cr, g: cg, b: cb }; }
+  const x = Math.max(0, Math.floor((r.left - box.left) * kx)), y = Math.max(0, Math.floor((r.top - box.top) * ky));
+  const w = Math.min(canvas.width - x, Math.ceil(r.width * kx)), h = Math.min(canvas.height - y, Math.ceil(r.height * ky));
+  if (w < 1 || h < 1) return white;
+  try {
+    return backgroundColorFrom(ctx.getImageData(x, y, w, h).data);
+  } catch {
+    return white;
   }
-  return best;
 }
 
 document.getElementById("viewer-scroll")!.addEventListener("click", (e: MouseEvent) => {
