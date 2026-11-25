@@ -32,8 +32,17 @@ src-tauri/WixTools/
 target/
 pdfium.dll
 
-# Store promo material, kept locally only
+# Marketing, store screenshots and listing text live on Google Drive, not in git
 marketing/
+
+# Local build outputs: releases are published on GitHub Releases only
+builds/
+
+# Local archive of retired documents (e.g. CRA drafts)
+archive/
+
+# Stray Python packages
+*.whl
 
 # MSIX for the Microsoft Store (scripts/build-msix.ps1, scripts/get-store-msix.ps1):
 # uploaded to the Store only, never published on GitHub
