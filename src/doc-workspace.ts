@@ -105,14 +105,15 @@ export class DocWorkspace<P> {
 
   /**
    * Opens a document in a new tab next to the active one. When `open` leaves nothing open
-   * (cancelled, failed), the tab goes away and the one before comes back.
+   * (cancelled, failed), the tab goes away and the one before comes back. `title` names the tab
+   * while the document loads, so the list never shows a blank row.
    */
-  async inNewTab(open: () => Promise<void>): Promise<void> {
+  async inNewTab(open: () => Promise<void>, title = ""): Promise<void> {
     await this.settled();
     if (!this.doc.canOpen()) return;
     const before = this.doc.isOpen() ? this.tabs.active : null;
     if (before) this.park();
-    const tab = this.tabs.add();
+    const tab = this.tabs.add(title);
     this.doc.clear();
     this.render();
     try {

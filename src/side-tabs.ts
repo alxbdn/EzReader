@@ -78,7 +78,6 @@ export class SideTabs {
     this.tabs = tabs;
     this.activeId = activeId;
     if (this.drag?.dragging) return;
-    this.el.hidden = tabs.length === 0;
     const items = tabs.map((tab) => {
       const active = tab.id === activeId;
       const item = document.createElement("div");
@@ -103,7 +102,9 @@ export class SideTabs {
       close.tabIndex = -1;
       close.addEventListener("pointerdown", (e) => e.stopPropagation());
       close.addEventListener("click", (e) => { e.stopPropagation(); this.on.close(tab.id); });
-      item.append(icon, name, close);
+      // A tab still loading its first document has no name yet: no lone close cross on a blank row.
+      if (tab.title) item.append(icon, name, close);
+      else { item.classList.add("loading"); item.append(icon, name); }
       item.addEventListener("pointerdown", (e) => this.press(e, tab.id, item));
       item.addEventListener("auxclick", (e) => { if (e.button === 1) { e.preventDefault(); this.on.close(tab.id); } });
       item.addEventListener("keydown", (e) => {

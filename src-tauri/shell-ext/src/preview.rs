@@ -1,4 +1,4 @@
-use crate::{pdf, viewer, Alive};
+use crate::{layout, pdf, viewer, Alive};
 use std::cell::{Cell, RefCell};
 use std::ffi::c_void;
 use windows::core::{implement, Interface, Ref, Result, GUID};
@@ -13,7 +13,9 @@ use windows::Win32::UI::Shell::PropertiesSystem::{IInitializeWithStream, IInitia
 use windows::Win32::UI::Shell::{
     IPreviewHandler, IPreviewHandlerFrame, IPreviewHandlerVisuals, IPreviewHandlerVisuals_Impl, IPreviewHandler_Impl,
 };
-use windows::Win32::UI::WindowsAndMessaging::{DestroyWindow, SetWindowPos, MSG, SWP_NOACTIVATE, SWP_NOZORDER};
+use windows::Win32::UI::WindowsAndMessaging::{
+    DestroyWindow, GetClientRect, SetWindowPos, MSG, SWP_NOACTIVATE, SWP_NOZORDER,
+};
 
 #[derive(Clone, Copy)]
 struct Colors {
@@ -62,12 +64,24 @@ impl PreviewHandler {
         }
     }
 
+    /// The rectangle Explorer asked for, cut to the pane it really has.
+    fn pane_rect(&self) -> RECT {
+        let r = self.rect.get();
+        let mut pane = RECT::default();
+        if unsafe { GetClientRect(self.parent.get(), &mut pane) }.is_err() {
+            return r;
+        }
+        let (left, top, right, bottom) =
+            layout::within_pane((r.left, r.top, r.right, r.bottom), (pane.right - pane.left, pane.bottom - pane.top));
+        RECT { left, top, right, bottom }
+    }
+
     fn place_window(&self) {
         let window = self.window.get();
         if window.is_invalid() {
             return;
         }
-        let r = self.rect.get();
+        let r = self.pane_rect();
         let _ = unsafe {
             SetWindowPos(window, None, r.left, r.top, r.right - r.left, r.bottom - r.top, SWP_NOZORDER | SWP_NOACTIVATE)
         };
@@ -132,7 +146,7 @@ impl IPreviewHandler_Impl for PreviewHandler_Impl {
         }
         let stream = self.stream.borrow().clone().ok_or(windows::core::Error::from(E_UNEXPECTED))?;
         let document = pdf::read_all(&stream).and_then(|bytes| pdf::open(&bytes)).ok();
-        let window = viewer::create(self.parent.get(), self.rect.get(), document, self.colors.get().style())?;
+        let window = viewer::create(self.parent.get(), self.pane_rect(), document, self.colors.get().style())?;
         self.window.set(window);
         Ok(())
     }

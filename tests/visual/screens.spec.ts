@@ -30,9 +30,9 @@ for (const scheme of ["light", "dark"] as const) {
   test.describe(`${scheme} theme`, () => {
     test.use({ colorScheme: scheme });
 
-    test("launcher", async ({ page }) => {
+    test("opening screen", async ({ page }) => {
       await start(page);
-      await expect(page).toHaveScreenshot(`launcher-${scheme}.png`);
+      await expect(page).toHaveScreenshot(`home-${scheme}.png`);
     });
 
     test("viewer with a document", async ({ page }) => {
