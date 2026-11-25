@@ -417,10 +417,6 @@ export async function moveTab(
   return call<"merged" | "window" | "stayed">("move_tab", { x, y, tab, name, allowNew });
 }
 
-export async function setLauncherRatioLock(locked: boolean): Promise<void> {
-  return call<void>("set_launcher_ratio_lock", { locked });
-}
-
 export async function setResizeBorder(visible: boolean): Promise<void> {
   return call<void>("set_resize_border", { visible });
 }

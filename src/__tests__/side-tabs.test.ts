@@ -21,7 +21,17 @@ describe("SideTabs", () => {
     tabs.el.querySelector<HTMLButtonElement>(".side-tab-open")!.click();
     expect(on.open).toHaveBeenCalled();
     tabs.render([], null);
-    expect(tabs.el.hidden).toBe(true);
+    expect(tabs.el.querySelectorAll(".side-tab:not(.side-tab-open)")).toHaveLength(0);
+    expect(tabs.el.querySelector(".side-tab-open")).not.toBeNull();
+  });
+
+  it("shows no close cross on a tab that is still loading and has no name", () => {
+    const on = { activate: vi.fn(), close: vi.fn(), move: vi.fn(), detach: vi.fn(), open: vi.fn() };
+    const tabs = new SideTabs(on);
+    tabs.render([tab(1, "a.pdf"), tab(2, "")], 2);
+    const items = [...tabs.el.querySelectorAll<HTMLElement>(".side-tab[data-tab]")];
+    expect(items[0]!.querySelector(".side-tab-close")).not.toBeNull();
+    expect(items[1]!.querySelector(".side-tab-close")).toBeNull();
   });
 });
 

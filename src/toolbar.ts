@@ -160,6 +160,8 @@ export class Toolbar {
   private lockBtn!: HTMLButtonElement;
   private infoBtn!: HTMLButtonElement;
   private themeSwitch!: HTMLButtonElement;
+  /** The parts that need a document: everything but the sidebar button and the theme switch. */
+  private idleParts: HTMLElement[] = [];
   private lockTexts = { on: "Remove the password…", off: "Protect with a password…" };
   private lockTitles = { on: "Protected: remove the password", off: "Protect with a password" };
   private locked = false;
@@ -184,6 +186,7 @@ export class Toolbar {
     }
     this.buildContextToolbar();
     this.setupMenuInteraction();
+    this.setLoaded(false);
   }
 
   on(handler: EventHandler): void {
@@ -341,8 +344,10 @@ export class Toolbar {
     this.setMark("sidebar", visible);
   }
 
+  /** With no document the toolbar stays in place, dimmed and out of reach, so the window keeps one layout. */
   setLoaded(loaded: boolean): void {
-    this.contextEl.style.display = loaded ? "flex" : "none";
+    this.contextEl.classList.toggle("tb-idle", !loaded);
+    for (const el of this.idleParts) el.inert = !loaded;
     for (const btn of this.docMenuEntries) {
       btn.disabled = !loaded;
     }
@@ -944,6 +949,10 @@ export class Toolbar {
       actions,
     );
     main.append(left, right);
+    this.idleParts = [
+      ...Array.from(left.children).filter((el) => el !== this.sidebarBtn) as HTMLElement[],
+      moreWrap, this.search.el, this.tools.row,
+    ];
     this.updateLayout(null, "vertical");
     this.syncModeBtns();
 
