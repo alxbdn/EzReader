@@ -58,9 +58,9 @@ export const ICON_FULLSCREEN = lucide(`<path d="M8 3H5a2 2 0 0 0-2 2v3"/><path d
 export const ICON_FULLSCREEN_EXIT = lucide(`<path d="M8 3v3a2 2 0 0 1-2 2H3"/><path d="M21 8h-3a2 2 0 0 1-2-2V3"/><path d="M3 16h3a2 2 0 0 1 2 2v3"/><path d="M16 21v-3a2 2 0 0 1 2-2h3"/>`);
 export const ICON_MORE = lucide(`<circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/>`);
 export const ICON_INFO = lucide(`<circle cx="12" cy="12" r="9"/><path d="M12 16v-4"/><path d="M12 8h.01"/>`);
-export const ICON_PAGES_1 = lucide(`<rect x="6" y="3" width="12" height="18" rx="1.8"/><path d="M10.5 9.5 12 8v8M10 16h4" stroke-width="1.8"/>`);
-export const ICON_PAGES_2 = lucide(`<rect x="1.5" y="4" width="9.5" height="16" rx="1.5"/><rect x="13" y="4" width="9.5" height="16" rx="1.5"/><path d="M5.2 10 6.5 9v6M5.2 15h2.6" stroke-width="1.6"/><path d="M16.2 10.2c0-1 .8-1.5 1.7-1.5s1.6.6 1.6 1.4c0 .9-.7 1.5-3.3 3.9v1h3.5" stroke-width="1.6"/>`);
-export const ICON_PAGES_2_EVEN = lucide(`<rect x="1.5" y="4" width="9.5" height="16" rx="1.5"/><rect x="13" y="4" width="9.5" height="16" rx="1.5"/><path d="M4.6 10.2c0-1 .8-1.5 1.7-1.5s1.6.6 1.6 1.4c0 .9-.7 1.5-3.3 3.9v1H8" stroke-width="1.6"/><path d="M16.2 9.5c.3-.6.9-.8 1.6-.8.9 0 1.6.5 1.6 1.3 0 .7-.5 1.2-1.3 1.3.9.1 1.5.7 1.5 1.5 0 .9-.8 1.5-1.8 1.5-.8 0-1.4-.3-1.7-.9" stroke-width="1.6"/>`);
+export const ICON_PAGES_1 = lucide(`<rect x="6" y="2" width="12" height="9" rx="1.5"/><rect x="6" y="13" width="12" height="9" rx="1.5"/>`);
+export const ICON_PAGES_2 = lucide(`<rect x="2" y="4" width="20" height="16" rx="2"/><path d="M12 4v16"/>`);
+export const ICON_PAGES_2_EVEN = lucide(`<rect x="12" y="4" width="10" height="16" rx="2"/><path d="M8 4H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h4" stroke-dasharray="2 3"/>`);
 export const ICON_PAGES_3 = lucide(`<rect x="1.5" y="6" width="6" height="12" rx="1"/><rect x="9" y="6" width="6" height="12" rx="1"/><rect x="16.5" y="6" width="6" height="12" rx="1"/>`);
 export const ICON_SCROLL_VERTICAL = lucide(`<rect x="7" y="2" width="10" height="8" rx="1"/><rect x="7" y="14" width="10" height="8" rx="1"/><path d="M12 10v4"/>`);
 export const ICON_SCROLL_HORIZONTAL = lucide(`<rect x="2" y="7" width="8" height="10" rx="1"/><rect x="14" y="7" width="8" height="10" rx="1"/><path d="M10 12h4"/>`);
@@ -119,6 +119,14 @@ export const ICON_UNLOCK = lucide(`<rect x="5" y="11" width="14" height="10" rx=
 export const ICON_EYE = lucide(`<path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>`);
 export const ICON_OCR = lucide(`<path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/><path d="M7 8h8"/><path d="M7 12h10"/><path d="M7 16h6"/>`);
 export const ICON_MOON = lucide(`<path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/>`);
+/** Page brightness, keyboard-backlight style: 1 to 3 rays lit. */
+export const brightnessIcon = (level: 1 | 2 | 3): string => {
+  const on = (n: number) => (level >= n ? "" : ' opacity=".28"');
+  return lucide(`<path d="M3 20h18"/><path d="M7.5 20a4.5 4.5 0 0 1 9 0"/>` +
+    `<path d="M12 9.5v2"${on(1)}/>` +
+    `<path d="m6.6 12.1 1.4 1.4"${on(2)}/><path d="m17.4 12.1-1.4 1.4"${on(2)}/>` +
+    `<path d="M3 16.5h2"${on(3)}/><path d="M19 16.5h2"${on(3)}/>`);
+};
 export const ICON_SUN = lucide(`<circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/>`);
 
 export const ICON_CIRCLE_CHECK = lucide(`<circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/>`);

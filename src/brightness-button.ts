@@ -1,4 +1,9 @@
-import { ICON_SUN } from "./icons";
+import { brightnessIcon } from "./icons";
+
+/** Which of the three lit levels the icon shows for a brightness. */
+export function brightnessLevel(v: number): 1 | 2 | 3 {
+  return v >= 85 ? 3 : v >= 60 ? 2 : 1;
+}
 
 export const MIN_BRIGHTNESS = 40;
 
@@ -17,7 +22,7 @@ export class BrightnessButton {
 
     this.button = document.createElement("button");
     this.button.className = "icon-btn";
-    this.button.innerHTML = ICON_SUN;
+    this.button.innerHTML = brightnessIcon(3);
     this.button.title = "Page brightness";
     this.button.setAttribute("aria-haspopup", "true");
     this.button.setAttribute("aria-expanded", "false");
@@ -98,5 +103,10 @@ export class BrightnessButton {
   private show(v: number): void {
     this.label.textContent = `${v} %`;
     this.button.classList.toggle("active", v < 100);
+    const level = brightnessLevel(v);
+    if (this.button.dataset["level"] !== String(level)) {
+      this.button.dataset["level"] = String(level);
+      this.button.innerHTML = brightnessIcon(level);
+    }
   }
 }

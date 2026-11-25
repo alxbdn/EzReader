@@ -53,6 +53,27 @@ pub fn open_document_dialog(app: AppHandle) -> CmdResult<Option<String>> {
     Ok(picked)
 }
 
+/// Several documents at once, each opened in its own tab.
+#[tauri::command(async)]
+pub fn open_documents_dialog(app: AppHandle) -> CmdResult<Vec<String>> {
+    let mut all = vec!["pdf"];
+    all.extend(BOOK_EXTENSIONS);
+    all.extend(IMAGE_EXTENSIONS);
+    let result = app
+        .dialog()
+        .file()
+        .add_filter("PDF, books and pictures", &all)
+        .add_filter("PDF Files", &["pdf"])
+        .add_filter("Books and comics", &BOOK_EXTENSIONS)
+        .add_filter("Images", &IMAGE_EXTENSIONS)
+        .blocking_pick_files();
+    let picked: Vec<String> = result.unwrap_or_default().into_iter().map(filepath_to_string).collect();
+    for path in &picked {
+        crate::allow_viewing(&app, path);
+    }
+    Ok(picked)
+}
+
 /// Opened by the book reader (same list as the interface's `BOOK_EXTENSIONS`).
 pub const BOOK_EXTENSIONS: [&str; 5] = ["epub", "cbz", "txt", "html", "htm"];
 

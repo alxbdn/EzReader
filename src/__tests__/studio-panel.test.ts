@@ -69,8 +69,9 @@ describe("StudioPanel", () => {
     const tools = new ToolSelection();
     const pick = vi.fn();
     const remove = vi.fn((a: Annotation) => session.remove(a));
+    const reorder = vi.fn((a: Annotation, i: number) => { session.moveTo(a, i); });
     const panel = new StudioPanel(document.createElement("div"), {
-      list: () => session.all(), selected: () => tools.selected, pick, remove,
+      list: () => session.all(), selected: () => tools.selected, pick, remove, reorder,
     });
     session.onContentChange(() => panel.refresh());
     tools.onSelect((a) => panel.setSelected(a));
@@ -104,6 +105,21 @@ describe("StudioPanel", () => {
     expect(remove).toHaveBeenCalledWith(a);
     flush();
     expect(panel.el.querySelectorAll(".studio-ann")).toHaveLength(0);
+  });
+
+  it("lists the topmost annotation first and Alt+Up brings one forward", () => {
+    const { session, panel } = mount();
+    const a = rect(1), b = rect(1), c = rect(1);
+    session.add(a); session.add(b); session.add(c);
+    flush();
+    const rows = () => [...panel.el.querySelectorAll<HTMLElement>(".studio-ann")];
+    expect(rows().map((r) => r.dataset["layer"])).toEqual(["2", "1", "0"]);
+    rows()[2]!.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowUp", altKey: true, bubbles: true }));
+    expect(session.forPage(1)).toEqual([b, a, c]);
+    session.moveTo(a, 2);
+    expect(session.forPage(1)).toEqual([b, c, a]);
+    session.undo();
+    expect(session.forPage(1)).toEqual([b, a, c]);
   });
 
   it("folds away and remembers it", () => {

@@ -44,12 +44,13 @@ import {
   type InkVector,
 } from "./models";
 import { StudioPanel } from "./studio-panel";
-import { matchPdfFont, textColorFrom } from "./font-match";
+import { backgroundColorFrom, matchPdfFont, textColorFrom } from "./font-match";
 import type { PageTextItem } from "./canvas-overlay";
 import { fitWithin, isImagePath, openKind, picturesDocument, type Picture } from "./pictures";
 import {
   openPagesDialog,
   openDocumentDialog,
+  openDocumentsDialog,
   picturesToNewPdf,
   getPageCount,
   listSystemFonts,
@@ -78,7 +79,6 @@ import {
   encryptPdf,
   decryptPdf,
   tempTag,
-  setLauncherRatioLock,
   setResizeBorder,
   isDefaultPdfReader,
   checkForUpdate,
@@ -100,6 +100,7 @@ import { AnnotationEditor } from "./annotation-editor";
 import { AnnotationClipboard, copyable } from "./annotation-clipboard";
 import { isLinux, isMac, macShortcuts } from "./platform";
 import { TabStrip } from "./tab-strip";
+import { SideTabs } from "./side-tabs";
 import type { SessionSnapshot } from "./document-session";
 import type { AnnotationSnapshot } from "./annotation-session";
 import type { DocState } from "./page-history";
@@ -153,7 +154,12 @@ const docs = new DocWorkspace<ParkedDoc>({
   close: closeDocument,
   settleUnsaved: () => settleUnsaved("msgSaveBeforeClose"),
 }, {
-  render: (tabs, activeId) => tabStrip.render(tabs, activeId),
+  render: (tabs, activeId) => {
+    // The title bar keeps only the current document's name; the list lives in the page panel.
+    const active = tabs.find((t) => t.id === activeId);
+    tabStrip.render(active ? [active] : [], activeId);
+    sideTabs.render(tabs, activeId);
+  },
   dirtyChanged: () => setDirty(session.isDirty),
 }, samePath);
 
@@ -164,6 +170,14 @@ const tabStrip = new TabStrip(document.getElementById("menubar-row")!, toolbar.t
   hover: (x, y) => tabDragHover(x, y),
   hoverEnd: () => void tabDragEnd().catch(() => {}),
   detach: (id, x, y) => void detachTab(id, x, y),
+});
+
+const sideTabs = new SideTabs({
+  activate: (id) => void docs.switchTo(id),
+  close: (id) => void docs.close(id),
+  move: (id, index) => docs.move(id, index),
+  detach: (id, x, y) => void detachTab(id, x, y),
+  open: () => void openFiles(),
 });
 
 const annotations: AnnotationSession = new AnnotationSession({
@@ -236,6 +250,7 @@ const sigModal           = new SignatureModal(sigStore);
 const settingsModal      = new SettingsModal();
 const splitModal         = new SplitModal();
 const pageSidebar        = new PageSidebar(document.getElementById("page-sidebar")!);
+document.getElementById("page-sidebar")!.prepend(sideTabs.el);
 const docSearch          = new DocSearch();
 const appEl              = document.getElementById("app")!;
 const adjustView         = new AdjustView(appEl, applyAdjust, () => {
@@ -249,6 +264,9 @@ const studio = new StudioPanel(toolbar.toolOptions, {
   selected: () => tools.selected,
   pick: (ann) => pickAnnotation(ann),
   remove: (ann) => removeAnnotation(ann),
+  reorder: (ann, index) => {
+    if (annotations.moveTo(ann, index)) viewer.pageViews.find((p) => p.pageNum === ann.page)?.builtOverlay?.redrawCommitted();
+  },
 });
 document.getElementById("viewer-area")!.append(studio.el);
 let installedFonts: string[] = [];
@@ -440,7 +458,6 @@ async function fitWindowToDocument(): Promise<boolean> {
   if (!("__TAURI_INTERNALS__" in window)) return true;
   const pref = parseFloat(settingsModal.getSettings().defaultZoom);
   try {
-    await setLauncherRatioLock(false);
     if (!autoFitWindow) return true;
     if (fullscreen || docs.count > 1 || await appWindow.isMaximized()) return preferredZoomShowsPage(pref);
     const monitor = await currentMonitor();
@@ -676,6 +693,7 @@ function applyLanguage(language: string): void {
   splitModal.applyTranslations(t);
   adjustView.applyTranslations(t);
   tabStrip.applyTranslations({ close: tabCloseLabel(t), dragNew: t.sbDragOut, dragMerge: t.tabDragMerge });
+  sideTabs.applyTranslations({ close: tabCloseLabel(t), open: t.tabsOpen, openHint: t.tabsOpenHint });
   applyTranslationsToDOM(t);
 }
 applyLanguage(settingsModal.getSettings().language);
@@ -728,6 +746,7 @@ async function openStartupFile(startup: StartupArgs): Promise<void> {
   if (startup.shouldPrint) {
     autoFitWindow = false;
     document.getElementById("toolbar-container")!.style.display = "none";
+    document.getElementById("status-bar")!.style.display = "none";
     await loadPdf(file);
     document.getElementById("app")!.classList.remove("booting");
     const all = Array.from({ length: viewer.pageCount }, (_, i) => i + 1);
@@ -1001,6 +1020,18 @@ async function openFile(): Promise<void> {
   await openPath(path);
 }
 
+/** "Open a PDF" in the tab list: several files at once, each in its own tab. */
+async function openFiles(): Promise<void> {
+  const paths = await openDocumentsDialog();
+  await openInTabs(paths);
+}
+
+async function openInTabs(paths: string[]): Promise<void> {
+  const images = paths.filter(isImagePath);
+  for (const p of paths) if (!isImagePath(p)) await openPath(p);
+  if (images.length > 0) await openPictures(images);
+}
+
 async function openPath(path: string): Promise<void> {
   if (openKind(path) === "epub") { await openEpub(path); return; }
   if (epubReader.isOpen) {
@@ -1011,7 +1042,7 @@ async function openPath(path: string): Promise<void> {
   if (openKind(path) === "pictures") { await openPictures([path]); return; }
   const open = docs.showing(path);
   if (open) { await docs.switchTo(open.id); return; }
-  await docs.inNewTab(() => loadPdf(path));
+  await docs.inNewTab(() => loadPdf(path), fileNameOf(path));
 }
 
 async function openPictures(paths: string[]): Promise<void> {
@@ -1185,7 +1216,7 @@ async function openTransferred(t: StartupArgs): Promise<void> {
     else if (t.savePath) session.adoptSavePath(t.savePath);
     setDirty(!!(t.dirty || t.unsaved));
     if (t.page && t.page > 1) viewer.goToPage(Math.min(t.page, viewer.pageCount), "instant");
-  });
+  }, fileNameOf(file));
 }
 
 void (async () => {
@@ -1536,7 +1567,7 @@ printModal.onConfirm(async (settings) => {
 
 mountWelcomeDots(document.getElementById("welcome-screen")!);
 
-const welcomePrefs = new WelcomePrefs(document.getElementById("welcome-screen")!, {
+const welcomePrefs = new WelcomePrefs(document.getElementById("status-bar")!, {
   language: () => settingsModal.getSettings().language,
   setLanguage: (code) => settingsModal.setLanguage(code),
   t: () => getTranslations(settingsModal.getSettings().language),
@@ -2121,28 +2152,22 @@ function inkAround(wrapper: HTMLElement, r: DOMRect, background: RgbColor): RgbC
   }
 }
 
+/** The colour behind the text drawn inside `r` on the page canvas. */
 function backgroundAround(wrapper: HTMLElement, r: DOMRect): RgbColor {
+  const white = { r: 255, g: 255, b: 255 };
   const canvas = wrapper.querySelector<HTMLCanvasElement>(".page-canvas");
   const ctx = canvas?.getContext("2d", { willReadFrequently: true });
-  if (!canvas || !ctx) return { r: 255, g: 255, b: 255 };
+  if (!canvas || !ctx || r.width < 1 || r.height < 1) return white;
   const box = canvas.getBoundingClientRect();
   const kx = canvas.width / box.width, ky = canvas.height / box.height;
-  const counts = new Map<string, number>();
-  const points = [
-    [r.left - 3, r.top - 2], [r.right + 3, r.top - 2], [r.left - 3, r.bottom + 2], [r.right + 3, r.bottom + 2],
-    [r.left + r.width / 2, r.top - 2], [r.left + r.width / 2, r.bottom + 2],
-  ];
-  let best: RgbColor = { r: 255, g: 255, b: 255 }, bestN = 0;
-  for (const [x, y] of points) {
-    const px = Math.round((x - box.left) * kx), py = Math.round((y - box.top) * ky);
-    if (px < 0 || py < 0 || px >= canvas.width || py >= canvas.height) continue;
-    const [cr, cg, cb] = ctx.getImageData(px, py, 1, 1).data;
-    const key = `${cr},${cg},${cb}`;
-    const n = (counts.get(key) ?? 0) + 1;
-    counts.set(key, n);
-    if (n > bestN) { bestN = n; best = { r: cr, g: cg, b: cb }; }
+  const x = Math.max(0, Math.floor((r.left - box.left) * kx)), y = Math.max(0, Math.floor((r.top - box.top) * ky));
+  const w = Math.min(canvas.width - x, Math.ceil(r.width * kx)), h = Math.min(canvas.height - y, Math.ceil(r.height * ky));
+  if (w < 1 || h < 1) return white;
+  try {
+    return backgroundColorFrom(ctx.getImageData(x, y, w, h).data);
+  } catch {
+    return white;
   }
-  return best;
 }
 
 document.getElementById("viewer-scroll")!.addEventListener("click", (e: MouseEvent) => {
@@ -2385,14 +2410,20 @@ async function handleDrop(paths: string[], at: { x: number; y: number } | null, 
     await appWindow.onDragDropEvent(async (event) => {
       const p = event.payload;
       const at = "position" in p ? { x: p.position.x / devicePixelRatio, y: p.position.y / devicePixelRatio } : null;
+      const onTabs = !!at && sideTabs.contains(at.x, at.y);
       if (p.type === "over" || p.type === "enter") {
         document.body.classList.add("drag-over");
-        if (at && viewer.isLoaded()) pageSidebar.externalDropAt(at.x, at.y);
+        sideTabs.setDropTarget(onTabs);
+        if (onTabs) pageSidebar.hideExternalDrop();
+        else if (at && viewer.isLoaded()) pageSidebar.externalDropAt(at.x, at.y);
       } else if (p.type === "leave") {
         document.body.classList.remove("drag-over");
+        sideTabs.setDropTarget(false);
         pageSidebar.hideExternalDrop();
       } else if (p.type === "drop") {
         document.body.classList.remove("drag-over");
+        sideTabs.setDropTarget(false);
+        if (onTabs) { pageSidebar.hideExternalDrop(); await openInTabs(p.paths); return; }
         const gap = at && viewer.isLoaded() ? pageSidebar.externalDropAt(at.x, at.y) : null;
         pageSidebar.hideExternalDrop();
         await handleDrop(p.paths, at, gap);

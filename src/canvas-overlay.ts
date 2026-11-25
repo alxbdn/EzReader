@@ -230,7 +230,7 @@ export class CanvasOverlay implements SelectionOwner {
   ): void {
     this.session.beginEdit();
     ann.color = { ...color };
-    ann.strokeWidth = strokeWidth;
+    ann.strokeWidth = ann.kind === "ink" ? Math.max(1, strokeWidth) : strokeWidth;
     ann.fillColor = fillColor ? { ...fillColor } : null;
     ann.opacity = opacity;
     this.redrawCommitted();
@@ -1028,8 +1028,8 @@ export class CanvasOverlay implements SelectionOwner {
         : [[this.startX, this.startY], [curX, curY]];
       ctx.save();
       ctx.globalAlpha = this.style.opacity;
-      this.strokeInk(pts, this.style.shapeColor, this.style.strokeWidth,
-        this.activeTool === "ink" ? null : null, this.activeTool === "arrow");
+      this.strokeInk(pts, this.style.shapeColor, Math.max(1, this.style.strokeWidth),
+        null, this.activeTool === "arrow");
       ctx.restore();
       return;
     }
@@ -1541,7 +1541,8 @@ export class CanvasOverlay implements SelectionOwner {
       x: x0, y: y0, width: w, height: h,
       points: pdf.map(([x, y]) => [round((x - x0) / w), round((y - y0) / h)]),
       color: { ...this.style.shapeColor },
-      strokeWidth: this.style.strokeWidth,
+      // A line or arrow without an outline would be invisible: "No outline" only applies to shapes.
+      strokeWidth: Math.max(1, this.style.strokeWidth),
       fillColor: !arrow && this.activeTool === "ink" && this.style.fillColor ? { ...this.style.fillColor } : null,
       opacity: this.style.opacity,
       ...(arrow ? { arrow: true } : {}),

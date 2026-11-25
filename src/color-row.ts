@@ -1,5 +1,103 @@
 import { hexToRgb, rgbToHex, type RgbColor } from "./models";
 
+const EYEDROPPER_ICON = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m2 22 1-1h3l9-9"/><path d="M3 21v-3l9-9"/><path d="m15 6 3.4-3.4a2.1 2.1 0 1 1 3 3L18 9l.4.4a2.1 2.1 0 1 1-3 3l-3.8-3.8a2.1 2.1 0 1 1 3-3l.4.4Z"/></svg>`;
+
+/** Reads a color from the window: the dropper stays armed (eyedropper cursor) until the next
+ *  click, which samples the page or annotation under it. Escape, a right click, a click on
+ *  `cancelEl` or leaving the window cancels. The whole click is swallowed so the page tool
+ *  under the cursor never sees it. The WebView2 native EyeDropper is not used: it fails
+ *  silently in the Tauri webview, which left the button doing nothing. */
+export function pickScreenColor(cancelEl?: Element | null): Promise<string | null> {
+  return new Promise((resolve) => {
+    const root = document.documentElement;
+    root.classList.add("eyedropping");
+    const events = ["pointerup", "pointercancel", "mousedown", "mouseup", "click", "auxclick", "contextmenu"] as const;
+    let finished = false;
+    const release = () => events.forEach((t) => window.removeEventListener(t, swallow, true));
+    const swallow = (e: Event) => {
+      e.preventDefault();
+      e.stopPropagation();
+      e.stopImmediatePropagation();
+      // The sampling click ends with pointerup; its click follows in the same task, so let go after it.
+      if (finished && (e.type === "pointerup" || e.type === "pointercancel")) setTimeout(release, 0);
+    };
+    const done = (hex: string | null, midClick = false) => {
+      if (finished) return;
+      finished = true;
+      root.classList.remove("eyedropping");
+      window.removeEventListener("pointerdown", onDown, true);
+      window.removeEventListener("keydown", onKey, true);
+      window.removeEventListener("blur", onBlur);
+      // Mid-click, keep swallowing until its pointerup (see swallow); otherwise let go now.
+      if (!midClick) release();
+      resolve(hex);
+    };
+    const onDown = (e: PointerEvent) => {
+      swallow(e);
+      const cancel = e.button !== 0 || (cancelEl != null && e.target instanceof Node && cancelEl.contains(e.target));
+      done(cancel ? null : sampleAt(e.clientX, e.clientY), true);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      swallow(e);
+      done(null);
+    };
+    const onBlur = () => done(null);
+    setTimeout(() => {
+      if (finished) return;
+      window.addEventListener("pointerdown", onDown, true);
+      window.addEventListener("keydown", onKey, true);
+      window.addEventListener("blur", onBlur);
+      events.forEach((t) => window.addEventListener(t, swallow, true));
+    }, 0);
+  });
+}
+
+function normalizeHex(text: string): string | null {
+  const m = /^rgba?\((\d+),\s*(\d+),\s*(\d+)/i.exec(text);
+  if (m) return rgbToHex({ r: +m[1]!, g: +m[2]!, b: +m[3]! }).toLowerCase();
+  const c = parseHex(text);
+  return c ? rgbToHex(c).toLowerCase() : null;
+}
+
+/** Topmost opaque canvas pixel under the point, else the element's background color.
+ *  Canvases with `pointer-events: none` (page renders, overlays) are not hit-tested by
+ *  elementsFromPoint, so they are looked up by geometry inside each element on the way down. */
+export function sampleAt(x: number, y: number): string | null {
+  const seen = new Set<Element>();
+  for (const el of document.elementsFromPoint(x, y)) {
+    if (el instanceof HTMLCanvasElement) {
+      seen.add(el);
+      const hex = canvasPixel(el, x, y);
+      if (hex) return hex;
+      continue;
+    }
+    const hidden = [...el.querySelectorAll("canvas")].filter((c) => !seen.has(c)).reverse();
+    for (const c of hidden) {
+      seen.add(c);
+      const hex = canvasPixel(c, x, y);
+      if (hex) return hex;
+    }
+    const bg = getComputedStyle(el).backgroundColor;
+    if (bg && !/^rgba\(.*,\s*0\)$/.test(bg) && bg !== "transparent") return normalizeHex(bg);
+  }
+  return null;
+}
+
+function canvasPixel(el: HTMLCanvasElement, x: number, y: number): string | null {
+  const r = el.getBoundingClientRect();
+  if (r.width === 0 || r.height === 0 || el.width === 0 || el.height === 0) return null;
+  if (x < r.left || x >= r.right || y < r.top || y >= r.bottom) return null;
+  if (getComputedStyle(el).visibility === "hidden") return null;
+  const px = Math.min(el.width - 1, Math.floor((x - r.left) * el.width / r.width));
+  const py = Math.min(el.height - 1, Math.floor((y - r.top) * el.height / r.height));
+  try {
+    const d = el.getContext("2d")?.getImageData(px, py, 1, 1).data;
+    if (d && d[3]! > 0) return rgbToHex({ r: d[0]!, g: d[1]!, b: d[2]! }).toLowerCase();
+  } catch { /* tainted or not a 2D canvas */ }
+  return null;
+}
+
 const NONE_SWATCH = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M1 23 23 1" stroke="#E53935" stroke-width="1.8"/></svg>`;
 
 export interface ColorRowOptions {
@@ -8,6 +106,7 @@ export interface ColorRowOptions {
   presets: [string, string][];
   noneTitle?: string;
   customTitle: string;
+  eyedropperTitle?: string;
   onPick: (color: RgbColor | null) => void;
 }
 
@@ -62,7 +161,13 @@ export class ColorRow {
     this.customWrap.addEventListener("click", () => this.togglePicker());
     this.swatchRow.append(this.customWrap);
 
-    this.picker = new HsvPicker((c) => { this.set(c); opts.onPick(c); });
+    this.picker = new HsvPicker((c) => { this.set(c); opts.onPick(c); }, async (dropper) => {
+      const hex = await pickScreenColor(dropper);
+      if (!hex) return;
+      const c = hexToRgb(hex);
+      this.set(c);
+      opts.onPick(c);
+    });
     this.el.append(this.picker.el);
 
     this.hexWrap = document.createElement("label");
@@ -89,10 +194,10 @@ export class ColorRow {
       if (e.key === "Escape") { e.preventDefault(); this.showHex(); this.hexInput.blur(); }
     });
     this.el.append(this.hexWrap);
-    this.setTitles(opts.title, opts.presets.map(p => p[1]), opts.noneTitle, opts.customTitle);
+    this.setTitles(opts.title, opts.presets.map(p => p[1]), opts.noneTitle, opts.customTitle, opts.eyedropperTitle);
   }
 
-  setTitles(title: string, names: string[], noneTitle: string | undefined, customTitle: string): void {
+  setTitles(title: string, names: string[], noneTitle: string | undefined, customTitle: string, eyedropperTitle = "Pick a color from the screen"): void {
     this.icon.title = title;
     this.label.textContent = title;
     this.hexInput.setAttribute("aria-label", `${title} (hex)`);
@@ -100,7 +205,7 @@ export class ColorRow {
     if (this.noneBtn && noneTitle !== undefined) { this.noneBtn.title = noneTitle; this.noneBtn.setAttribute("aria-label", noneTitle); }
     this.customWrap.title = customTitle;
     this.customWrap.setAttribute("aria-label", customTitle);
-    this.picker.setLabel(customTitle);
+    this.picker.setLabel(customTitle, eyedropperTitle);
   }
 
   set(color: RgbColor | null): void {
@@ -217,7 +322,9 @@ class HsvPicker {
   private s = 1;
   private v = 1;
 
-  constructor(private onPick: (c: RgbColor) => void) {
+  private dropper: HTMLButtonElement;
+
+  constructor(private onPick: (c: RgbColor) => void, onDropper: (dropper: HTMLElement) => Promise<void>) {
     this.el = document.createElement("div");
     this.el.className = "color-picker-pop";
     this.el.hidden = true;
@@ -233,7 +340,24 @@ class HsvPicker {
     this.hue.min = "0";
     this.hue.max = "360";
     this.hue.addEventListener("input", () => { this.h = Number(this.hue.value); this.emit(); });
-    this.el.append(this.sv, this.hue);
+    this.dropper = document.createElement("button");
+    this.dropper.type = "button";
+    this.dropper.className = "cp-dropper";
+    this.dropper.innerHTML = EYEDROPPER_ICON;
+    this.dropper.setAttribute("aria-pressed", "false");
+    this.dropper.addEventListener("click", () => {
+      if (this.dropper.classList.contains("on")) return;
+      this.dropper.classList.add("on");
+      this.dropper.setAttribute("aria-pressed", "true");
+      void onDropper(this.dropper).finally(() => {
+        this.dropper.classList.remove("on");
+        this.dropper.setAttribute("aria-pressed", "false");
+      });
+    });
+    const hueLine = document.createElement("div");
+    hueLine.className = "cp-hue-line";
+    hueLine.append(this.dropper, this.hue);
+    this.el.append(this.sv, hueLine);
 
     this.sv.addEventListener("pointerdown", (e) => {
       if (e.button !== 0) return;
@@ -261,9 +385,11 @@ class HsvPicker {
     });
   }
 
-  setLabel(text: string): void {
+  setLabel(text: string, dropper: string): void {
     this.sv.setAttribute("aria-label", text);
     this.hue.setAttribute("aria-label", text);
+    this.dropper.title = dropper;
+    this.dropper.setAttribute("aria-label", dropper);
   }
 
   setHex(hex: string): void {

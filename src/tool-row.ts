@@ -126,6 +126,8 @@ export class ToolRow {
   private textBg!: ColorRow;
   private styleBtns = new Map<string, HTMLButtonElement>();
   private outline: ColorRow[] = [];
+  private shapeOutline!: ColorRow;
+  private lastStrokeWidth = 2;
   private fill: ColorRow[] = [];
   private shapeFillWrap!: HTMLElement;
   private pencilFillWrap!: HTMLElement;
@@ -337,7 +339,8 @@ export class ToolRow {
     for (const [el, key, fb] of this.titles) { el.title = this.tr(key, fb); el.setAttribute("aria-label", el.title); }
     for (const [row, key, presets, noneKey] of this.colorRows) {
       row.setTitles(this.tr(key, ""), presets.map(([, n]) => this.tr(COLOR_KEYS[n], n)),
-        noneKey ? this.tr(noneKey, "No background") : undefined, this.tr("optCustomColor", "Custom color"));
+        noneKey ? this.tr(noneKey, noneKey === "optNoOutline" ? "No outline" : "No background") : undefined,
+        this.tr("optCustomColor", "Custom color"), this.tr("optEyedropper", "Pick a color from the screen"));
     }
     for (const [s, key, fb] of this.sliders) s.setLabel(this.tr(key, fb));
     for (const [g, key, fb] of this.fontGroups) g.label = this.tr(key, fb);
@@ -494,8 +497,16 @@ export class ToolRow {
       seg.append(b);
     }
 
-    const outline = this.colorRow(ICON_OPT_OUTLINE, "optOutline", INK_COLORS, null, (c) => {
-      if (c) this.state.shapeColor = c;
+    // Shapes can drop their outline (like the background); a pencil stroke always shows.
+    const shapes = group === "shapes";
+    const outline = this.colorRow(ICON_OPT_OUTLINE, "optOutline", INK_COLORS, shapes ? "optNoOutline" : null, (c) => {
+      if (c) {
+        this.state.shapeColor = c;
+        if (this.state.strokeWidth === 0) this.state.strokeWidth = this.lastStrokeWidth;
+      } else {
+        if (this.state.strokeWidth > 0) this.lastStrokeWidth = this.state.strokeWidth;
+        this.state.strokeWidth = 0;
+      }
       this.changed();
     });
     const fill = this.colorRow(ICON_OPT_FILL, "optBackground", BACKGROUNDS, "optNoBackground", (c) => {
@@ -507,15 +518,16 @@ export class ToolRow {
     fillWrap.append(this.divider(), fill.el);
     if (group === "pencil") this.pencilFillWrap = fillWrap; else this.shapeFillWrap = fillWrap;
 
-    const thick = this.slider(1, 12, " px", "optThickness", "Thickness", (v) => {
+    const thick = this.slider(shapes ? 0 : 1, 12, " px", "optThickness", "Thickness", (v) => {
       this.state.strokeWidth = v;
+      if (v > 0) this.lastStrokeWidth = v;
       this.changed();
     });
     const op = this.slider(10, 100, " %", "optOpacity", "Opacity", (v) => {
       this.state.opacity = v / 100;
       this.changed();
     });
-    this.outline.push(outline);
+    if (shapes) this.shapeOutline = outline; else this.outline.push(outline);
     this.fill.push(fill);
     this.thickness.push(thick);
     this.opacity.push(op);
@@ -712,6 +724,7 @@ export class ToolRow {
     this.textColor.set(st.color);
     this.textBg.set(st.textBackground);
     for (const r of this.outline) r.set(st.shapeColor);
+    this.shapeOutline.set(st.strokeWidth === 0 ? null : st.shapeColor);
     for (const r of this.fill) r.set(st.fillColor);
     for (const s of this.thickness) s.set(st.strokeWidth);
     for (const s of this.opacity) s.set(st.opacity * 100);
@@ -869,7 +882,7 @@ export class ToolRow {
   private colorRow(icon: string, key: Key, presets: [string, string][], noneKey: Key | null, onPick: (c: RgbColor | null) => void): ColorRow {
     const row = new ColorRow({
       icon, title: key, presets, customTitle: "Custom color", onPick,
-      ...(noneKey ? { noneTitle: "No background" } : {}),
+      ...(noneKey ? { noneTitle: noneKey === "optNoOutline" ? "No outline" : "No background" } : {}),
     });
     this.colorRows.push([row, key, presets, noneKey]);
     return row;
