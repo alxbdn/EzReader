@@ -1,3 +1,4 @@
+import { isBookPath } from "./books";
 export interface Picture {
   data: string;
   width: number;
@@ -12,7 +13,7 @@ export function isImagePath(path: string): boolean {
 
 export function openKind(path: string): "pdf" | "epub" | "pictures" | null {
   if (/\.pdf$/i.test(path)) return "pdf";
-  if (/\.epub$/i.test(path)) return "epub";
+  if (isBookPath(path)) return "epub";
   return isImagePath(path) ? "pictures" : null;
 }
 

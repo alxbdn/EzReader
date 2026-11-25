@@ -70,6 +70,14 @@
             <uap:DisplayName>EPUB Book</uap:DisplayName>
           </uap:FileTypeAssociation>
         </uap:Extension>
+        <uap:Extension Category="windows.fileTypeAssociation">
+          <uap:FileTypeAssociation Name="cbz">
+            <uap:SupportedFileTypes>
+              <uap:FileType>.cbz</uap:FileType>
+            </uap:SupportedFileTypes>
+            <uap:DisplayName>Comic Book Archive</uap:DisplayName>
+          </uap:FileTypeAssociation>
+        </uap:Extension>
         <com:Extension Category="windows.comServer">
           <com:ComServer>
             <com:SurrogateServer DisplayName="EzReader PDF thumbnails and preview">

@@ -67,6 +67,12 @@
         "name": "EPUB Book",
         "description": "EPUB electronic book",
         "role": "Viewer"
+      },
+      {
+        "ext": ["cbz"],
+        "name": "Comic Book Archive",
+        "description": "Comic book (ZIP of pictures)",
+        "role": "Viewer"
       }
     ]
   }
