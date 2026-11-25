@@ -21,7 +21,8 @@ describe("SideTabs", () => {
     tabs.el.querySelector<HTMLButtonElement>(".side-tab-open")!.click();
     expect(on.open).toHaveBeenCalled();
     tabs.render([], null);
-    expect(tabs.el.hidden).toBe(true);
+    expect(tabs.el.querySelectorAll(".side-tab:not(.side-tab-open)")).toHaveLength(0);
+    expect(tabs.el.querySelector(".side-tab-open")).not.toBeNull();
   });
 
   it("shows no close cross on a tab that is still loading and has no name", () => {

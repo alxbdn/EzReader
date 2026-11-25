@@ -79,7 +79,6 @@ import {
   encryptPdf,
   decryptPdf,
   tempTag,
-  setLauncherRatioLock,
   setResizeBorder,
   isDefaultPdfReader,
   checkForUpdate,
@@ -459,7 +458,6 @@ async function fitWindowToDocument(): Promise<boolean> {
   if (!("__TAURI_INTERNALS__" in window)) return true;
   const pref = parseFloat(settingsModal.getSettings().defaultZoom);
   try {
-    await setLauncherRatioLock(false);
     if (!autoFitWindow) return true;
     if (fullscreen || docs.count > 1 || await appWindow.isMaximized()) return preferredZoomShowsPage(pref);
     const monitor = await currentMonitor();
@@ -748,6 +746,7 @@ async function openStartupFile(startup: StartupArgs): Promise<void> {
   if (startup.shouldPrint) {
     autoFitWindow = false;
     document.getElementById("toolbar-container")!.style.display = "none";
+    document.getElementById("status-bar")!.style.display = "none";
     await loadPdf(file);
     document.getElementById("app")!.classList.remove("booting");
     const all = Array.from({ length: viewer.pageCount }, (_, i) => i + 1);
@@ -1568,7 +1567,7 @@ printModal.onConfirm(async (settings) => {
 
 mountWelcomeDots(document.getElementById("welcome-screen")!);
 
-const welcomePrefs = new WelcomePrefs(document.getElementById("welcome-screen")!, {
+const welcomePrefs = new WelcomePrefs(document.getElementById("status-bar")!, {
   language: () => settingsModal.getSettings().language,
   setLanguage: (code) => settingsModal.setLanguage(code),
   t: () => getTranslations(settingsModal.getSettings().language),
