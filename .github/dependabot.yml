@@ -17,6 +17,10 @@ updates:
     schedule:
       interval: weekly
     groups:
+      # windows-collections must use the same windows-core as the windows
+      # crate: bumped alone, the build breaks on mismatched trait impls.
+      windows:
+        patterns: ['windows', 'windows-*']
       cargo-minor-and-patch:
         update-types: [minor, patch]
 

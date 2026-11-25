@@ -12,6 +12,7 @@
     strip_annotation_streams: () => false,
     temp_tag: () => "visual",
     is_default_pdf_reader: () => true,
+    check_for_update: () => ({ current: "1.0.0", latest: "1.0.0", upToDate: true, channel: "installer" }),
     check_pdf_association: () => true,
     list_printers: () => [],
     ocr_languages: () => [{ tag: "en-US", name: "English" }],
