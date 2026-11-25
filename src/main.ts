@@ -1043,7 +1043,7 @@ async function openPath(path: string): Promise<void> {
   if (openKind(path) === "pictures") { await openPictures([path]); return; }
   const open = docs.showing(path);
   if (open) { await docs.switchTo(open.id); return; }
-  await docs.inNewTab(() => loadPdf(path));
+  await docs.inNewTab(() => loadPdf(path), fileNameOf(path));
 }
 
 async function openPictures(paths: string[]): Promise<void> {
@@ -1217,7 +1217,7 @@ async function openTransferred(t: StartupArgs): Promise<void> {
     else if (t.savePath) session.adoptSavePath(t.savePath);
     setDirty(!!(t.dirty || t.unsaved));
     if (t.page && t.page > 1) viewer.goToPage(Math.min(t.page, viewer.pageCount), "instant");
-  });
+  }, fileNameOf(file));
 }
 
 void (async () => {
