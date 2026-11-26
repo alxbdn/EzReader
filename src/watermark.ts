@@ -44,15 +44,16 @@ export function watermarkPhrase(o: Pick<WatermarkOptions, "text" | "date" | "cod
 
 /** The pattern's measures, from the page width in pixels, so the preview and the saved file match. */
 export function watermarkGeometry(width: number) {
-  const fontSize = width / 92;
+  const fontSize = width / 80;
+  const dotStep = fontSize / 7;
   return {
     fontSize,
-    lineGap: fontSize * 1.25,
+    lineGap: fontSize * 1.4,
     amplitude: fontSize * 1.6,
     wavelength: fontSize * 30,
     angle: -Math.PI / 6,
-    dotStep: fontSize / 5.2,
-    dotRadius: (fontSize / 5.2) * 0.42,
+    dotStep,
+    dotRadius: dotStep * 0.45,
   };
 }
 
@@ -116,14 +117,19 @@ export function drawWatermark(ctx: CanvasRenderingContext2D, w: number, h: numbe
   m.restore();
 
   // 2. Keep only the dots of the matrix that fall on the text.
-  const tile = canvas(g.dotStep, g.dotStep);
+  // The tile is drawn larger then scaled down, so the dots keep their exact spacing at any size.
+  const side = Math.max(8, Math.ceil(g.dotStep * 4));
+  const k = side / g.dotStep;
+  const tile = canvas(side, side);
   const t = tile.getContext("2d")!;
   t.fillStyle = "#fff";
   t.beginPath();
-  t.arc(g.dotStep / 2, g.dotStep / 2, g.dotRadius, 0, Math.PI * 2);
+  t.arc(side / 2, side / 2, g.dotRadius * k, 0, Math.PI * 2);
   t.fill();
   m.globalCompositeOperation = "source-in";
-  m.fillStyle = m.createPattern(tile, "repeat")!;
+  const dots = m.createPattern(tile, "repeat")!;
+  dots.setTransform?.(new DOMMatrix().scale(1 / k));
+  m.fillStyle = dots;
   m.fillRect(0, 0, w, h);
 
   // 3. White dots in "difference" mode give the negative of the page under each dot.
