@@ -569,15 +569,14 @@ body.tab-dragging, body.tab-dragging * { cursor: grabbing !important; }
 
 /* Light / dark pill switch. */
 .theme-switch {
-  margin-left: 2px;
   position: relative;
   flex-shrink: 0;
   display: inline-flex;
   align-items: center;
   justify-content: space-between;
-  width: 52px;
-  height: 28px;
-  padding: 0 7px;
+  width: 64px;
+  height: 34px;
+  padding: 0 9px;
   border: 1px solid var(--border);
   border-radius: 999px;
   background: var(--muted);
@@ -586,21 +585,21 @@ body.tab-dragging, body.tab-dragging * { cursor: grabbing !important; }
 }
 .theme-switch:hover { border-color: var(--input); }
 .theme-switch-icon { position: relative; z-index: 1; display: inline-flex; transition: color 160ms ease; }
-.theme-switch-icon svg { width: 13px; height: 13px; display: block; }
+.theme-switch-icon svg { width: 15px; height: 15px; display: block; }
 .theme-switch:not(.on) .theme-switch-icon.sun,
 .theme-switch.on .theme-switch-icon.moon { color: var(--foreground); }
 .theme-switch-knob {
   position: absolute;
   top: 2px;
   left: 2px;
-  width: 22px;
-  height: 22px;
+  width: 28px;
+  height: 28px;
   border-radius: 999px;
   background: var(--background);
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12);
   transition: transform 180ms ease-out;
 }
-.theme-switch.on .theme-switch-knob { transform: translateX(24px); }
+.theme-switch.on .theme-switch-knob { transform: translateX(30px); }
 @media (prefers-reduced-motion: reduce) {
   .theme-switch-knob, .pointer-seg .icon-btn { transition: none; }
 }
@@ -3152,6 +3151,7 @@ body.mac .titlebar-logo { display: none !important; }
 }
 
 .tb-more-wrap { position: relative; display: inline-flex; }
+.icon-btn.tb-square.tb-more { border-radius: 999px; }
 .icon-btn.tb-square.tb-more.open { background: var(--accent); }
 .tb-more-menu {
   top: calc(100% + 6px);
