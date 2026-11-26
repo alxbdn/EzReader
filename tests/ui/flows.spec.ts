@@ -103,6 +103,26 @@ test.describe("opening screen", () => {
       await dismiss(page);
     }
   });
+
+  test("no scrollbar after the window grows then shrinks", async ({ page }) => {
+    await page.emulateMedia({ reducedMotion: "no-preference" });
+    await start(page);
+    const welcome = page.locator("#welcome-screen");
+    await page.setViewportSize({ width: 1700, height: 1600 });
+    await settle(page, 150);
+    await page.setViewportSize({ width: 1280, height: 860 });
+    await settle(page, 150);
+    const fits = () => welcome.evaluate((el) => el.scrollHeight <= el.clientHeight && el.scrollWidth <= el.clientWidth);
+    expect(await fits()).toBe(true);
+    await page.locator("#welcome-open-btn").click();
+    await expect(page.locator("#viewer-scroll .page-wrapper").first()).toBeVisible();
+    await page.setViewportSize({ width: 1100, height: 760 });
+    await settle(page, 150);
+    await page.locator(".side-tab-close").first().click({ force: true });
+    await expect(welcome).toBeVisible();
+    await settle(page, 150);
+    expect(await fits()).toBe(true);
+  });
 });
 
 test.describe("document", () => {
