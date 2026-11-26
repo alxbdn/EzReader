@@ -3624,7 +3624,10 @@ body.fullscreen .window-controls { display: none; }
 .studio-ann:hover .studio-ann-del, .studio-ann.on .studio-ann-del, .studio-ann:focus-within .studio-ann-del { visibility: visible; }
 .studio-ann-del:hover { color: var(--destructive, #dc2626); background: color-mix(in srgb, var(--destructive, #dc2626) 10%, transparent); }
 
-.hl-popover {
+/* ══ Selection pill ══
+   The one floating menu every selected annotation gets: colour, copy or duplicate, delete.
+   It stays dark in both themes so it reads as a tool over any page. */
+.sel-pill {
   position: absolute;
   z-index: 30;
   display: inline-flex;
@@ -3637,8 +3640,11 @@ body.fullscreen .window-controls { display: none; }
   box-shadow: 0 6px 20px rgba(0, 0, 0, 0.35);
   pointer-events: auto;
   user-select: none;
+  white-space: nowrap;
+  animation: pop-in 0.12s ease-out;
 }
-.hl-popover-color {
+@media (prefers-reduced-motion: reduce) { .sel-pill { animation: none; } }
+.sel-pill-color {
   display: inline-flex;
   align-items: center;
   gap: 4px;
@@ -3650,28 +3656,30 @@ body.fullscreen .window-controls { display: none; }
   color: #d4d4d8;
   cursor: pointer;
 }
-.hl-popover-color:hover { background: #3f3f46; }
-.hl-popover-dot {
+.sel-pill-color:hover { background: #3f3f46; }
+.sel-pill-dot {
   width: 14px;
   height: 14px;
   border-radius: 50%;
   border: 1.5px solid rgba(255, 255, 255, 0.85);
   flex-shrink: 0;
 }
-.hl-popover-chev {
+.sel-pill-chev {
   display: inline-flex;
   align-items: center;
   color: #a1a1aa;
+  transition: transform 0.12s ease-out;
 }
-.hl-popover-chev svg { width: 10px; height: 10px; }
-.hl-popover-swatches {
+.sel-pill.swatches-open .sel-pill-chev { transform: rotate(180deg); }
+.sel-pill-chev svg { width: 10px; height: 10px; }
+.sel-pill-swatches {
   display: none;
   align-items: center;
   gap: 5px;
   padding: 0 4px;
 }
-.hl-popover.swatches-open .hl-popover-swatches { display: inline-flex; }
-.hl-popover-swatch {
+.sel-pill.swatches-open .sel-pill-swatches { display: inline-flex; }
+.sel-pill-swatch {
   width: 16px;
   height: 16px;
   padding: 0;
@@ -3680,15 +3688,15 @@ body.fullscreen .window-controls { display: none; }
   cursor: pointer;
   transition: transform 0.1s, border-color 0.1s;
 }
-.hl-popover-swatch:hover { transform: scale(1.12); border-color: #fff; }
-.hl-popover-swatch.active { border-color: #fff; box-shadow: 0 0 0 1.5px #4f46e5; }
-.hl-popover-sep {
+.sel-pill-swatch:hover { transform: scale(1.12); border-color: #fff; }
+.sel-pill-swatch.active { border-color: #fff; box-shadow: 0 0 0 1.5px #27272a, 0 0 0 3px #fff; }
+.sel-pill-sep {
   width: 1px;
   height: 16px;
   margin: 0 2px;
   background: #3f3f46;
 }
-.hl-popover-del {
+.sel-pill-btn {
   width: 26px;
   height: 26px;
   padding: 0;
@@ -3701,24 +3709,10 @@ body.fullscreen .window-controls { display: none; }
   justify-content: center;
   cursor: pointer;
 }
-.hl-popover-del:hover { background: #3f3f46; color: #f87171; }
-.hl-popover-copy {
-  width: 26px;
-  height: 26px;
-  padding: 0;
-  border: none;
-  border-radius: 50%;
-  background: transparent;
-  color: #d4d4d8;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-}
-.hl-popover-copy:hover { background: #3f3f46; color: #fafafa; }
-.hl-popover-copy.done { color: #4ade80; }
-.hl-popover-copy svg { width: 13px; height: 13px; }
-.hl-popover-del svg { width: 13px; height: 13px; }
+.sel-pill-btn svg { width: 13px; height: 13px; }
+.sel-pill-btn:hover { background: #3f3f46; color: #fafafa; }
+.sel-pill-del:hover { color: #f87171; }
+.sel-pill-copy.done { color: #4ade80; }
 
 /* ══ EPUB reader ══ */
 .epub-reader {

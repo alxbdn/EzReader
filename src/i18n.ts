@@ -341,6 +341,9 @@ export interface Translations {
   menuExtractPages?: string;
   menuSelectAllPages?: string;
   menuDuplicate?: string;
+  selColor?: string;
+  selCopyText?: string;
+  selDelete?: string;
   menuPages3?: string;
   menuTools?: string;
   menuWindow?: string;
@@ -951,6 +954,9 @@ const EN: Translations = {
   menuExtractPages: "Extract selected pages…",
   menuSelectAllPages: "Select all pages",
   menuDuplicate: "Duplicate",
+  selColor: "Color",
+  selCopyText: "Copy text",
+  selDelete: "Delete",
   menuPages3: "Three pages per row",
   menuTools: "Tools",
   menuWindow: "Window",
@@ -1561,6 +1567,9 @@ const FR: Translations = {
   menuExtractPages: "Extraire les pages sélectionnées…",
   menuSelectAllPages: "Sélectionner toutes les pages",
   menuDuplicate: "Dupliquer",
+  selColor: "Couleur",
+  selCopyText: "Copier le texte",
+  selDelete: "Supprimer",
   menuPages3: "3 pages par ligne",
   menuTools: "Outils",
   menuWindow: "Fenêtre",

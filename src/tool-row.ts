@@ -2,6 +2,10 @@ import {
   defaultToolState,
   FONT_FAMILIES,
   HIGHLIGHT_PRESETS,
+  INK_PRESETS,
+  NOTE_PRESETS,
+  SIGNATURE_PRESETS,
+  STAMP_PRESETS,
   SYSTEM_FONTS,
   type ActiveToolState,
   type FontFamilyValue,
@@ -48,27 +52,24 @@ type PencilStyle = "ink" | "line";
 type ShapeStyle = "rect" | "circle" | "arrow";
 type Key = keyof Translations;
 
-const INK_COLORS: [string, string][] = [
-  ["#000000", "Black"], ["#e53935", "Red"], ["#2563eb", "Blue"], ["#16a34a", "Green"], ["#facc15", "Yellow"],
-];
+const INK_COLORS: [string, string][] = INK_PRESETS;
 const BACKGROUNDS: [string, string][] = [
   ["#ffffff", "White"], ["#fde047", "Yellow"], ["#fca5a5", "Pink"], ["#93c5fd", "Blue"], ["#86efac", "Green"],
 ];
-const NOTE_COLORS: [string, string][] = [
-  ["#fde047", "Yellow"], ["#f9a8d4", "Pink"], ["#93c5fd", "Blue"], ["#86efac", "Green"], ["#fdba74", "Orange"],
-];
+const NOTE_COLORS: [string, string][] = NOTE_PRESETS;
 const HIGHLIGHT_COLORS: [string, string][] = HIGHLIGHT_PRESETS;
-const STAMP_COLORS: [string, string][] = [
-  ["#000000", "Black"], ["#1e3a8a", "Ink blue"], ["#16a34a", "Green"], ["#dc2626", "Red"], ["#2563eb", "Blue"],
-];
+const STAMP_COLORS: [string, string][] = STAMP_PRESETS;
 const COLOR_KEYS: Record<string, Key> = {
   Black: "colBlack", Red: "colRed", Blue: "colBlue", Green: "colGreen", Yellow: "colYellow",
   White: "colWhite", Pink: "colPink", Orange: "colOrange", "Ink blue": "colInkBlue",
 };
+/** The translated name of a preset colour, named in English in the palettes. */
+export function colorName(t: Partial<Translations>, english: string): string {
+  const v = COLOR_KEYS[english] ? t[COLOR_KEYS[english]] : undefined;
+  return typeof v === "string" ? v : english;
+}
 const FONT_SIZES = [8, 9, 10, 11, 12, 14, 16, 18, 20, 24, 28, 32, 36, 48, 60, 72];
-const SIGNATURE_INKS: [string, string][] = [
-  ["#18181b", "Black"], ["#1d4ed8", "Blue"], ["#dc2626", "Red"], ["#15803d", "Green"],
-];
+const SIGNATURE_INKS: [string, string][] = SIGNATURE_PRESETS;
 
 export const BRUSHES: { id: string; key: Key; fb: string; width: number; opacity: number }[] = [
   { id: "ballpoint", key: "brushBallpoint", fb: "Ballpoint pen", width: 1, opacity: 1 },

@@ -25,15 +25,59 @@ import {
   type FontFamilyValue,
   DRAW_TOOLS,
   HIGHLIGHT_PRESETS,
+  INK_PRESETS,
+  NOTE_PRESETS,
+  SIGNATURE_PRESETS,
+  STAMP_PRESETS,
   type TextCover,
 } from "./models";
 import { ICON_CHECK, ICON_CHEVRON_DOWN, ICON_COPY, ICON_TRASH } from "./icons";
 import { textUnder, type Box } from "./highlight-text";
+import { copyable } from "./annotation-clipboard";
 import { drawVector } from "./signature-ink";
 import type { AnnotationSession } from "./annotation-session";
 import type { SelectionOwner, ToolSelection } from "./tool-selection";
 
 export type ShapeAnnotation = RectAnnotation | CircleAnnotation | InkAnnotation;
+
+/** The words on the selection pill, in the window's language. */
+export interface SelectionPillLabels {
+  color: string;
+  copyText: string;
+  duplicate: string;
+  delete: string;
+  colorName: (english: string) => string;
+}
+
+let pillLabels: SelectionPillLabels = {
+  color: "Color", copyText: "Copy text", duplicate: "Duplicate (Ctrl+D)", delete: "Delete (Del)",
+  colorName: (n) => n,
+};
+let pillLabelsVersion = 0;
+
+/** Sets the pill's words; pills already shown are rebuilt on their next redraw. */
+export function setSelectionPillLabels(labels: SelectionPillLabels): void {
+  pillLabels = labels;
+  pillLabelsVersion++;
+}
+
+/** The colours the pill offers for each kind; kinds without one keep the colour they were made with. */
+const palettes: Partial<Record<Annotation["kind"], [string, string][]>> = {
+  highlight: HIGHLIGHT_PRESETS,
+  rect: INK_PRESETS,
+  circle: INK_PRESETS,
+  ink: INK_PRESETS,
+  text: INK_PRESETS,
+  note: NOTE_PRESETS,
+  stamp: STAMP_PRESETS,
+  signature: SIGNATURE_PRESETS,
+};
+
+/** The colour the pill shows for `ann`, or null when it has none to change (pictures, scanned signatures, redactions). */
+export function annotationColor(ann: Annotation): RgbColor | null {
+  if (ann.kind === "signature") return ann.vector && ann.color ? ann.color : null;
+  return "color" in ann ? ann.color : null;
+}
 
 const NOTE_W = 150;
 const NOTE_H = 100;
@@ -144,7 +188,10 @@ export class CanvasOverlay implements SelectionOwner {
   private viewportRotation = 0;
 
   private readonly stopKeys: () => void;
-  private hlPopover: HTMLElement | null = null;
+  private pill: HTMLElement | null = null;
+  private pillFor: Annotation | null = null;
+  private pillKey = "";
+  private pillLang = -1;
   private containerDownPos: { x: number; y: number } | null = null;
 
   onHoverCursor: ((offsetX: number, offsetY: number) => string) | null = null;
@@ -546,7 +593,7 @@ export class CanvasOverlay implements SelectionOwner {
     if (this.selected && this.committed.includes(this.selected)) {
       this.drawSelectionBox(this.selected);
     }
-    this.syncHighlightPopover();
+    this.syncSelectionPill();
   }
 
   private drawSelectionBox(ann: Annotation): void {
@@ -584,97 +631,151 @@ export class CanvasOverlay implements SelectionOwner {
     }
   }
 
-  private syncHighlightPopover(): void {
-    const ann = this.selected?.kind === "highlight" && this.committed.includes(this.selected)
+  /**
+   * The floating pill under the selected annotation: its colour, then copy (highlights) or
+   * duplicate, then delete. Every kind gets the same pill; a control only shows when it applies.
+   * It is rebuilt when the selection or its colour changes, and only moved otherwise.
+   */
+  private syncSelectionPill(): void {
+    const ann = this.selected && this.committed.includes(this.selected) && this.selected !== this.editingAnn
+      && (this.activeTool === "select" || this.selected.kind === "highlight")
       ? this.selected
       : null;
     if (!ann) {
-      if (this.hlPopover) {
-        this.hlPopover.remove();
-        this.hlPopover = null;
-      }
+      this.pill?.remove();
+      this.pill = null;
+      this.pillFor = null;
       return;
     }
 
-    if (!this.hlPopover) {
+    const color = annotationColor(ann);
+    const key = color ? rgbToHex(color).toLowerCase() : "";
+    if (!this.pill || this.pillFor !== ann || this.pillKey !== key || this.pillLang !== pillLabelsVersion) {
+      this.buildPill(ann, color);
+      this.pillFor = ann;
+      this.pillKey = key;
+      this.pillLang = pillLabelsVersion;
+    }
+    this.placePill(ann);
+  }
+
+  private buildPill(ann: Annotation, color: RgbColor | null): void {
+    if (!this.pill) {
       const pop = document.createElement("div");
-      pop.className = "hl-popover";
-      pop.addEventListener("mousedown", (ev) => ev.stopPropagation());
-      pop.addEventListener("mouseup",   (ev) => ev.stopPropagation());
-      pop.addEventListener("click",     (ev) => ev.stopPropagation());
-      this.hlPopover = pop;
+      pop.className = "sel-pill";
+      pop.setAttribute("role", "toolbar");
+      for (const type of ["mousedown", "mouseup", "click", "dblclick", "contextmenu"] as const) {
+        pop.addEventListener(type, (ev) => { ev.stopPropagation(); if (type === "contextmenu") ev.preventDefault(); });
+      }
+      this.pill = pop;
       this.container.appendChild(pop);
     }
-
-    const pop = this.hlPopover;
-    const wasOpen = pop.classList.contains("swatches-open");
+    const pop = this.pill;
+    const wasOpen = this.pillFor === ann && pop.classList.contains("swatches-open");
     pop.replaceChildren();
     pop.classList.toggle("swatches-open", wasOpen);
 
-    const colorBtn = document.createElement("button");
-    colorBtn.type = "button";
-    colorBtn.className = "hl-popover-color";
-    const dot = document.createElement("span");
-    dot.className = "hl-popover-dot";
-    dot.style.background = rgbToCss(ann.color);
-    const chev = document.createElement("span");
-    chev.className = "hl-popover-chev";
-    chev.innerHTML = ICON_CHEVRON_DOWN;
-    colorBtn.append(dot, chev);
-    colorBtn.addEventListener("click", () => {
-      pop.classList.toggle("swatches-open");
-    });
+    const button = (cls: string, icon: string, label: string, run: (btn: HTMLButtonElement) => void): HTMLButtonElement => {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = `sel-pill-btn ${cls}`;
+      btn.title = label;
+      btn.setAttribute("aria-label", label);
+      btn.innerHTML = icon;
+      btn.addEventListener("click", () => run(btn));
+      return btn;
+    };
 
-    const swatches = document.createElement("div");
-    swatches.className = "hl-popover-swatches";
-    const activeHex = rgbToHex(ann.color).toLowerCase();
-    for (const [hex, label] of HIGHLIGHT_PRESETS) {
-      const sw = document.createElement("button");
-      sw.type = "button";
-      sw.className = `hl-popover-swatch${hex.toLowerCase() === activeHex ? " active" : ""}`;
-      sw.style.background = hex;
-      sw.title = label;
-      sw.addEventListener("click", () => {
-        const nextColor = hexToRgb(hex);
-        this.style.highlightColor = { ...nextColor };
-        this.applyHighlightAnnotationStyle(ann, nextColor, ann.opacity);
-        this.emitHighlightSelected(ann);
-      });
-      swatches.appendChild(sw);
+    const presets = palettes[ann.kind];
+    if (color && presets) {
+      const colorBtn = document.createElement("button");
+      colorBtn.type = "button";
+      colorBtn.className = "sel-pill-color";
+      colorBtn.title = pillLabels.color;
+      colorBtn.setAttribute("aria-label", pillLabels.color);
+      const dot = document.createElement("span");
+      dot.className = "sel-pill-dot";
+      dot.style.background = rgbToCss(color);
+      const chev = document.createElement("span");
+      chev.className = "sel-pill-chev";
+      chev.innerHTML = ICON_CHEVRON_DOWN;
+      colorBtn.append(dot, chev);
+      colorBtn.addEventListener("click", () => pop.classList.toggle("swatches-open"));
+
+      const swatches = document.createElement("div");
+      swatches.className = "sel-pill-swatches";
+      const activeHex = rgbToHex(color).toLowerCase();
+      for (const [hex, name] of presets) {
+        const sw = document.createElement("button");
+        sw.type = "button";
+        sw.className = `sel-pill-swatch${hex.toLowerCase() === activeHex ? " active" : ""}`;
+        sw.style.background = hex;
+        sw.title = pillLabels.colorName(name);
+        sw.setAttribute("aria-label", sw.title);
+        sw.addEventListener("click", () => this.recolor(ann, hexToRgb(hex)));
+        swatches.appendChild(sw);
+      }
+      pop.append(colorBtn, swatches);
     }
 
-    const copyBtn = document.createElement("button");
-    copyBtn.type = "button";
-    copyBtn.className = "hl-popover-copy";
-    const copyLabel = document.getElementById("ctx-copy")?.textContent?.trim() || "Copy";
-    copyBtn.title = copyLabel;
-    copyBtn.setAttribute("aria-label", copyLabel);
-    copyBtn.innerHTML = ICON_COPY;
-    copyBtn.addEventListener("click", () => void this.copyHighlight(ann, copyBtn));
+    if (ann.kind === "highlight") {
+      pop.append(button("sel-pill-copy", ICON_COPY, pillLabels.copyText, (btn) => void this.copyHighlight(ann, btn)));
+    } else if (copyable(ann)) {
+      pop.append(button("sel-pill-copy", ICON_COPY, pillLabels.duplicate, () => {
+        this.placeCopy(structuredClone(ann), 1);
+      }));
+    }
 
-    const sep = document.createElement("span");
-    sep.className = "hl-popover-sep";
+    if (pop.childElementCount > 0) {
+      const sep = document.createElement("span");
+      sep.className = "sel-pill-sep";
+      pop.append(sep);
+    }
+    pop.append(button("sel-pill-del", ICON_TRASH, pillLabels.delete, () => this.removeSelected()));
+  }
 
-    const delBtn = document.createElement("button");
-    delBtn.type = "button";
-    delBtn.className = "hl-popover-del";
-    delBtn.innerHTML = ICON_TRASH;
-    delBtn.addEventListener("click", () => {
-      this.selected = null;
-      this.session.remove(ann);
-      this.redrawCommitted();
-      this.emitHighlightSelected(null);
-    });
-
-    pop.append(colorBtn, swatches, copyBtn, sep, delBtn);
-
+  private placePill(ann: Annotation): void {
+    const pop = this.pill;
+    if (!pop) return;
     const b = this.getAnnBounds(ann);
     const pageW = this.canvas.clientWidth || (this.canvas.width / (window.devicePixelRatio || 1));
     const pageH = this.canvas.clientHeight || (this.canvas.height / (window.devicePixelRatio || 1));
-    const top = Math.min(Math.max(4, pageH - 42), b.bottom + 6);
-    const rightOffset = Math.max(4, Math.min(pageW - 128, pageW - b.right));
+    const pad = ann.kind === "highlight" ? 2 : 5;
+    const pillW = pop.offsetWidth || 128;
+    const below = b.bottom + pad + 6;
+    // Under the annotation when it fits on the page, above it otherwise.
+    const top = below + 36 <= pageH ? below : Math.max(4, b.top - pad - 6 - 36);
+    const right = Math.max(4, Math.min(pageW - pillW - 4, pageW - b.right - pad));
     pop.style.top = `${Math.round(top)}px`;
-    pop.style.right = `${Math.round(rightOffset)}px`;
+    pop.style.right = `${Math.round(right)}px`;
+  }
+
+  /** Gives `ann` a new colour as one undoable step, and tells the toolbar so its options follow. */
+  private recolor(ann: Annotation, color: RgbColor): void {
+    if (ann.kind === "highlight") {
+      this.style.highlightColor = { ...color };
+      this.applyHighlightAnnotationStyle(ann, color, ann.opacity);
+      this.emitHighlightSelected(ann);
+      return;
+    }
+    if (!("color" in ann)) return;
+    this.session.beginEdit();
+    ann.color = { ...color };
+    this.redrawCommitted();
+    this.session.edited();
+    if (ann.kind === "text") this.emitTextSelected(ann);
+    if (ann.kind === "rect" || ann.kind === "circle" || ann.kind === "ink") this.emitShapeSelected(ann);
+  }
+
+  private removeSelected(): void {
+    const removed = this.selected;
+    if (!removed) return;
+    this.selected = null;
+    this.session.remove(removed);
+    this.redrawCommitted();
+    this.emitTextSelected(null);
+    this.emitShapeSelected(null);
+    this.emitHighlightSelected(null);
   }
 
   highlightText(ann: HighlightAnnotation): string {
@@ -1102,7 +1203,7 @@ export class CanvasOverlay implements SelectionOwner {
   };
 
   private onContainerMouseDown = (e: MouseEvent): void => {
-    if ((e.target as HTMLElement | null)?.closest(".hl-popover")) return;
+    if ((e.target as HTMLElement | null)?.closest(".sel-pill")) return;
     this.containerDownPos = { x: e.clientX, y: e.clientY };
     if (this.activeTool !== "select") return;
     if (this.dragging || this.resizing) return;
@@ -1127,7 +1228,7 @@ export class CanvasOverlay implements SelectionOwner {
   private onContainerMouseUp = (e: MouseEvent): void => {
     const down = this.containerDownPos;
     this.containerDownPos = null;
-    if ((e.target as HTMLElement | null)?.closest(".hl-popover")) return;
+    if ((e.target as HTMLElement | null)?.closest(".sel-pill")) return;
     if (this.activeTool !== "select" && this.activeTool !== "highlight") return;
     if (this.dragging || this.resizing || this.isDrawing) return;
     if (down && Math.hypot(e.clientX - down.x, e.clientY - down.y) > 5) return;
@@ -1173,7 +1274,8 @@ export class CanvasOverlay implements SelectionOwner {
       }
       const hit = this.hitTest(e.offsetX, e.offsetY);
       this.selected = hit;
-      if (hit) {
+      // Only the main button moves an annotation; a right click just selects it.
+      if (hit && e.button === 0) {
         this.changeNotified = false;
         const bounds = this.getAnnBounds(hit);
         this.dragging    = true;
@@ -1595,11 +1697,7 @@ export class CanvasOverlay implements SelectionOwner {
         (document.activeElement as HTMLElement)?.isContentEditable) return;
     if ((e.key === "Delete" || e.key === "Backspace") &&
         this.selected && (this.activeTool === "select" || this.selected.kind === "highlight")) {
-      const removed = this.selected;
-      this.selected = null;
-      this.session.remove(removed);
-      this.redrawCommitted();
-      if (removed.kind === "highlight") this.emitHighlightSelected(null);
+      this.removeSelected();
     }
   };
 
@@ -1692,8 +1790,16 @@ export class CanvasOverlay implements SelectionOwner {
 
   };
 
+  /**
+   * A right click on an annotation selects it and shows its pill, the one menu annotations have;
+   * the page's own menu (Copy) only belongs to selected text, so it doesn't open here.
+   */
   private onContextMenu = (e: MouseEvent): void => {
     e.preventDefault();
+    e.stopPropagation();
+    if (this.activeTool !== "select") return;
+    const hit = this.hitTest(e.offsetX, e.offsetY) ?? this.hitHighlight(e.offsetX, e.offsetY);
+    if (hit && hit !== this.selected) this.select(hit);
   };
 
   reorderAnnotation(ann: Annotation, dir: "up" | "down"): void {
