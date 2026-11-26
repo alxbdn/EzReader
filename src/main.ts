@@ -89,7 +89,6 @@ import {
   unregisterPdfHandler,
   openDefaultAppsSettings,
   quickLookState,
-  setQuickLook,
   tabDragHover,
   tabDragEnd,
   moveTab,
@@ -107,6 +106,7 @@ import type { DocState } from "./page-history";
 import { currentMonitor, getCurrentWindow } from "@tauri-apps/api/window";
 import { LogicalSize, PhysicalPosition, PhysicalSize } from "@tauri-apps/api/dpi";
 import { keepCentred, pageFitScale, planWindowFit } from "./window-fit";
+import { showQuickLookCard } from "./welcome-quick-look";
 import { mountWindowControls } from "./window-controls";
 import { menuOwnsKey } from "./mac-menu";
 import { InfoPanel } from "./info-panel";
@@ -1581,19 +1581,9 @@ const welcomePrefs = new WelcomePrefs(document.getElementById("status-bar")!, {
     }
     await openDefaultAppsSettings();
   },
-  quickLook: () => quickLookState(),
-  setQuickLook: async (on) => {
-    try {
-      await setQuickLook(on);
-    } catch (err) {
-      const t = getTranslations(settingsModal.getSettings().language);
-      const blocked = err instanceof Error && err.message === "startup-blocked";
-      showToast(blocked ? t.settingsQuickLookBlocked ?? errText(err) : errText(err), true);
-      throw err;
-    }
-  },
 });
 void welcomePrefs.refresh();
+void showQuickLookCard(quickLookState);
 const updateToast = new UpdateToast();
 const updateBadge: UpdateBadge = new UpdateBadge(welcomePrefs.root, {
   t: () => getTranslations(settingsModal.getSettings().language),

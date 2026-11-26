@@ -639,7 +639,8 @@ body.tab-dragging, body.tab-dragging * { cursor: grabbing !important; }
   padding: 0 10px;
 }
 
-.tb-main { min-height: 50px; flex-wrap: wrap; row-gap: 6px; }
+/* One row only: when room runs out, fitMainRow folds and hides buttons instead of wrapping. */
+.tb-main { min-height: 50px; flex-wrap: nowrap; }
 
 .tb-tools {
   min-height: 42px;
@@ -745,6 +746,8 @@ body.tab-dragging, body.tab-dragging * { cursor: grabbing !important; }
 .tb-compact-2 .tb-left > .toolbar-sep { display: none; }
 .tb-compact-2 .toolbar-group.tb-left { gap: 5px; }
 .tb-compact-3 .tb-actions .tb-pages { display: none; }
+.tb-compact-4 .tb-real { display: none; }
+.tb-compact-5 .tb-actions .brightness-wrap { display: none; }
 
 /* Export, compress, protect, info and present sit on the bar; they fold
    into the "…" menu only when the row runs out of room. */
@@ -2098,13 +2101,9 @@ kbd,
 
 .welcome-features {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px;
   width: 100%;
-}
-
-@media (max-width: 900px) {
-  .welcome-features { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 
 @media (max-height: 700px) {
@@ -2114,13 +2113,14 @@ kbd,
   .welcome-logo svg { width: 52px; height: 52px; }
   .welcome-tagline { margin-bottom: 4px; }
   .welcome-hint { margin-bottom: 10px; }
+  .welcome-feature { padding: 10px 12px; }
 }
 
 .welcome-feature {
   display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 8px 10px;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 12px 14px;
   background: var(--card);
   border: 1px solid var(--border);
   border-radius: var(--radius);
@@ -2129,11 +2129,13 @@ kbd,
   cursor: default;
   user-select: none;
 }
+.welcome-feature[hidden] { display: none; }
+.welcome-feature-wide { grid-column: 1 / -1; align-items: center; }
 
 .welcome-feature-icon {
   flex-shrink: 0;
-  width: 28px;
-  height: 28px;
+  width: 34px;
+  height: 34px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -2142,9 +2144,50 @@ kbd,
   color: var(--foreground);
 }
 
+.welcome-feature-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+
 .welcome-feature-title {
   font-size: 13px;
   font-weight: 600;
+  color: var(--foreground);
+}
+
+.welcome-feature-desc {
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--muted-foreground);
+}
+
+/* Quick look: a tiny keyboard with blank keys, only Space is named. */
+.kb-mini {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 5px;
+  background: var(--muted);
+  border-radius: var(--radius-md);
+}
+.kb-row { display: flex; gap: 3px; }
+.kb-row-offset { padding-left: 5px; }
+.kb-key {
+  width: 8px;
+  height: 8px;
+  border: 1px solid var(--border);
+  border-bottom-width: 2px;
+  border-radius: 2px;
+  background: var(--background);
+}
+.kb-key.kb-space {
+  flex: 1;
+  height: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-color: var(--ring);
+  font-size: 9px;
+  font-weight: 600;
+  line-height: 1;
   color: var(--foreground);
 }
 
