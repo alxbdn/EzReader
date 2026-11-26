@@ -1722,7 +1722,7 @@ export async function renderRedactedPages(
 export async function renderWatermarkedPages(
   filePath: string,
   draw: (ctx: CanvasRenderingContext2D, width: number, height: number) => void,
-  dpi = 200,
+  dpi = 300,
   onProgress?: (done: number, total: number) => void,
   pages?: number[],
 ): Promise<RedactedPage[]> {
@@ -1783,7 +1783,7 @@ async function paintPage(page: PDFPageProxy, dpi: number): Promise<HTMLCanvasEle
 export async function renderStraightenedPages(
   filePath: string,
   items: { page: number; quad: [Point, Point, Point, Point] }[],
-  dpi = 200,
+  dpi = 300,
 ): Promise<StraightenedPage[]> {
   const doc = await (await pdfjsLib()).getDocument({ ...SAFE_PDF, url: convertFileSrc(filePath) + `?t=${Date.now()}` }).promise;
   try {

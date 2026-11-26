@@ -474,6 +474,8 @@ test.describe("documents", () => {
     await start(page, { doc: true });
     await page.click("[data-mode=edit]");
     await tryClick(page.locator("[data-group=redact]"));
+    await expect(page.locator("[data-redact=text]")).toHaveClass(/active/);
+    await tryClick(page.locator("[data-redact=area]"));
     const box = await pageBox(page);
     await drag(page, [box.x + 60, box.y + 60], [box.x + 200, box.y + 120]);
     await tryClick(page.locator("[data-redact=text]"));
@@ -509,6 +511,9 @@ test.describe("documents", () => {
     await start(page, { doc: true });
     await page.click("[data-mode=edit]");
     await page.click(".edit-tools [data-group=stamp]");
+    const size = page.locator(".studio-options .slider-row input[type=range]").last();
+    await expect(size).toBeVisible();
+    await expect(size).toHaveValue("8");
     await page.click(".stamp-new");
     const dialog = page.locator(".stamp-maker-box");
     await expect(dialog).toBeVisible();

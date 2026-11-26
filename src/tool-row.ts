@@ -112,7 +112,7 @@ export class ToolRow {
   private panel: ToolGroup | null = null;
   private pencilStyle: PencilStyle = "ink";
   private shapeStyle: ShapeStyle = "rect";
-  private redactKind: RedactKind = "area";
+  private redactKind: RedactKind = "text";
   private customStamp: string | null = null;
   private stampColorMode: StampColorMode = "original";
   private stamps: StampChip[] = [];
@@ -797,8 +797,9 @@ export class ToolRow {
     this.stampColorWrap.className = "opt-field";
     this.stampColorWrap.append(this.stampModeSeg, this.stampColor.el);
 
-    this.stampSize = this.slider(15, 80, " mm", "optSize", "Size", (v) => {
-      this.state.stampSize = v;
+    this.stampSize = this.slider(4, 80, " mm", "optSize", "Size", (v) => {
+      if (this.customStamp) this.state.stampSize = v;
+      else this.state.markSize = v;
       this.changed();
     });
     this.stampSizeWrap = this.stampSize.el;
@@ -963,8 +964,7 @@ export class ToolRow {
     this.stampModeSeg.hidden = !custom;
     for (const [m, b] of this.stampModeBtns) b.classList.toggle("active", m === this.stampColorMode);
     this.stampColor.el.hidden = custom && this.stampColorMode === "original";
-    this.stampSizeWrap.hidden = !custom;
-    this.stampSize.set(st.stampSize);
+    this.stampSize.set(custom ? st.stampSize : st.markSize);
     this.sigInk.set(st.signatureColor);
     const brush = brushOf(st.strokeWidth, st.opacity);
     for (const [id, b] of this.brushBtns) {
@@ -1035,7 +1035,7 @@ export class ToolRow {
           return [chip.name, this.stampColorMode === "recolor" ? color(STAMP_COLORS, st.stampColor) : this.tr("stmOriginal", "Original"), `${st.stampSize} mm`];
         }
         const mark = st.stampMark === "cross" ? this.tr("toolCross", "Cross") : this.tr("toolCheck", "Check mark");
-        return [mark, color(STAMP_COLORS, st.stampColor)];
+        return [mark, color(STAMP_COLORS, st.stampColor), `${st.markSize} mm`];
       }
       case "etext":
       case "text": {

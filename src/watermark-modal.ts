@@ -85,7 +85,7 @@ export class WatermarkModal extends Modal {
     this.opacity.min = "10";
     this.opacity.max = "100";
     this.opacity.step = "5";
-    this.opacity.value = "60";
+    this.opacity.value = "20";
     this.opacity.addEventListener("input", () => this.changed());
     opField.append(opHead, this.opacity);
 
