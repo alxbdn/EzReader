@@ -3213,7 +3213,7 @@ body.read-only .page-form-layer { pointer-events: none; }
 .wm-stage { position: relative; line-height: 0; cursor: zoom-in; }
 .wm-page { display: block; width: 250px; background: #fff; box-shadow: var(--page-shadow); }
 .wm-loupe {
-  position: absolute; width: 160px; height: 160px; border-radius: 50%; overflow: hidden; pointer-events: none;
+  position: absolute; width: 190px; height: 190px; border-radius: 50%; overflow: hidden; pointer-events: none;
   border: 3px solid var(--foreground); box-shadow: var(--shadow-lg); background: #fff;
   opacity: 0; transition: opacity 0.12s ease-out;
 }
