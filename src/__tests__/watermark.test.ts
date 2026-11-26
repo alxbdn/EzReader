@@ -49,7 +49,7 @@ describe("watermark dialog", () => {
     expect(o.text).toBe("For the sole purpose of ");
     expect(o.date).toBe("26/11/2026");
     expect(o.code).toMatch(/^[A-Z0-9]{6}$/);
-    expect(o.opacity).toBeCloseTo(0.6);
+    expect(o.opacity).toBeCloseTo(0.2);
     expect(m.box.querySelector(".wm-code")!.textContent).toBe(o.code);
   });
 
