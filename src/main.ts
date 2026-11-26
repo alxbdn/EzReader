@@ -12,7 +12,10 @@ import { pdfjsLib } from "./pdfjs";
 import { WelcomePrefs } from "./welcome-prefs";
 import { UpdateBadge } from "./update-badge";
 import { UpdateToast } from "./update-toast";
-import { PdfViewer, PdfPageView, renderRedactedPages, renderStraightenedPages } from "./pdf-viewer";
+import { PdfViewer, PdfPageView, renderFirstPage, renderRedactedPages, renderStraightenedPages, renderWatermarkedPages } from "./pdf-viewer";
+import { WatermarkModal } from "./watermark-modal";
+import { setUpWatermark } from "./watermark-flow";
+import { drawWatermark } from "./watermark";
 import { AdjustView, type PageSetting } from "./adjust-view";
 import { Toolbar } from "./toolbar";
 import { Presentation } from "./presentation";
@@ -73,6 +76,7 @@ import {
   splitPdf,
   pickDirectoryDialog,
   redactPages,
+  watermarkPages,
   straightenPages,
   renameFile,
   openImageDialog,
@@ -215,6 +219,7 @@ const pageEditor = new PageEditor({
   failed: (kind, err) => showToast(msg(kind === "adjust" ? "msgAdjustFailed" : "msgPagesFailed", { err: errText(err) }), true),
 });
 const compressModal      = new CompressModal();
+const watermarkModal     = new WatermarkModal();
 const exportModal        = new ExportModal();
 const ocrModal = new OcrModal({
   pageCount: () => (viewer.isLoaded() ? viewer.pageCount : 0),
@@ -398,6 +403,21 @@ const openCompress = setUpCompress({
   messages,
   ui: feedback,
   backend: tauriBackend,
+});
+
+const openWatermark = setUpWatermark({
+  session,
+  modal: watermarkModal,
+  refuse: () => protection.refuse(),
+  messages,
+  ui: feedback,
+  backend: tauriBackend,
+  renderPreview: renderFirstPage,
+  burn: async (input, output, o, copyLabel, onProgress) => {
+    const pages = await renderWatermarkedPages(input, (ctx, w, h) => drawWatermark(ctx, w, h, o, copyLabel), 200, onProgress);
+    await watermarkPages(input, output, pages);
+  },
+  today: () => new Date().toLocaleDateString(settingsModal.getSettings().language || undefined),
 });
 
 const exportFlow = setUpExport({
@@ -713,6 +733,7 @@ function applyLanguage(language: string): void {
   toolbar.applyTranslations(t);
   studio.applyTranslations(t);
   compressModal.applyTranslations(t);
+  watermarkModal.applyTranslations(t);
   exportModal.applyTranslations(t);
   ocrModal.applyTranslations(t);
   passwordModal.applyTranslations(t);
@@ -1670,6 +1691,10 @@ toolbar.on(async (e) => {
 
     case "compress":
       await openCompress();
+      break;
+
+    case "watermark":
+      await openWatermark();
       break;
 
     case "rotate":

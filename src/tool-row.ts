@@ -35,6 +35,7 @@ import {
   ICON_CHECK,
   ICON_DISCARD,
   ICON_EDIT_TEXT,
+  ICON_WATERMARK,
   ICON_IMAGE,
   ICON_REDACT_TEXT,
   ICON_REDACT_AREA,
@@ -186,7 +187,22 @@ export class ToolRow {
       this.groupButton("check", ICON_STAMP_CHECK, "toolCheck", "Check mark"),
       this.groupButton("cross", ICON_STAMP_CROSS, "toolCross", "Cross"),
     );
-    this.editSeg.append(contentSeg, this.groupLabel("grpRedact", "Redact"), redactSeg, this.groupLabel("grpStamps", "Stamps"), stampSeg);
+    const watermark = document.createElement("button");
+    watermark.type = "button";
+    watermark.className = "tool-btn";
+    watermark.innerHTML = ICON_WATERMARK;
+    const wmLabel = document.createElement("span");
+    this.text(wmLabel, "toolWatermark", "Watermark…");
+    watermark.append(wmLabel);
+    this.title(watermark, "ttWatermark", "Watermark: burn a text into every page of a copy");
+    watermark.addEventListener("click", () => {
+      if (!this.canSwitch()) return;
+      if (this.group) this.clearTool();
+      this.emit({ type: "watermark" });
+    });
+    const watermarkSeg = this.segment("");
+    watermarkSeg.append(watermark);
+    this.editSeg.append(contentSeg, this.groupLabel("grpRedact", "Redact"), redactSeg, watermarkSeg, this.groupLabel("grpStamps", "Stamps"), stampSeg);
 
     this.hint = document.createElement("span");
     this.hint.className = "tb-hint";

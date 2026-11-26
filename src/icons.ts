@@ -145,3 +145,5 @@ export const ICON_IMAGE_SMALL = lucide(`<rect x="3" y="4" width="18" height="16"
 export const ICON_TOC = lucide(`<path d="M3 6h.01"/><path d="M3 12h.01"/><path d="M3 18h.01"/><path d="M8 6h13"/><path d="M8 12h13"/><path d="M8 18h13"/>`);
 export const ICON_TEXT_SMALLER = lucide(`<path d="M3.5 13h6"/><path d="m2 16 4.5-9 4.5 9"/><path d="M18 7v9"/><path d="m14 12 4 4 4-4"/>`);
 export const ICON_TEXT_LARGER = lucide(`<path d="M3.5 13h6"/><path d="m2 16 4.5-9 4.5 9"/><path d="M18 16V7"/><path d="m14 11 4-4 4 4"/>`);
+/** A page crossed by diagonal lines of text: the watermark. */
+export const ICON_WATERMARK = lucide(`<path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="m8 17 8-8"/><path d="m8 12 3-3"/><path d="m13 17 3-3"/>`);

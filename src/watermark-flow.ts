@@ -1,0 +1,57 @@
+import type { Backend, Feedback } from "./backend";
+import type { DocumentSession } from "./document-session";
+import type { Messages } from "./messages";
+import type { WatermarkOptions } from "./watermark";
+import type { PagePreview, WatermarkModal } from "./watermark-modal";
+
+export interface WatermarkDeps {
+  session: Pick<DocumentSession, "isOpen" | "sourcePath" | "materialize">;
+  modal: Pick<WatermarkModal, "open" | "onConfirm" | "isOpen" | "close" | "startRunning" | "setProgress" | "finishRunning" | "copyLabel">;
+  refuse(): boolean;
+  messages: Messages;
+  ui: Feedback;
+  backend: Pick<Backend, "savePdfDialog">;
+  /** Page 1 of `input` as a picture `widthPx` wide. */
+  renderPreview(input: string, widthPx: number): Promise<HTMLCanvasElement>;
+  /** Writes `output`: `input` with every page replaced by its watermarked picture. */
+  burn(input: string, output: string, o: WatermarkOptions, copyLabel: string, onProgress: (done: number, total: number) => void): Promise<void>;
+  today(): string;
+}
+
+/** "Contrat.pdf" → "Contrat-watermarked.pdf", in the same folder. */
+export function watermarkedName(source: string, suffix: string): string {
+  return source.replace(/(\.pdf)?$/i, `-${suffix}.pdf`);
+}
+
+/**
+ * The watermark is saved as a copy: the original stays as it was, and each copy sent out can carry
+ * its own code.
+ */
+export function setUpWatermark(d: WatermarkDeps): () => Promise<void> {
+  const { msg, errText } = d.messages;
+  let input: Promise<string> | null = null;
+
+  d.modal.onConfirm(async (o) => {
+    const source = d.session.sourcePath;
+    if (!source || !input) return;
+    const out = await d.backend.savePdfDialog(watermarkedName(source, msg("msgWmFileSuffix")));
+    if (!out) return;
+    d.modal.startRunning();
+    try {
+      await d.burn(await input, out, o, d.modal.copyLabel, (done, total) => d.modal.setProgress(done, total));
+      d.modal.finishRunning();
+      d.modal.close();
+      d.ui.notify(msg("msgWatermarked", { name: out.split(/[\\/]/).pop() ?? out }));
+    } catch (err) {
+      d.modal.finishRunning();
+      d.ui.notify(msg("msgWatermarkFailed", { err: errText(err) }), true);
+    }
+  });
+
+  return async () => {
+    if (!d.session.isOpen || d.modal.isOpen || d.refuse()) return;
+    input = d.session.materialize();
+    const preview: PagePreview = async (w) => d.renderPreview(await input!, w);
+    d.modal.open(preview, d.today());
+  };
+}

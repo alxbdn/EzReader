@@ -23,6 +23,21 @@ const DROPPED_PAGE_KEYS: [&[u8]; 9] =
     [b"Annots", b"Thumb", b"PieceInfo", b"StructParents", b"CropBox", b"BleedBox", b"TrimBox", b"ArtBox", b"Metadata"];
 
 pub fn redact_pages(doc: &mut Document, pages: &[RedactedPage]) -> Result<(), String> {
+    replace_pages(doc, pages, true)
+}
+
+/// Burns a watermark into every page: each page becomes its picture, which already shows the
+/// annotations under the watermark, so the editable annotation record is dropped too. Nothing is
+/// left on top of the watermark to lift it off.
+pub fn watermark_pages(doc: &mut Document, pages: &[RedactedPage]) -> Result<(), String> {
+    if pages.len() != doc.get_pages().len() {
+        return Err("every page must be watermarked".into());
+    }
+    crate::pdf::annotation_layer::drop_meta(doc);
+    replace_pages(doc, pages, false)
+}
+
+fn replace_pages(doc: &mut Document, pages: &[RedactedPage], keep_layer: bool) -> Result<(), String> {
     if pages.is_empty() {
         return Ok(());
     }
@@ -35,7 +50,11 @@ pub fn redact_pages(doc: &mut Document, pages: &[RedactedPage]) -> Result<(), St
 
         let (img_id, ops) = add_picture(doc, rp)?;
         let content_id = doc.add_object(Stream::new(dictionary! {}, ops.into_bytes()));
-        let contents = with_annotation_layer(doc, &meta, rp.page, content_id);
+        let contents = if keep_layer {
+            with_annotation_layer(doc, &meta, rp.page, content_id)
+        } else {
+            vec![Object::Reference(content_id)]
+        };
         let [x0, y0, x1, y1] = rp.view;
 
         let annots = doc.get_dictionary(page_id).ok().and_then(|d| d.get(b"Annots").ok().cloned());
@@ -285,6 +304,31 @@ mod tests {
         assert!(!reloaded.extract_text(&[1]).unwrap_or_default().contains("Page 1"));
         assert!(reloaded.extract_text(&[2]).unwrap().contains("Page 2"));
         std::fs::remove_file(&out).ok();
+    }
+
+    #[test]
+    fn watermark_flattens_every_page_and_drops_the_annotation_record() {
+        let mut doc = secret_pdf();
+        let meta = crate::pdf::annotation_layer::AnnotationMeta::default();
+        crate::pdf::annotation_layer::save_meta(&mut doc, &meta).unwrap();
+        watermark_pages(&mut doc, &[page(1)]).unwrap();
+        let out = tmp("watermarked.pdf");
+        doc.save(&out).unwrap();
+        let bytes = std::fs::read(&out).unwrap();
+        let has = |needle: &[u8]| bytes.windows(needle.len()).any(|w| w == needle);
+        assert!(!has(b"SECRET"), "page text survived");
+        assert!(!has(b"CCAnnot"), "annotation record survived");
+        let reloaded = Document::load(&out).unwrap();
+        let pid = reloaded.get_pages()[&1];
+        let contents = reloaded.get_dictionary(pid).unwrap().get(b"Contents").unwrap().as_array().unwrap().len();
+        assert_eq!(contents, 1, "only the picture is drawn");
+        std::fs::remove_file(&out).ok();
+    }
+
+    #[test]
+    fn watermark_needs_every_page() {
+        let mut doc = Document::load(fixture("objstm-indirect-length.pdf")).unwrap();
+        assert!(watermark_pages(&mut doc, &[page(1)]).is_err());
     }
 
     #[test]

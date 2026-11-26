@@ -1715,6 +1715,69 @@ export async function renderRedactedPages(
   }
 }
 
+/**
+ * Every page as a picture with `draw` painted over it (the watermark), ready to replace the page
+ * like a redaction. Annotations already written into `filePath` end up under the watermark.
+ */
+export async function renderWatermarkedPages(
+  filePath: string,
+  draw: (ctx: CanvasRenderingContext2D, width: number, height: number) => void,
+  dpi = 200,
+  onProgress?: (done: number, total: number) => void,
+): Promise<RedactedPage[]> {
+  const doc = await (await pdfjsLib()).getDocument({ ...SAFE_PDF, url: convertFileSrc(filePath) + `?t=${Date.now()}` }).promise;
+  try {
+    const out: RedactedPage[] = [];
+    for (let pageNum = 1; pageNum <= doc.numPages; pageNum++) {
+      const page = await doc.getPage(pageNum);
+      const canvas = await paintPage(page, dpi);
+      draw(canvas.getContext("2d")!, canvas.width, canvas.height);
+      const [v0, v1, v2, v3] = page.view;
+      out.push({
+        page: pageNum,
+        jpegBase64: canvas.toDataURL("image/jpeg", 0.9).split(",")[1],
+        widthPx: canvas.width,
+        heightPx: canvas.height,
+        view: [v0, v1, v2, v3],
+      });
+      canvas.width = canvas.height = 0;
+      page.cleanup();
+      onProgress?.(pageNum, doc.numPages);
+    }
+    return out;
+  } finally {
+    await doc.loadingTask.destroy();
+  }
+}
+
+/** Page 1 of `filePath`, `widthPx` wide, on white: the watermark dialog's preview. */
+export async function renderFirstPage(filePath: string, widthPx: number): Promise<HTMLCanvasElement> {
+  const doc = await (await pdfjsLib()).getDocument({ ...SAFE_PDF, url: convertFileSrc(filePath) + `?t=${Date.now()}` }).promise;
+  try {
+    const page = await doc.getPage(1);
+    const unit = page.getViewport({ scale: 1, rotation: 0 });
+    const canvas = await paintPage(page, (widthPx / unit.width) * 72);
+    page.cleanup();
+    return canvas;
+  } finally {
+    await doc.loadingTask.destroy();
+  }
+}
+
+async function paintPage(page: PDFPageProxy, dpi: number): Promise<HTMLCanvasElement> {
+  const unit = page.getViewport({ scale: 1, rotation: 0 });
+  const scale = Math.min(dpi / 72, Math.sqrt(40e6 / (unit.width * unit.height)));
+  const viewport = page.getViewport({ scale, rotation: 0 });
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.ceil(viewport.width);
+  canvas.height = Math.ceil(viewport.height);
+  const ctx = canvas.getContext("2d")!;
+  ctx.fillStyle = "#fff";
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  await page.render({ canvas: ctx.canvas, viewport }).promise;
+  return canvas;
+}
+
 export async function renderStraightenedPages(
   filePath: string,
   items: { page: number; quad: [Point, Point, Point, Point] }[],
