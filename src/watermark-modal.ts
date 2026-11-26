@@ -8,7 +8,11 @@ export type PagePreview = (widthPx: number) => Promise<HTMLCanvasElement>;
 
 const PREVIEW_CSS_WIDTH = 250;
 const LOUPE_ZOOM = 4;
-const LOUPE_RADIUS = 80;
+const LOUPE_RADIUS = 95;
+/** The loupe's picture is drawn this many times sharper than it shows, so the micro-text reads clearly. */
+const LOUPE_SHARPNESS = 2;
+/** The widest loupe picture, in pixels, to keep memory in check. */
+const LOUPE_MAX_WIDTH = 4000;
 
 export class WatermarkModal extends Modal {
   private handlers: ConfirmHandler[] = [];
@@ -216,7 +220,7 @@ export class WatermarkModal extends Modal {
     if (!this.base || !this.preview) return;
     if (!this.big) {
       const preview = this.preview;
-      this.bigPending ??= preview(Math.round(this.base.width * LOUPE_ZOOM)).then((c) => {
+      this.bigPending ??= preview(loupeWidth(this.base.width)).then((c) => {
         if (this.preview !== preview) return;
         this.big = c;
         this.redraw();
@@ -239,6 +243,11 @@ export class WatermarkModal extends Modal {
     this.loupeCanvas.style.height = `${r.height * k}px`;
     this.loupeCanvas.style.transform = `translate(${-(x * k - d / 2)}px, ${-(y * k - d / 2)}px)`;
   }
+}
+
+/** The width of the loupe's picture of a preview `baseWidth` pixels wide. */
+export function loupeWidth(baseWidth: number): number {
+  return Math.round(Math.min(LOUPE_MAX_WIDTH, Math.max(baseWidth * LOUPE_ZOOM, 1000) * LOUPE_SHARPNESS));
 }
 
 /** `base` copied onto `target`, with the watermark over it unless `o` is null (already drawn). */
