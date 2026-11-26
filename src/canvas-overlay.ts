@@ -1359,6 +1359,14 @@ export class CanvasOverlay implements SelectionOwner {
       return;
     }
 
+    if (this.activeTool === "stamp" && this.style.stampImage) {
+      const { data, ratio } = this.style.stampImage;
+      const side = (this.style.stampSize * 72) / 25.4;
+      const [w, h] = ratio > 1 ? [side / ratio, side] : [side, side * ratio];
+      this.placeImage(this.startX, this.startY, data, w, h);
+      return;
+    }
+
     if (this.activeTool === "stamp") {
       const [px, py] = this.toPdf(this.startX, this.startY);
       const ann: StampAnnotation = {

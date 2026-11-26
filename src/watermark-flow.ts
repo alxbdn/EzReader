@@ -1,8 +1,7 @@
 import type { Backend, Feedback } from "./backend";
 import type { DocumentSession } from "./document-session";
 import type { Messages } from "./messages";
-import type { WatermarkOptions } from "./watermark";
-import type { PagePreview, WatermarkModal } from "./watermark-modal";
+import type { PagePreview, WatermarkModal, WatermarkRequest } from "./watermark-modal";
 
 export interface WatermarkDeps {
   session: Pick<DocumentSession, "isOpen" | "sourcePath" | "materialize">;
@@ -11,11 +10,13 @@ export interface WatermarkDeps {
   messages: Messages;
   ui: Feedback;
   backend: Pick<Backend, "savePdfDialog">;
-  /** Page 1 of `input` as a picture `widthPx` wide. */
-  renderPreview(input: string, widthPx: number): Promise<HTMLCanvasElement>;
-  /** Writes `output`: `input` with every page replaced by its watermarked picture. */
-  burn(input: string, output: string, o: WatermarkOptions, copyLabel: string, onProgress: (done: number, total: number) => void): Promise<void>;
+  /** Page `page` of `input` as a picture `widthPx` wide. */
+  renderPreview(input: string, widthPx: number, page: number): Promise<HTMLCanvasElement>;
+  /** Writes `output`: `input` with the pages in `o.pages` replaced by their watermarked picture. */
+  burn(input: string, output: string, o: WatermarkRequest, copyLabel: string, onProgress: (done: number, total: number) => void): Promise<void>;
   today(): string;
+  /** The page in view and the number of pages. */
+  pages(): { current: number; total: number };
 }
 
 /** "Contrat.pdf" → "Contrat-watermarked.pdf", in the same folder. */
@@ -33,7 +34,7 @@ export function setUpWatermark(d: WatermarkDeps): () => Promise<void> {
 
   d.modal.onConfirm(async (o) => {
     const source = d.session.sourcePath;
-    if (!source || !input) return;
+    if (!source || !input || o.pages.length === 0) return;
     const out = await d.backend.savePdfDialog(watermarkedName(source, msg("msgWmFileSuffix")));
     if (!out) return;
     d.modal.startRunning();
@@ -51,7 +52,7 @@ export function setUpWatermark(d: WatermarkDeps): () => Promise<void> {
   return async () => {
     if (!d.session.isOpen || d.modal.isOpen || d.refuse()) return;
     input = d.session.materialize();
-    const preview: PagePreview = async (w) => d.renderPreview(await input!, w);
-    d.modal.open(preview, d.today());
+    const preview: PagePreview = async (w, page) => d.renderPreview(await input!, w, page);
+    d.modal.open(preview, d.today(), d.pages());
   };
 }

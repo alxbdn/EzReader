@@ -215,6 +215,60 @@ pub(crate) fn picture_from_bytes(bytes: &[u8]) -> CmdResult<Picture> {
     Ok(Picture { data: b64(&out), width: img.width(), height: img.height() })
 }
 
+const MAX_SVG_BYTES: u64 = 2 * 1024 * 1024;
+
+/// An SVG picture for a stamp, as base64. The interface only draws it through an `<img>`,
+/// where scripts and outside links never run.
+#[tauri::command(async)]
+pub fn load_svg(path: String) -> CmdResult<String> {
+    crate::grants::check(&path)?;
+    svg_from_file(std::path::Path::new(&path))
+}
+
+pub(crate) fn svg_from_file(p: &std::path::Path) -> CmdResult<String> {
+    use base64::Engine;
+    let ext = p.extension().and_then(|e| e.to_str()).map(str::to_ascii_lowercase).unwrap_or_default();
+    if ext != "svg" {
+        return Err(PdfError::new(ErrorCode::NotAnImage, "not an SVG picture"));
+    }
+    let len = std::fs::metadata(p).map_err(|e| e.to_string())?.len();
+    if len > MAX_SVG_BYTES {
+        return Err(PdfError::new(ErrorCode::TooLarge, "too large"));
+    }
+    let bytes = std::fs::read(p).map_err(|e| e.to_string())?;
+    let text = std::str::from_utf8(&bytes).map_err(|_| PdfError::new(ErrorCode::NotAnImage, "not an SVG picture"))?;
+    if !text.contains("<svg") {
+        return Err(PdfError::new(ErrorCode::NotAnImage, "not an SVG picture"));
+    }
+    Ok(base64::engine::general_purpose::STANDARD.encode(&bytes))
+}
+
+#[cfg(test)]
+mod svg_tests {
+    use super::*;
+
+    fn file(name: &str, body: &[u8]) -> std::path::PathBuf {
+        let d = std::env::temp_dir().join(format!("ezreader-svg-{}-{}", std::process::id(), name));
+        std::fs::create_dir_all(&d).unwrap();
+        let p = d.join(name);
+        std::fs::write(&p, body).unwrap();
+        p
+    }
+
+    #[test]
+    fn reads_an_svg_file() {
+        let p = file("stamp.svg", br#"<svg xmlns="http://www.w3.org/2000/svg" width="4" height="4"/>"#);
+        assert!(svg_from_file(&p).unwrap().starts_with("PHN2Zy"));
+    }
+
+    #[test]
+    fn refuses_other_files() {
+        assert_eq!(svg_from_file(&file("a.txt", b"<svg/>")).unwrap_err().code, ErrorCode::NotAnImage);
+        assert_eq!(svg_from_file(&file("b.svg", b"hello")).unwrap_err().code, ErrorCode::NotAnImage);
+        assert_eq!(svg_from_file(&file("c.svg", &[0xff, 0xfe, 0])).unwrap_err().code, ErrorCode::NotAnImage);
+    }
+}
+
 #[tauri::command]
 pub fn temp_tag() -> String {
     crate::tempfiles::tag()

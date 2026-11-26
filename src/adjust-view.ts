@@ -28,6 +28,23 @@ const SELECT = "#E53935";
 const ZOOM = 4;
 const MAX_PIXELS = 12e6;
 
+/** Which pages Crop and Straighten work on. */
+export type PageScope = "this" | "selection" | "all";
+
+export interface ScopePages { current: number; selection: number[]; total: number }
+
+/** The pages a scope stands for. An empty selection falls back to the current page. */
+export function scopePages(scope: PageScope, p: ScopePages): number[] {
+  if (scope === "all") return Array.from({ length: p.total }, (_, i) => i + 1);
+  if (scope === "selection" && p.selection.length > 0) return [...p.selection].sort((a, b) => a - b);
+  return [p.current];
+}
+
+/** The scope an opening starts with: the selection when there is one beyond the current page. */
+export function defaultScope(p: ScopePages): PageScope {
+  return p.selection.length > 1 || (p.selection.length === 1 && p.selection[0] !== p.current) ? "selection" : "this";
+}
+
 export function changesPage(s: PageSetting): boolean {
   if (s.mode === "crop") {
     return s.flipH || s.flipV || s.crop.l > 1e-4 || s.crop.t > 1e-4 || s.crop.r < 1 - 1e-4 || s.crop.b < 1 - 1e-4;
@@ -51,6 +68,10 @@ interface Rendered {
 export class AdjustView {
   readonly el: HTMLElement;
   private header: HTMLElement;
+  private scopeSeg: HTMLElement;
+  private scopeBtns = new Map<PageScope, HTMLButtonElement>();
+  private scope: PageScope = "this";
+  private scopePagesOf: ScopePages = { current: 1, selection: [], total: 1 };
   private titleEl: HTMLElement;
   private modeBtns = new Map<AdjustKind, HTMLButtonElement>();
   private cropTools: HTMLElement;
@@ -125,7 +146,20 @@ export class AdjustView {
     this.warpHint.className = "adj-hint";
     this.text(this.warpHint, "adjWarpHint", "Click a corner: an offset loupe opens so you can place it to the pixel. Arrow keys nudge it.");
 
-    this.header.append(this.titleEl, seg, this.cropTools, this.warpHint);
+    this.scopeSeg = document.createElement("div");
+    this.scopeSeg.className = "toolbar-segment adj-scope";
+    this.scopeSeg.setAttribute("role", "group");
+    for (const scope of ["this", "selection", "all"] as PageScope[]) {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "tool-btn";
+      b.dataset["scope"] = scope;
+      b.addEventListener("click", () => this.setScope(scope));
+      this.scopeBtns.set(scope, b);
+      this.scopeSeg.append(b);
+    }
+
+    this.header.append(this.titleEl, this.scopeSeg, seg, this.cropTools, this.warpHint);
 
     const body = document.createElement("div");
     body.className = "adj-body";
@@ -146,11 +180,13 @@ export class AdjustView {
 
   get isOpen(): boolean { return this.doc !== null; }
 
-  open(doc: PDFDocumentProxy, pages: number[], kind: AdjustKind, rotation: number): void {
+  open(doc: PDFDocumentProxy, pages: ScopePages, kind: AdjustKind, rotation: number): void {
     this.doc = doc;
     this.opened++;
     this.rotation = rotation;
-    this.settings = pages.map((page) => ({ page, mode: kind, crop: { ...FULL }, flipH: false, flipV: false, quad: CORNERS.map((p) => [...p]) as Quad }));
+    this.scopePagesOf = pages;
+    this.scope = defaultScope(pages);
+    this.settings = scopePages(this.scope, pages).map((page) => fresh(page, kind));
     this.index = 0;
     this.corner = -1;
     this.busy = false;
@@ -201,6 +237,21 @@ export class AdjustView {
   }
 
   private get current(): PageSetting { return this.settings[this.index]; }
+
+  /** Works on other pages; the pages already set keep their settings. */
+  private setScope(scope: PageScope): void {
+    if (scope === this.scope || this.busy || !this.doc) return;
+    this.scope = scope;
+    const kind = this.current?.mode ?? "crop";
+    const shown = this.current?.page;
+    const kept = new Map(this.settings.map((s) => [s.page, s]));
+    this.settings = scopePages(scope, this.scopePagesOf).map((page) => kept.get(page) ?? fresh(page, kind));
+    this.index = Math.max(0, this.settings.findIndex((s) => s.page === shown));
+    this.corner = -1;
+    this.buildList();
+    this.syncHeader();
+    void this.showPage();
+  }
 
   private setMode(kind: AdjustKind): void {
     if (this.current.mode === kind) {
@@ -384,6 +435,21 @@ export class AdjustView {
   private syncHeader(): void {
     const n = this.settings.length;
     this.titleEl.textContent = n === 1 ? this.tr("adjTitleOne", "Adjust 1 page") : this.tr("adjTitleMany", "Adjust {n} pages").replace("{n}", String(n));
+    const p = this.scopePagesOf;
+    const labels: Record<PageScope, string> = {
+      this: this.tr("scopeThis", "This one"),
+      selection: this.tr("scopeSelection", "Selection ({n})").replace("{n}", String(p.selection.length)),
+      all: this.tr("scopeAll", "All ({n})").replace("{n}", String(p.total)),
+    };
+    for (const [k, b] of this.scopeBtns) {
+      b.textContent = labels[k];
+      b.classList.toggle("active", k === this.scope);
+      b.setAttribute("aria-pressed", String(k === this.scope));
+    }
+    this.scopeBtns.get("selection")!.hidden = p.selection.length === 0;
+    this.scopeBtns.get("all")!.hidden = p.total < 2;
+    this.scopeSeg.hidden = p.total < 2;
+    this.scopeSeg.setAttribute("aria-label", this.tr("pagesScope", "Pages"));
     const s = this.current;
     if (!s) return;
     for (const [k, b] of this.modeBtns) {
@@ -728,6 +794,10 @@ export class AdjustView {
     }
     return b;
   }
+}
+
+function fresh(page: number, mode: AdjustKind): PageSetting {
+  return { page, mode, crop: { ...FULL }, flipH: false, flipV: false, quad: CORNERS.map((p) => [...p]) as Quad };
 }
 
 function clamp01(n: number): number {

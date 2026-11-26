@@ -12,7 +12,7 @@ import { pdfjsLib } from "./pdfjs";
 import { WelcomePrefs } from "./welcome-prefs";
 import { UpdateBadge } from "./update-badge";
 import { UpdateToast } from "./update-toast";
-import { PdfViewer, PdfPageView, renderFirstPage, renderRedactedPages, renderStraightenedPages, renderWatermarkedPages } from "./pdf-viewer";
+import { PdfViewer, PdfPageView, renderPagePreview, renderRedactedPages, renderStraightenedPages, renderWatermarkedPages } from "./pdf-viewer";
 import { WatermarkModal } from "./watermark-modal";
 import { setUpWatermark } from "./watermark-flow";
 import { drawWatermark } from "./watermark";
@@ -48,6 +48,8 @@ import {
   type InkVector,
 } from "./models";
 import { StudioPanel } from "./studio-panel";
+import { StampStore } from "./stamp-store";
+import { pictureKind, StampMakerModal } from "./stamp-maker-modal";
 import { backgroundColorFrom, matchPdfFont, textColorFrom } from "./font-match";
 import { setSelectionPillLabels, type PageTextItem } from "./canvas-overlay";
 import { colorName } from "./tool-row";
@@ -62,6 +64,8 @@ import {
   listPdfFonts,
   savePdfDialog,
   loadPictureFile,
+  loadSvgFile,
+  openStampDialog,
   saveAnnotatedPdf,
   stripAnnotationStreams,
   ocrImage,
@@ -268,6 +272,40 @@ const studio = new StudioPanel(toolbar.toolOptions, {
   },
 });
 document.getElementById("viewer-area")!.append(studio.el);
+studio.onCollapse = (collapsed) => toolbar.setPanelCollapsed(collapsed, () => studio.setCollapsed(false));
+toolbar.setPanelCollapsed(studio.isCollapsed, () => studio.setCollapsed(false));
+
+const stampStore = new StampStore();
+const stampMaker = new StampMakerModal(async () => {
+  try {
+    const path = await openStampDialog();
+    if (!path) return null;
+    const name = path.split(/[\\/]/).pop() ?? path;
+    if (/\.svg$/i.test(path)) return { name, kind: "svg", data: await loadSvgFile(path) };
+    const pic = await loadPictureFile(path);
+    return { name, kind: pictureKind(pic.data), data: pic.data };
+  } catch (err) {
+    showToast(msg("msgImageFailed", { err: errText(err) }), true);
+    return null;
+  }
+});
+function refreshStamps(): void {
+  toolbar.setStamps(stampStore.getAll());
+}
+refreshStamps();
+stampMaker.onCreate((s) => {
+  const stamp = stampStore.add(s.name, s.dataUrl, s.ratio);
+  if (!stamp) {
+    stampMaker.showError(stampStore.full
+      ? msg("msgStampsFull", { n: StampStore.MAX })
+      : msg("msgStampFailed", { err: "storage full" }));
+    return;
+  }
+  stampMaker.close();
+  refreshStamps();
+  toolbar.useStamp(stamp.id);
+  showToast(msg("msgStampAdded"));
+});
 let installedFonts: string[] = [];
 void listSystemFonts().then((names) => {
   installedFonts = names ?? [];
@@ -412,12 +450,13 @@ const openWatermark = setUpWatermark({
   messages,
   ui: feedback,
   backend: tauriBackend,
-  renderPreview: renderFirstPage,
+  renderPreview: renderPagePreview,
   burn: async (input, output, o, copyLabel, onProgress) => {
-    const pages = await renderWatermarkedPages(input, (ctx, w, h) => drawWatermark(ctx, w, h, o, copyLabel), 200, onProgress);
+    const pages = await renderWatermarkedPages(input, (ctx, w, h) => drawWatermark(ctx, w, h, o, copyLabel), 200, onProgress, o.pages);
     await watermarkPages(input, output, pages);
   },
   today: () => new Date().toLocaleDateString(settingsModal.getSettings().language || undefined),
+  pages: () => ({ current: viewer.currentPage, total: viewer.pageCount }),
 });
 
 const exportFlow = setUpExport({
@@ -734,6 +773,7 @@ function applyLanguage(language: string): void {
   studio.applyTranslations(t);
   compressModal.applyTranslations(t);
   watermarkModal.applyTranslations(t);
+  stampMaker.applyTranslations(t);
   exportModal.applyTranslations(t);
   ocrModal.applyTranslations(t);
   passwordModal.applyTranslations(t);
@@ -1415,16 +1455,14 @@ async function insertSlots(after: number, inserted: PageSlot[]): Promise<void> {
   if (await editPages(planInsert(viewer.pageCount, after, inserted))) showToast(msg("msgPagesUpdated"));
 }
 
-pageSidebar.onSelectionChange((pages) => toolbar.setPageSelection(pages.length));
 
 function openAdjust(kind: "crop" | "straighten"): void {
   const doc = viewer.document;
   if (!doc || adjustView.isOpen) return;
-  const pages = pageSidebar.selection.length > 0 ? pageSidebar.selection : [viewer.currentPage];
   cancelSignaturePlacement();
   toolbar.search.close();
   appEl.classList.add("adjusting");
-  adjustView.open(doc, pages, kind, viewer.rotation);
+  adjustView.open(doc, { current: viewer.currentPage, selection: pageSidebar.selection, total: doc.numPages }, kind, viewer.rotation);
 }
 
 async function applyAdjust(settings: PageSetting[]): Promise<boolean> {
@@ -1834,6 +1872,16 @@ toolbar.on(async (e) => {
 
     case "image-browse":
       await browsePicture();
+      break;
+
+    case "stamp-create":
+      if (stampStore.full) showToast(msg("msgStampsFull", { n: StampStore.MAX }), true);
+      else await stampMaker.start();
+      break;
+
+    case "stamp-delete":
+      stampStore.delete(e.id);
+      refreshStamps();
       break;
 
     case "insert-image":
@@ -2246,6 +2294,10 @@ window.addEventListener("keydown", async (e: KeyboardEvent) => {
   const active = document.activeElement as HTMLElement | null;
   const typing = !!active && (active.tagName === "INPUT" || active.tagName === "TEXTAREA" || active.tagName === "SELECT" || active.isContentEditable);
   if (typing) return;
+  if ((e.ctrlKey || e.metaKey) && !e.altKey && e.key === ".") {
+    if (studio.toggle()) e.preventDefault();
+    return;
+  }
   if (e.key === "Enter" && toolbar.isPending) {
     e.preventDefault();
     annotations.apply();

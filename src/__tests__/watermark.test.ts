@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 import { describe, expect, it, vi } from "vitest";
-import { newCopyCode, watermarkGeometry, watermarkPhrase } from "../watermark";
+import { dotColor, negateUnder, newCopyCode, watermarkGeometry, watermarkPhrase } from "../watermark";
 import { setUpWatermark, watermarkedName, type WatermarkDeps } from "../watermark-flow";
-import { WatermarkModal } from "../watermark-modal";
+import { WatermarkModal, watermarkPages } from "../watermark-modal";
 
 describe("watermark text", () => {
   it("joins text, code and date in capitals, with a separator to repeat on", () => {
@@ -66,6 +66,55 @@ describe("watermark dialog", () => {
   });
 });
 
+describe("watermark pages and dots", () => {
+  it("lists the pages of each choice", () => {
+    expect(watermarkPages("all", "", 2, 4)).toEqual([1, 2, 3, 4]);
+    expect(watermarkPages("this", "", 2, 4)).toEqual([2]);
+    expect(watermarkPages("pick", "1, 3-4", 2, 4)).toEqual([1, 3, 4]);
+    expect(watermarkPages("pick", "", 2, 4)).toBeNull();
+    expect(watermarkPages("pick", "7", 2, 4)).toBeNull();
+  });
+
+  it("darkens light pixels and lightens dark ones, mid-tones included", () => {
+    expect(dotColor(255, 255, 255).every((c) => c < 60)).toBe(true);
+    expect(dotColor(0, 0, 0).every((c) => c > 200)).toBe(true);
+    const [r, g, b] = dotColor(60, 110, 70);
+    expect(Math.min(r, g, b)).toBeGreaterThan(200);
+    const grey = dotColor(150, 150, 150);
+    expect(grey[0]).toBeLessThan(40);
+  });
+
+  it("only touches the pixels under the mask, by its alpha and the opacity", () => {
+    const page = new Uint8ClampedArray([255, 255, 255, 255, 255, 255, 255, 255]);
+    const mask = new Uint8ClampedArray([0, 0, 0, 255, 0, 0, 0, 0]);
+    negateUnder(page, mask, 0.5);
+    expect(page[0]).toBeLessThan(160);
+    expect(page[0]).toBeGreaterThan(120);
+    expect([...page.slice(4)]).toEqual([255, 255, 255, 255]);
+  });
+});
+
+describe("watermark dialog pages", () => {
+  it("offers all pages, this one or a typed list, and blocks an unreadable list", () => {
+    document.body.innerHTML = "";
+    vi.stubGlobal("requestAnimationFrame", () => 0);
+    const m = new WatermarkModal();
+    m.open(() => new Promise(() => {}), "26/11/2026", { current: 3, total: 5 });
+    expect(m.options().pages).toEqual([1, 2, 3, 4, 5]);
+    m.box.querySelector<HTMLButtonElement>("[data-pages=this]")!.click();
+    expect(m.options().pages).toEqual([3]);
+    m.box.querySelector<HTMLButtonElement>("[data-pages=pick]")!.click();
+    const input = m.box.querySelector<HTMLInputElement>(".wm-page-input")!;
+    input.value = "2-9";
+    input.dispatchEvent(new Event("input"));
+    expect(m.okBtn.disabled).toBe(true);
+    input.value = "2, 4";
+    input.dispatchEvent(new Event("input"));
+    expect(m.okBtn.disabled).toBe(false);
+    expect(m.options().pages).toEqual([2, 4]);
+  });
+});
+
 describe("watermark flow", () => {
   function deps(over: Partial<WatermarkDeps> = {}) {
     let confirm: ((o: never) => Promise<void>) | null = null;
@@ -83,6 +132,7 @@ describe("watermark flow", () => {
       renderPreview: vi.fn(),
       burn: vi.fn(async () => {}),
       today: () => "26/11/2026",
+      pages: () => ({ current: 2, total: 3 }),
       ...over,
     } as unknown as WatermarkDeps;
     const open = setUpWatermark(d);
@@ -92,7 +142,7 @@ describe("watermark flow", () => {
   it("saves a copy next to the original and leaves the original alone", async () => {
     const { d, open, confirm } = deps();
     await open();
-    const o = { text: "x", date: null, code: "ABCDEF", opacity: 0.6 };
+    const o = { text: "x", date: null, code: "ABCDEF", opacity: 0.6, pages: [1, 2] };
     await confirm()(o as never);
     expect(d.backend.savePdfDialog).toHaveBeenCalledWith("/d/id-watermarked.pdf");
     expect(d.burn).toHaveBeenCalledWith("/tmp/current.pdf", "/d/id-watermarked.pdf", o, "Unique copy", expect.any(Function));
@@ -103,9 +153,17 @@ describe("watermark flow", () => {
   it("reports a failure and keeps the dialog open", async () => {
     const { d, open, confirm } = deps({ burn: vi.fn(async () => { throw new Error("disk full"); }) });
     await open();
-    await confirm()({ text: "x", date: null, code: null, opacity: 1 } as never);
+    await confirm()({ text: "x", date: null, code: null, opacity: 1, pages: [1] } as never);
     expect(d.modal.close).not.toHaveBeenCalled();
     expect(d.ui.notify).toHaveBeenCalledWith("msgWatermarkFailed:Error: disk full", true);
+  });
+
+  it("opens on the page in view and saves nothing without pages", async () => {
+    const { d, open, confirm } = deps();
+    await open();
+    expect(d.modal.open).toHaveBeenCalledWith(expect.any(Function), "26/11/2026", { current: 2, total: 3 });
+    await confirm()({ text: "x", date: null, code: null, opacity: 1, pages: [] } as never);
+    expect(d.backend.savePdfDialog).not.toHaveBeenCalled();
   });
 
   it("does nothing on a protected document", async () => {

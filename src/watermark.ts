@@ -44,11 +44,11 @@ export function watermarkPhrase(o: Pick<WatermarkOptions, "text" | "date" | "cod
 
 /** The pattern's measures, from the page width in pixels, so the preview and the saved file match. */
 export function watermarkGeometry(width: number) {
-  const fontSize = width / 80;
-  const dotStep = fontSize / 7;
+  const fontSize = width / 46;
+  const dotStep = fontSize / 8;
   return {
     fontSize,
-    lineGap: fontSize * 1.4,
+    lineGap: fontSize * 1.5,
     amplitude: fontSize * 1.6,
     wavelength: fontSize * 30,
     angle: -Math.PI / 6,
@@ -132,11 +132,31 @@ export function drawWatermark(ctx: CanvasRenderingContext2D, w: number, h: numbe
   m.fillStyle = dots;
   m.fillRect(0, 0, w, h);
 
-  // 3. White dots in "difference" mode give the negative of the page under each dot.
-  ctx.save();
-  ctx.globalCompositeOperation = "difference";
-  ctx.globalAlpha = Math.min(1, Math.max(0.1, o.opacity));
-  ctx.drawImage(mask, 0, 0);
-  ctx.restore();
+  // 3. Each dot takes the page's negative in lightness: dark on light parts, light on dark ones,
+  //    so it shows on any background, mid-tones included.
+  const page = ctx.getImageData(0, 0, w, h);
+  const under = m.getImageData(0, 0, w, h).data;
+  negateUnder(page.data, under, Math.min(1, Math.max(0.1, o.opacity)));
+  ctx.putImageData(page, 0, 0);
   mask.width = mask.height = 0;
+}
+
+/** The colour a dot gives to a page pixel: much darker when the pixel is light, much lighter when dark. */
+export function dotColor(r: number, g: number, b: number): [number, number, number] {
+  const light = 0.299 * r + 0.587 * g + 0.114 * b > 140;
+  return light
+    ? [r * 0.18, g * 0.18, b * 0.18]
+    : [r + (255 - r) * 0.82, g + (255 - g) * 0.82, b + (255 - b) * 0.82];
+}
+
+/** Puts `dotColor` on the page pixels under the mask, by the mask's alpha times `opacity`. */
+export function negateUnder(page: Uint8ClampedArray, mask: Uint8ClampedArray, opacity: number): void {
+  for (let i = 0; i < page.length; i += 4) {
+    const a = (mask[i + 3] / 255) * opacity;
+    if (a <= 0) continue;
+    const [r, g, b] = dotColor(page[i], page[i + 1], page[i + 2]);
+    page[i] += (r - page[i]) * a;
+    page[i + 1] += (g - page[i + 1]) * a;
+    page[i + 2] += (b - page[i + 2]) * a;
+  }
 }

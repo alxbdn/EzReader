@@ -251,6 +251,10 @@ export interface ActiveToolState {
   redactShape: RedactShape;
   stampMark: StampMark;
   stampColor: RgbColor;
+  /** A stamp made from a picture (PNG base64 and height / width), placed instead of the mark. */
+  stampImage: { data: string; ratio: number } | null;
+  /** The longest side of a picture stamp, in millimetres. */
+  stampSize: number;
   signatureColor: RgbColor;
 }
 
@@ -297,6 +301,8 @@ export function defaultToolState(): ActiveToolState {
     redactShape: "rect",
     stampMark: "check",
     stampColor: { r: 0, g: 0, b: 0 },
+    stampImage: null,
+    stampSize: 35,
     signatureColor: { r: 24, g: 24, b: 27 },
   };
 }

@@ -342,6 +342,15 @@ export async function openImageDialog(): Promise<string | null> {
   return call<string | null>("open_image_dialog");
 }
 
+export async function openStampDialog(): Promise<string | null> {
+  return call<string | null>("open_stamp_dialog");
+}
+
+/** An SVG file as base64, for an `<img>` only. */
+export async function loadSvgFile(path: string): Promise<string> {
+  return call<string>("load_svg", { path });
+}
+
 export async function loadPictureFile(path: string): Promise<{ data: string; width: number; height: number }> {
   return call("load_picture", { path });
 }

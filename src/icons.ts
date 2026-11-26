@@ -102,7 +102,9 @@ export const ICON_OPT_COLOR = lucide(`<circle cx="13.5" cy="6.5" r=".5" fill="cu
 export const ICON_CHECK = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m4 12 5 5L20 6"/></svg>`;
 export const ICON_DISCARD = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" aria-hidden="true"><path d="M5 5l14 14M19 5 5 19"/></svg>`;
 
-export const ICON_EDIT_TEXT = lucide(`<path d="M4 7V4h16v3"/><path d="M9 20h6"/><path d="M12 4v16"/>`);
+export const ICON_EDIT_TEXT = lucide(`<path d="M17 22h-1a4 4 0 0 1-4-4V6a4 4 0 0 1 4-4h1"/><path d="M7 22h1a4 4 0 0 0 4-4v-1"/><path d="M7 2h1a4 4 0 0 1 4 4v1"/>`);
+/** An eye struck out, the bar rising to the right: what is redacted can't be seen. */
+export const ICON_REDACT_EYE = lucide(`<g transform="matrix(-1 0 0 1 24 0)"><path d="M10.73 5.08A10.43 10.43 0 0 1 12 5c7 0 10 7 10 7a13.16 13.16 0 0 1-1.67 2.68"/><path d="M6.61 6.61A13.53 13.53 0 0 0 2 12s3 7 10 7a9.74 9.74 0 0 0 5.39-1.61"/><path d="M9.88 9.88a3 3 0 1 0 4.24 4.24"/><path d="m2 2 20 20"/></g>`);
 export const ICON_IMAGE = lucide(`<rect x="3" y="4" width="18" height="16" rx="2"/><path d="m21 15-5-5-9 9"/><circle cx="8.5" cy="9.5" r="1.5"/>`);
 export const ICON_REDACT_TEXT = lucide(`<path d="M4 6h16"/><rect x="4" y="10" width="16" height="5" rx="1" fill="currentColor" stroke="none"/><path d="M4 19h10"/>`);
 export const ICON_REDACT_AREA = lucide(`<rect x="4" y="4" width="16" height="16" rx="2" fill="currentColor" stroke="none"/>`);
@@ -118,6 +120,7 @@ export const ICON_STRAIGHTEN = lucide(`<path d="M5 6 19 4l1 15-15 1z"/><circle c
 export const ICON_FLIP_V = lucide(`<path d="M3 12h18"/><path d="M7 8l5-5 5 5H7z"/><path d="M7 16l5 5 5-5H7z"/>`);
 export const ICON_FLIP_H = lucide(`<path d="M12 3v18"/><path d="M8 7l-5 5 5 5V7z"/><path d="M16 7l5 5-5 5V7z"/>`);
 
+export const ICON_STAMP = lucide(`<path d="M5 22h14"/><path d="M19.27 13.73A2.5 2.5 0 0 0 17.5 13h-11A2.5 2.5 0 0 0 4 15.5V17a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-1.5c0-.66-.26-1.3-.73-1.77Z"/><path d="M14 13V8.5C14 7 15 7 15 5a3 3 0 0 0-3-3c-1.66 0-3 1-3 3s1 2 1 3.5V13"/>`);
 export const ICON_LOCK = lucide(`<rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/>`);
 export const ICON_UNLOCK = lucide(`<rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 7.7-1.5"/>`);
 export const ICON_EYE = lucide(`<path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>`);

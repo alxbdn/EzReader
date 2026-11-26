@@ -185,12 +185,26 @@ export class StudioPanel {
     }
   }
 
-  private setCollapsed(c: boolean): void {
+  /** Called with the folded state each time it changes, and once at start. */
+  onCollapse: ((collapsed: boolean) => void) | null = null;
+
+  get isCollapsed(): boolean { return this.collapsed; }
+
+  /** Folds or unfolds the panel (Ctrl+.). Does nothing while it is not shown. */
+  toggle(): boolean {
+    if (!this.shown) return false;
+    this.setCollapsed(!this.collapsed);
+    return true;
+  }
+
+  setCollapsed(c: boolean): void {
+    if (this.collapsed === c) return;
     const opening = this.collapsed && !c;
     this.collapsed = c;
     if (opening) slideIn(this.el);
     try { localStorage.setItem(COLLAPSED_KEY, c ? "1" : "0"); } catch {}
     this.sync();
+    this.onCollapse?.(c);
   }
 
   private sync(): void {
