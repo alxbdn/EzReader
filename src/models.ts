@@ -262,6 +262,19 @@ export const HIGHLIGHT_PRESETS: [string, string][] = [
   ["#fed7aa", "Orange"],
 ];
 
+export const INK_PRESETS: [string, string][] = [
+  ["#000000", "Black"], ["#e53935", "Red"], ["#2563eb", "Blue"], ["#16a34a", "Green"], ["#facc15", "Yellow"],
+];
+export const NOTE_PRESETS: [string, string][] = [
+  ["#fde047", "Yellow"], ["#f9a8d4", "Pink"], ["#93c5fd", "Blue"], ["#86efac", "Green"], ["#fdba74", "Orange"],
+];
+export const STAMP_PRESETS: [string, string][] = [
+  ["#000000", "Black"], ["#1e3a8a", "Ink blue"], ["#16a34a", "Green"], ["#dc2626", "Red"], ["#2563eb", "Blue"],
+];
+export const SIGNATURE_PRESETS: [string, string][] = [
+  ["#18181b", "Black"], ["#1d4ed8", "Blue"], ["#dc2626", "Red"], ["#15803d", "Green"],
+];
+
 export function defaultToolState(): ActiveToolState {
   return {
     tool: "select",

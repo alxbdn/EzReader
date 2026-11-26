@@ -45,7 +45,8 @@ import {
 } from "./models";
 import { StudioPanel } from "./studio-panel";
 import { backgroundColorFrom, matchPdfFont, textColorFrom } from "./font-match";
-import type { PageTextItem } from "./canvas-overlay";
+import { setSelectionPillLabels, type PageTextItem } from "./canvas-overlay";
+import { colorName } from "./tool-row";
 import { fitWithin, isImagePath, openKind, picturesDocument, type Picture } from "./pictures";
 import {
   openPagesDialog,
@@ -694,6 +695,13 @@ function applyLanguage(language: string): void {
   adjustView.applyTranslations(t);
   tabStrip.applyTranslations({ close: tabCloseLabel(t), dragNew: t.sbDragOut, dragMerge: t.tabDragMerge });
   sideTabs.applyTranslations({ close: tabCloseLabel(t), open: t.tabsOpen, openHint: t.tabsOpenHint });
+  setSelectionPillLabels({
+    color: t.selColor ?? "Color",
+    copyText: t.selCopyText ?? "Copy text",
+    duplicate: `${t.menuDuplicate ?? "Duplicate"} (${isMac ? "⌘D" : "Ctrl+D"})`,
+    delete: `${t.selDelete ?? "Delete"} (${isMac ? "⌫" : "Del"})`,
+    colorName: (n) => colorName(t, n),
+  });
   applyTranslationsToDOM(t);
 }
 applyLanguage(settingsModal.getSettings().language);
@@ -2082,13 +2090,14 @@ const ctxCopyBtn = document.getElementById("ctx-copy") as HTMLButtonElement;
 
 document.addEventListener("contextmenu", (e: MouseEvent) => {
   e.preventDefault();
-  const hlPage = document.querySelector(".hl-popover")?.closest(".page-wrapper");
-  if (hlPage && hlPage.contains(e.target as Node)) {
+  // The menu only holds Copy, so it opens only over selected text: anywhere else it would be
+  // empty. Annotations have their own pill, which a right click on them shows.
+  const sel = window.getSelection()?.toString() ?? "";
+  if (sel.trim().length === 0 || typingInField()) {
     ctxMenu.classList.add("hidden");
     return;
   }
-  const sel = window.getSelection()?.toString() ?? "";
-  ctxCopyBtn.disabled = sel.length === 0;
+  ctxCopyBtn.disabled = false;
   ctxMenu.style.left = `${e.clientX}px`;
   ctxMenu.style.top  = `${e.clientY}px`;
   ctxMenu.classList.remove("hidden");
