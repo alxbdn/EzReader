@@ -1,3 +1,4 @@
+import { slideIn } from "./motion";
 import type { PDFDocumentProxy, RenderTask } from "pdfjs-dist";
 import type { Translations } from "./i18n";
 import { fmt } from "./i18n";
@@ -221,6 +222,37 @@ export class PageSidebar {
 
   get selection(): number[] { return this.sortedSelection(); }
 
+  /** The pages a right click on `page` acts on: the selection when it holds that page, else that
+   *  page alone, which then becomes the selection (as in a file manager). */
+  contextPages(page: number): number[] {
+    if (!this.selected.has(page)) {
+      this.selected.clear();
+      this.selected.add(page);
+      this.anchor = page;
+      this.updateSelectionClasses();
+    }
+    return this.sortedSelection();
+  }
+
+  requestRotate(pages: number[], quarterTurns: number): void {
+    if (this.canAct() && pages.length > 0) for (const cb of this.rotateHandlers) cb(pages, quarterTurns);
+  }
+
+  requestDelete(pages: number[]): void {
+    if (this.canAct() && pages.length > 0) for (const cb of this.deleteHandlers) cb(pages);
+  }
+
+  requestExport(pages: number[]): void {
+    if (this.canAct() && pages.length > 0) for (const cb of this.exportHandlers) cb(pages);
+  }
+
+  requestInsertBlankAfter(page: number): void {
+    if (this.canAct()) for (const cb of this.insertBlankHandlers) cb(page);
+  }
+
+  get pageCount(): number { return this.thumbs.length; }
+
+
   setHits(counts: Map<number, number>): void {
     for (const t of this.thumbs) {
       const n = counts.get(t.page) ?? 0;
@@ -235,8 +267,10 @@ export class PageSidebar {
   toggle(): void { this.setVisible(!this._visible); }
 
   setVisible(visible: boolean): void {
+    const opening = visible && !this._visible;
     this._visible = visible;
     this.root.classList.toggle("collapsed", !visible);
+    if (opening) slideIn(this.root);
     this.writeVisible(visible);
     if (visible) {
       this.scrollToCurrent();

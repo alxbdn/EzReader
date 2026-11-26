@@ -1,5 +1,6 @@
 import { ICON_CLOSE, ICON_PLUS } from "./icons";
 import type { DocTab } from "./doc-tabs";
+import { splitFileName } from "./file-paths";
 
 const DRAG_THRESHOLD_PX = 5;
 const ICON_DOC = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/></svg>`;
@@ -8,6 +9,7 @@ export interface SideTabsLabels {
   close: string;
   open: string;
   openHint: string;
+  rename: string;
 }
 
 export interface SideTabsHandlers {
@@ -16,6 +18,8 @@ export interface SideTabsHandlers {
   move(id: number, index: number): void;
   detach(id: number, screenX: number, screenY: number): void;
   open(): void;
+  /** A new name (without its extension) typed for the current document. */
+  rename(id: number, stem: string): void;
 }
 
 /** The open documents, listed on top of the page panel, with an "Open a PDF" entry
@@ -25,11 +29,13 @@ export class SideTabs {
   private list: HTMLElement;
   private openBtn: HTMLButtonElement;
   private openLabel: HTMLElement;
-  private labels: SideTabsLabels = { close: "Close tab (Ctrl+W)", open: "Open a PDF", openHint: "Open PDFs, or drop them here (Ctrl+O)" };
+  private labels: SideTabsLabels = { close: "Close tab (Ctrl+W)", open: "Open a PDF", openHint: "Open PDFs, or drop them here (Ctrl+O)", rename: "Double-click to rename (F2)" };
   private tabs: readonly DocTab<unknown>[] = [];
   private activeId: number | null = null;
   private drag: { id: number; el: HTMLElement; pointerId: number; startY: number; dragging: boolean; outside: boolean } | null = null;
   private suppressClick = false;
+  private renaming: { id: number; field: HTMLElement; input: HTMLInputElement } | null = null;
+  private renamable = true;
 
   constructor(private readonly on: SideTabsHandlers) {
     this.el = document.createElement("nav");
@@ -77,7 +83,7 @@ export class SideTabs {
   render(tabs: readonly DocTab<unknown>[], activeId: number | null): void {
     this.tabs = tabs;
     this.activeId = activeId;
-    if (this.drag?.dragging) return;
+    if (this.drag?.dragging || this.renaming) return;
     const items = tabs.map((tab) => {
       const active = tab.id === activeId;
       const item = document.createElement("div");
@@ -86,7 +92,7 @@ export class SideTabs {
       item.setAttribute("role", "tab");
       item.setAttribute("aria-selected", String(active));
       item.tabIndex = active ? 0 : -1;
-      item.title = tab.title;
+      item.title = active && this.renamable && tab.title ? `${tab.title}\n${this.labels.rename}` : tab.title;
       const icon = document.createElement("span");
       icon.className = "side-tab-icon";
       icon.innerHTML = ICON_DOC;
@@ -107,7 +113,12 @@ export class SideTabs {
       else { item.classList.add("loading"); item.append(icon, name); }
       item.addEventListener("pointerdown", (e) => this.press(e, tab.id, item));
       item.addEventListener("auxclick", (e) => { if (e.button === 1) { e.preventDefault(); this.on.close(tab.id); } });
+      item.addEventListener("dblclick", (e) => {
+        if ((e.target as Element).closest(".side-tab-close")) return;
+        this.startRename(tab.id);
+      });
       item.addEventListener("keydown", (e) => {
+        if (e.key === "F2") { e.preventDefault(); this.startRename(tab.id); return; }
         if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
         e.preventDefault();
         const at = tabs.findIndex((t) => t.id === tab.id);
@@ -120,12 +131,68 @@ export class SideTabs {
     this.list.querySelector(".side-tab.active")?.scrollIntoView?.({ block: "nearest" });
   }
 
+  /** Whether the current document can take a new name (not while a book is shown, for one). */
+  setRenamable(on: boolean): void {
+    if (this.renamable === on) return;
+    this.renamable = on;
+    if (!on) this.endRename(false);
+    this.render(this.tabs, this.activeId);
+  }
+
+  get canRename(): boolean { return this.renamable; }
+
+  /** Turns the current document's name into a field; Enter keeps the new name, Escape drops it. */
+  startRename(id: number): void {
+    const tab = this.tabs.find((t) => t.id === id);
+    if (!tab || !tab.title || id !== this.activeId || !this.renamable || this.renaming) return;
+    const item = this.list.querySelector<HTMLElement>(`.side-tab[data-tab="${id}"]`);
+    const name = item?.querySelector<HTMLElement>(".side-tab-name");
+    if (!item || !name) return;
+    const [stem, ext] = splitFileName(tab.title);
+    const field = document.createElement("label");
+    field.className = "side-tab-field";
+    const input = document.createElement("input");
+    input.className = "side-tab-input";
+    input.value = stem;
+    input.spellcheck = false;
+    input.autocomplete = "off";
+    input.setAttribute("aria-label", this.labels.rename);
+    const extEl = document.createElement("span");
+    extEl.className = "side-tab-ext";
+    extEl.textContent = ext;
+    field.append(input, extEl);
+    name.replaceWith(field);
+    item.classList.add("renaming");
+    this.renaming = { id, field, input };
+    input.addEventListener("keydown", (e) => {
+      e.stopPropagation();
+      if (e.key === "Enter") { e.preventDefault(); this.endRename(true); }
+      else if (e.key === "Escape") { e.preventDefault(); this.endRename(false); }
+    });
+    input.addEventListener("blur", () => this.endRename(true));
+    for (const type of ["pointerdown", "dblclick", "click"] as const) field.addEventListener(type, (e) => e.stopPropagation());
+    input.focus();
+    input.select();
+  }
+
+  private endRename(commit: boolean): void {
+    const r = this.renaming;
+    if (!r) return;
+    this.renaming = null;
+    const stem = r.input.value.trim();
+    const tab = this.tabs.find((t) => t.id === r.id);
+    const [current] = splitFileName(tab?.title ?? "");
+    this.render(this.tabs, this.activeId);
+    if (commit && stem && stem !== current) this.on.rename(r.id, stem);
+    this.focusActive();
+  }
+
   private focusActive(): void {
     this.list.querySelector<HTMLElement>(".side-tab.active")?.focus();
   }
 
   private press(e: PointerEvent, id: number, el: HTMLElement): void {
-    if (e.button !== 0 || this.drag) return;
+    if (e.button !== 0 || this.drag || this.renaming) return;
     if (id !== this.activeId) this.on.activate(id);
     this.drag = { id, el, pointerId: e.pointerId, startY: e.clientY, dragging: false, outside: false };
     window.addEventListener("pointermove", this.onMove);

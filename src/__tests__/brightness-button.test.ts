@@ -34,11 +34,12 @@ describe("BrightnessButton", () => {
     expect(commit).toHaveBeenLastCalledWith(70);
   });
 
-  it("is highlighted while pages are dimmed, and keeps values in range", () => {
+  it("shows dimming in its rays only, with no grey box, and keeps values in range", () => {
     const { b } = mount(80);
-    expect(b.button.classList.contains("active")).toBe(true);
-    b.value = 100;
     expect(b.button.classList.contains("active")).toBe(false);
+    expect(b.button.dataset["level"]).toBe("2");
+    b.value = 100;
+    expect(b.button.dataset["level"]).toBe("3");
     b.value = 10;
     expect(b.value).toBe(40);
     b.value = Number.NaN;

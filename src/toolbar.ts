@@ -36,11 +36,12 @@ import {
   ICON_UNLOCK,
   ICON_SUN,
   ICON_MOON,
+  ICON_CHEVRON_UP,
+  ICON_CHEVRON_DOWN,
 } from "./icons";
 import { SearchPill } from "./search-pill";
 import { BrightnessButton } from "./brightness-button";
 import { blockedWhileProtected } from "./read-only";
-import { splitFileName } from "./file-paths";
 
 export type AppMode = "read" | "annotate" | "edit";
 export type PointerMode = "hand" | "select";
@@ -134,12 +135,6 @@ export class Toolbar {
   private docMenuEntries: HTMLButtonElement[] = [];
   private markEntries = new Map<string, HTMLButtonElement>();
   private shortcutEls: [HTMLElement, string][] = [];
-  private docTitleEl!: HTMLElement;
-  private docTitleName!: HTMLButtonElement;
-  private docTitleInput!: HTMLInputElement;
-  private docTitleExt!: HTMLElement;
-  private docName: string | null = null;
-  private renameTitle = "Click to rename";
 
   private mode: AppMode = "read";
   private pointer: PointerMode = "select";
@@ -148,6 +143,8 @@ export class Toolbar {
   private zoomLabel!: HTMLButtonElement;
   readonly brightness = new BrightnessButton();
   private zoomInput!: HTMLInputElement;
+  private zoomMenu!: HTMLElement;
+  private mainRow!: HTMLElement;
   private pagesBtn!: HTMLButtonElement;
   private shownColumns = 1;
   private shownEvenSpread = false;
@@ -199,11 +196,9 @@ export class Toolbar {
     this._lastT = t;
     this._i18nText.forEach((key, el)  => { const v = t[key]; if (v !== undefined) el.textContent = v; });
     this._i18nTitle.forEach((key, el) => { const v = t[key]; if (v !== undefined) el.title = v; });
-    this.renameTitle = t.ttRename ?? "Click to rename";
     this.lockTitles = { on: t.ttLockOn ?? "Protected: remove the password", off: t.ttLockOff ?? "Protect with a password" };
     this.lockTexts = { on: t.moreUnprotect ?? "Remove the password…", off: t.moreProtect ?? "Protect with a password…" };
     this.setProtected(this.locked);
-    this.docTitleName.title = this.docName ? this.renameTitle : "";
     const shift = t.kbdShift ?? "Shift";
     for (const [el, raw] of this.shortcutEls) el.textContent = raw.replace("Shift", shift);
     this.search.applyTranslations(t);
@@ -306,14 +301,9 @@ export class Toolbar {
     this.infoBtn.setAttribute("aria-pressed", String(open));
   }
 
-  get titleElement(): HTMLElement { return this.docTitleEl; }
-
-  setDocTitle(name: string | null, dirty: boolean, renamable = true): void {
-    this.docName = name;
-    if (!this.docTitleEl.classList.contains("renaming")) this.docTitleName.textContent = name ?? "";
-    this.docTitleName.title = name && renamable ? this.renameTitle : "";
-    this.docTitleName.disabled = !name || !renamable;
-    this.docTitleEl.classList.toggle("dirty", !!name && dirty);
+  /** The document's name goes to the window title (taskbar) and its unsaved state to the save
+   *  button; the name itself is shown, and renamed, in the page panel's file list. */
+  setDocTitle(name: string | null, dirty: boolean): void {
     this.saveBtn.classList.toggle("dirty", !!name && dirty);
     document.title = name ? `${dirty ? "• " : ""}${name} – EzReader` : "EzReader";
   }
@@ -586,73 +576,6 @@ export class Toolbar {
       wrapper.append(menuBtn, dropdown);
       this.menuBarEl.append(wrapper);
     }
-
-    this.buildDocTitle();
-  }
-
-  private buildDocTitle(): void {
-    this.docTitleEl = document.createElement("div");
-    this.docTitleEl.className = "doc-title";
-    this.docTitleName = document.createElement("button");
-    this.docTitleName.className = "doc-title-name";
-    this.docTitleName.disabled = true;
-    this.docTitleName.addEventListener("click", () => this.startRename());
-    this.docTitleName.addEventListener("dblclick", (e) => e.stopPropagation());
-
-    const field = document.createElement("label");
-    field.className = "doc-title-field";
-    this.docTitleInput = document.createElement("input");
-    this.docTitleInput.className = "doc-title-input";
-    this.docTitleInput.spellcheck = false;
-    this.docTitleInput.autocomplete = "off";
-    this.docTitleExt = document.createElement("span");
-    this.docTitleExt.className = "doc-title-ext";
-    field.append(this.docTitleInput, this.docTitleExt);
-    field.addEventListener("dblclick", (e) => e.stopPropagation());
-
-    this.docTitleInput.addEventListener("input", () => this.sizeTitleInput());
-    this.docTitleInput.addEventListener("keydown", (e) => {
-      e.stopPropagation();
-      if (e.key === "Enter") { e.preventDefault(); this.endRename(true); }
-      else if (e.key === "Escape") { e.preventDefault(); this.endRename(false); }
-    });
-    this.docTitleInput.addEventListener("blur", () => this.endRename(true));
-
-    const dirtyDot = document.createElement("span");
-    dirtyDot.className = "doc-title-dirty";
-    this.docTitleEl.append(this.docTitleName, field, dirtyDot);
-    this.menuBarEl.append(this.docTitleEl);
-  }
-
-  private startRename(): void {
-    if (!this.docName) return;
-    const [stem, ext] = splitFileName(this.docName);
-    this.docTitleInput.value = stem;
-    this.docTitleExt.textContent = ext;
-    this.docTitleEl.classList.add("renaming");
-    this.sizeTitleInput();
-    this.docTitleInput.focus();
-    this.docTitleInput.select();
-  }
-
-  private endRename(commit: boolean): void {
-    if (!this.docTitleEl.classList.contains("renaming")) return;
-    this.docTitleEl.classList.remove("renaming");
-    const stem = this.docTitleInput.value.trim();
-    const [current] = splitFileName(this.docName ?? "");
-    if (commit && stem && stem !== current) this.emit({ type: "rename", stem });
-    this.docTitleName.textContent = this.docName ?? "";
-  }
-
-  private measureCtx: CanvasRenderingContext2D | null = null;
-
-  private sizeTitleInput(): void {
-    this.measureCtx ??= document.createElement("canvas").getContext("2d");
-    const ctx = this.measureCtx;
-    if (!ctx) return;
-    ctx.font = getComputedStyle(this.docTitleInput).font;
-    const w = ctx.measureText(this.docTitleInput.value || " ").width;
-    this.docTitleInput.style.width = `${Math.ceil(w) + 6}px`;
   }
 
   private setupMenuInteraction(): void {
@@ -754,9 +677,10 @@ export class Toolbar {
   private buildContextToolbar(): void {
     const main = document.createElement("div");
     main.className = "tb-row tb-main";
+    this.mainRow = main;
     this.contextEl.append(main, this.tools.row);
 
-    this.sidebarBtn = this.btn(ICON_SIDEBAR, "Show or hide the page thumbnails", "icon-btn");
+    this.sidebarBtn = this.btn(ICON_SIDEBAR, "Show or hide the page thumbnails", "icon-btn panel-toggle");
     this.reg(this.sidebarBtn, undefined, "ttPageSidebar");
     this.sidebarBtn.addEventListener("click", () => this.emit({ type: "toggle-sidebar" }));
 
@@ -793,7 +717,10 @@ export class Toolbar {
 
     this.zoomLabel = this.btn("100 %", "Click to type a zoom level (Ctrl+0 resets it)", "zoom-label");
     this.reg(this.zoomLabel, undefined, "ttZoomLabel");
-    this.zoomLabel.addEventListener("click", () => this.startZoomEdit());
+    this.zoomLabel.addEventListener("click", () => {
+      if (this.mainRow.classList.contains("tb-zoom-stack")) this.toggleZoomMenu();
+      else this.startZoomEdit();
+    });
     this.zoomInput = document.createElement("input");
     this.zoomInput.type = "text";
     this.zoomInput.className = "zoom-input";
@@ -810,6 +737,25 @@ export class Toolbar {
     const realSizeBtn = this.btn("1:1", "Real size (1:1)", "icon-btn text-icon-btn");
     this.reg(realSizeBtn, undefined, "ttRealSize");
     realSizeBtn.addEventListener("click", () => this.emit({ type: "zoom-real" }));
+    realSizeBtn.classList.add("zoom-real");
+    zoomOut.classList.add("zoom-step");
+    zoomIn.classList.add("zoom-step");
+
+    // A narrow window folds − + and 1:1 into a small up/down pair beside the level; the level then
+    // opens a menu with the fits and 1:1 (see fitMainRow).
+    const stack = document.createElement("span");
+    stack.className = "zoom-stack";
+    const stackBtn = (icon: string, title: string, key: keyof Translations, e: ToolbarEvent): HTMLButtonElement => {
+      const b = this.btn(icon, title, "zoom-stack-btn");
+      this.reg(b, undefined, key);
+      b.addEventListener("click", () => this.emit(e));
+      return b;
+    };
+    stack.append(
+      stackBtn(ICON_CHEVRON_UP, "Zoom in (Ctrl++)", "ttZoomIn", { type: "zoom-in" }),
+      stackBtn(ICON_CHEVRON_DOWN, "Zoom out (Ctrl+−)", "ttZoomOut", { type: "zoom-out" }),
+    );
+    this.zoomMenu = this.buildZoomMenu();
 
     this.reg(this.brightness.button, undefined, "settingsBrightness");
 
@@ -945,7 +891,7 @@ export class Toolbar {
       this.sidebarBtn, modeSeg, this.sep(),
       this.saveBtn, this.segment(undo, redo), this.sep(),
       this.pointerSegment(),
-      this.segment(zoomOut, this.zoomLabel, this.zoomInput, zoomIn, realSizeBtn),
+      this.zoomSegment(this.segment(zoomOut, this.zoomLabel, this.zoomInput, zoomIn, realSizeBtn, stack)),
       actions,
     );
     main.append(left, right);
@@ -1012,8 +958,8 @@ export class Toolbar {
   }
 
   private fitMainRow(main: HTMLElement): void {
-    const levels = ["tb-fold", "tb-compact", "tb-compact-2", "tb-compact-3"];
-    const searchOpen = [250, 250, 190, 160, 120];
+    const levels = ["tb-zoom-stack", "tb-fold", "tb-compact", "tb-compact-2", "tb-compact-3"];
+    const searchOpen = [250, 250, 250, 190, 160, 120];
     const pill = this.search.el;
     const open = pill.classList.contains("open");
     const [left, right] = Array.from(main.children) as HTMLElement[];
@@ -1033,6 +979,7 @@ export class Toolbar {
     let level = 0;
     while (level < levels.length && overflow(level) > 0) main.classList.add(levels[level++]);
     main.style.flexWrap = "";
+    if (level === 0) this.closeZoomMenu();
     const w = `${searchOpen[level]}px`;
     if (pill.style.getPropertyValue("--search-open-w") !== w) pill.style.setProperty("--search-open-w", w);
   }
@@ -1068,6 +1015,74 @@ export class Toolbar {
       b.classList.toggle("active", on);
       b.setAttribute("aria-pressed", String(on));
     }
+  }
+
+  private zoomSegment(seg: HTMLElement): HTMLElement {
+    seg.classList.add("zoom-seg");
+    seg.append(this.zoomMenu);
+    return seg;
+  }
+
+  private buildZoomMenu(): HTMLElement {
+    const menu = document.createElement("div");
+    menu.className = "zoom-menu";
+    menu.setAttribute("role", "menu");
+    const entry = (key: keyof Translations, fb: string, e: (() => void), shortcut?: string): HTMLButtonElement => {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "menu-entry";
+      b.setAttribute("role", "menuitem");
+      const label = document.createElement("span");
+      label.textContent = fb;
+      this.reg(label, key);
+      b.append(label);
+      if (shortcut) {
+        const sc = document.createElement("span");
+        sc.className = "shortcut";
+        sc.textContent = shortcut;
+        b.append(sc);
+      }
+      b.addEventListener("click", () => { this.closeZoomMenu(); e(); });
+      return b;
+    };
+    const sep = document.createElement("div");
+    sep.className = "menu-sep";
+    menu.append(
+      entry("menuFitWidth", "Fit to width", () => this.emit({ type: "fit-width" })),
+      entry("menuFitHeight", "Fit to height", () => this.emit({ type: "fit-height" })),
+      entry("ttRealSize", "Actual size (1:1)", () => this.emit({ type: "zoom-real" })),
+      sep,
+      entry("zoomTypeLevel", "Type a zoom level…", () => this.startZoomEdit()),
+    );
+    document.addEventListener("mousedown", (e) => {
+      const t = e.target as Node;
+      if (!menu.contains(t) && !this.zoomLabel.contains(t)) this.closeZoomMenu();
+    }, true);
+    window.addEventListener("blur", () => this.closeZoomMenu());
+    menu.addEventListener("keydown", (e) => {
+      const entries = Array.from(menu.querySelectorAll<HTMLButtonElement>(".menu-entry"));
+      const at = entries.indexOf(document.activeElement as HTMLButtonElement);
+      if (e.key === "Escape") { e.preventDefault(); this.closeZoomMenu(); this.zoomLabel.focus(); }
+      else if (e.key === "ArrowDown") { e.preventDefault(); entries[(at + 1) % entries.length]?.focus(); }
+      else if (e.key === "ArrowUp") { e.preventDefault(); entries[(at - 1 + entries.length) % entries.length]?.focus(); }
+    });
+    return menu;
+  }
+
+  private toggleZoomMenu(): void {
+    if (this.zoomMenu.classList.contains("open")) { this.closeZoomMenu(); return; }
+    this.closeAllMenus();
+    this.zoomMenu.classList.add("open");
+    this.zoomLabel.classList.add("open");
+    this.zoomLabel.setAttribute("aria-expanded", "true");
+    this.zoomMenu.querySelector<HTMLButtonElement>(".menu-entry")?.focus();
+  }
+
+  private closeZoomMenu(): void {
+    if (!this.zoomMenu?.classList.contains("open")) return;
+    this.zoomMenu.classList.remove("open");
+    this.zoomLabel.classList.remove("open");
+    this.zoomLabel.setAttribute("aria-expanded", "false");
   }
 
   private startZoomEdit(): void {

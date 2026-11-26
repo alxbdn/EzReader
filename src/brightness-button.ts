@@ -102,7 +102,6 @@ export class BrightnessButton {
 
   private show(v: number): void {
     this.label.textContent = `${v} %`;
-    this.button.classList.toggle("active", v < 100);
     const level = brightnessLevel(v);
     if (this.button.dataset["level"] !== String(level)) {
       this.button.dataset["level"] = String(level);

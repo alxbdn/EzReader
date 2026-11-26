@@ -1,3 +1,4 @@
+import { stampPath } from "./stamp-marks";
 export const ICON_OPEN_FILE = `<svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M10.4287 1.08398C10.5111 1.02905 10.608 0.999824 10.707 1H14.7L15 1.3V5.293C15 5.39194 14.9706 5.48864 14.9156 5.57088C14.8606 5.65311 14.7824 5.71718 14.691 5.75498C14.5996 5.79277 14.499 5.80259 14.402 5.78319C14.3049 5.76379 14.2159 5.71605 14.146 5.646L12.973 4.473L12.692 4.192L9.067 7.817C8.94923 7.93347 8.79034 7.99888 8.6247 7.99907C8.45907 7.99925 8.30003 7.93421 8.182 7.818C8.06518 7.70036 7.99962 7.54129 7.99962 7.3755C7.99962 7.20971 8.06518 7.05065 8.182 6.933L11.807 3.308L10.353 1.854C10.2829 1.78407 10.2351 1.6949 10.2158 1.59779C10.1964 1.50068 10.2063 1.40001 10.2442 1.30854C10.2821 1.21707 10.3464 1.13891 10.4287 1.08398ZM7.81694 2.06694C7.69973 2.18415 7.54076 2.25 7.375 2.25H2.85L2.25 2.85V13.15L2.85 13.75H13.15L13.75 13.15V8.625C13.75 8.45924 13.8158 8.30027 13.9331 8.18306C14.0503 8.06585 14.2092 8 14.375 8C14.5408 8 14.6997 8.06585 14.8169 8.18306C14.9342 8.30027 15 8.45924 15 8.625V13C15 13.5304 14.7893 14.0391 14.4142 14.4142C14.0391 14.7893 13.5304 15 13 15H3C2.46957 15 1.96086 14.7893 1.58579 14.4142C1.21071 14.0391 1 13.5304 1 13V3C1 2.46957 1.21071 1.96086 1.58579 1.58579C1.96086 1.21071 2.46957 1 3 1H7.375C7.54076 1 7.69973 1.06585 7.81694 1.18306C7.93415 1.30027 8 1.45924 8 1.625C8 1.79076 7.93415 1.94973 7.81694 2.06694Z" fill="currentColor"/></svg>`;
 
 export const ICON_PAGE_UP = `<svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M8.35179 5.001L13.8178 10.466C13.876 10.524 13.9222 10.5929 13.9537 10.6688C13.9852 10.7447 14.0013 10.826 14.0012 10.9082C14.0011 10.9904 13.9848 11.0717 13.9531 11.1475C13.9215 11.2234 13.8751 11.2922 13.8168 11.35C13.6991 11.4668 13.5401 11.5324 13.3743 11.5324C13.2085 11.5324 13.0494 11.4668 12.9318 11.35L7.99879 6.416L3.06679 11.349C2.94842 11.4614 2.79085 11.5231 2.62765 11.521C2.46445 11.5189 2.30853 11.4531 2.19312 11.3377C2.07771 11.2223 2.01193 11.0663 2.00982 10.9031C2.0077 10.7399 2.06941 10.5824 2.18179 10.464L7.64779 5L8.35179 5.001Z" fill="currentColor"/></svg>`;
@@ -66,7 +67,8 @@ export const ICON_SCROLL_VERTICAL = lucide(`<rect x="7" y="2" width="10" height=
 export const ICON_SCROLL_HORIZONTAL = lucide(`<rect x="2" y="7" width="8" height="10" rx="1"/><rect x="14" y="7" width="8" height="10" rx="1"/><path d="M10 12h4"/>`);
 export const ICON_FILL = lucide(`<path d="m19 11-8-8-8.6 8.6a2 2 0 0 0 0 2.8l5.2 5.2c.8.8 2 .8 2.8 0L19 11Z"/><path d="m5 2 5 5"/><path d="M2 13h15"/><path d="M22 20a2 2 0 1 1-4 0c0-1.6 1.7-2.4 2-4 .3 1.6 2 2.4 2 4Z"/>`);
 export const ICON_NO_FILL = lucide(`<rect x="4" y="4" width="16" height="16" rx="2"/><path d="m5 19 14-14"/>`);
-export const ICON_SIDEBAR = lucide(`<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18"/>`);
+/** Panel toggles: the shaded strip and its edge slide in and out with the panel (see .pnl-fill in app.css). */
+export const ICON_SIDEBAR = lucide(`<path class="pnl-fill" d="M5 3h4v18H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z" fill="currentColor" stroke="none"/><rect x="3" y="3" width="18" height="18" rx="2"/><path class="pnl-edge" d="M9 3v18"/>`);
 
 export const ICON_SAVE = lucide(`<path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><path d="M17 21v-8H7v8M7 3v5h8"/>`);
 export const ICON_UNDO = lucide(`<path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/>`);
@@ -104,8 +106,10 @@ export const ICON_EDIT_TEXT = lucide(`<path d="M4 7V4h16v3"/><path d="M9 20h6"/>
 export const ICON_IMAGE = lucide(`<rect x="3" y="4" width="18" height="16" rx="2"/><path d="m21 15-5-5-9 9"/><circle cx="8.5" cy="9.5" r="1.5"/>`);
 export const ICON_REDACT_TEXT = lucide(`<path d="M4 6h16"/><rect x="4" y="10" width="16" height="5" rx="1" fill="currentColor" stroke="none"/><path d="M4 19h10"/>`);
 export const ICON_REDACT_AREA = lucide(`<rect x="4" y="4" width="16" height="16" rx="2" fill="currentColor" stroke="none"/>`);
-export const ICON_STAMP_CHECK = lucide(`<path d="m4 12 5 5L20 6"/>`);
-export const ICON_STAMP_CROSS = lucide(`<path d="M6 6l12 12"/><path d="M18 6 6 18"/>`);
+const stampIcon = (mark: "check" | "cross"): string =>
+  `<svg width="16" height="16" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="${stampPath(mark)}" fill="currentColor"/></svg>`;
+export const ICON_STAMP_CHECK = stampIcon("check");
+export const ICON_STAMP_CROSS = stampIcon("cross");
 export const ICON_SHAPE_LASSO = lucide(`<path d="M6 5c5-3 13-1 13 5s-6 9-11 8-6-10-2-13z"/>`);
 export const ICON_SHAPE_POLY = lucide(`<path d="M4 7l9-3 7 8-5 8-9-2z"/><circle cx="4" cy="7" r="1.2" fill="currentColor"/><circle cx="13" cy="4" r="1.2" fill="currentColor"/><circle cx="20" cy="12" r="1.2" fill="currentColor"/><circle cx="15" cy="20" r="1.2" fill="currentColor"/><circle cx="6" cy="18" r="1.2" fill="currentColor"/>`);
 
@@ -135,7 +139,7 @@ export const ICON_LOADER = lucide(`<path d="M21 12a9 9 0 1 1-6.219-8.56"/>`);
 
 export const ICON_TRASH = lucide(`<path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M10 11v6"/><path d="M14 11v6"/>`);
 export const ICON_COPY = lucide(`<rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/>`);
-export const ICON_PANEL_RIGHT = lucide(`<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M15 3v18"/>`);
+export const ICON_PANEL_RIGHT = lucide(`<path class="pnl-fill pnl-right" d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4z" fill="currentColor" stroke="none"/><rect x="3" y="3" width="18" height="18" rx="2"/><path class="pnl-edge pnl-right" d="M15 3v18"/>`);
 export const ICON_IMAGE_SMALL = lucide(`<rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="m21 15-5-5-9 9"/>`);
 
 export const ICON_TOC = lucide(`<path d="M3 6h.01"/><path d="M3 12h.01"/><path d="M3 18h.01"/><path d="M8 6h13"/><path d="M8 12h13"/><path d="M8 18h13"/>`);
