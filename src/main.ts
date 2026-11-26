@@ -452,7 +452,7 @@ const openWatermark = setUpWatermark({
   backend: tauriBackend,
   renderPreview: renderPagePreview,
   burn: async (input, output, o, copyLabel, onProgress) => {
-    const pages = await renderWatermarkedPages(input, (ctx, w, h) => drawWatermark(ctx, w, h, o, copyLabel), 200, onProgress, o.pages);
+    const pages = await renderWatermarkedPages(input, (ctx, w, h) => drawWatermark(ctx, w, h, o, copyLabel), 300, onProgress, o.pages);
     await watermarkPages(input, output, pages);
   },
   today: () => new Date().toLocaleDateString(settingsModal.getSettings().language || undefined),
