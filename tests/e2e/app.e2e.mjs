@@ -246,6 +246,7 @@ describe("opening screen", () => {
   test("starts on the opening screen with an Open button and the menus", async () => {
     await launch();
     assert.equal(await waitFor("the opening screen", () => !document.getElementById("welcome-screen").classList.contains("hidden")), true);
+    await waitFor("the window to be shown", () => !document.getElementById("app").classList.contains("booting"));
     assert.equal(await driver.findElement(By.css("#welcome-open-btn")).isDisplayed(), true);
     const menus = await driver.executeScript(() => [...document.querySelectorAll(".menubar-item")].map((b) => b.dataset.menuId));
     assert.deepEqual(menus, ["file", "edit", "view", "tools"]);

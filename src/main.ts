@@ -106,7 +106,7 @@ import type { AnnotationSnapshot } from "./annotation-session";
 import type { DocState } from "./page-history";
 import { currentMonitor, getCurrentWindow } from "@tauri-apps/api/window";
 import { LogicalSize, PhysicalPosition, PhysicalSize } from "@tauri-apps/api/dpi";
-import { a4WelcomeWidth, keepCentred, pageFitScale, planWindowFit } from "./window-fit";
+import { a4WelcomeWindow, keepCentred, pageFitScale, planWindowFit } from "./window-fit";
 import { showQuickLookCard } from "./welcome-quick-look";
 import { mountWindowControls } from "./window-controls";
 import { menuOwnsKey } from "./mac-menu";
@@ -448,7 +448,7 @@ function scrollbarSize(): number {
   return size;
 }
 
-/** At launch, widen or narrow the window so the opening screen itself is A4 portrait. */
+/** At launch, size the window to the screen so the opening screen itself is A4 portrait. */
 async function fitWindowToWelcome(): Promise<void> {
   if (!("__TAURI_INTERNALS__" in window)) return;
   try {
@@ -457,20 +457,24 @@ async function fitWindowToWelcome(): Promise<void> {
     const welcome = document.getElementById("welcome-screen");
     if (!monitor || !welcome) return;
     const sf = monitor.scaleFactor || 1;
-    const width = a4WelcomeWidth(
+    const target = a4WelcomeWindow(
       { width: window.innerWidth, height: window.innerHeight },
       { width: welcome.offsetWidth, height: welcome.offsetHeight },
-      monitor.workArea.size.width / sf,
+      { width: monitor.workArea.size.width / sf, height: monitor.workArea.size.height / sf },
     );
-    if (Math.abs(width - window.innerWidth) <= 1) return;
+    if (Math.abs(target.width - window.innerWidth) <= 1 && Math.abs(target.height - window.innerHeight) <= 1) return;
     const pos = await appWindow.outerPosition();
     const outer = await appWindow.outerSize();
-    const next = { width: outer.width + Math.round((width - window.innerWidth) * sf), height: outer.height };
+    const inner = await appWindow.innerSize();
+    const next = {
+      width: Math.round(target.width * sf) + outer.width - inner.width,
+      height: Math.round(target.height * sf) + outer.height - inner.height,
+    };
     const at = keepCentred(pos, outer, next, {
       x: monitor.workArea.position.x, y: monitor.workArea.position.y,
       width: monitor.workArea.size.width, height: monitor.workArea.size.height,
     });
-    await appWindow.setSize(new LogicalSize(width, window.innerHeight));
+    await appWindow.setSize(new LogicalSize(target.width, target.height));
     await appWindow.setPosition(new PhysicalPosition(at.x, at.y));
   } catch (err) {
     console.warn("fit window to welcome:", err);

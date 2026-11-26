@@ -62,10 +62,13 @@ export function keepCentred(
 }
 
 /**
- * Window width that makes the opening screen A4 portrait (height = width × √2) at the current
- * height, whatever the sidebar and bars take; kept within the minimum and the screen.
+ * Inner window size at launch: 90 % of the screen height, and the width that makes the opening
+ * screen A4 portrait (height = width × √2) at that height, whatever the sidebar and bars take;
+ * kept within the minimum size and the screen.
  */
-export function a4WelcomeWidth(window: Size, welcome: Size, areaWidth: number): number {
-  const width = window.width + Math.round(welcome.height / Math.SQRT2 - welcome.width);
-  return Math.max(MIN_WINDOW.width, Math.min(Math.floor(areaWidth * 0.95), width));
+export function a4WelcomeWindow(window: Size, welcome: Size, area: Size): Size {
+  const height = Math.max(MIN_WINDOW.height, Math.min(Math.floor(area.height * SCREEN_SHARE), Math.floor(area.height)));
+  const welcomeHeight = welcome.height + height - window.height;
+  const width = window.width + Math.round(welcomeHeight / Math.SQRT2 - welcome.width);
+  return { width: Math.max(MIN_WINDOW.width, Math.min(Math.floor(area.width * 0.95), width)), height };
 }
