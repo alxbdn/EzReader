@@ -54,17 +54,12 @@ export function cutOut(px: Pixels, paper: RgbColor, strength: number): void {
 
 export function recolor(px: Pixels, color: RgbColor): void {
   const { data } = px;
-  // The lightness range of the pixels that show. A one-colour picture (a logo already cut out)
-  // simply takes the colour; a picture with a drawing keeps it, as ink: its darkest parts take
-  // the full colour and its lightest parts fade out, like a rubber stamp.
   const lum = (i: number) => 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
   const seen: number[] = [];
   for (let i = 0; i < data.length; i += 4) if (data[i + 3] > 64) seen.push(lum(i));
   seen.sort((a, b) => a - b);
   const pick = (q: number) => (seen.length ? seen[Math.floor((seen.length - 1) * q)] : 0);
   const light = pick(0.99);
-  // The usual ink: the median of the darker half, so a drop shadow or a few dark specks
-  // do not make the main colour look washed out.
   const mid = (pick(0.01) + light) / 2;
   const inks = seen.filter((v) => v < mid);
   const dark = inks.length ? inks[Math.floor(inks.length / 2)] : light;
