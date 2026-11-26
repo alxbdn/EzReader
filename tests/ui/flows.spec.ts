@@ -270,6 +270,13 @@ test.describe("document", () => {
         if (!group) continue;
         await tryClick(group);
         await settle(page);
+        if (await page.locator("#adjust-view").isVisible()) {
+          // Crop and Straighten open over the pages: try each page choice, then leave.
+          for (const s of await visible(page, ".adj-scope button")) await tryClick(s);
+          await page.keyboard.press("Escape");
+          await settle(page);
+          continue;
+        }
         const subs = await visible(page, ".tool-row button, .studio-panel button");
         for (const s of subs.slice(0, 12)) {
           await tryClick(s);
@@ -469,7 +476,7 @@ test.describe("documents", () => {
     await tryClick(page.locator("[data-group=redact]"));
     const box = await pageBox(page);
     await drag(page, [box.x + 60, box.y + 60], [box.x + 200, box.y + 120]);
-    await tryClick(page.locator("[data-group=redact-text]"));
+    await tryClick(page.locator("[data-redact=text]"));
     await drag(page, [box.x + 40, box.y + 200], [box.x + 300, box.y + 220]);
     await page.keyboard.press("Control+s");
     await settle(page, 1500);
@@ -496,6 +503,51 @@ test.describe("documents", () => {
     await dialog.locator(".btn-primary").click();
     await expect(dialog).toBeHidden({ timeout: 20_000 });
     expect(await page.evaluate(() => (window as unknown as { __EZ_CALLS__: string[] }).__EZ_CALLS__)).toContain("watermark_pages");
+  });
+
+  test("create a stamp from a picture and place it", async ({ page }) => {
+    await start(page, { doc: true });
+    await page.click("[data-mode=edit]");
+    await page.click(".edit-tools [data-group=stamp]");
+    await page.click(".stamp-new");
+    const dialog = page.locator(".stamp-maker-box");
+    await expect(dialog).toBeVisible();
+    await expect(dialog.locator(".stm-file-name")).toHaveText("recu.svg");
+    await expect(dialog.locator("input.ez-input")).toHaveValue("recu");
+    await expect(dialog.locator("canvas")).toHaveAttribute("data-ready", "true");
+    await dialog.locator(".stm-seg .opt-btn").nth(1).click();
+    await dialog.locator(".stm-swatches .color-swatch").nth(3).click();
+    await dialog.locator(".btn-primary").click();
+    await expect(dialog).toBeHidden();
+    await expect(page.locator(".stamp-chip")).toHaveCount(1);
+    await expect(page.locator(".stamp-chip")).toHaveClass(/active/);
+    const box = await pageBox(page);
+    await page.mouse.click(box.x + 200, box.y + 300);
+    await expect(page.locator(".studio-ann")).toHaveCount(1);
+
+    await page.keyboard.press("Control+.");
+    await expect(page.locator(".studio-panel")).toHaveClass(/collapsed/);
+    await expect(page.locator(".tb-summary")).toHaveText("recu · Original · 35 mm");
+    await page.click(".tb-summary");
+    await expect(page.locator(".studio-panel")).not.toHaveClass(/collapsed/);
+
+    await page.locator(".stamp-chip").hover();
+    await page.locator(".stamp-chip .sig-chip-del").click();
+    await expect(page.locator(".stamp-chip")).toHaveCount(0);
+  });
+
+  test("crop this page, the selection or all pages", async ({ page }) => {
+    await start(page, { doc: true });
+    await page.click("[data-mode=edit]");
+    await page.click(".edit-tools [data-adjust=crop]");
+    const title = page.locator(".adj-title");
+    await expect(title).toHaveText("Adjust 1 page");
+    await page.click(".adj-scope [data-scope=all]");
+    await expect(title).toHaveText("Adjust 4 pages");
+    await expect(page.locator(".adj-thumb")).toHaveCount(4);
+    await page.click(".adj-scope [data-scope=this]");
+    await expect(title).toHaveText("Adjust 1 page");
+    await page.keyboard.press("Escape");
   });
 
   test("reorder pages by dragging", async ({ page }) => {
@@ -602,8 +654,9 @@ test.describe("annotations", () => {
     await page.keyboard.press("Delete");
 
     await page.click("[data-mode=edit]");
+    await tryClick(page.locator("[data-group=stamp]"));
     for (const [g, dx] of [["check", 60], ["cross", 120]] as const) {
-      await tryClick(page.locator(`[data-group=${g}]`));
+      await tryClick(page.locator(`[data-mark=${g}]`));
       await page.mouse.click(box.x + dx, box.y + 560);
       await settle(page, 200);
       await page.mouse.click(box.x + dx, box.y + 560);

@@ -35,6 +35,8 @@ function answers(png: string) {
     open_document_dialog: next,
     open_documents_dialog: () => [next()],
     open_image_dialog: () => "/pics/stamp.png",
+    open_stamp_dialog: () => "/pics/recu.svg",
+    load_svg: () => btoa('<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200"><circle cx="100" cy="100" r="80" fill="none" stroke="#1d4ed8" stroke-width="12"/></svg>'),
     open_images_dialog: () => ["/pics/a.png", "/pics/b.png"],
     load_picture: () => ({ data: png, width: 4, height: 4 }),
     save_pdf_dialog: () => "/docs/saved.pdf",

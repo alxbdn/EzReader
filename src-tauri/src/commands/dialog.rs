@@ -89,6 +89,19 @@ pub fn open_image_dialog(app: AppHandle) -> CmdResult<Option<String>> {
     Ok(picked)
 }
 
+/// Pictures a stamp can be made from.
+pub const STAMP_EXTENSIONS: [&str; 4] = ["png", "jpg", "jpeg", "svg"];
+
+#[tauri::command(async)]
+pub fn open_stamp_dialog(app: AppHandle) -> CmdResult<Option<String>> {
+    let result = app.dialog().file().add_filter("Images", &STAMP_EXTENSIONS).blocking_pick_file();
+    let picked = result.map(filepath_to_string);
+    if let Some(path) = &picked {
+        crate::grants::allow_file(path);
+    }
+    Ok(picked)
+}
+
 #[tauri::command(async)]
 pub fn open_images_dialog(app: AppHandle) -> CmdResult<Vec<String>> {
     let result = app.dialog().file().add_filter("Images", &IMAGE_EXTENSIONS).blocking_pick_files();

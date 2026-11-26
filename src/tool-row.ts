@@ -9,6 +9,7 @@ import {
   SYSTEM_FONTS,
   type ActiveToolState,
   type FontFamilyValue,
+  rgbToHex,
   type RedactShape,
   type RgbColor,
   type ToolKind,
@@ -45,10 +46,16 @@ import {
   ICON_SHAPE_POLY,
   ICON_CROP,
   ICON_STRAIGHTEN,
+  ICON_PLUS,
+  ICON_LOCK,
 } from "./icons";
+import { tintedPng } from "./stamp-maker";
+import { StampStore } from "./stamp-store";
 
 export type ToolGroup = "text" | "pencil" | "shapes" | "note" | "highlight" | "sign"
-  | "etext" | "image" | "redact-text" | "redact" | "check" | "cross";
+  | "etext" | "image" | "redact" | "stamp";
+type RedactKind = "text" | "area";
+type StampColorMode = "original" | "recolor";
 type PencilStyle = "ink" | "line";
 type ShapeStyle = "rect" | "circle" | "arrow";
 type Key = keyof Translations;
@@ -60,6 +67,7 @@ const BACKGROUNDS: [string, string][] = [
 const NOTE_COLORS: [string, string][] = NOTE_PRESETS;
 const HIGHLIGHT_COLORS: [string, string][] = HIGHLIGHT_PRESETS;
 const STAMP_COLORS: [string, string][] = STAMP_PRESETS;
+const STAMP_MAX = StampStore.MAX;
 const COLOR_KEYS: Record<string, Key> = {
   Black: "colBlack", Red: "colRed", Blue: "colBlue", Green: "colGreen", Yellow: "colYellow",
   White: "colWhite", Pink: "colPink", Orange: "colOrange", "Ink blue": "colInkBlue",
@@ -90,6 +98,7 @@ export function brushOf(width: number, opacity: number): string | null {
 }
 
 export interface SignatureChip { id: string; dataUrl: string }
+export interface StampChip { id: string; name: string; dataUrl: string; ratio: number }
 
 export class ToolRow {
   readonly row: HTMLElement;
@@ -101,6 +110,11 @@ export class ToolRow {
   private panel: ToolGroup | null = null;
   private pencilStyle: PencilStyle = "ink";
   private shapeStyle: ShapeStyle = "rect";
+  private redactKind: RedactKind = "area";
+  private customStamp: string | null = null;
+  private stampColorMode: StampColorMode = "original";
+  private stamps: StampChip[] = [];
+  private stampImgs = new Map<string, HTMLImageElement>();
 
   private groupBtns = new Map<ToolGroup, HTMLButtonElement>();
   private annotateSeg: HTMLElement;
@@ -109,8 +123,6 @@ export class ToolRow {
   private hint: HTMLElement;
   private validate: HTMLElement;
   private pending = false;
-  private selectedPages = 0;
-  private pageBtns: [HTMLButtonElement, Key, string, Key, string][] = [];
 
   private t: Translations = {} as Translations;
   private texts: [HTMLElement, Key, string][] = [];
@@ -141,6 +153,18 @@ export class ToolRow {
   private textTitle!: HTMLElement;
   private textBgWrap!: HTMLElement;
   private stampColor!: ColorRow;
+  private stampColorWrap!: HTMLElement;
+  private stampModeSeg!: HTMLElement;
+  private stampModeBtns = new Map<StampColorMode, HTMLButtonElement>();
+  private markBtns = new Map<string, HTMLButtonElement>();
+  private stampList!: HTMLElement;
+  private stampCount!: HTMLElement;
+  private stampSize!: SliderRow;
+  private stampSizeWrap!: HTMLElement;
+  private redactBtns = new Map<RedactKind, HTMLButtonElement>();
+  private redactShapes!: HTMLElement;
+  private summary!: HTMLButtonElement;
+  private panelCollapsed = false;
   private sigList!: HTMLElement;
   private sigNew!: HTMLButtonElement;
   private sigCount!: HTMLElement;
@@ -149,6 +173,8 @@ export class ToolRow {
   private brushBtns = new Map<string, HTMLButtonElement>();
   private brushWrap!: HTMLElement;
   onSync: ((title: string | null, mode: AppMode) => void) | null = null;
+  /** Opens the options panel again, from the summary shown while it is folded. */
+  onExpand: (() => void) | null = null;
 
   constructor(private emit: (e: ToolbarEvent) => void, private canSwitch: () => boolean) {
     this.row = document.createElement("div");
@@ -174,18 +200,13 @@ export class ToolRow {
     contentSeg.append(
       this.groupButton("etext", ICON_EDIT_TEXT, "toolEditText", "Edit text"),
       this.groupButton("image", ICON_IMAGE, "toolImage", "Image"),
-      this.pageButton("crop", ICON_CROP, "toolCrop", "Crop", "ttCropOff", "Crop: select pages in the side panel first"),
-      this.pageButton("straighten", ICON_STRAIGHTEN, "toolStraighten", "Straighten", "ttStraightenOff", "Straighten: select pages in the side panel first"),
+      this.groupButton("redact", ICON_REDACT_AREA, "toolRedact", "Redact", "ttRedact", "Redact: hide text or an area for good"),
+      this.groupButton("stamp", ICON_STAMP_CHECK, "toolStamp", "Stamp", "ttStamp", "Stamp: a check mark, a cross or one of your stamps"),
     );
-    const redactSeg = this.segment("");
-    redactSeg.append(
-      this.groupButton("redact-text", ICON_REDACT_TEXT, "toolRedactText", "Redact text"),
-      this.groupButton("redact", ICON_REDACT_AREA, "toolRedactArea", "Redact an area"),
-    );
-    const stampSeg = this.segment("");
-    stampSeg.append(
-      this.groupButton("check", ICON_STAMP_CHECK, "toolCheck", "Check mark"),
-      this.groupButton("cross", ICON_STAMP_CROSS, "toolCross", "Cross"),
+    const pageSeg = this.segment("");
+    pageSeg.append(
+      this.pageButton("crop", ICON_CROP, "toolCrop", "Crop"),
+      this.pageButton("straighten", ICON_STRAIGHTEN, "toolStraighten", "Straighten"),
     );
     const watermark = document.createElement("button");
     watermark.type = "button";
@@ -200,12 +221,18 @@ export class ToolRow {
       if (this.group) this.clearTool();
       this.emit({ type: "watermark" });
     });
-    const watermarkSeg = this.segment("");
-    watermarkSeg.append(watermark);
-    this.editSeg.append(contentSeg, this.groupLabel("grpRedact", "Redact"), redactSeg, watermarkSeg, this.groupLabel("grpStamps", "Stamps"), stampSeg);
+    contentSeg.append(watermark);
+    const sep = document.createElement("span");
+    sep.className = "tool-sep";
+    this.editSeg.append(contentSeg, sep, pageSeg);
 
     this.hint = document.createElement("span");
     this.hint.className = "tb-hint";
+    this.summary = document.createElement("button");
+    this.summary.type = "button";
+    this.summary.className = "tb-summary";
+    this.summary.hidden = true;
+    this.summary.addEventListener("click", () => this.onExpand?.());
 
     this.validate = document.createElement("div");
     this.validate.className = "tb-validate";
@@ -216,7 +243,7 @@ export class ToolRow {
     this.validate.append(ok, no);
     this.validate.addEventListener("animationend", () => this.validate.classList.remove("shake"));
 
-    this.row.append(this.annotateSeg, this.editSeg, this.hint, this.validate);
+    this.row.append(this.annotateSeg, this.editSeg, this.hint, this.summary, this.validate);
 
     this.buildTextPanel();
     this.buildStrokePanel("pencil");
@@ -229,7 +256,6 @@ export class ToolRow {
     this.buildStampPanel();
     for (const p of new Set(this.panels.values())) this.options.append(p);
 
-    this.syncPageBtns();
     this.syncAll();
   }
 
@@ -317,12 +343,6 @@ export class ToolRow {
 
   hideHighlightStyles(): void { this.hideSelectionPanel("highlight"); }
 
-  setPageSelection(count: number): void {
-    this.selectedPages = count;
-    this.syncPageBtns();
-    this.syncHint();
-  }
-
   setSystemFonts(names: string[]): void {
     this.sysFonts.replaceChildren(...SYSTEM_FONTS.filter((f) => names.includes(f.name)).map((f) => {
       const o = document.createElement("option");
@@ -362,8 +382,9 @@ export class ToolRow {
     for (const [s, key, fb] of this.sliders) s.setLabel(this.tr(key, fb));
     for (const [g, key, fb] of this.fontGroups) g.label = this.tr(key, fb);
     this.renderSignatures();
-    this.syncPageBtns();
+    this.renderStamps();
     this.syncHint();
+    this.syncSummary();
   }
 
   private selectionPanel: ToolGroup | null = null;
@@ -385,11 +406,10 @@ export class ToolRow {
       case "note": return "note";
       case "highlight": return "highlight";
       case "sign": return "signature";
-      case "redact": return "redact";
+      case "redact": return this.redactKind === "text" ? "redact-text" : "redact";
       case "etext": return "etext";
       case "image": return "image";
-      case "redact-text": return "redact-text";
-      case "check": case "cross": return "stamp";
+      case "stamp": return "stamp";
     }
   }
 
@@ -400,10 +420,63 @@ export class ToolRow {
     this.selectionPanel = null;
     this.panel = this.panels.has(g) ? g : null;
     this.state.tool = this.toolFor(g);
-    if (g === "check" || g === "cross") this.state.stampMark = g;
     this.syncAll();
     this.emit({ type: "tool-change", tool: this.state.tool });
-    if (g === "check" || g === "cross") this.emit({ type: "style-change", style: this.getStyle() });
+    if (g === "stamp") this.emit({ type: "style-change", style: this.getStyle() });
+  }
+
+  private pickRedact(kind: RedactKind): void {
+    this.redactKind = kind;
+    this.syncAll();
+    if (this.group === "redact") {
+      this.state.tool = this.toolFor("redact");
+      this.emit({ type: "tool-change", tool: this.state.tool });
+    }
+  }
+
+  private pickMark(mark: "check" | "cross"): void {
+    this.state.stampMark = mark;
+    this.customStamp = null;
+    this.state.stampImage = null;
+    this.changed();
+  }
+
+  private pickStamp(id: string): void {
+    this.customStamp = id;
+    this.syncStampImage();
+    this.changed();
+  }
+
+  /** The picked picture stamp, recoloured when asked, as the tool places it. */
+  private syncStampImage(): void {
+    const chip = this.stamps.find((s) => s.id === this.customStamp);
+    if (!chip) {
+      this.customStamp = null;
+      this.state.stampImage = null;
+      return;
+    }
+    const data = chip.dataUrl.split(",")[1] ?? "";
+    this.state.stampImage = { data, ratio: chip.ratio };
+    if (this.stampColorMode !== "recolor") return;
+    const img = this.stampImg(chip);
+    const tint = () => {
+      const tinted = tintedPng(img, this.state.stampColor);
+      if (tinted && this.customStamp === chip.id && this.stampColorMode === "recolor") {
+        this.state.stampImage = { data: tinted, ratio: chip.ratio };
+      }
+    };
+    if (img.complete && img.naturalWidth) tint();
+    else img.addEventListener("load", () => { tint(); this.emit({ type: "style-change", style: this.getStyle() }); }, { once: true });
+  }
+
+  private stampImg(chip: StampChip): HTMLImageElement {
+    let img = this.stampImgs.get(chip.id);
+    if (!img) {
+      img = new Image();
+      img.src = chip.dataUrl;
+      this.stampImgs.set(chip.id, img);
+    }
+    return img;
   }
 
   private pickStyle(group: "pencil" | "shapes", style: PencilStyle | ShapeStyle): void {
@@ -640,37 +713,158 @@ export class ToolRow {
   }
 
   private buildRedactPanel(): void {
-    const p = this.panelEl("redact", "optAreaShape", "Area shape");
+    const p = this.panelEl("redact", "toolRedact", "Redact");
+    const kinds: [RedactKind, string, Key, string][] = [
+      ["text", ICON_REDACT_TEXT, "redactText", "Text"],
+      ["area", ICON_REDACT_AREA, "redactArea", "An area"],
+    ];
+    const kindSeg = this.segment("opt-seg opt-split");
+    for (const [kind, icon, key, fb] of kinds) {
+      const b = this.optButton(icon, key, fb);
+      b.dataset["redact"] = kind;
+      b.addEventListener("click", () => this.pickRedact(kind));
+      this.redactBtns.set(kind, b);
+      kindSeg.append(b);
+    }
     const shapes: [RedactShape, string, Key, string][] = [
       ["rect", ICON_SHAPE_RECT, "shapeRect", "Rectangle"],
       ["ellipse", ICON_SHAPE_ELLIPSE, "shapeEllipse", "Ellipse"],
       ["lasso", ICON_SHAPE_LASSO, "styleFreeform", "Freeform"],
       ["poly", ICON_SHAPE_POLY, "shapeStretch", "Stretchable"],
     ];
-    const seg = this.segment("opt-seg");
+    const seg = this.segment("opt-seg opt-tiles");
     for (const [shape, icon, key, fb] of shapes) {
-      const b = document.createElement("button");
-      b.type = "button";
-      b.className = "opt-btn opt-style";
-      b.innerHTML = icon;
-      const label = document.createElement("span");
-      this.text(label, key, fb);
-      b.append(label);
+      const b = this.optButton(icon, key, fb);
       b.addEventListener("click", () => { this.state.redactShape = shape; this.changed(); });
       this.styleBtns.set(`redact:${shape}`, b);
       seg.append(b);
     }
-    p.append(seg);
+    this.redactShapes = this.labelled("optShape", "Shape", seg);
+    p.append(this.labelled("toolRedact", "Redact", kindSeg), this.redactShapes,
+      this.lockNote("redactNote", "Permanent when saved: what is hidden is removed from the file."));
   }
 
   private buildStampPanel(): void {
-    const p = this.panelEl("check", "optStampColor", "Stamp color");
-    this.panels.set("cross", p);
+    const p = this.panelEl("stamp", "toolStamp", "Stamp");
+    const marks = this.segment("opt-seg opt-tiles opt-marks");
+    for (const [mark, icon, key, fb] of [
+      ["check", ICON_STAMP_CHECK, "toolCheck", "Check mark"], ["cross", ICON_STAMP_CROSS, "toolCross", "Cross"],
+    ] as ["check" | "cross", string, Key, string][]) {
+      const b = this.optButton(icon, key, fb);
+      b.dataset["mark"] = mark;
+      b.addEventListener("click", () => this.pickMark(mark));
+      this.markBtns.set(mark, b);
+      marks.append(b);
+    }
+
+    this.stampList = document.createElement("div");
+    this.stampList.className = "stamp-chips";
+    const mine = document.createElement("div");
+    mine.className = "opt-field";
+    const head = document.createElement("div");
+    head.className = "opt-field-head";
+    const label = document.createElement("span");
+    label.className = "opt-label";
+    this.text(label, "stampMine", "My stamps");
+    this.stampCount = document.createElement("span");
+    this.stampCount.className = "opt-label";
+    head.append(label, this.stampCount);
+    mine.append(head, this.stampList);
+
+    this.stampModeSeg = this.segment("opt-seg opt-split");
+    for (const [mode, key, fb] of [["original", "stmOriginal", "Original"], ["recolor", "stmRecolor", "Recolor"]] as [StampColorMode, Key, string][]) {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "opt-btn";
+      this.text(b, key, fb);
+      b.addEventListener("click", () => {
+        this.stampColorMode = mode;
+        this.syncStampImage();
+        this.changed();
+      });
+      this.stampModeBtns.set(mode, b);
+      this.stampModeSeg.append(b);
+    }
     this.stampColor = this.colorRow(ICON_OPT_COLOR, "optColor", STAMP_COLORS, null, (c) => {
       if (c) this.state.stampColor = c;
+      this.syncStampImage();
       this.changed();
     });
-    p.append(this.stampColor.el);
+    this.stampColorWrap = document.createElement("div");
+    this.stampColorWrap.className = "opt-field";
+    this.stampColorWrap.append(this.stampModeSeg, this.stampColor.el);
+
+    this.stampSize = this.slider(15, 80, " mm", "optSize", "Size", (v) => {
+      this.state.stampSize = v;
+      this.changed();
+    });
+    this.stampSizeWrap = this.stampSize.el;
+
+    p.append(this.labelled("optType", "Type", marks), mine, this.stampColorWrap, this.stampSizeWrap);
+  }
+
+  setStamps(list: StampChip[]): void {
+    this.stamps = list;
+    for (const id of [...this.stampImgs.keys()]) if (!list.some((s) => s.id === id)) this.stampImgs.delete(id);
+    if (this.customStamp && !list.some((s) => s.id === this.customStamp)) {
+      this.customStamp = null;
+      this.state.stampImage = null;
+    }
+    this.renderStamps();
+    this.syncAll();
+  }
+
+  /** Picks a stamp just made, so the next click places it. */
+  useStamp(id: string): void {
+    if (this.group !== "stamp") this.pickGroup("stamp");
+    this.pickStamp(id);
+  }
+
+  setPanelCollapsed(collapsed: boolean): void {
+    this.panelCollapsed = collapsed;
+    this.syncSummary();
+  }
+
+  get summaryText(): string { return this.summary.hidden ? "" : this.summary.textContent ?? ""; }
+
+  private renderStamps(): void {
+    if (!this.stampList) return;
+    const chips = this.stamps.map((s) => {
+      const chip = document.createElement("div");
+      chip.className = "stamp-chip";
+      chip.dataset.id = s.id;
+      const use = document.createElement("button");
+      use.type = "button";
+      use.className = "stamp-chip-use";
+      use.title = s.name;
+      use.setAttribute("aria-label", s.name);
+      const img = document.createElement("img");
+      img.src = s.dataUrl;
+      img.alt = "";
+      use.append(img);
+      use.addEventListener("click", () => this.pickStamp(s.id));
+      const del = document.createElement("button");
+      del.type = "button";
+      del.className = "sig-chip-del";
+      del.textContent = "×";
+      del.title = this.tr("stampDelete", "Delete this stamp");
+      del.setAttribute("aria-label", del.title);
+      del.addEventListener("click", () => this.emit({ type: "stamp-delete", id: s.id }));
+      chip.append(use, del);
+      return chip;
+    });
+    const add = document.createElement("button");
+    add.type = "button";
+    add.className = "stamp-new";
+    add.innerHTML = ICON_PLUS;
+    const addLabel = document.createElement("span");
+    addLabel.textContent = this.tr("stampCreate", "Create…");
+    add.append(addLabel);
+    add.title = this.tr("ttStampCreate", "Create a stamp from a PNG, JPEG or SVG picture");
+    add.hidden = this.stamps.length >= STAMP_MAX;
+    add.addEventListener("click", () => this.emit({ type: "stamp-create" }));
+    this.stampList.replaceChildren(...chips, add);
+    this.stampCount.textContent = this.stamps.length ? `${this.stamps.length}/${STAMP_MAX}` : "";
   }
 
   private renderSignatures(): void {
@@ -754,6 +948,20 @@ export class ToolRow {
       b.classList.toggle("active", style === current);
     }
     this.stampColor.set(st.stampColor);
+    for (const [k, b] of this.redactBtns) b.classList.toggle("active", k === this.redactKind);
+    this.redactShapes.hidden = this.redactKind !== "area";
+    const custom = this.customStamp !== null;
+    for (const [m, b] of this.markBtns) b.classList.toggle("active", !custom && m === st.stampMark);
+    this.stampList.querySelectorAll<HTMLElement>(".stamp-chip").forEach((c) => {
+      const on = c.dataset.id === this.customStamp;
+      c.classList.toggle("active", on);
+      c.querySelector(".stamp-chip-use")?.setAttribute("aria-pressed", String(on));
+    });
+    this.stampModeSeg.hidden = !custom;
+    for (const [m, b] of this.stampModeBtns) b.classList.toggle("active", m === this.stampColorMode);
+    this.stampColor.el.hidden = custom && this.stampColorMode === "original";
+    this.stampSizeWrap.hidden = !custom;
+    this.stampSize.set(st.stampSize);
     this.sigInk.set(st.signatureColor);
     const brush = brushOf(st.strokeWidth, st.opacity);
     for (const [id, b] of this.brushBtns) {
@@ -765,6 +973,7 @@ export class ToolRow {
     this.shapeFillWrap.hidden = this.shapeStyle === "arrow" && this.selectionPanel !== "shapes";
     this.brushWrap.hidden = this.pencilStyle !== "ink" && this.selectionPanel !== "pencil";
     this.syncHint();
+    this.syncSummary();
     const title = show && shown ? shown.querySelector(".opt-title")?.textContent ?? null : null;
     this.onSync?.(title, this.mode);
   }
@@ -779,22 +988,69 @@ export class ToolRow {
       note: ["hintNote", "Click to stick a note, or drag to set its size. Double-click a note to write in it."],
       highlight: ["hintHighlight", "Select text to highlight it. Select it again to remove the highlight."],
       sign: ["hintSign", "Pick a signature, then click where it goes."],
-      redact: ["hintRedact", "Drag over what must disappear."],
+      redact: this.redactKind === "text"
+        ? ["hintRedactText", "Select text to redact it. Select it again to undo."]
+        : ["hintRedact", "Drag over what must disappear."],
       etext: ["hintEditText", "Click existing text to replace it."],
       image: ["hintImage", "Browse for a picture, or drop one on the page."],
-      "redact-text": ["hintRedactText", "Select text to redact it. Select it again to undo."],
-      check: ["hintStamp", "Click on the page to stamp."],
-      cross: ["hintStamp", "Click on the page to stamp."],
+      stamp: ["hintStamp", "Click on the page to stamp."],
     };
     if (!this.pending && !this.group && this.mode === "edit") {
-      this.hint.textContent = this.selectedPages > 0
-        ? this.tr("hintEditPagesReady", "{n} page(s) selected: Crop and Straighten are ready.").replace("{n}", String(this.selectedPages))
-        : this.tr("hintEditPages", "Select pages to crop or straighten them.");
+      this.hint.textContent = this.tr("hintEditPick", "Pick a tool. Crop and Straighten work on this page, the selected pages or all of them.");
       return;
     }
     const [key, fb] = this.pending ? ["hintPending", "Validate or discard your changes to continue."] as [Key, string]
       : this.group ? hints[this.group] : ["hintPick", "Pick a tool."] as [Key, string];
     this.hint.textContent = this.tr(key, fb);
+  }
+
+  /** One line on the tool's settings, shown in the tool row while the options panel is folded. */
+  private syncSummary(): void {
+    const parts = this.panelCollapsed && this.mode !== "read" && this.group ? this.summaryParts(this.group) : [];
+    this.summary.hidden = parts.length === 0;
+    this.summary.textContent = parts.join(" · ");
+    this.summary.title = this.tr("ttStudioShow", "Show the panel");
+    this.hint.hidden = !this.summary.hidden && !this.pending;
+  }
+
+  private summaryParts(g: ToolGroup): string[] {
+    const st = this.state;
+    const color = (presets: [string, string][], c: RgbColor) => {
+      const hex = rgbToHex(c).toLowerCase();
+      const p = presets.find(([h]) => h.toLowerCase() === hex);
+      return p ? this.tr(COLOR_KEYS[p[1]], p[1]) : hex;
+    };
+    switch (g) {
+      case "redact": {
+        if (this.redactKind === "text") return [this.tr("redactText", "Text")];
+        const shape = this.styleBtns.get(`redact:${st.redactShape}`)?.textContent ?? "";
+        return [this.tr("redactArea", "An area"), shape];
+      }
+      case "stamp": {
+        const chip = this.stamps.find((s) => s.id === this.customStamp);
+        if (chip) {
+          return [chip.name, this.stampColorMode === "recolor" ? color(STAMP_COLORS, st.stampColor) : this.tr("stmOriginal", "Original"), `${st.stampSize} mm`];
+        }
+        const mark = st.stampMark === "cross" ? this.tr("toolCross", "Cross") : this.tr("toolCheck", "Check mark");
+        return [mark, color(STAMP_COLORS, st.stampColor)];
+      }
+      case "etext":
+      case "text": {
+        const font = st.fontName ?? FONT_FAMILIES.find((f) => f.value === st.fontFamily)?.label ?? "";
+        return [font, String(st.fontSize)];
+      }
+      case "pencil":
+      case "shapes":
+        return [color(INK_COLORS, st.shapeColor), `${st.strokeWidth} px`];
+      case "highlight":
+        return [color(HIGHLIGHT_COLORS, st.highlightColor), `${Math.round(st.highlightOpacity * 100)} %`];
+      case "note":
+        return [color(NOTE_COLORS, st.noteColor)];
+      case "sign":
+        return [color(SIGNATURE_INKS, st.signatureColor)];
+      case "image":
+        return [];
+    }
   }
 
   private tr(key: Key, fb: string): string {
@@ -819,20 +1075,13 @@ export class ToolRow {
     return d;
   }
 
-  private groupLabel(key: Key, fb: string): HTMLElement {
-    const l = document.createElement("span");
-    l.className = "tool-group-label";
-    this.text(l, key, fb);
-    return l;
-  }
-
   private divider(): HTMLElement {
     const d = document.createElement("span");
     d.className = "opt-divider";
     return d;
   }
 
-  private groupButton(g: ToolGroup, icon: string, key: Key, fb: string): HTMLButtonElement {
+  private groupButton(g: ToolGroup, icon: string, key: Key, fb: string, ttKey: Key = key, ttFb: string = fb): HTMLButtonElement {
     const b = document.createElement("button");
     b.type = "button";
     b.className = "tool-btn";
@@ -841,13 +1090,13 @@ export class ToolRow {
     const label = document.createElement("span");
     this.text(label, key, fb);
     b.append(label);
-    this.title(b, key, fb);
+    this.title(b, ttKey, ttFb);
     b.addEventListener("click", () => this.pickGroup(g));
     this.groupBtns.set(g, b);
     return b;
   }
 
-  private pageButton(kind: "crop" | "straighten", icon: string, key: Key, fb: string, offKey: Key, offFb: string): HTMLButtonElement {
+  private pageButton(kind: "crop" | "straighten", icon: string, key: Key, fb: string): HTMLButtonElement {
     const b = document.createElement("button");
     b.type = "button";
     b.className = "tool-btn";
@@ -856,23 +1105,45 @@ export class ToolRow {
     const label = document.createElement("span");
     this.text(label, key, fb);
     b.append(label);
+    this.title(b, key, fb);
     b.addEventListener("click", () => {
       if (!this.canSwitch()) return;
       if (this.group) this.clearTool();
       this.emit({ type: "adjust", kind });
     });
-    this.pageBtns.push([b, key, fb, offKey, offFb]);
     return b;
   }
 
-  private syncPageBtns(): void {
-    const off = this.selectedPages === 0;
-    for (const [b, key, fb, offKey, offFb] of this.pageBtns) {
-      b.classList.toggle("off", off);
-      b.setAttribute("aria-disabled", String(off));
-      b.title = off ? this.tr(offKey, offFb) : this.tr(key, fb);
-      b.setAttribute("aria-label", b.title);
-    }
+  private optButton(icon: string, key: Key, fb: string): HTMLButtonElement {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "opt-btn opt-style";
+    b.innerHTML = icon;
+    const label = document.createElement("span");
+    this.text(label, key, fb);
+    b.append(label);
+    return b;
+  }
+
+  /** `el` under a small label, as a block of the options panel. */
+  private labelled(key: Key, fb: string, el: HTMLElement): HTMLElement {
+    const f = document.createElement("div");
+    f.className = "opt-field";
+    const label = document.createElement("span");
+    label.className = "opt-label";
+    this.text(label, key, fb);
+    f.append(label, el);
+    return f;
+  }
+
+  private lockNote(key: Key, fb: string): HTMLElement {
+    const n = document.createElement("div");
+    n.className = "opt-lock";
+    n.innerHTML = ICON_LOCK;
+    const t = document.createElement("span");
+    this.text(t, key, fb);
+    n.append(t);
+    return n;
   }
 
   private roundBtn(cls: string, icon: string, key: Key, fb: string): HTMLButtonElement {

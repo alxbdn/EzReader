@@ -221,7 +221,6 @@ export interface Translations {
   btnSign?: string;
   btnCompressShort?: string;
   btnRedact?: string;
-  ttRedact?: string;
   ttResetZoom?: string;
   ttRealSize?: string;
   ttPages1?: string;
@@ -461,12 +460,8 @@ export interface Translations {
   colInkBlue?: string;
   toolEditText?: string;
   toolImage?: string;
-  toolRedactText?: string;
-  toolRedactArea?: string;
   toolCheck?: string;
   toolCross?: string;
-  grpRedact?: string;
-  grpStamps?: string;
   optBrowse?: string;
   optImageDrop?: string;
   optAreaShape?: string;
@@ -480,10 +475,6 @@ export interface Translations {
   msgDropImageOnPage?: string;
   toolCrop?: string;
   toolStraighten?: string;
-  ttCropOff?: string;
-  ttStraightenOff?: string;
-  hintEditPages?: string;
-  hintEditPagesReady?: string;
   adjTitleOne?: string;
   adjTitleMany?: string;
   adjFlipV?: string;
@@ -641,6 +632,42 @@ export interface Translations {
   msgWmFileSuffix?: string;
   msgWatermarked?: string;
   msgWatermarkFailed?: string;
+  toolRedact?: string;
+  ttRedact?: string;
+  redactText?: string;
+  redactArea?: string;
+  optShape?: string;
+  redactNote?: string;
+  toolStamp?: string;
+  ttStamp?: string;
+  optType?: string;
+  stampMine?: string;
+  stampCreate?: string;
+  ttStampCreate?: string;
+  stampDelete?: string;
+  hintEditPick?: string;
+  stmTitle?: string;
+  stmOk?: string;
+  stmChange?: string;
+  stmBefore?: string;
+  stmAfter?: string;
+  stmCutout?: string;
+  stmOff?: string;
+  stmAuto?: string;
+  stmCutoutOn?: string;
+  stmCutoutOff?: string;
+  stmOriginal?: string;
+  stmRecolor?: string;
+  stmName?: string;
+  stmHint?: string;
+  stmUnreadable?: string;
+  pagesScope?: string;
+  scopeThis?: string;
+  scopeSelection?: string;
+  scopeAll?: string;
+  msgStampAdded?: string;
+  msgStampFailed?: string;
+  msgStampsFull?: string;
 }
 
 const EN: Translations = {
@@ -864,7 +891,7 @@ const EN: Translations = {
   btnSign:              "Sign",
   btnCompressShort:     "Compress",
   btnRedact:            "Redact",
-  ttRedact:             "Redact: black out an area (permanent once saved)",
+  ttRedact:             "Redact: hide text or an area for good",
   ttResetZoom:          "Reset zoom to default (Ctrl+0)",
   ttRealSize:           "Actual size (1:1)",
   ttPages1:             "One page per row",
@@ -1104,12 +1131,8 @@ const EN: Translations = {
   colInkBlue: "Ink blue",
   toolEditText: "Edit text",
   toolImage: "Image",
-  toolRedactText: "Redact text",
-  toolRedactArea: "Redact an area",
   toolCheck: "Check mark",
   toolCross: "Cross",
-  grpRedact: "Redact",
-  grpStamps: "Stamps",
   optBrowse: "Browse…",
   optImageDrop: "or drop a picture on the page to place it, or in the side panel to add it as a new page",
   optAreaShape: "Area shape",
@@ -1123,10 +1146,6 @@ const EN: Translations = {
   msgDropImageOnPage: "Drop the picture on a page to place it, or in the side panel to add it as a page.",
   toolCrop: "Crop",
   toolStraighten: "Straighten",
-  ttCropOff: "Crop: select pages in the side panel first",
-  ttStraightenOff: "Straighten: select pages in the side panel first",
-  hintEditPages: "Select pages to crop or straighten them.",
-  hintEditPagesReady: "{n} page(s) selected: Crop and Straighten are ready.",
   adjTitleOne: "Adjust 1 page",
   adjTitleMany: "Adjust {n} pages",
   adjFlipV: "Flip vertical",
@@ -1284,6 +1303,41 @@ const EN: Translations = {
   msgWmFileSuffix: "watermarked",
   msgWatermarked: "Saved as {name}",
   msgWatermarkFailed: "Couldn't add the watermark: {err}",
+  toolRedact: "Redact",
+  redactText: "Text",
+  redactArea: "An area",
+  optShape: "Shape",
+  redactNote: "Permanent when saved: what is hidden is removed from the file.",
+  toolStamp: "Stamp",
+  ttStamp: "Stamp: a check mark, a cross or one of your stamps",
+  optType: "Type",
+  stampMine: "My stamps",
+  stampCreate: "Create…",
+  ttStampCreate: "Create a stamp from a PNG, JPEG or SVG picture",
+  stampDelete: "Delete this stamp",
+  hintEditPick: "Pick a tool. Crop and Straighten work on this page, the selected pages or all of them.",
+  stmTitle: "Create a stamp",
+  stmOk: "Add to my stamps",
+  stmChange: "Change…",
+  stmBefore: "Imported picture",
+  stmAfter: "Cut-out stamp",
+  stmCutout: "Cut-out",
+  stmOff: "Off",
+  stmAuto: "Auto",
+  stmCutoutOn: "The paper color is detected and made transparent.",
+  stmCutoutOff: "The picture is kept as it is.",
+  stmOriginal: "Original",
+  stmRecolor: "Recolor",
+  stmName: "Name",
+  stmHint: "PNG and SVG keep their transparency. Photos and JPEG pictures are cut out automatically.",
+  stmUnreadable: "This picture can't be read.",
+  pagesScope: "Pages",
+  scopeThis: "This one",
+  scopeSelection: "Selection ({n})",
+  scopeAll: "All ({n})",
+  msgStampAdded: "Stamp added. Click on the page to place it.",
+  msgStampFailed: "Couldn't save the stamp: {err}",
+  msgStampsFull: "You can keep {n} stamps. Delete one to make room.",
 };
 
 const FR: Translations = {
@@ -1507,7 +1561,7 @@ const FR: Translations = {
   btnSign:              "Signer",
   btnCompressShort:     "Compresser",
   btnRedact:            "Caviarder",
-  ttRedact:             "Caviarder : masquer une zone (définitif à l'enregistrement)",
+  ttRedact:             "Caviarder : masquer du texte ou une zone pour de bon",
   ttResetZoom:          "Revenir au zoom par défaut (Ctrl+0)",
   ttRealSize:           "Taille réelle (1:1)",
   ttPages1:             "1 page par ligne",
@@ -1747,12 +1801,8 @@ const FR: Translations = {
   colInkBlue: "Bleu encre",
   toolEditText: "Modifier le texte",
   toolImage: "Image",
-  toolRedactText: "Caviarder du texte",
-  toolRedactArea: "Caviarder une zone",
   toolCheck: "Coche",
   toolCross: "Croix",
-  grpRedact: "Caviarder",
-  grpStamps: "Tampons",
   optBrowse: "Parcourir…",
   optImageDrop: "ou déposez une image sur la page pour la placer, ou dans le panneau latéral pour l'ajouter comme nouvelle page",
   optAreaShape: "Forme de la zone",
@@ -1766,10 +1816,6 @@ const FR: Translations = {
   msgDropImageOnPage: "Déposez l'image sur une page pour la placer, ou dans le panneau latéral pour l'ajouter comme page.",
   toolCrop: "Recadrer",
   toolStraighten: "Redresser",
-  ttCropOff: "Recadrer : sélectionnez d'abord des pages dans le panneau latéral",
-  ttStraightenOff: "Redresser : sélectionnez d'abord des pages dans le panneau latéral",
-  hintEditPages: "Sélectionnez des pages pour les recadrer ou les redresser.",
-  hintEditPagesReady: "{n} page(s) sélectionnée(s) : Recadrer et Redresser sont prêts.",
   adjTitleOne: "Ajuster 1 page",
   adjTitleMany: "Ajuster {n} pages",
   adjFlipV: "Retourner verticalement",
@@ -1927,6 +1973,41 @@ const FR: Translations = {
   msgWmFileSuffix: "filigrane",
   msgWatermarked: "Enregistré sous {name}",
   msgWatermarkFailed: "Impossible d'ajouter le filigrane : {err}",
+  toolRedact: "Caviarder",
+  redactText: "Du texte",
+  redactArea: "Une zone",
+  optShape: "Forme",
+  redactNote: "Définitif à l'enregistrement : le contenu caché est supprimé du fichier.",
+  toolStamp: "Tampon",
+  ttStamp: "Tampon : une coche, une croix ou l'un de vos tampons",
+  optType: "Type",
+  stampMine: "Mes tampons",
+  stampCreate: "Créer…",
+  ttStampCreate: "Créer un tampon à partir d'une image PNG, JPEG ou SVG",
+  stampDelete: "Supprimer ce tampon",
+  hintEditPick: "Choisissez un outil. Recadrer et Redresser s'appliquent à cette page, aux pages sélectionnées ou à toutes.",
+  stmTitle: "Créer un tampon",
+  stmOk: "Ajouter à mes tampons",
+  stmChange: "Changer…",
+  stmBefore: "Image importée",
+  stmAfter: "Tampon détouré",
+  stmCutout: "Détourage",
+  stmOff: "Aucun",
+  stmAuto: "Auto",
+  stmCutoutOn: "Fond du papier détecté et rendu transparent.",
+  stmCutoutOff: "L'image est gardée telle quelle.",
+  stmOriginal: "D'origine",
+  stmRecolor: "Recolorer",
+  stmName: "Nom",
+  stmHint: "PNG et SVG gardent leur transparence. Les photos et les JPEG sont détourés automatiquement.",
+  stmUnreadable: "Impossible de lire cette image.",
+  pagesScope: "Pages",
+  scopeThis: "Celle-ci",
+  scopeSelection: "Sélection ({n})",
+  scopeAll: "Toutes ({n})",
+  msgStampAdded: "Tampon ajouté. Cliquez sur la page pour le poser.",
+  msgStampFailed: "Impossible d'enregistrer le tampon : {err}",
+  msgStampsFull: "Vous pouvez garder {n} tampons. Supprimez-en un pour faire de la place.",
 };
 
 const ZH: Translations = {

@@ -7,7 +7,7 @@ import {
   MIN_SCALE,
   MAX_SCALE,
 } from "./models";
-import { ToolRow, type SignatureChip } from "./tool-row";
+import { ToolRow, type SignatureChip, type StampChip } from "./tool-row";
 import { getTranslations, type Translations } from "./i18n";
 import { isMac } from "./platform";
 import { MacMenu } from "./mac-menu";
@@ -77,6 +77,8 @@ export type ToolbarEvent =
   | { type: "signature-delete"; id: string }
   | { type: "draft-apply" }
   | { type: "image-browse" }
+  | { type: "stamp-create" }
+  | { type: "stamp-delete"; id: string }
   | { type: "adjust"; kind: "crop" | "straighten" }
   | { type: "draft-discard" }
   | { type: "pages" }
@@ -383,6 +385,16 @@ export class Toolbar {
   setActiveSignature(id: string | null): void { this.tools.setActiveSignature(id); }
 
   setSignatures(list: SignatureChip[]): void { this.tools.setSignatures(list); }
+
+  setStamps(list: StampChip[]): void { this.tools.setStamps(list); }
+
+  useStamp(id: string): void { this.tools.useStamp(id); }
+
+  /** Tells the tool row the options panel is folded, so it sums the settings up itself. */
+  setPanelCollapsed(collapsed: boolean, expand: () => void): void {
+    this.tools.onExpand = expand;
+    this.tools.setPanelCollapsed(collapsed);
+  }
 
   private sep(): HTMLElement {
     const d = document.createElement("div");
@@ -1021,5 +1033,4 @@ export class Toolbar {
 
   clearActiveTool(): void { this.tools.clearTool(); }
 
-  setPageSelection(count: number): void { this.tools.setPageSelection(count); }
 }
