@@ -15,6 +15,10 @@ describe("watermark text", () => {
     const code = newCopyCode((n) => new Uint8Array(n).map((_, i) => i * 40));
     expect(code).toMatch(/^[2-9A-HJ-KM-NP-Z]{6}$/);
     expect(newCopyCode()).toHaveLength(6);
+    // Bytes past the last full round of the alphabet are skipped, not folded onto its start.
+    let call = 0;
+    const skewed = (n: number) => new Uint8Array(n).fill(call++ === 0 ? 255 : 0);
+    expect(newCopyCode(skewed)).toBe("222222");
   });
 
   it("scales with the page so the preview matches the saved file", () => {

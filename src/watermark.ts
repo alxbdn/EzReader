@@ -21,9 +21,16 @@ export const WATERMARK_MAX_CHARS = 100;
 const CODE_ALPHABET = "23456789ABCDEFGHJKMNPQRSTUVWXYZ";
 
 export function newCopyCode(random: (n: number) => Uint8Array = (n) => crypto.getRandomValues(new Uint8Array(n))): string {
-  const bytes = random(6);
+  // Bytes at or above the largest multiple of the alphabet size are skipped, so every
+  // character is equally likely.
+  const n = CODE_ALPHABET.length;
+  const limit = 256 - (256 % n);
   let out = "";
-  for (const b of bytes) out += CODE_ALPHABET[b % CODE_ALPHABET.length];
+  while (out.length < 6) {
+    for (const b of random(12)) {
+      if (b < limit && out.length < 6) out += CODE_ALPHABET.charAt(b % n);
+    }
+  }
   return out;
 }
 
