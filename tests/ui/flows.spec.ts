@@ -103,6 +103,45 @@ test.describe("opening screen", () => {
       await dismiss(page);
     }
   });
+
+  test("no scrollbar after the window grows then shrinks", async ({ page }) => {
+    await page.emulateMedia({ reducedMotion: "no-preference" });
+    await start(page);
+    const welcome = page.locator("#welcome-screen");
+    await page.setViewportSize({ width: 1700, height: 1600 });
+    await settle(page, 150);
+    await page.setViewportSize({ width: 1280, height: 860 });
+    await settle(page, 150);
+    const fits = () => welcome.evaluate((el) => {
+      const canvas = el.querySelector("canvas")!.getBoundingClientRect();
+      const box = el.getBoundingClientRect();
+      return canvas.height <= box.height && canvas.width <= box.width;
+    });
+    expect(await fits()).toBe(true);
+    await page.locator("#welcome-open-btn").click();
+    await expect(page.locator("#viewer-scroll .page-wrapper").first()).toBeVisible();
+    await page.setViewportSize({ width: 1100, height: 760 });
+    await settle(page, 150);
+    await page.locator(".side-tab-close").first().click({ force: true });
+    await expect(welcome).toBeVisible();
+    await settle(page, 150);
+    expect(await fits()).toBe(true);
+  });
+
+  test("the opening screen shrinks to fit a short window", async ({ page }) => {
+    await start(page);
+    const welcome = page.locator("#welcome-screen");
+    for (const height of [480, 600, 760]) {
+      await page.setViewportSize({ width: 900, height });
+      await settle(page, 150);
+      const fit = await welcome.evaluate((el) => {
+        const box = el.getBoundingClientRect();
+        const inner = el.querySelector(".welcome-inner")!.getBoundingClientRect();
+        return { scrolls: getComputedStyle(el).overflowY !== "hidden", top: inner.top >= box.top, bottom: inner.bottom <= box.bottom };
+      });
+      expect(fit).toEqual({ scrolls: false, top: true, bottom: true });
+    }
+  });
 });
 
 test.describe("document", () => {

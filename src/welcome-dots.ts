@@ -55,7 +55,7 @@ export function mountWelcomeDots(screen: HTMLElement): void {
   function layout(): void {
     dpr = window.devicePixelRatio || 1;
     width = screen.clientWidth;
-    height = Math.max(screen.clientHeight, screen.scrollHeight);
+    height = screen.clientHeight;
     canvas.style.width = `${width}px`;
     canvas.style.height = `${height}px`;
     canvas.width = Math.round(width * dpr);

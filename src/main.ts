@@ -7,6 +7,7 @@ import type { Feedback } from "./backend";
 import { tauriBackend } from "./tauri-backend";
 import { fileNameOf } from "./file-paths";
 import { mountWelcomeDots } from "./welcome-dots";
+import { mountWelcomeFit } from "./welcome-fit";
 import { pdfjsLib } from "./pdfjs";
 import { WelcomePrefs } from "./welcome-prefs";
 import { UpdateBadge } from "./update-badge";
@@ -1596,6 +1597,7 @@ printModal.onConfirm(async (settings) => {
 });
 
 mountWelcomeDots(document.getElementById("welcome-screen")!);
+mountWelcomeFit(document.getElementById("welcome-screen")!);
 
 const welcomePrefs = new WelcomePrefs(document.getElementById("status-bar")!, {
   language: () => settingsModal.getSettings().language,
