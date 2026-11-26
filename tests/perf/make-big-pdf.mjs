@@ -3,6 +3,7 @@ import { deflateSync } from "node:zlib";
 
 const out = process.argv[2] ?? "big.pdf";
 const pages = Number(process.argv[3] ?? 1500);
+const scanEvery = Number(process.argv[4] ?? 5);
 
 const objects = [];
 const add = (body) => { objects.push(body); return objects.length; };
@@ -42,7 +43,7 @@ function scan(p) {
   return add(stream(`/Type /XObject /Subtype /Image /Width ${SW} /Height ${SH} /ColorSpace /DeviceGray /BitsPerComponent 8 /Filter /FlateDecode /DecodeParms << /Predictor 15 /Colors 1 /BitsPerComponent 8 /Columns ${SW} >>`, deflateSync(rows)));
 }
 const scans = new Map();
-for (let p = 1; p <= pages; p++) if (p % 5 === 3) scans.set(p, scan(p));
+for (let p = 1; p <= pages; p++) if (p % scanEvery === 3 % scanEvery) scans.set(p, scan(p));
 
 const pagesId = objects.length + 1 + pages * 2;
 const kids = [];

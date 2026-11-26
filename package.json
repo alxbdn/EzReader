@@ -14,7 +14,8 @@
     "test:visual": "playwright test -c tests/visual/playwright.config.ts",
     "test:ui": "playwright test -c tests/ui/playwright.config.ts",
     "test:corpus": "cargo test --manifest-path src-tauri/Cargo.toml --lib corpus_tests",
-    "test:perf": "vite build && node tests/perf/make-big-pdf.mjs perf-big.pdf && node tests/perf/stress.mjs perf-big.pdf"
+    "test:perf": "vite build && node tests/perf/make-big-pdf.mjs perf-big.pdf && node tests/perf/stress.mjs perf-big.pdf",
+    "test:perf:tabs": "vite build && node tests/perf/tabs.mjs"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.12.5",

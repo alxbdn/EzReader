@@ -34,3 +34,36 @@ What it does:
 Run it locally (Linux, for the memory figures): `npm run test:perf`.
 `PERF_VERBOSE=1` also prints the memory of each process.
 `--rounds N` sets the number of rounds.
+
+## Several documents in tabs
+
+`tests/perf/tabs.mjs` opens several large PDFs at once, each in its own tab, most of them
+already annotated, and goes round the tabs: on each tab it waits for the document to come
+back, jumps to 8 pages, scrolls, and draws a rectangle. At the end every tab is saved and
+the annotations sent to the save are counted. `.github/workflows/perf-tabs.yml` runs it.
+
+| Profile | When | Tabs | Pages | Annotations | Rounds |
+|---|---|---:|---:|---:|---:|
+| `quick` | Every pull request and push to `main` | 4 | 2,900 | 21,000 | 3 |
+| `soak` | Every release tag, and on demand | 8 | 6,000 | 50,000 | 10 |
+
+The documents of each profile are in `tabs-profiles.json`: page count, annotations per
+page (highlights, ink with 50 to 200 points, text, shapes, notes, stamps, signatures),
+`inkHeavy` for mostly ink, `scanEvery: 1` for a scanned document read by the OCR. The
+annotations are handed to the app as if read from the file.
+
+| Measure | What it catches |
+|---|---|
+| `open_all_ms` | Time to open every tab |
+| `switch_p95_ms` | Time from Ctrl+Tab to the page where the tab was left drawn again |
+| `jump_p95_ms` | Slow redraws after a jump in an annotated document |
+| `memory_peak_mb`, `memory_leak_per_round_mb` | Memory of the whole app, and memory that keeps growing round after round |
+| `heap_leak_per_round_mb` | JS objects kept alive between rounds (tabs in the background, undo history) |
+| `dom_nodes_growth_after_round_1` | Page elements left behind by a tab that was hidden |
+| `pdf_worker_heap_end_mb` | Documents of hidden tabs not given back by pdf.js |
+| `annotations_lost` | Annotations missing from the save, after all the tab switches |
+| `dirty_tabs_lost` | Tabs with a drawn annotation no longer marked as changed |
+| `wrong_document_shown` | A tab showing another document, or the wrong page count |
+
+Limits are in `tabs-thresholds.json`. Run it locally: `npm run test:perf:tabs`, with
+`--profile soak` for the long one and `--rounds N` to change the number of rounds.
