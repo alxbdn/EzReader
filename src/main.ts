@@ -2161,13 +2161,27 @@ function pageMenu(withCopy: boolean): ContextItem[] {
   ];
 }
 
+function zoomMenu(): ContextItem[] {
+  const t = getTranslations(settingsModal.getSettings().language);
+  const level = (pct: number): ContextItem => ({
+    label: `${pct} %`, run: () => toolbar.dispatch({ type: "zoom-set", scale: pct / 100 * CSS_UNITS }),
+  });
+  return [
+    { label: t.menuFitWidth ?? "Fit to width", run: () => toolbar.dispatch({ type: "fit-width" }) },
+    { label: t.menuFitHeight ?? "Fit to height", run: () => toolbar.dispatch({ type: "fit-height" }) },
+    { label: t.ttRealSize ?? "Actual size (1:1)", run: () => toolbar.dispatch({ type: "zoom-real" }) },
+    "sep",
+    ...[50, 75, 100, 125, 150, 200, 300].map(level),
+  ];
+}
+
 async function copySelectedText(): Promise<void> {
   const text = window.getSelection()?.toString() ?? "";
   if (text) await navigator.clipboard.writeText(text).catch(() => {});
 }
 
-// One right-click menu, built for what is under the pointer: the files in the panel, the page
-// thumbnails, or the pages themselves. Everywhere else (bars, empty space) none opens. Fields keep
+// One right-click menu, built for what is under the pointer: the zoom level, the files in the
+// panel, the page thumbnails, or the pages themselves. Everywhere else (bars, empty space) none opens. Fields keep
 // the system's own menu (cut, copy, paste).
 document.addEventListener("contextmenu", (e: MouseEvent) => {
   const target = e.target as Element | null;
@@ -2176,7 +2190,9 @@ document.addEventListener("contextmenu", (e: MouseEvent) => {
   let items: ContextItem[] = [];
   const tab = target?.closest<HTMLElement>(".side-tab[data-tab]");
   const thumb = target?.closest<HTMLElement>(".page-sidebar-thumb");
-  if (tab) {
+  if (target?.closest(".zoom-label, .zoom-stack") && viewer.isLoaded()) {
+    items = zoomMenu();
+  } else if (tab) {
     items = tabMenu(Number(tab.dataset["tab"]));
   } else if (thumb && viewer.isLoaded() && !pageEditor.busy) {
     items = thumbMenu(Number(thumb.dataset["page"]));

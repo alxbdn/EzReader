@@ -491,7 +491,7 @@ body.tab-dragging, body.tab-dragging * { cursor: grabbing !important; }
 }
 
 .zoom-label {
-  width: 56px;
+  width: 50px;
   height: 28px;
   padding: 0;
   border: none;
@@ -524,8 +524,7 @@ body.tab-dragging, body.tab-dragging * { cursor: grabbing !important; }
 .mode-btn { display: inline-flex; align-items: center; gap: 6px; }
 .mode-icon { display: none; }
 .mode-icon svg { width: 16px; height: 16px; display: block; }
-/* Zoom: an up/down pair beside the level, which opens a menu with the fits and 1:1. */
-.zoom-seg { position: relative; }
+/* Zoom: the level, a small up/down pair beside it, and 1:1 while there is room. */
 .zoom-stack { display: flex; flex-direction: column; width: 18px; height: 28px; }
 .zoom-stack-btn {
   flex: 1;
@@ -541,23 +540,6 @@ body.tab-dragging, body.tab-dragging * { cursor: grabbing !important; }
 }
 .zoom-stack-btn svg { width: 11px; height: 11px; }
 .zoom-stack-btn:hover { background: var(--accent); color: var(--foreground); }
-.zoom-seg .zoom-label { width: 46px; }
-.zoom-label.open { background: var(--accent); }
-.zoom-menu {
-  display: none;
-  position: absolute;
-  top: calc(100% + 6px);
-  left: 0;
-  min-width: 210px;
-  padding: 4px;
-  background: var(--popover);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  box-shadow: var(--shadow-lg);
-  z-index: 100;
-}
-.zoom-menu.open { display: block; animation: pop-in 0.12s ease-out; }
-@media (prefers-reduced-motion: reduce) { .zoom-menu.open { animation: none; } }
 .tb-compact .mode-btn { padding: 0 8px; }
 .tb-compact .mode-icon { display: inline-flex; }
 .tb-compact .mode-label { display: none; }
@@ -565,6 +547,7 @@ body.tab-dragging, body.tab-dragging * { cursor: grabbing !important; }
 .tb-compact-2 .tb-left > .toolbar-sep { display: none; }
 .tb-compact-2 .toolbar-group.tb-left { gap: 5px; }
 .tb-compact-3 .tb-actions .tb-pages { display: none; }
+.tb-compact-4 .tb-real { display: none; }
 .tb-compact-5 .tb-actions .brightness-wrap { display: none; }
 
 /* Export, compress, protect, info and present sit on the bar; they fold

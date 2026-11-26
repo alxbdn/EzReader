@@ -391,8 +391,6 @@ export interface Translations {
   tabsOpen?: string;
   tabsOpenHint?: string;
   tabsRenameHint?: string;
-  zoomTypeLevel?: string;
-  ttZoomMenu?: string;
   ctxRename?: string;
   ctxCloseTab?: string;
   ctxCloseOthers?: string;
@@ -1015,8 +1013,6 @@ const EN: Translations = {
   tabsOpen: "Open a PDF",
   tabsOpenHint: "Open PDFs in new tabs, or drop them here (Ctrl+O)",
   tabsRenameHint: "Double-click to rename (F2)",
-  zoomTypeLevel: "Type a zoom level…",
-  ttZoomMenu: "Zoom options: fit, actual size, type a level (Ctrl+0 resets)",
   ctxRename: "Rename…",
   ctxCloseTab: "Close",
   ctxCloseOthers: "Close the others",
@@ -1639,8 +1635,6 @@ const FR: Translations = {
   tabsOpen: "Ouvrir un PDF",
   tabsOpenHint: "Ouvrez des PDF dans de nouveaux onglets, ou déposez-les ici (Ctrl+O)",
   tabsRenameHint: "Double-cliquez pour renommer (F2)",
-  zoomTypeLevel: "Saisir un niveau de zoom…",
-  ttZoomMenu: "Options de zoom : ajuster, taille réelle, saisir un niveau (Ctrl+0 réinitialise)",
   ctxRename: "Renommer…",
   ctxCloseTab: "Fermer",
   ctxCloseOthers: "Fermer les autres",

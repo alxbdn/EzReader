@@ -141,7 +141,6 @@ export class Toolbar {
   private zoomLabel!: HTMLButtonElement;
   readonly brightness = new BrightnessButton();
   private zoomInput!: HTMLInputElement;
-  private zoomMenu!: HTMLElement;
   private pagesBtn!: HTMLButtonElement;
   private shownColumns = 1;
   private shownEvenSpread = false;
@@ -704,13 +703,9 @@ export class Toolbar {
     });
     this.syncPointerBtns();
 
-    this.zoomLabel = this.btn("100 %", "Zoom options: fit, actual size, type a level (Ctrl+0 resets)", "zoom-label");
-    this.zoomLabel.setAttribute("aria-haspopup", "menu");
-    this.zoomLabel.setAttribute("aria-expanded", "false");
-    this.reg(this.zoomLabel, undefined, "ttZoomMenu");
-    this.zoomLabel.addEventListener("click", () => {
-      this.toggleZoomMenu();
-    });
+    this.zoomLabel = this.btn("100 %", "Click to type a zoom level (Ctrl+0 resets it)", "zoom-label");
+    this.reg(this.zoomLabel, undefined, "ttZoomLabel");
+    this.zoomLabel.addEventListener("click", () => this.startZoomEdit());
     this.zoomInput = document.createElement("input");
     this.zoomInput.type = "text";
     this.zoomInput.className = "zoom-input";
@@ -724,8 +719,7 @@ export class Toolbar {
     });
     this.zoomInput.addEventListener("blur", () => this.endZoomEdit());
 
-    // Zoom is a small up/down pair beside the level; the level opens a menu with the fits, 1:1 and
-    // typing a value.
+    // Zoom is the level (click to type one), a small up/down pair, and 1:1 while there is room.
     const stack = document.createElement("span");
     stack.className = "zoom-stack";
     const stackBtn = (icon: string, title: string, key: keyof Translations, e: ToolbarEvent): HTMLButtonElement => {
@@ -738,7 +732,9 @@ export class Toolbar {
       stackBtn(ICON_CHEVRON_UP, "Zoom in (Ctrl++)", "ttZoomIn", { type: "zoom-in" }),
       stackBtn(ICON_CHEVRON_DOWN, "Zoom out (Ctrl+−)", "ttZoomOut", { type: "zoom-out" }),
     );
-    this.zoomMenu = this.buildZoomMenu();
+    const realSizeBtn = this.btn("1:1", "Real size (1:1)", "icon-btn text-icon-btn tb-real");
+    this.reg(realSizeBtn, undefined, "ttRealSize");
+    realSizeBtn.addEventListener("click", () => this.emit({ type: "zoom-real" }));
 
     this.reg(this.brightness.button, undefined, "settingsBrightness");
 
@@ -874,7 +870,7 @@ export class Toolbar {
       this.sidebarBtn, modeSeg, this.sep(),
       this.saveBtn, this.segment(undo, redo), this.sep(),
       this.pointerSegment(),
-      this.zoomSegment(this.segment(this.zoomLabel, this.zoomInput, stack)),
+      this.segment(this.zoomLabel, this.zoomInput, stack, realSizeBtn),
       actions,
     );
     main.append(left, right);
@@ -995,74 +991,6 @@ export class Toolbar {
       b.classList.toggle("active", on);
       b.setAttribute("aria-pressed", String(on));
     }
-  }
-
-  private zoomSegment(seg: HTMLElement): HTMLElement {
-    seg.classList.add("zoom-seg");
-    seg.append(this.zoomMenu);
-    return seg;
-  }
-
-  private buildZoomMenu(): HTMLElement {
-    const menu = document.createElement("div");
-    menu.className = "zoom-menu";
-    menu.setAttribute("role", "menu");
-    const entry = (key: keyof Translations, fb: string, e: (() => void), shortcut?: string): HTMLButtonElement => {
-      const b = document.createElement("button");
-      b.type = "button";
-      b.className = "menu-entry";
-      b.setAttribute("role", "menuitem");
-      const label = document.createElement("span");
-      label.textContent = fb;
-      this.reg(label, key);
-      b.append(label);
-      if (shortcut) {
-        const sc = document.createElement("span");
-        sc.className = "shortcut";
-        sc.textContent = shortcut;
-        b.append(sc);
-      }
-      b.addEventListener("click", () => { this.closeZoomMenu(); e(); });
-      return b;
-    };
-    const sep = document.createElement("div");
-    sep.className = "menu-sep";
-    menu.append(
-      entry("menuFitWidth", "Fit to width", () => this.emit({ type: "fit-width" })),
-      entry("menuFitHeight", "Fit to height", () => this.emit({ type: "fit-height" })),
-      entry("ttRealSize", "Actual size (1:1)", () => this.emit({ type: "zoom-real" })),
-      sep,
-      entry("zoomTypeLevel", "Type a zoom level…", () => this.startZoomEdit()),
-    );
-    document.addEventListener("mousedown", (e) => {
-      const t = e.target as Node;
-      if (!menu.contains(t) && !this.zoomLabel.contains(t)) this.closeZoomMenu();
-    }, true);
-    window.addEventListener("blur", () => this.closeZoomMenu());
-    menu.addEventListener("keydown", (e) => {
-      const entries = Array.from(menu.querySelectorAll<HTMLButtonElement>(".menu-entry"));
-      const at = entries.indexOf(document.activeElement as HTMLButtonElement);
-      if (e.key === "Escape") { e.preventDefault(); this.closeZoomMenu(); this.zoomLabel.focus(); }
-      else if (e.key === "ArrowDown") { e.preventDefault(); entries[(at + 1) % entries.length]?.focus(); }
-      else if (e.key === "ArrowUp") { e.preventDefault(); entries[(at - 1 + entries.length) % entries.length]?.focus(); }
-    });
-    return menu;
-  }
-
-  private toggleZoomMenu(): void {
-    if (this.zoomMenu.classList.contains("open")) { this.closeZoomMenu(); return; }
-    this.closeAllMenus();
-    this.zoomMenu.classList.add("open");
-    this.zoomLabel.classList.add("open");
-    this.zoomLabel.setAttribute("aria-expanded", "true");
-    this.zoomMenu.querySelector<HTMLButtonElement>(".menu-entry")?.focus();
-  }
-
-  private closeZoomMenu(): void {
-    if (!this.zoomMenu?.classList.contains("open")) return;
-    this.zoomMenu.classList.remove("open");
-    this.zoomLabel.classList.remove("open");
-    this.zoomLabel.setAttribute("aria-expanded", "false");
   }
 
   private startZoomEdit(): void {
