@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { a4WelcomeWidth, keepCentred, pageFitScale, planWindowFit } from "../window-fit";
+import { a4WelcomeWindow, keepCentred, pageFitScale, planWindowFit } from "../window-fit";
 
 const A4 = { width: 595, height: 842 };
 const A4_LANDSCAPE = { width: 842, height: 595 };
@@ -67,17 +67,19 @@ describe("keepCentred", () => {
   });
 });
 
-describe("a4WelcomeWidth", () => {
-  it("sizes the window so the opening screen is A4 portrait", () => {
-    const w = a4WelcomeWidth({ width: 1100, height: 1000 }, { width: 868, height: 882 }, 2560);
-    expect(w).toBe(1100 + Math.round(882 / Math.SQRT2 - 868));
+describe("a4WelcomeWindow", () => {
+  it("takes 90 % of the screen height and makes the opening screen A4 portrait", () => {
+    const w = a4WelcomeWindow({ width: 853, height: 991 }, { width: 561, height: 843 }, { width: 2560, height: 1400 });
+    expect(w.height).toBe(1260);
+    expect(w.width).toBe(853 + Math.round((843 + 1260 - 991) / Math.SQRT2 - 561));
   });
 
-  it("never goes under the minimum width", () => {
-    expect(a4WelcomeWidth({ width: 800, height: 500 }, { width: 568, height: 380 }, 2560)).toBe(720);
+  it("never goes under the minimum size", () => {
+    expect(a4WelcomeWindow({ width: 800, height: 500 }, { width: 568, height: 380 }, { width: 2560, height: 400 }))
+      .toEqual({ width: 720, height: 480 });
   });
 
   it("never goes wider than the screen", () => {
-    expect(a4WelcomeWidth({ width: 900, height: 2000 }, { width: 668, height: 1880 }, 1000)).toBe(950);
+    expect(a4WelcomeWindow({ width: 900, height: 2000 }, { width: 668, height: 1880 }, { width: 1000, height: 2400 }).width).toBe(950);
   });
 });
