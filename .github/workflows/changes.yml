@@ -1,0 +1,50 @@
+name: Changes
+
+# Called by the PR workflows: tells them whether a pull request changes anything
+# besides documentation (Markdown, docs/, the README pictures). When it does not,
+# their heavy jobs are skipped, which GitHub counts as passing for the required
+# checks. Any other event, or a failure here, means "run everything".
+
+on:
+  workflow_call:
+    outputs:
+      code:
+        description: '"false" when a pull request touches documentation only'
+        value: ${{ jobs.detect.outputs.code }}
+
+permissions:
+  contents: read
+
+jobs:
+  detect:
+    name: Code or docs only
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      code: ${{ steps.files.outputs.code }}
+    steps:
+      # A pull request is checked out as its merge commit: its first parent is
+      # the base branch, so the diff between the two is what the PR changes.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        if: github.event_name == 'pull_request'
+        with:
+          fetch-depth: 2
+          persist-credentials: false
+      - id: files
+        shell: bash
+        env:
+          EVENT: ${{ github.event_name }}
+        run: |
+          if [[ "$EVENT" != "pull_request" ]]; then
+            echo "code=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          files=$(git diff --name-only HEAD^1 HEAD)
+          echo "$files"
+          if [[ -n "$files" ]] && ! grep -qvE '^(.*\.md|docs/.*|\.github/readme/.*|LICENSE)$' <<< "$files"; then
+            echo "Documentation only: the heavy jobs are skipped."
+            echo "code=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "code=true" >> "$GITHUB_OUTPUT"
+          fi

@@ -12,8 +12,15 @@ env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
+  # Skips the jobs below on pull requests that change documentation only.
+  changes:
+    uses: ./.github/workflows/changes.yml
+
   test:
     runs-on: windows-latest
+    needs: changes
+    # A docs-only pull request skips this job; if the check itself fails, it still runs.
+    if: ${{ !cancelled() && needs.changes.outputs.code != 'false' }}
 
     steps:
       - name: Checkout
@@ -67,6 +74,9 @@ jobs:
   coverage:
     name: Coverage
     runs-on: windows-latest
+    needs: changes
+    # A docs-only pull request skips this job; if the check itself fails, it still runs.
+    if: ${{ !cancelled() && needs.changes.outputs.code != 'false' }}
 
     steps:
       - name: Checkout
