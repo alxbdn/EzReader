@@ -61,13 +61,6 @@ pub fn quick_look_rect(work: (i32, i32, i32, i32)) -> (i32, i32, i32, i32) {
     (left, top, left + width, top + height)
 }
 
-/// Keeps the preview inside the pane Explorer gave it.
-///
-/// On Windows 10 the preview host is not DPI aware while Explorer is, so the
-/// rectangle Explorer hands over is in physical pixels and the window built
-/// from it is scaled up again: at 200 % only the top-left half of the page
-/// shows. The pane's own client size is measured in the host's units, so
-/// cutting the rectangle to it gives the right size on every Windows version.
 pub fn within_pane(rect: (i32, i32, i32, i32), pane: (i32, i32)) -> (i32, i32, i32, i32) {
     let (width, height) = (pane.0.max(0), pane.1.max(0));
     if width == 0 || height == 0 {
@@ -159,12 +152,9 @@ mod tests {
 
     #[test]
     fn preview_fits_the_pane_on_scaled_screens() {
-        // Explorer at 200 % on Windows 10: physical rectangle, logical pane.
         assert_eq!(within_pane((0, 0, 1200, 1600), (600, 800)), (0, 0, 600, 800));
-        // Same units (Windows 11): the rectangle is left as it is.
         assert_eq!(within_pane((0, 0, 600, 800), (600, 800)), (0, 0, 600, 800));
         assert_eq!(within_pane((4, 8, 300, 400), (600, 800)), (4, 8, 300, 400));
-        // A pane that cannot be measured keeps Explorer's rectangle.
         assert_eq!(within_pane((0, 0, 1200, 1600), (0, 0)), (0, 0, 1200, 1600));
     }
 

@@ -165,7 +165,6 @@ mod engine {
     }
 
     fn supported() -> Result<Vec<String>, String> {
-        // SAFETY: a plain query on a fresh request.
         let tags =
             unsafe { accurate_request().supportedRecognitionLanguagesAndReturnError() }.map_err(|e| message(&e))?;
         Ok(tags.iter().map(|t| t.to_string()).collect())
@@ -205,8 +204,6 @@ mod engine {
     }
 
     fn word_box(text: &VNRecognizedText, range: NSRange) -> Option<(f32, f32, f32, f32)> {
-        // SAFETY: `boundingBoxForRange:error:` takes an NSRange and returns
-        // the observation (or nil and an error).
         let obs: Result<Retained<VNRectangleObservation>, Retained<NSError>> =
             unsafe { objc2::msg_send![text, boundingBoxForRange: range, error: _] };
         let r = unsafe { obs.ok()?.boundingBox() };

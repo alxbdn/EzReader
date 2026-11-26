@@ -273,6 +273,7 @@ const results = {
   heap_growth_mb: end.heapMb - baseline.heapMb,
   heap_leak_per_round_mb: rounds > 1 ? (end.heapMb - afterFirst.heapMb) / (rounds - 1) : 0,
   dom_nodes_growth: end.nodes - baseline.nodes,
+  dom_nodes_growth_per_page: (end.nodes - baseline.nodes) / pageCount,
   pdf_worker_heap_end_mb: workerHeapMb,
   canvas_peak_mb: peakCanvasMb,
   canvas_end_mb: end.canvasMb,

@@ -4,7 +4,6 @@ import { hexToRgb, STAMP_PRESETS, type RgbColor } from "./models";
 import { DEFAULT_CUTOUT, hasTransparency, makeStamp, type Pixels } from "./stamp-maker";
 import { STAMP_NAME_MAX } from "./stamp-store";
 
-/** A picture picked for a stamp. `data` is base64. */
 export interface StampSource {
   name: string;
   kind: "png" | "jpeg" | "svg";
@@ -14,15 +13,12 @@ export interface StampSource {
 export interface NewStamp { name: string; dataUrl: string; ratio: number }
 
 const MIME: Record<StampSource["kind"], string> = { png: "image/png", jpeg: "image/jpeg", svg: "image/svg+xml" };
-/** Size used for an SVG that gives none. */
 const SVG_SIDE = 600;
 
-/** The kind of a raster picture, from the first bytes of its base64. */
 export function pictureKind(b64: string): "png" | "jpeg" {
   return b64.startsWith("/9j/") ? "jpeg" : "png";
 }
 
-/** The file name without its folder and extension, for the stamp's name. */
 export function stampName(path: string): string {
   const file = path.split(/[\\/]/).pop() ?? "";
   return file.replace(/\.[^.]+$/, "").slice(0, STAMP_NAME_MAX);
@@ -139,7 +135,6 @@ export class StampMakerModal extends Modal {
 
   onCreate(h: (s: NewStamp) => void): void { this.handlers.push(h); }
 
-  /** Asks for a picture, then opens on it. Nothing opens when none is picked. */
   async start(): Promise<void> {
     const src = await this.pick();
     if (!src) return;
@@ -231,7 +226,6 @@ export class StampMakerModal extends Modal {
   }
 }
 
-/** True when the picture already has see-through parts (a PNG or SVG without paper). */
 function sees(img: HTMLImageElement): boolean {
   const k = Math.min(1, 200 / Math.max(img.width, img.height, 1));
   const c = document.createElement("canvas");

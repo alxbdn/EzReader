@@ -4,7 +4,6 @@ import { ResourceUrls, EpubError } from "../epub-book";
 import { openBook, isBookPath } from "../books";
 import { decodeText } from "../book-text";
 
-/** A ZIP with stored entries, built in memory. */
 function zip(files: Record<string, string | Uint8Array>): Uint8Array {
   const enc = new TextEncoder();
   const locals: Uint8Array[] = [];

@@ -1,10 +1,5 @@
 name: Changes
 
-# Called by the PR workflows: tells them whether a pull request changes anything
-# besides documentation (Markdown, docs/, the README pictures). When it does not,
-# their heavy jobs are skipped, which GitHub counts as passing for the required
-# checks. Any other event, or a failure here, means "run everything".
-
 on:
   workflow_call:
     outputs:
@@ -24,8 +19,6 @@ jobs:
     outputs:
       code: ${{ steps.files.outputs.code }}
     steps:
-      # A pull request is checked out as its merge commit: its first parent is
-      # the base branch, so the diff between the two is what the PR changes.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         if: github.event_name == 'pull_request'
         with:

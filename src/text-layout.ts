@@ -27,7 +27,6 @@ const CELL_GAP = 2.2;
 
 const bucket = (x: number): number => Math.round(x / 1.5);
 
-/** "12", "-3.5", "1 234,50", "(12.00)", "€ 4,99", "15 %": the values a table column holds. */
 export function looksNumeric(s: string): boolean {
   const t = s.trim();
   return /\d/.test(t) && /^[-−+(]?\s?[€$£¥]?\s?[\d\s  .,']+\s?(%|[€$£¥])?\)?-?$/.test(t);
@@ -46,8 +45,6 @@ function toLines(runs: TextRun[]): RawLine[] {
   }
   for (const g of groups) g.sort((a, b) => a.x - b.x);
 
-  // Where text starts or ends after/before a gap, counted over the page:
-  // columns line up on their left edge (text) or their right edge (numbers).
   const starts = new Map<number, number>();
   const ends = new Map<number, number>();
   for (const g of groups) {
@@ -92,7 +89,6 @@ function toLines(runs: TextRun[]): RawLine[] {
   }).filter((l) => l.cells.length > 0);
 }
 
-/** Runs of lines that form a table: lines of several cells, and the one-cell rows between them. */
 function tableRegions(lines: RawLine[]): [number, number][] {
   const multi = lines.map((l) => l.cells.length > 1);
   const close = (a: RawLine, b: RawLine): boolean => b.y - a.y <= Math.max(a.size, b.size) * 2.6;
@@ -109,11 +105,6 @@ function tableRegions(lines: RawLine[]): [number, number][] {
   return regions;
 }
 
-/**
- * The columns of a table, as x ranges: where its cells overlap from row to
- * row. A cell that spans several columns (a header over two) is left out,
- * else it would glue them together.
- */
 export function tableColumns(rows: { x: number; right: number }[][]): [number, number][] {
   const cells = rows.flat();
   if (cells.length === 0) return [];
@@ -148,7 +139,6 @@ export function tableColumns(rows: { x: number; right: number }[][]): [number, n
   return columns;
 }
 
-/** The column a cell belongs to: the one it overlaps most (the first one for a spanning cell). */
 export function columnFor(cell: { x: number; right: number }, columns: [number, number][]): number {
   let best = -1, bestOverlap = 0;
   for (let i = 0; i < columns.length; i++) {
@@ -167,11 +157,6 @@ export function columnFor(cell: { x: number; right: number }, columns: [number, 
 
 interface PlacedLine { line: RawLine; cols: number[] }
 
-/**
- * Lines up the cells of each table in columns, and folds a cell that wraps
- * onto a second line back into its row: a line right under a row, with
- * only text, and nothing in the first column.
- */
 function placeTables(raw: RawLine[]): PlacedLine[] {
   const placed: PlacedLine[] = raw.map((line) => ({ line, cols: line.cells.map(() => 0) }));
   const keep = new Array<boolean>(raw.length).fill(true);

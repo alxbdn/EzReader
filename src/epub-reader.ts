@@ -5,12 +5,9 @@ import { ICON_CHEVRON_LEFT, ICON_CHEVRON_RIGHT, ICON_CLOSE, ICON_EXPORT, ICON_TE
 
 export interface EpubReaderDeps {
   openUrl(url: string): void;
-  /** The book's title while one is open, null once it is closed. */
   titleChanged(title: string | null): void;
   closeRequested(): void;
-  /** "Save as PDF…" was pressed. */
   convertRequested(): void;
-  /** Keys the reader doesn't use, typed while the book has the focus (menu shortcuts…). */
   forwardKey(e: KeyboardEvent): void;
 }
 
@@ -23,24 +20,21 @@ function load(key: string): string | null {
   try { return localStorage.getItem(key); } catch { return null; }
 }
 function store(key: string, value: string): void {
-  try { localStorage.setItem(key, value); } catch { /* private mode */ }
+  try { localStorage.setItem(key, value); } catch {}
 }
 
-/** Colors and fonts of the app, handed to the book's frame as variables. */
 const TOKENS: [string, string][] = [
   ["--ez-bg", "--viewer"], ["--ez-dot", "--viewer-dot"], ["--ez-card", "--card"], ["--ez-fg", "--foreground"],
   ["--ez-muted", "--muted-foreground"], ["--ez-border", "--border"], ["--ez-hover", "--accent"],
   ["--ez-shadow", "--page-shadow"], ["--ez-font", "--font"],
 ];
 
-/** Defaults the book's own styles can change. */
 export const BASE_CSS = `
 html { font-family: Georgia, "Iowan Old Style", "Palatino Linotype", Cambria, serif; line-height: 1.6; }
 img, svg, video { max-width: 100%; }
 img { height: auto; }
 `;
 
-/** What the reader keeps whatever the book says: its page, the text size and the theme. */
 const READER_CSS = `
 html {
   font-size: calc(var(--ez-scale) * 100%) !important;
@@ -121,7 +115,6 @@ function button(cls: string, icon: string): HTMLButtonElement {
   return b;
 }
 
-/** Reads an EPUB: one chapter at a time, in a page that follows the app's theme and the chosen text size. */
 export class EpubReader {
   private book: Book | null = null;
   private path = "";
@@ -217,7 +210,6 @@ export class EpubReader {
   get isOpen(): boolean { return this.book !== null; }
   get current(): Book | null { return this.book; }
 
-  /** Shows "Save as PDF…" where the system can print to PDF. */
   setCanConvert(can: boolean): void { this.pdfBtn.hidden = !can; }
 
   setConverting(busy: boolean): void {
@@ -241,7 +233,6 @@ export class EpubReader {
     if (end) end.textContent = this.nextLabel();
   }
 
-  /** Opens the book; throws an `EpubError` when it can't be read. */
   async open(path: string, bytes: Uint8Array): Promise<void> {
     const book = await openBook(path, bytes);
     this.close();
@@ -270,13 +261,11 @@ export class EpubReader {
     this.deps.titleChanged(null);
   }
 
-  /** The theme changed: hands the new colors to the open chapter. */
   refreshTheme(): void {
     const d = this.frame.contentDocument;
     if (d && this.book) this.paint(d);
   }
 
-  /** Reader keys, from the app window or from the book's frame. Returns true when used. */
   handleKey(e: KeyboardEvent): boolean {
     if (!this.book) return false;
     const ctrl = e.ctrlKey || e.metaKey;
@@ -302,7 +291,6 @@ export class EpubReader {
     }
     const target = e.target as Node | null;
     if (target === win.document || target?.ownerDocument === win.document) return false;
-    // Keys typed in the app window still scroll the book.
     const page = win.innerHeight * 0.9;
     const by: Record<string, number> = { ArrowDown: 40, ArrowUp: -40, PageDown: page, PageUp: -page, " ": e.shiftKey ? -page : page };
     if (e.key in by) {
@@ -356,7 +344,6 @@ export class EpubReader {
     if (at.fragment) this.scrollToFragment(at.fragment);
     else if (at.fraction) {
       const w = this.frame.contentWindow!;
-      // Pictures change the height as they load: wait for them before going back to the place.
       await Promise.race([
         Promise.all(Array.from(d.images).map((img) => img.complete ? null : new Promise((r) => { img.onload = img.onerror = r; }))),
         new Promise((r) => setTimeout(r, 800)),
@@ -413,7 +400,6 @@ export class EpubReader {
   private onClick(e: MouseEvent): void {
     const a = (e.target as Element | null)?.closest?.("a");
     if (!a) {
-      // A comic page turns with a click on its picture.
       if ((e.target as Element | null)?.localName === "img" && this.frame.contentDocument?.documentElement.classList.contains("ez-pictures")) void this.step(1);
       return;
     }

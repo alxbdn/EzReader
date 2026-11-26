@@ -1,54 +1,41 @@
-# Node / frontend
 node_modules/
 dist/
 public/
 *.log
 
-# Rust / Tauri
 src-tauri/target/
 src-tauri/gen/
 *.rs.bk
 *.rlib
 
-# Environment
 .env
 .env.*
 !.env.example
 
-# Editor
 .vscode/
 .idea/
 *.suo
 *.user
 
-# OS
 .DS_Store
 Thumbs.db
 *.tmp
 *.swp
 
-# Tauri build artifacts
 src-tauri/WixTools/
 target/
 pdfium.dll
 
-# Marketing, store screenshots and listing text live on Google Drive, not in git
 marketing/
 
-# Local build outputs: releases are published on GitHub Releases only
 builds/
 
-# Local archive of retired documents (e.g. CRA drafts)
 archive/
 
-# Stray Python packages
 *.whl
 
-# MSIX for the Microsoft Store (scripts/build-msix.ps1, scripts/get-store-msix.ps1):
-# uploaded to the Store only, never published on GitHub
 store/
 
-# Test outputs
 tests/e2e/results/
 tests/visual/results/
 tests/ui/results/
@@ -56,6 +43,5 @@ tests/ui/raw/
 coverage-ts/
 tests/visual/report/
 
-# Load test (tests/perf/)
 perf-big.pdf
 perf-results.json

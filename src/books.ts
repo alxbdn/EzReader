@@ -2,7 +2,6 @@ import { EpubBook, type Book } from "./epub-book";
 import { CbzBook } from "./book-cbz";
 import { HtmlBook, TextBook } from "./book-text";
 
-/** Extensions the book reader opens. */
 export const BOOK_EXTENSIONS = ["epub", "cbz", "txt", "html", "htm"] as const;
 
 const BOOK = new RegExp(`\\.(${BOOK_EXTENSIONS.join("|")})$`, "i");
@@ -11,7 +10,6 @@ export function isBookPath(path: string): boolean {
   return BOOK.test(path);
 }
 
-/** Opens a book by its extension; throws an `EpubError` when it can't be read. */
 export async function openBook(path: string, bytes: Uint8Array): Promise<Book> {
   const ext = /\.([a-z0-9]+)$/i.exec(path)?.[1]?.toLowerCase();
   switch (ext) {

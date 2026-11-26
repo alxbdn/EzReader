@@ -1,10 +1,7 @@
-/** A stamp the user made from a picture, kept on this computer. */
 export interface SavedStamp {
   id: string;
   name: string;
-  /** PNG with transparency, as a data: URL. */
   dataUrl: string;
-  /** Height divided by width. */
   ratio: number;
 }
 
@@ -30,7 +27,6 @@ export class StampStore {
 
   get full(): boolean { return this.stamps.length >= StampStore.MAX; }
 
-  /** Adds a stamp first in the list. Returns null when the list is full or storage refuses it. */
   add(name: string, dataUrl: string, ratio: number): SavedStamp | null {
     if (this.full) return null;
     const stamp: SavedStamp = { id: crypto.randomUUID(), name: name.trim().slice(0, STAMP_NAME_MAX), dataUrl, ratio };

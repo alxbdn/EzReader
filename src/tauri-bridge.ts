@@ -16,12 +16,10 @@ async function call<T>(cmd: string, args?: Record<string, unknown>): Promise<T> 
 
 import type { FormFieldValue, StoredAnnotation } from "./models";
 
-/** PDFs and pictures to add as pages, several at once. */
 export async function openPagesDialog(): Promise<string[]> {
   return call<string[]>("open_pages_dialog");
 }
 
-/** Documents to open, several at once (each in its own tab). */
 export async function openDocumentsDialog(): Promise<string[]> {
   return call<string[]>("open_documents_dialog");
 }
@@ -50,7 +48,6 @@ export async function listSystemFonts(): Promise<string[]> {
   return call<string[]>("list_system_fonts", {});
 }
 
-/** The fonts a PDF uses, one name each, sorted. */
 export async function listPdfFonts(filePath: string, password: string | null): Promise<string[]> {
   return call<string[]>("list_pdf_fonts", { filePath, password });
 }
@@ -84,11 +81,9 @@ export async function stripAnnotationStreams(
 
 export interface DisplayCopy {
   annotations: StoredAnnotation[];
-  /** True when `workingPath` now holds the file without the drawn layer of its annotations. */
   workingCopy: boolean;
 }
 
-/** Reads a file being opened once: its stored annotations, and a working copy when needed. */
 export async function openForDisplay(filePath: string, workingPath: string): Promise<DisplayCopy> {
   return call<DisplayCopy>("open_for_display", { filePath, workingPath });
 }
@@ -103,7 +98,6 @@ export interface StartupArgs {
   page?: number;
 }
 
-/** Unpacks one deflated ZIP entry in the back end (raw bytes both ways). */
 export async function inflateRaw(data: Uint8Array): Promise<Uint8Array> {
   return new Uint8Array(await call<ArrayBuffer>("inflate_raw", data as unknown as Record<string, unknown>));
 }
@@ -112,7 +106,6 @@ export async function canPrintHtmlToPdf(): Promise<boolean> {
   return call<boolean>("can_print_html_to_pdf");
 }
 
-/** Prints each HTML page to its own PDF with the system webview; `done` gets the count after each page. */
 export async function printHtmlPages(pages: string[], done: (n: number) => void): Promise<string[]> {
   const progress = new Channel<number>();
   progress.onmessage = done;
@@ -248,7 +241,6 @@ export async function installUpdate(): Promise<UpdateOutcome> {
   return call<UpdateOutcome>("install_update");
 }
 
-/** "ready": downloaded, installs when EzReader closes. "manual": needs a click. */
 export type UpdatePrepared = "ready" | "manual";
 
 export async function prepareUpdate(): Promise<UpdatePrepared> {
@@ -346,7 +338,6 @@ export async function openStampDialog(): Promise<string | null> {
   return call<string | null>("open_stamp_dialog");
 }
 
-/** An SVG file as base64, for an `<img>` only. */
 export async function loadSvgFile(path: string): Promise<string> {
   return call<string>("load_svg", { path });
 }

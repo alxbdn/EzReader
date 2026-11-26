@@ -18,12 +18,9 @@ export interface SideTabsHandlers {
   move(id: number, index: number): void;
   detach(id: number, screenX: number, screenY: number): void;
   open(): void;
-  /** A new name (without its extension) typed for the current document. */
   rename(id: number, stem: string): void;
 }
 
-/** The open documents, listed on top of the page panel, with an "Open a PDF" entry
- *  that also takes dropped files. */
 export class SideTabs {
   readonly el: HTMLElement;
   private list: HTMLElement;
@@ -68,12 +65,10 @@ export class SideTabs {
     this.render(this.tabs, this.activeId);
   }
 
-  /** Lights the list up while files are dragged over it. */
   setDropTarget(on: boolean): void {
     this.el.classList.toggle("drop-target", on);
   }
 
-  /** True when a point (client pixels) falls on the list or the open entry. */
   contains(x: number, y: number): boolean {
     if (this.el.offsetParent === null) return false;
     const r = this.el.getBoundingClientRect();
@@ -108,7 +103,6 @@ export class SideTabs {
       close.tabIndex = -1;
       close.addEventListener("pointerdown", (e) => e.stopPropagation());
       close.addEventListener("click", (e) => { e.stopPropagation(); this.on.close(tab.id); });
-      // A tab still loading its first document has no name yet: no lone close cross on a blank row.
       if (tab.title) item.append(icon, name, close);
       else { item.classList.add("loading"); item.append(icon, name); }
       item.addEventListener("pointerdown", (e) => this.press(e, tab.id, item));
@@ -131,7 +125,6 @@ export class SideTabs {
     this.list.querySelector(".side-tab.active")?.scrollIntoView?.({ block: "nearest" });
   }
 
-  /** Whether the current document can take a new name (not while a book is shown, for one). */
   setRenamable(on: boolean): void {
     if (this.renamable === on) return;
     this.renamable = on;
@@ -141,7 +134,6 @@ export class SideTabs {
 
   get canRename(): boolean { return this.renamable; }
 
-  /** Turns the current document's name into a field; Enter keeps the new name, Escape drops it. */
   startRename(id: number): void {
     const tab = this.tabs.find((t) => t.id === id);
     if (!tab || !tab.title || id !== this.activeId || !this.renamable || this.renaming) return;

@@ -67,7 +67,6 @@ export const ICON_SCROLL_VERTICAL = lucide(`<rect x="7" y="2" width="10" height=
 export const ICON_SCROLL_HORIZONTAL = lucide(`<rect x="2" y="7" width="8" height="10" rx="1"/><rect x="14" y="7" width="8" height="10" rx="1"/><path d="M10 12h4"/>`);
 export const ICON_FILL = lucide(`<path d="m19 11-8-8-8.6 8.6a2 2 0 0 0 0 2.8l5.2 5.2c.8.8 2 .8 2.8 0L19 11Z"/><path d="m5 2 5 5"/><path d="M2 13h15"/><path d="M22 20a2 2 0 1 1-4 0c0-1.6 1.7-2.4 2-4 .3 1.6 2 2.4 2 4Z"/>`);
 export const ICON_NO_FILL = lucide(`<rect x="4" y="4" width="16" height="16" rx="2"/><path d="m5 19 14-14"/>`);
-/** Panel toggles: the shaded strip and its edge slide in and out with the panel (see .pnl-fill in app.css). */
 export const ICON_SIDEBAR = lucide(`<path class="pnl-fill" d="M5 3h4v18H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z" fill="currentColor" stroke="none"/><rect x="3" y="3" width="18" height="18" rx="2"/><path class="pnl-edge" d="M9 3v18"/>`);
 
 export const ICON_SAVE = lucide(`<path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><path d="M17 21v-8H7v8M7 3v5h8"/>`);
@@ -103,7 +102,6 @@ export const ICON_CHECK = `<svg width="16" height="16" viewBox="0 0 24 24" fill=
 export const ICON_DISCARD = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" aria-hidden="true"><path d="M5 5l14 14M19 5 5 19"/></svg>`;
 
 export const ICON_EDIT_TEXT = lucide(`<path d="M17 22h-1a4 4 0 0 1-4-4V6a4 4 0 0 1 4-4h1"/><path d="M7 22h1a4 4 0 0 0 4-4v-1"/><path d="M7 2h1a4 4 0 0 1 4 4v1"/>`);
-/** An eye struck out, the bar rising to the right: what is redacted can't be seen. */
 export const ICON_REDACT_EYE = lucide(`<g transform="matrix(-1 0 0 1 24 0)"><path d="M10.73 5.08A10.43 10.43 0 0 1 12 5c7 0 10 7 10 7a13.16 13.16 0 0 1-1.67 2.68"/><path d="M6.61 6.61A13.53 13.53 0 0 0 2 12s3 7 10 7a9.74 9.74 0 0 0 5.39-1.61"/><path d="M9.88 9.88a3 3 0 1 0 4.24 4.24"/><path d="m2 2 20 20"/></g>`);
 export const ICON_IMAGE = lucide(`<rect x="3" y="4" width="18" height="16" rx="2"/><path d="m21 15-5-5-9 9"/><circle cx="8.5" cy="9.5" r="1.5"/>`);
 export const ICON_REDACT_TEXT = lucide(`<path d="M4 6h16"/><rect x="4" y="10" width="16" height="5" rx="1" fill="currentColor" stroke="none"/><path d="M4 19h10"/>`);
@@ -126,7 +124,6 @@ export const ICON_UNLOCK = lucide(`<rect x="5" y="11" width="14" height="10" rx=
 export const ICON_EYE = lucide(`<path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>`);
 export const ICON_OCR = lucide(`<path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/><path d="M7 8h8"/><path d="M7 12h10"/><path d="M7 16h6"/>`);
 export const ICON_MOON = lucide(`<path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/>`);
-/** Page brightness, keyboard-backlight style: 1 to 3 rays lit. */
 export const brightnessIcon = (level: 1 | 2 | 3): string => {
   const on = (n: number) => (level >= n ? "" : ' opacity=".28"');
   return lucide(`<path d="M3 20h18"/><path d="M7.5 20a4.5 4.5 0 0 1 9 0"/>` +
@@ -148,5 +145,4 @@ export const ICON_IMAGE_SMALL = lucide(`<rect x="3" y="4" width="18" height="16"
 export const ICON_TOC = lucide(`<path d="M3 6h.01"/><path d="M3 12h.01"/><path d="M3 18h.01"/><path d="M8 6h13"/><path d="M8 12h13"/><path d="M8 18h13"/>`);
 export const ICON_TEXT_SMALLER = lucide(`<path d="M3.5 13h6"/><path d="m2 16 4.5-9 4.5 9"/><path d="M18 7v9"/><path d="m14 12 4 4 4-4"/>`);
 export const ICON_TEXT_LARGER = lucide(`<path d="M3.5 13h6"/><path d="m2 16 4.5-9 4.5 9"/><path d="M18 16V7"/><path d="m14 11 4-4 4 4"/>`);
-/** A page crossed by diagonal lines of text: the watermark. */
 export const ICON_WATERMARK = lucide(`<path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="m8 17 8-8"/><path d="m8 12 3-3"/><path d="m13 17 3-3"/>`);

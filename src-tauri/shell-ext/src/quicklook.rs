@@ -410,9 +410,6 @@ struct QuickLook {
     controls: Vec<(Control, RECT)>,
     hover: Option<Control>,
     icon: Option<HICON>,
-    /// Set once the window really is the foreground window. Until then a
-    /// deactivation is only Windows settling who owns the foreground, not the
-    /// user clicking away, so it must not close the preview.
     armed: bool,
 }
 
@@ -470,7 +467,6 @@ impl EncodeWideNull for std::ffi::OsStr {
     }
 }
 
-/// Closes the preview if one is open, and says whether there was one.
 fn close_open_window() -> bool {
     let open = HWND(OPEN.swap(0, Ordering::SeqCst) as *mut _);
     if !open.is_invalid() && unsafe { IsWindow(Some(open)) }.as_bool() {
@@ -480,13 +476,6 @@ fn close_open_window() -> bool {
     false
 }
 
-/// Makes the preview the foreground window, so it gets the next Space or Esc.
-///
-/// The Space press that opened it was swallowed by the keyboard hook, so
-/// Windows does not count this process as the one the user is typing to and
-/// refuses a plain `SetForegroundWindow`. A zero mouse input (no movement, no
-/// click) makes this process the last one to send input, which lifts that
-/// lock; joining Explorer's input queue is the fallback.
 fn bring_to_front(window: HWND) -> bool {
     unsafe {
         if GetForegroundWindow() == window {
@@ -588,8 +577,6 @@ fn show(path: &Path, explorer: HWND) {
     unsafe {
         let _ = ShowWindow(window, SW_SHOW);
     }
-    // Activation flips back and forth while the foreground changes hands, so
-    // the window only counts as open, and closes on deactivation, after that.
     state.armed = bring_to_front(window);
     OPEN.store(window.0 as isize, Ordering::SeqCst);
 }
@@ -946,8 +933,6 @@ extern "system" fn window_proc(window: HWND, message: u32, wparam: WPARAM, lpara
             WM_ACTIVATE => {
                 let current = OPEN.load(Ordering::SeqCst) == window.0 as isize;
                 if (wparam.0 & 0xffff) as u32 != WA_INACTIVE {
-                    // Clicking into a preview that never got the foreground
-                    // makes it a normal one: clicking away closes it again.
                     if current && GetForegroundWindow() == window {
                         state.armed = true;
                     }

@@ -72,7 +72,6 @@ describe("text layout", () => {
 });
 
 describe("tables for Excel", () => {
-  // Right-aligned amounts: their left edges never line up.
   const right = (str: string, end: number, y: number): TextRun => run(str, end - str.length * 5, y);
 
   it("puts right-aligned amounts in their own columns, with no empty columns between", () => {

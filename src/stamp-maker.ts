@@ -1,16 +1,12 @@
 import type { RgbColor } from "./models";
 
-/** RGBA pixels, as in an ImageData. */
 export interface Pixels { data: Uint8ClampedArray; width: number; height: number }
 
-/** The longest side of a saved stamp, in pixels. */
 export const STAMP_MAX_SIDE = 600;
-/** The cut-out strength the dialog starts at. */
 export const DEFAULT_CUTOUT = 50;
 
 const MAX_DIST = Math.sqrt(3 * 255 * 255);
 
-/** True when a fair share of the pixels are see-through: the picture already has no paper. */
 export function hasTransparency(px: Pixels): boolean {
   const { data } = px;
   let clear = 0;
@@ -18,7 +14,6 @@ export function hasTransparency(px: Pixels): boolean {
   return clear > (data.length / 4) * 0.01;
 }
 
-/** The paper colour: the median of the opaque pixels along the edges, or null when there are none. */
 export function paperColor(px: Pixels): RgbColor | null {
   const { data, width: w, height: h } = px;
   const ring = Math.max(1, Math.round(Math.min(w, h) * 0.04));
@@ -38,11 +33,6 @@ export function paperColor(px: Pixels): RgbColor | null {
   return { r: median(rs), g: median(gs), b: median(bs) };
 }
 
-/**
- * Makes the paper see-through: pixels close to `paper` fade out, with a soft edge, and the colour
- * of the half-faded ones is unmixed from the paper so no light halo is left around the ink.
- * `strength` goes from 0 (keep almost everything) to 100 (keep only the strongest ink).
- */
 export function cutOut(px: Pixels, paper: RgbColor, strength: number): void {
   const { data } = px;
   const s = Math.min(100, Math.max(0, strength)) / 100;
@@ -53,7 +43,6 @@ export function cutOut(px: Pixels, paper: RgbColor, strength: number): void {
     const d = Math.sqrt(dr * dr + dg * dg + db * db);
     const a = d <= lo ? 0 : d >= hi ? 1 : (d - lo) / (hi - lo);
     if (a > 0 && a < 1) {
-      // The pixel is a mix of ink and paper: keep the ink's own colour.
       const k = Math.max(a, d / MAX_DIST);
       data[i] = paper.r + dr / k;
       data[i + 1] = paper.g + dg / k;
@@ -63,7 +52,6 @@ export function cutOut(px: Pixels, paper: RgbColor, strength: number): void {
   }
 }
 
-/** Paints every pixel in `color`, keeping its transparency. */
 export function recolor(px: Pixels, color: RgbColor): void {
   const { data } = px;
   for (let i = 0; i < data.length; i += 4) {
@@ -73,7 +61,6 @@ export function recolor(px: Pixels, color: RgbColor): void {
   }
 }
 
-/** The box around the pixels that show, or null when the picture is empty. */
 export function visibleBounds(px: Pixels): { x: number; y: number; w: number; h: number } | null {
   const { data, width: w, height: h } = px;
   let x0 = w, y0 = h, x1 = -1, y1 = -1;
@@ -90,22 +77,15 @@ export function visibleBounds(px: Pixels): { x: number; y: number; w: number; h:
   return x1 < 0 ? null : { x: x0, y: y0, w: x1 - x0 + 1, h: y1 - y0 + 1 };
 }
 
-/** The scale that brings a `w` × `h` picture within `max` pixels on its longest side. */
 export function fitScale(w: number, h: number, max = STAMP_MAX_SIDE): number {
   return Math.min(1, max / Math.max(w, h, 1));
 }
 
 export interface StampSettings {
-  /** Cut-out strength, or null to keep the picture's own transparency. */
   cutout: number | null;
-  /** The ink colour, or null for the picture's own colours. */
   color: RgbColor | null;
 }
 
-/**
- * The stamp drawn from `img`: paper removed, recoloured if asked, transparent margins trimmed,
- * at most STAMP_MAX_SIDE pixels. Null when nothing is left.
- */
 export function makeStamp(img: CanvasImageSource & { width: number; height: number }, settings: StampSettings): HTMLCanvasElement | null {
   const k = fitScale(img.width, img.height);
   const w = Math.max(1, Math.round(img.width * k)), h = Math.max(1, Math.round(img.height * k));
@@ -134,7 +114,6 @@ export function makeStamp(img: CanvasImageSource & { width: number; height: numb
   return out;
 }
 
-/** `img` recoloured in `color`, as PNG base64 (without the data: prefix). */
 export function tintedPng(img: HTMLImageElement, color: RgbColor): string | null {
   const c = document.createElement("canvas");
   c.width = img.naturalWidth;

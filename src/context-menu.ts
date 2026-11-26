@@ -1,9 +1,7 @@
-/** One entry of a right-click menu, or a separator. */
 export type ContextItem =
   | { label: string; shortcut?: string; disabled?: boolean; danger?: boolean; run: () => void }
   | "sep";
 
-/** The right-click menu: built for what was clicked, and only when there is something to offer. */
 export class ContextMenu {
   readonly el: HTMLElement;
 
@@ -23,8 +21,6 @@ export class ContextMenu {
 
   get isOpen(): boolean { return !this.el.classList.contains("hidden"); }
 
-  /** Opens at a point (client pixels). Leading, trailing and doubled separators are dropped;
-   *  with no entry left, nothing opens. */
   show(x: number, y: number, items: readonly ContextItem[]): boolean {
     const clean = tidy(items);
     if (clean.length === 0) { this.hide(); return false; }

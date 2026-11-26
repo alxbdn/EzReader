@@ -98,8 +98,6 @@ pub fn save_annotated_pdf(
         fsutil::save_incremental(&mut inc, &output_path)?;
         return Ok(());
     }
-    // Replaced text is destructive, like a redaction: the original words are removed from
-    // the page, and the file is rewritten whole so no earlier revision still holds them.
     let mut doc = fsutil::compacted(&mut inc)?;
     let keep: HashSet<ObjectId> = writer::load_meta(&doc).layers().map(|(_, sid)| sid).collect();
     let pages = doc.get_pages();
@@ -113,7 +111,6 @@ pub fn save_annotated_pdf(
     Ok(())
 }
 
-/// The white patches of replaced text, by page.
 fn replaced_text_areas(annotations: &[Annotation]) -> HashMap<u32, Vec<erase_text::Area>> {
     let mut out: HashMap<u32, Vec<erase_text::Area>> = HashMap::new();
     for ann in annotations {
@@ -210,15 +207,12 @@ fn clone_acroform_tree(inc: &mut IncrementalDocument, cat_id: ObjectId) -> lopdf
     Ok(())
 }
 
-/// EzReader's annotation record in a file, with the document it was read from.
 struct Stored {
     bytes: Vec<u8>,
     doc: Document,
     meta: writer::AnnotationMeta,
 }
 
-/// Reads EzReader's annotation record, parsing the file only when its bytes can hold one, so
-/// opening a file EzReader never annotated costs a read, not a parse of every object.
 fn load_stored(path: &str) -> Result<Option<Stored>, String> {
     let bytes = std::fs::read(path).map_err(|e| e.to_string())?;
     if !writer::may_hold_meta(&bytes) {
@@ -229,8 +223,6 @@ fn load_stored(path: &str) -> Result<Option<Stored>, String> {
     Ok(Some(Stored { bytes, doc, meta }))
 }
 
-/// Writes `stored` without the drawn layer of its annotations to `output_path`, so the viewer
-/// shows them once, as editable objects. False, and nothing written, when there is no layer.
 fn write_without_layer(stored: Stored, output_path: &str) -> CmdResult<bool> {
     if !stored.meta.has_layers() {
         return Ok(false);
@@ -255,8 +247,6 @@ pub fn strip_annotation_streams(input_path: String, output_path: String) -> CmdR
     Ok(stripped)
 }
 
-/// What the viewer needs to show a file: the annotations EzReader stored in it, and whether
-/// a working copy without their drawn layer was written (the viewer then shows that copy).
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DisplayCopy {
@@ -264,9 +254,6 @@ pub struct DisplayCopy {
     pub working_copy: bool,
 }
 
-/// One read of a file being opened: replaces `read_annotations` followed by
-/// `strip_annotation_streams`, which parsed the file up to three times before the viewer could
-/// start. `working_path` is written only when `working_copy` comes back true.
 #[tauri::command(async)]
 pub fn open_for_display(file_path: String, working_path: String) -> CmdResult<DisplayCopy> {
     crate::grants::check_all([&file_path, &working_path])?;
@@ -1688,7 +1675,6 @@ fn unique_path(dir: &std::path::Path, stem: &str, ext: &str) -> std::path::PathB
     dir.join(format!("{stem}-conflict.{ext}"))
 }
 
-/// The fonts the document uses, one name each, for the document info panel.
 #[tauri::command(async)]
 pub fn list_pdf_fonts(file_path: String, password: Option<String>) -> CmdResult<Vec<String>> {
     crate::grants::check(&file_path)?;

@@ -6,8 +6,6 @@ type ConfirmHandler = (level: CompressLevel, targetBytes?: number) => void;
 
 const MB = 1024 * 1024;
 
-// A number format is costly to build (toLocaleString with options builds one per call), and the
-// dialog formats a dozen sizes each time it refreshes, translations at startup included.
 const formats = new Map<string, Intl.NumberFormat>();
 function formatNumber(n: number, lang: string, digits: number): string {
   const key = `${lang}|${digits}`;

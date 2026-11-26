@@ -1,9 +1,5 @@
 name: Scorecard
 
-# OpenSSF Scorecard: rates the project's security practices (pinned
-# dependencies, branch protection, code review, SAST, fuzzing...). The results
-# show in the Security tab and feed the Scorecard badge of the README.
-
 on:
   push:
     branches: [main]

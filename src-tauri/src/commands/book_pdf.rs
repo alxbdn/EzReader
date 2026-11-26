@@ -1,7 +1,3 @@
-//! EPUB to PDF: the interface hands over each chapter as a standalone HTML page
-//! (pictures inlined, nothing active); the system webview prints it to PDF, and
-//! the chapters are then put together with a table of contents as bookmarks.
-
 use crate::error::{CmdResult, ErrorCode, PdfError};
 use crate::fsutil;
 use lopdf::{Dictionary, Document, Object, ObjectId, StringFormat};
@@ -13,8 +9,6 @@ use tauri::ipc::Channel;
 use tauri::{AppHandle, Manager, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
 
 const PRINT_WINDOW: &str = "book-print";
-/// A5, the size of a paperback, in inches, with 15 mm margins.
-// Only the Windows and Linux printers use these: macOS has no print-to-PDF here.
 #[cfg(any(windows, target_os = "linux"))]
 const PAGE_WIDTH_IN: f64 = 5.83;
 #[cfg(any(windows, target_os = "linux"))]
@@ -27,14 +21,11 @@ fn other(e: impl ToString) -> PdfError {
     PdfError::new(ErrorCode::Other, e.to_string())
 }
 
-/// Whether this system's webview can print a page to PDF.
 #[tauri::command]
 pub fn can_print_html_to_pdf() -> bool {
     cfg!(any(windows, target_os = "linux"))
 }
 
-/// Prints each HTML page to its own temporary PDF, in order, and returns their paths.
-/// `progress` receives the number of pages done after each one.
 #[tauri::command(async)]
 pub fn print_html_pages(app: AppHandle, pages: Vec<String>, progress: Channel<u32>) -> CmdResult<Vec<String>> {
     if !can_print_html_to_pdf() {
@@ -57,7 +48,6 @@ pub fn print_html_pages(app: AppHandle, pages: Vec<String>, progress: Channel<u3
                 window.navigate(file_url(html_path)?).map_err(other)?;
             }
             loaded_rx.recv_timeout(STEP_TIMEOUT).map_err(|_| other("the page took too long to load"))?;
-            // Let the layout settle after the load event.
             std::thread::sleep(Duration::from_millis(150));
             let pdf = temp_path(&format!("book-{i}.pdf"));
             print_to_pdf(&window, &pdf)?;
@@ -84,7 +74,6 @@ fn file_url(path: &Path) -> CmdResult<url::Url> {
     url::Url::from_file_path(path).map_err(|_| other("invalid temporary path"))
 }
 
-/// An off-screen window that only shows the pages being printed: it has no access to the app's commands.
 fn print_window(app: &AppHandle, first: url::Url, loaded: mpsc::Sender<()>) -> CmdResult<WebviewWindow> {
     if let Some(old) = app.get_webview_window(PRINT_WINDOW) {
         let _ = old.destroy();
@@ -117,7 +106,6 @@ fn print_to_pdf(window: &WebviewWindow, out: &Path) -> CmdResult<()> {
         .with_webview(move |pv| {
             let failed = tx.clone();
             let started = (|| -> windows::core::Result<()> {
-                // SAFETY: COM calls on the webview's own thread, with interfaces it handed us.
                 unsafe {
                     let core: ICoreWebView2_7 = pv.controller().CoreWebView2()?.cast()?;
                     let env: ICoreWebView2Environment6 = pv.environment().cast()?;
@@ -188,7 +176,6 @@ fn print_to_pdf(window: &WebviewWindow, out: &Path) -> CmdResult<()> {
         })
         .map_err(other)?;
     rx.recv_timeout(STEP_TIMEOUT).map_err(|_| other("printing took too long"))?.map_err(other)?;
-    // The print job writes the file just after it reports being done.
     for _ in 0..50 {
         if std::fs::metadata(out).map(|m| m.len() > 0).unwrap_or(false) {
             return Ok(());
@@ -206,12 +193,10 @@ fn print_to_pdf(_window: &WebviewWindow, _out: &Path) -> CmdResult<()> {
 #[derive(Debug, Clone, Deserialize)]
 pub struct Bookmark {
     pub title: String,
-    /// 1-based page number.
     pub page: u32,
     pub depth: u32,
 }
 
-/// Writes `input` to `output` with `bookmarks` as the PDF's outline, and the book's title and author.
 #[tauri::command(async)]
 pub fn finish_book_pdf(
     input: String,
@@ -227,7 +212,6 @@ pub fn finish_book_pdf(
     fsutil::save_document(&mut doc, &output).map_err(other)
 }
 
-/// A PDF text string: plain bytes for ASCII, UTF-16 with a byte-order mark otherwise.
 fn text_string(s: &str) -> Object {
     if s.is_ascii() {
         return Object::String(s.as_bytes().to_vec(), StringFormat::Literal);
@@ -262,7 +246,6 @@ pub(crate) fn add_outline(doc: &mut Document, bookmarks: &[Bookmark]) -> CmdResu
     let root = doc.add_object(Dictionary::new());
     let ids: Vec<ObjectId> = marks.iter().map(|_| doc.add_object(Dictionary::new())).collect();
 
-    // Parent of each entry: the nearest earlier entry less deep, or the root.
     let mut parent: Vec<ObjectId> = Vec::with_capacity(marks.len());
     let mut children: std::collections::HashMap<ObjectId, Vec<usize>> = std::collections::HashMap::new();
     let mut stack: Vec<(u32, usize)> = Vec::new();
@@ -301,7 +284,6 @@ pub(crate) fn add_outline(doc: &mut Document, bookmarks: &[Bookmark]) -> CmdResu
         if let Some(kids) = children.get(&ids[i]) {
             d.set("First", Object::Reference(ids[kids[0]]));
             d.set("Last", Object::Reference(ids[*kids.last().expect("not empty")]));
-            // Negative: the entry starts closed.
             d.set("Count", Object::Integer(-(kids.len() as i64)));
         }
         doc.objects.insert(ids[i], Object::Dictionary(d));

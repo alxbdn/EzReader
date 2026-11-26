@@ -2,11 +2,6 @@ import { hexToRgb, rgbToHex, type RgbColor } from "./models";
 
 const EYEDROPPER_ICON = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m2 22 1-1h3l9-9"/><path d="M3 21v-3l9-9"/><path d="m15 6 3.4-3.4a2.1 2.1 0 1 1 3 3L18 9l.4.4a2.1 2.1 0 1 1-3 3l-3.8-3.8a2.1 2.1 0 1 1 3-3l.4.4Z"/></svg>`;
 
-/** Reads a color from the window: the dropper stays armed (eyedropper cursor) until the next
- *  click, which samples the page or annotation under it. Escape, a right click, a click on
- *  `cancelEl` or leaving the window cancels. The whole click is swallowed so the page tool
- *  under the cursor never sees it. The WebView2 native EyeDropper is not used: it fails
- *  silently in the Tauri webview, which left the button doing nothing. */
 export function pickScreenColor(cancelEl?: Element | null): Promise<string | null> {
   return new Promise((resolve) => {
     const root = document.documentElement;
@@ -18,7 +13,6 @@ export function pickScreenColor(cancelEl?: Element | null): Promise<string | nul
       e.preventDefault();
       e.stopPropagation();
       e.stopImmediatePropagation();
-      // The sampling click ends with pointerup; its click follows in the same task, so let go after it.
       if (finished && (e.type === "pointerup" || e.type === "pointercancel")) setTimeout(release, 0);
     };
     const done = (hex: string | null, midClick = false) => {
@@ -28,7 +22,6 @@ export function pickScreenColor(cancelEl?: Element | null): Promise<string | nul
       window.removeEventListener("pointerdown", onDown, true);
       window.removeEventListener("keydown", onKey, true);
       window.removeEventListener("blur", onBlur);
-      // Mid-click, keep swallowing until its pointerup (see swallow); otherwise let go now.
       if (!midClick) release();
       resolve(hex);
     };
@@ -60,9 +53,6 @@ function normalizeHex(text: string): string | null {
   return c ? rgbToHex(c).toLowerCase() : null;
 }
 
-/** Topmost opaque canvas pixel under the point, else the element's background color.
- *  Canvases with `pointer-events: none` (page renders, overlays) are not hit-tested by
- *  elementsFromPoint, so they are looked up by geometry inside each element on the way down. */
 export function sampleAt(x: number, y: number): string | null {
   const seen = new Set<Element>();
   for (const el of document.elementsFromPoint(x, y)) {
@@ -94,7 +84,7 @@ function canvasPixel(el: HTMLCanvasElement, x: number, y: number): string | null
   try {
     const d = el.getContext("2d")?.getImageData(px, py, 1, 1).data;
     if (d && d[3]! > 0) return rgbToHex({ r: d[0]!, g: d[1]!, b: d[2]! }).toLowerCase();
-  } catch { /* tainted or not a 2D canvas */ }
+  } catch {}
   return null;
 }
 

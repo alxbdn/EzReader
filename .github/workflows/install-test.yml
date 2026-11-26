@@ -1,12 +1,5 @@
 name: Install test
 
-# Installs, upgrades (from the latest release), starts and uninstalls both the
-# NSIS installer and the MSIX on a clean Windows runner: scripts/install-test.ps1.
-#
-# Runs before every release (called by release.yml with the packages it just
-# built, and the release is only published if this passes), on PRs that touch
-# the packaging, and on demand.
-
 on:
   workflow_call:
     inputs:
@@ -38,7 +31,6 @@ env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
-  # Only when not called by the release, which passes its own packages.
   build:
     name: Build the packages
     if: ${{ !inputs.artifact }}
@@ -64,7 +56,6 @@ jobs:
             src-tauri/shell-ext
           key: install-test
 
-      # Higher than any real release, so the latest release upgrades to it.
       - name: Test version
         id: version
         shell: bash

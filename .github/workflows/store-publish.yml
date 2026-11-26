@@ -15,7 +15,6 @@ permissions:
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
-  # Store ID of EzReader in Partner Center (public, not a secret).
   STORE_APP_ID: ${{ vars.MICROSOFT_STORE_APP_ID || '9P9PVN4DRVS8' }}
 
 jobs:
@@ -23,10 +22,6 @@ jobs:
     runs-on: windows-latest
 
     steps:
-      # Needs, in Settings > Secrets and variables > Actions: the variable
-      # MICROSOFT_STORE_SELLER_ID and the secrets MICROSOFT_STORE_TENANT_ID,
-      # MICROSOFT_STORE_CLIENT_ID and MICROSOFT_STORE_CLIENT_SECRET (a
-      # Microsoft Entra app added in Partner Center with the Manager role).
       - name: Check Store credentials
         id: creds
         shell: bash
@@ -62,8 +57,6 @@ jobs:
           echo "version=$VERSION" >> $GITHUB_OUTPUT
           echo "tag=$TAG" >> $GITHUB_OUTPUT
 
-      # The .msix is not on the GitHub release: it is the store-msix-<version>
-      # artifact of the run that built the release (Release or Bump & Release).
       - name: Download MSIX from the release build
         if: steps.creds.outputs.ready == 'true'
         shell: bash
@@ -98,7 +91,6 @@ jobs:
           MICROSOFT_STORE_CLIENT_ID: ${{ secrets.MICROSOFT_STORE_CLIENT_ID }}
           MICROSOFT_STORE_CLIENT_SECRET: ${{ secrets.MICROSOFT_STORE_CLIENT_SECRET }}
         run: |
-          # Write config.json (no ClientSecret - it goes to Credential Manager)
           $configDir = "$env:LOCALAPPDATA\Microsoft\MSStore.CLI"
           New-Item -ItemType Directory -Path $configDir -Force | Out-Null
           $config = @{
@@ -110,14 +102,11 @@ jobs:
           $configPath = Join-Path $configDir "settings.json"
           [System.IO.File]::WriteAllText($configPath, $config, $utf8NoBom)
 
-          # Store ClientSecret in Windows Credential Manager
-          # msstore CLI uses target name "MicrosoftStoreCli:user={clientId}"
           $clientId = $env:MICROSOFT_STORE_CLIENT_ID
           $secret = $env:MICROSOFT_STORE_CLIENT_SECRET
           $target = "MicrosoftStoreCli:user=$clientId"
           cmdkey /generic:$target /user:$clientId /pass:$secret
 
-          # Submit
           $version = "${{ steps.version.outputs.version }}"
           $msixFile = "ezreader-${version}-win-x64.msix"
           Write-Host "Submitting $msixFile to Microsoft Store..."

@@ -53,7 +53,6 @@ pub fn open_document_dialog(app: AppHandle) -> CmdResult<Option<String>> {
     Ok(picked)
 }
 
-/// Several documents at once, each opened in its own tab.
 #[tauri::command(async)]
 pub fn open_documents_dialog(app: AppHandle) -> CmdResult<Vec<String>> {
     let mut all = vec!["pdf"];
@@ -74,7 +73,6 @@ pub fn open_documents_dialog(app: AppHandle) -> CmdResult<Vec<String>> {
     Ok(picked)
 }
 
-/// Opened by the book reader (same list as the interface's `BOOK_EXTENSIONS`).
 pub const BOOK_EXTENSIONS: [&str; 5] = ["epub", "cbz", "txt", "html", "htm"];
 
 pub const IMAGE_EXTENSIONS: [&str; 6] = ["png", "jpg", "jpeg", "webp", "gif", "bmp"];
@@ -89,7 +87,6 @@ pub fn open_image_dialog(app: AppHandle) -> CmdResult<Option<String>> {
     Ok(picked)
 }
 
-/// Pictures a stamp can be made from.
 pub const STAMP_EXTENSIONS: [&str; 4] = ["png", "jpg", "jpeg", "svg"];
 
 #[tauri::command(async)]

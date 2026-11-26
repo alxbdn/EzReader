@@ -6,16 +6,13 @@ export interface UpdateBadgeDeps {
   t(): Translations;
   check(): Promise<UpdateStatus>;
   install(): Promise<UpdateOutcome>;
-  /** Downloads the update in the background so it installs when EzReader closes. */
   prepare(): Promise<UpdatePrepared>;
   notify(text: string, isError?: boolean): void;
-  /** Called once when the download finishes, to offer a restart. */
   onReady?(status: UpdateStatus): void;
 }
 
 type State = "hidden" | "current" | "outdated" | "downloading" | "ready" | "installing";
 
-/** Installs that update themselves without a click. */
 const SILENT: ReadonlySet<UpdateChannel> = new Set(["installer", "portable", "homebrew", "dmg", "store"]);
 
 export class UpdateBadge {
@@ -56,7 +53,6 @@ export class UpdateBadge {
     if (this.state === "ready" && this.status) this.deps.onReady?.(this.status);
   }
 
-  /** Restarts into the downloaded version (the toast's "Restart"). */
   restartNow(): Promise<void> {
     return this.onClick();
   }

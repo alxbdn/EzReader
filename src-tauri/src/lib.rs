@@ -41,8 +41,6 @@ pub struct StartupArgs {
     pub page: u32,
 }
 
-/// Opens the window so its central area (the opening screen) is A4 portrait (1 : √2), sized to
-/// the screen; it stays freely resizable. The page then trims the width to the real layout.
 fn fit_to_screen(window: &tauri::WebviewWindow) -> tauri::Result<()> {
     let Some(monitor) = window.current_monitor()? else { return Ok(()) };
     let area = monitor.work_area();
@@ -59,13 +57,9 @@ fn fit_to_screen(window: &tauri::WebviewWindow) -> tauri::Result<()> {
 }
 
 const MIN_WIDTH: f64 = 720.0;
-/// Thumbnail sidebar beside the opening screen, and the bars above and below it (logical px).
 const SIDE_WIDTH: f64 = 232.0;
 const BARS_HEIGHT: f64 = 118.0;
 
-/// Outer size of the window: 90 % of the screen height, and wide enough for the central area
-/// (window minus `frame` = sidebar width, bars height) to be A4 portrait; never narrower than
-/// the minimum width nor wider than the screen.
 fn a4_window(area: (u32, u32), frame: (u32, u32), min_width: u32) -> (u32, u32) {
     let height = (area.1 as f64 * 0.9).round();
     let centre = (height - frame.1 as f64).max(0.0) / std::f64::consts::SQRT_2;

@@ -1,12 +1,11 @@
 import { EpubError, prepareChapter, type Book, type BookInfo, type Chapter, type ContentSource, type ResourceUrls, type TocEntry } from "./epub-book";
 
-/** Decodes text: a byte order mark, then strict UTF-8, then Windows-1252 for older files. */
 export function decodeText(bytes: Uint8Array, declared?: string): string {
   if (bytes[0] === 0xef && bytes[1] === 0xbb && bytes[2] === 0xbf) return new TextDecoder("utf-8").decode(bytes.subarray(3));
   if (bytes[0] === 0xff && bytes[1] === 0xfe) return new TextDecoder("utf-16le").decode(bytes.subarray(2));
   if (bytes[0] === 0xfe && bytes[1] === 0xff) return new TextDecoder("utf-16be").decode(bytes.subarray(2));
   if (declared) {
-    try { return new TextDecoder(declared).decode(bytes); } catch { /* unknown label */ }
+    try { return new TextDecoder(declared).decode(bytes); } catch {}
   }
   try {
     return new TextDecoder("utf-8", { fatal: true }).decode(bytes);
@@ -15,19 +14,15 @@ export function decodeText(bytes: Uint8Array, declared?: string): string {
   }
 }
 
-/** Lines that open a chapter in plain text books. */
 const HEADING = /^\s*(chapter|chapitre|capítulo|capitulo|kapitel|capitolo|part|partie|book|livre|prologue|épilogue|epilogue|prologo|prólogo)\b[^\n]{0,70}$/i;
 
-/** Above this size, a text without headings is cut into parts so each page stays light. */
 const PART_SIZE = 150_000;
 
-/** Fragment-only links stay in their chapter; nothing outside the file is reachable. */
 const local: Omit<ContentSource, "resolve"> = {
   resource: async () => null,
   stylesheet: async () => null,
 };
 
-/** A plain text file (.txt): paragraphs, cut into chapters at their headings. */
 export class TextBook implements Book, ContentSource {
   readonly resource = local.resource;
   readonly stylesheet = local.stylesheet;
@@ -39,7 +34,6 @@ export class TextBook implements Book, ContentSource {
     if (text.includes("\u0000")) throw new EpubError("invalid", "not a text file");
     const lines = text.split("\n");
     const blank = lines.filter((l) => l.trim() === "").length;
-    // Hard-wrapped text separates paragraphs with blank lines; otherwise each line is one.
     const wrapped = blank > lines.length / 20;
     const paragraphs: string[] = [];
     if (wrapped) {
@@ -85,7 +79,6 @@ export class TextBook implements Book, ContentSource {
   resolve(): null { return null; }
 }
 
-/** A web page saved as a file (.html, .htm): one page, with its headings as contents. */
 export class HtmlBook implements Book, ContentSource {
   readonly resource = local.resource;
   readonly stylesheet = local.stylesheet;
@@ -118,7 +111,6 @@ export class HtmlBook implements Book, ContentSource {
     return new HtmlBook(info, html);
   }
 
-  /** The page's h1 to h3, each given an id when it has none. */
   private static headings(doc: Document): Element[] {
     const all = Array.from(doc.body.querySelectorAll("h1, h2, h3"));
     all.forEach((h, i) => { if (!h.id) h.id = `ez-h${i}`; });
@@ -135,7 +127,7 @@ export class HtmlBook implements Book, ContentSource {
   resolve(_from: string, href: string): { path: string; fragment: string } | null {
     if (!href.startsWith("#")) return null;
     let fragment = href.slice(1);
-    try { fragment = decodeURIComponent(fragment); } catch { /* keep as written */ }
+    try { fragment = decodeURIComponent(fragment); } catch {}
     return { path: "page", fragment };
   }
 }

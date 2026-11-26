@@ -53,11 +53,9 @@ export interface StudioPanelHooks {
   selected(): Annotation | null;
   pick(ann: Annotation): void;
   remove(ann: Annotation): void;
-  /** Moves `ann` to `index` in its page's stacking order (0 = bottom). */
   reorder(ann: Annotation, index: number): void;
 }
 
-/** Page order, then topmost first within a page (like a layers panel). */
 export function panelOrder(anns: Annotation[]): { ann: Annotation; layer: number; count: number }[] {
   const byPage = new Map<number, Annotation[]>();
   for (const a of anns) {
@@ -185,12 +183,10 @@ export class StudioPanel {
     }
   }
 
-  /** Called with the folded state each time it changes, and once at start. */
   onCollapse: ((collapsed: boolean) => void) | null = null;
 
   get isCollapsed(): boolean { return this.collapsed; }
 
-  /** Folds or unfolds the panel (Ctrl+.). Does nothing while it is not shown. */
   toggle(): boolean {
     if (!this.shown) return false;
     this.setCollapsed(!this.collapsed);
@@ -277,7 +273,6 @@ export class StudioPanel {
     requestAnimationFrame(() => requestAnimationFrame(() => this.rows.get(ann)?.focus()));
   }
 
-  /** Pointer-driven drag (HTML5 drag and drop is taken by the window's file drop). */
   private makeDraggable(row: HTMLElement, ann: Annotation): void {
     row.addEventListener("pointerdown", (e) => {
       if (e.button !== 0 || (e.target as HTMLElement).closest(".studio-ann-del")) return;
@@ -318,7 +313,6 @@ export class StudioPanel {
     row.addEventListener("lostpointercapture", (e) => end(e, true));
   }
 
-  /** Picks the slot on the dragged row's page closest to the pointer. */
   private markDropTarget(y: number): void {
     const d = this.drag!;
     const page = d.row.dataset["page"];
@@ -337,7 +331,6 @@ export class StudioPanel {
     d.target = target;
     if (target === from) return;
     const over = peers.find((r) => Number(r.dataset["layer"]) === target);
-    // Rows run topmost first: moving up the list raises the layer.
     over?.classList.add(target > from ? "drop-above" : "drop-below");
   }
 

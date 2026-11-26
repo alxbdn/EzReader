@@ -217,8 +217,6 @@ pub(crate) fn picture_from_bytes(bytes: &[u8]) -> CmdResult<Picture> {
 
 const MAX_SVG_BYTES: u64 = 2 * 1024 * 1024;
 
-/// An SVG picture for a stamp, as base64. The interface only draws it through an `<img>`,
-/// where scripts and outside links never run.
 #[tauri::command(async)]
 pub fn load_svg(path: String) -> CmdResult<String> {
     crate::grants::check(&path)?;
@@ -366,11 +364,8 @@ mod export_tests {
     }
 }
 
-/// Largest entry an EPUB may unpack to (same limit as the interface's ZIP reader).
 const MAX_INFLATED: u64 = 64 * 1024 * 1024;
 
-/// Unpacks one deflated ZIP entry of an EPUB, for webviews without `DecompressionStream`
-/// (the WebKit of macOS 11 to 13). Raw bytes in, raw bytes out.
 #[tauri::command]
 pub fn inflate_raw(request: tauri::ipc::Request<'_>) -> CmdResult<tauri::ipc::Response> {
     let tauri::ipc::InvokeBody::Raw(data) = request.body() else {

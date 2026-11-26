@@ -145,7 +145,6 @@ pub fn blocks(page: &TextPage) -> Vec<Block> {
         if text.is_empty() {
             continue;
         }
-        // A row with one filled cell, past the first column, stays in its table.
         let lone_table_cell = !table.is_empty() && line.cells.iter().any(|c| c.col > 0);
         if text.len() > 1 || lone_table_cell {
             table.push(line);

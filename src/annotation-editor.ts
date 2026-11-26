@@ -9,7 +9,6 @@ type Styled =
 
 export type StylePanel = Styled["kind"] | "signature";
 
-/** The toolbar panels that show and change the selected annotation's style. */
 export interface StylePanels {
   showText(ann: TextAnnotation): void;
   showShape(ann: ShapeAnnotation, panel: "pencil" | "shapes"): void;
@@ -19,9 +18,7 @@ export interface StylePanels {
 }
 
 export interface EditedDocument {
-  /** The overlay of `page`, built if needed; null when the page is not laid out. */
   overlayOf(page: number): CanvasOverlay | null;
-  /** Draws `page`'s annotations again, if its overlay is built. */
   redraw(page: number): void;
   has(ann: Annotation): boolean;
   beginEdit(): void;
@@ -29,19 +26,12 @@ export interface EditedDocument {
   markDirty(): void;
 }
 
-/**
- * The annotation whose style the toolbar is showing, and what changing that style does to it.
- *
- * Text boxes, shapes and highlights take turns: selecting one stops editing the others. A drawn
- * signature is tracked on its own, from the tool selection, because its only style is its ink.
- */
 export class AnnotationEditor {
   private styled: Styled | null = null;
   private signature: SignatureAnnotation | null = null;
 
   constructor(private readonly doc: EditedDocument, private readonly panels: StylePanels) {}
 
-  /** The annotation being styled (text box, shape or highlight), if any. */
   get editing(): TextAnnotation | ShapeAnnotation | HighlightAnnotation | null { return this.styled?.ann ?? null; }
 
   textSelected(ann: TextAnnotation | null): void {
@@ -59,7 +49,6 @@ export class AnnotationEditor {
     else this.leave("highlight");
   }
 
-  /** The tool selection changed: a drawn signature shows its ink colour. */
   selectionChanged(ann: Annotation | null): void {
     if (ann?.kind === "signature" && ann.vector) {
       this.signature = ann;
@@ -70,7 +59,6 @@ export class AnnotationEditor {
     }
   }
 
-  /** Stops editing and hides the style panels (the document changed under the selection). */
   drop(): void {
     this.styled = null;
     this.panels.hide("text");
@@ -78,12 +66,10 @@ export class AnnotationEditor {
     this.panels.hide("highlight");
   }
 
-  /** Stops editing without touching the panels: another tool takes over the toolbar. */
   release(): void {
     this.styled = null;
   }
 
-  /** `ann` was deleted: stop editing it. */
   removed(ann: Annotation): void {
     if (this.styled?.ann === ann) {
       this.panels.hide(this.styled.kind);
@@ -91,7 +77,6 @@ export class AnnotationEditor {
     }
   }
 
-  /** The toolbar's style changed: apply it to the annotation being edited. */
   restyle(style: ActiveToolState): void {
     const s = this.styled;
     if (s) {
@@ -112,7 +97,6 @@ export class AnnotationEditor {
     this.doc.edited();
   }
 
-  /** Moves the text box or shape being edited above or below the others. */
   reorder(dir: "up" | "down"): void {
     const s = this.styled;
     if (!s || s.kind === "highlight") return;

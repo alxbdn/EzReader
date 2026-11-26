@@ -1,7 +1,3 @@
-/**
- * The note shown once an update is downloaded: it stays until the user picks
- * "Restart" or "Later", unlike the short status toast.
- */
 export interface UpdateToastText {
   message: string;
   restart: string;

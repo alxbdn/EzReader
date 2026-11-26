@@ -21,11 +21,8 @@ const ICON_DOWN   = svg(`<path d="m6 9 6 6 6-6"/>`, 13, 2.5);
 const HOLD_DELAY_MS = 500;
 const HOLD_REPEAT_MS = 45;
 
-/** Width of a thumbnail's frame (`.page-sidebar-frame`). */
 const THUMB_WIDTH = 120;
-/** Gap between frame and page number plus the number row's height (`.page-sidebar-thumb`, `.page-sidebar-rotate`). */
 const THUMB_META_HEIGHT = 6 + 24;
-/** Padding a card has around its content, matched by a negative margin (`.page-sidebar-thumb`). */
 const CARD_BLEED = 6;
 
 interface Thumb {
@@ -222,8 +219,6 @@ export class PageSidebar {
 
   get selection(): number[] { return this.sortedSelection(); }
 
-  /** The pages a right click on `page` acts on: the selection when it holds that page, else that
-   *  page alone, which then becomes the selection (as in a file manager). */
   contextPages(page: number): number[] {
     if (!this.selected.has(page)) {
       this.selected.clear();
@@ -313,7 +308,6 @@ export class PageSidebar {
     frag.appendChild(this.dropIndicator);
     this.list.appendChild(frag);
     for (const t of this.thumbs) this.observer.observe(t.card);
-    // Writing scrollTop lays the whole list out at once; a fresh list is already at the top.
     if (scrollTop > 0) this.list.scrollTop = scrollTop;
     if (this.outlineMode) void this.ensureOutline();
     this.updateHeader();
@@ -680,7 +674,6 @@ export class PageSidebar {
     return this.thumbs.length > 0 && this.selected.size === this.thumbs.length;
   }
 
-  /** One card with every part a thumbnail has, cloned for each page: much cheaper than building 5,000 cards. */
   private buildCardTemplate(): HTMLElement {
     const card = document.createElement("div");
     card.className = "page-sidebar-thumb";
@@ -724,7 +717,6 @@ export class PageSidebar {
     return thumb;
   }
 
-  /** Clicks and presses on any card, handled once for the list instead of four listeners per card. */
   private listenToCards(): void {
     const target = (e: Event): { page: number; part: Element; kind: "frame" | "label" | "rotate" } | null => {
       const el = e.target as Element | null;
@@ -772,7 +764,6 @@ export class PageSidebar {
     const h = dim?.height ?? 842;
     const swap = this.rotation % 180 !== 0;
     thumb.canvas.style.aspectRatio = swap ? `${h} / ${w}` : `${w} / ${h}`;
-    // The size a card has once laid out, so cards off screen take their real room without being laid out.
     const frameHeight = THUMB_WIDTH * (swap ? w / h : h / w);
     thumb.card.style.containIntrinsicSize = `${THUMB_WIDTH}px ${frameHeight + THUMB_META_HEIGHT}px`;
   }

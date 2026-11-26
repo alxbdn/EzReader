@@ -570,7 +570,6 @@ pub fn embed_image(doc: &mut Document, bytes: &[u8]) -> Result<(ObjectId, Option
     Ok((doc.add_object(stream), smask_id))
 }
 
-// Hand-drawn stamp marks: filled outlines in a unit box, y up. Same data as src/stamp-marks.ts.
 const STAMP_CHECK_0: &[(f64, f64)] = &[
     (0.124, 0.549),
     (0.158, 0.522),

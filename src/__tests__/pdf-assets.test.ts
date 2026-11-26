@@ -7,17 +7,13 @@ const DIST = Object.keys(
   import.meta.glob("../../node_modules/pdfjs-dist/{wasm,cmaps,standard_fonts,iccs}/*", { query: "?url" }),
 );
 const available = (dir: string) => DIST.filter((p) => p.includes(`/pdfjs-dist/${dir}/`)).map((p) => p.split("/").pop()!);
-/** A path, not a file: URL: pdf.js reads these with fs in Node. */
 const url = (dir: PdfjsAssetDir) =>
   decodeURIComponent(new URL(`../../node_modules/pdfjs-dist/${dir}/`, import.meta.url).pathname)
-    // Windows: "/D:/a/..." is not a path fs can read.
     .replace(/^\/([A-Za-z]:)/, "$1");
 const WASM_URL = url("wasm");
 
-/** A one-page PDF holding a 32×32 red square encoded as JPEG 2000 (JPXDecode). */
 const JPX_PDF = "JVBERi0xLjUKMSAwIG9iago8PCAvVHlwZSAvQ2F0YWxvZyAvUGFnZXMgMiAwIFIgPj4KZW5kb2JqCjIgMCBvYmoKPDwgL1R5cGUgL1BhZ2VzIC9LaWRzIFszIDAgUl0gL0NvdW50IDEgPj4KZW5kb2JqCjMgMCBvYmoKPDwgL1R5cGUgL1BhZ2UgL1BhcmVudCAyIDAgUiAvTWVkaWFCb3ggWzAgMCAzMiAzMl0gL1Jlc291cmNlcyA8PCAvWE9iamVjdCA8PCAvSW0wIDUgMCBSID4+ID4+IC9Db250ZW50cyA0IDAgUiA+PgplbmRvYmoKNCAwIG9iago8PCAvTGVuZ3RoIDI4ID4+CnN0cmVhbQpxIDMyIDAgMCAzMiAwIDAgY20gL0ltMCBEbyBRCmVuZHN0cmVhbQplbmRvYmoKNSAwIG9iago8PCAvVHlwZSAvWE9iamVjdCAvU3VidHlwZSAvSW1hZ2UgL1dpZHRoIDMyIC9IZWlnaHQgMzIgL0ZpbHRlciAvSlBYRGVjb2RlIC9MZW5ndGggMjU2ID4+CnN0cmVhbQoAAAAMalAgIA0KhwoAAAAUZnR5cGpwMiAAAAAAanAyIAAAAC1qcDJoAAAAFmloZHIAAAAgAAAAIAADBwcAAAAAAA9jb2xyAQAAAAAAEAAAALNqcDJj/0//UQAvAAAAAAAgAAAAIAAAAAAAAAAAAAAAIAAAACAAAAAAAAAAAAADBwEBBwEBBwEB/1IADAAAAAEABQQEAAH/XAATQEBISFBISFBISFBISFBISFD/ZAAlAAFDcmVhdGVkIGJ5IE9wZW5KUEVHIHZlcnNpb24gMi41LjT/kAAKAAAAAAAsAAH/k8+0CAMzz7QICB/PtAgIH4CAgICAgICAgICAgICAgP/ZCmVuZHN0cmVhbQplbmRvYmoKeHJlZgowIDYKMDAwMDAwMDAwMCA2NTUzNSBmIAowMDAwMDAwMDA5IDAwMDAwIG4gCjAwMDAwMDAwNTggMDAwMDAgbiAKMDAwMDAwMDExNSAwMDAwMCBuIAowMDAwMDAwMjQzIDAwMDAwIG4gCjAwMDAwMDAzMjEgMDAwMDAgbiAKdHJhaWxlcgo8PCAvU2l6ZSA2IC9Sb290IDEgMCBSID4+CnN0YXJ0eHJlZgo2OTkKJSVFT0YK";
 
-/** Renders the fixture and returns its centre pixel. */
 async function centrePixel(wasmUrl: string): Promise<number[]> {
   const data = Uint8Array.from(atob(JPX_PDF), (c) => c.charCodeAt(0));
   const task = getDocument({ ...SAFE_PDF, data, verbosity: 0, wasmUrl });
@@ -38,10 +34,6 @@ async function centrePixel(wasmUrl: string): Promise<number[]> {
   }
 }
 
-/**
- * A one-page PDF writing "日本" with a non-embedded Japanese font, whose encoding pdf.js only
- * understands once it has loaded the UniJIS-UCS2-H CMap.
- */
 const CJK_PDF = "JVBERi0xLjUKMSAwIG9iago8PCAvVHlwZSAvQ2F0YWxvZyAvUGFnZXMgMiAwIFIgPj4KZW5kb2JqCjIgMCBvYmoKPDwgL1R5cGUgL1BhZ2VzIC9LaWRzIFszIDAgUl0gL0NvdW50IDEgPj4KZW5kb2JqCjMgMCBvYmoKPDwgL1R5cGUgL1BhZ2UgL1BhcmVudCAyIDAgUiAvTWVkaWFCb3ggWzAgMCAxMDAgNTBdIC9SZXNvdXJjZXMgPDwgL0ZvbnQgPDwgL0YxIDUgMCBSID4+ID4+IC9Db250ZW50cyA0IDAgUiA+PgplbmRvYmoKNCAwIG9iago8PCAvTGVuZ3RoIDM4ID4+CnN0cmVhbQpCVCAvRjEgMjQgVGYgMTAgMTAgVGQgPDY1RTU2NzJDPiBUaiBFVAplbmRzdHJlYW0KZW5kb2JqCjUgMCBvYmoKPDwgL1R5cGUgL0ZvbnQgL1N1YnR5cGUgL1R5cGUwIC9CYXNlRm9udCAvS296TWluUHI2Ti1SZWd1bGFyIC9FbmNvZGluZyAvVW5pSklTLVVDUzItSCAvRGVzY2VuZGFudEZvbnRzIFs2IDAgUl0gPj4KZW5kb2JqCjYgMCBvYmoKPDwgL1R5cGUgL0ZvbnQgL1N1YnR5cGUgL0NJREZvbnRUeXBlMCAvQmFzZUZvbnQgL0tvek1pblByNk4tUmVndWxhciAvQ0lEU3lzdGVtSW5mbyA8PCAvUmVnaXN0cnkgKEFkb2JlKSAvT3JkZXJpbmcgKEphcGFuMSkgL1N1cHBsZW1lbnQgNiA+PiAvRm9udERlc2NyaXB0b3IgNyAwIFIgPj4KZW5kb2JqCjcgMCBvYmoKPDwgL1R5cGUgL0ZvbnREZXNjcmlwdG9yIC9Gb250TmFtZSAvS296TWluUHI2Ti1SZWd1bGFyIC9GbGFncyA0IC9Gb250QkJveCBbMCAtMTIwIDEwMDAgODgwXSAvSXRhbGljQW5nbGUgMCAvQXNjZW50IDg4MCAvRGVzY2VudCAtMTIwIC9DYXBIZWlnaHQgNzAwIC9TdGVtViA4MCA+PgplbmRvYmoKeHJlZgowIDgKMDAwMDAwMDAwMCA2NTUzNSBmIAowMDAwMDAwMDA5IDAwMDAwIG4gCjAwMDAwMDAwNTggMDAwMDAgbiAKMDAwMDAwMDExNSAwMDAwMCBuIAowMDAwMDAwMjQwIDAwMDAwIG4gCjAwMDAwMDAzMjggMDAwMDAgbiAKMDAwMDAwMDQ1NyAwMDAwMCBuIAowMDAwMDAwNjM3IDAwMDAwIG4gCnRyYWlsZXIKPDwgL1NpemUgOCAvUm9vdCAxIDAgUiA+PgpzdGFydHhyZWYKODEzCiUlRU9GCg==";
 
 describe("pdf.js run-time data", () => {

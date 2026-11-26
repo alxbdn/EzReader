@@ -1,19 +1,11 @@
 name: Release
 
-# Releases are immutable once published: nothing can be added to them
-# afterwards. So every file (Windows, macOS, Linux, provenance, reports) is
-# attached to a draft first, and the draft is published last, in one step.
-# The macOS disk image is built in parallel and attached to the same draft
-# when it is ready, so a slow Mac runner never holds back the other jobs.
-
 on:
   push:
     tags:
       - 'v*.*.*'
-  # Started by Bump & Release on the tag it pushes (github.ref is the tag).
   workflow_dispatch:
 
-# Read-only by default: each job asks for the write access it needs.
 permissions:
   contents: read
 
@@ -21,8 +13,6 @@ env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
-  # SCA, SAST and fuzzing on the tagged commit. Nothing is built or published
-  # if one of them fails.
   security:
     permissions:
       contents: read
@@ -32,7 +22,6 @@ jobs:
   build:
     needs: security
     runs-on: windows-latest
-    # id-token and attestations: signed SLSA build provenance for the packages.
     permissions:
       contents: read
       id-token: write
@@ -107,9 +96,6 @@ jobs:
           cp "store/EzReader_${VERSION}.0_x64.msix" \
              "ezreader-${VERSION}-win-x64.msix"
 
-      # SLSA build provenance, signed with Sigstore and recorded in the
-      # repository's attestations. Check a download with:
-      #   gh attestation verify <file> --repo alxbdn/EzReader
       - name: Attest build provenance
         id: attest
         uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
@@ -132,8 +118,6 @@ jobs:
           path: ezreader-${{ steps.version.outputs.version }}-windows.intoto.jsonl
           if-no-files-found: error
 
-      # The .msix is also attached to the GitHub release. store-publish.yml and
-      # scripts/get-store-msix.ps1 fetch it from this artifact.
       - name: Upload Store package
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
@@ -163,8 +147,6 @@ jobs:
             ezreader-${{ steps.version.outputs.version }}-win-x64.msix
           if-no-files-found: error
 
-  # Install, upgrade from the previous release and uninstall on a clean
-  # runner: nothing is published if the packages do not install.
   install-test:
     needs: build
     uses: ./.github/workflows/install-test.yml
@@ -172,8 +154,6 @@ jobs:
       artifact: release-packages
       version: ${{ needs.build.outputs.version }}
 
-  # The Linux packages, built once the scans have passed and handed over as
-  # the release-linux artifact.
   linux:
     needs: security
     permissions:
@@ -185,12 +165,6 @@ jobs:
       for_release: true
       release_tag: ${{ github.ref_name }}
 
-  # The universal macOS disk image (Intel and Apple Silicon), built in
-  # parallel once the scans have passed and handed over as the release-macos
-  # artifact. macOS runners are scarce: the Windows and Linux files go into the
-  # draft without waiting for it, and macos-attach adds the disk image before
-  # publishing. If the Mac job is dropped, re-run the failed jobs: the release
-  # stays a draft until the disk image is attached.
   macos:
     needs: security
     permissions:
@@ -202,16 +176,12 @@ jobs:
       for_release: true
       release_tag: ${{ github.ref_name }}
 
-  # One draft release holding the Windows and Linux packages and their
-  # provenance.
   draft:
     needs: [build, install-test, linux]
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
-      # release-packages, release-provenance (Windows), release-linux. The
-      # macOS files are attached by macos-attach, whenever they are ready.
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           pattern: release-*
@@ -223,8 +193,6 @@ jobs:
           path: src
           sparse-checkout: docs/release-notes
 
-      # The intro, then docs/release-notes/<tag>.md when there is one, then
-      # GitHub's generated notes.
       - name: Write the release notes
         shell: bash
         env:
@@ -259,7 +227,6 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-  # The macOS disk image and its provenance, attached to the draft.
   macos-attach:
     needs: [build, draft, macos]
     runs-on: ubuntu-latest
@@ -284,8 +251,6 @@ jobs:
             "macos/ezreader-${VERSION}-macos-universal.dmg" \
             "macos/ezreader-${VERSION}-macos.intoto.jsonl"
 
-  # The reports zip (security and performance reports, SBOMs), attached to
-  # the draft.
   reports:
     needs: draft
     permissions:
@@ -296,7 +261,6 @@ jobs:
     with:
       tag: ${{ github.ref_name }}
 
-  # Everything is attached: publish. From here on the release is immutable.
   publish:
     needs: [draft, macos-attach, reports]
     runs-on: ubuntu-latest
@@ -311,7 +275,6 @@ jobs:
           TAG: ${{ github.ref_name }}
         run: gh release edit "$TAG" --draft=false
 
-      # A release published with GITHUB_TOKEN starts no workflow by itself.
       - name: Submit to the Microsoft Store
         env:
           GH_TOKEN: ${{ github.token }}

@@ -10,24 +10,16 @@ export interface WatermarkDeps {
   messages: Messages;
   ui: Feedback;
   backend: Pick<Backend, "savePdfDialog">;
-  /** Page `page` of `input` as a picture `widthPx` wide. */
   renderPreview(input: string, widthPx: number, page: number): Promise<HTMLCanvasElement>;
-  /** Writes `output`: `input` with the pages in `o.pages` replaced by their watermarked picture. */
   burn(input: string, output: string, o: WatermarkRequest, copyLabel: string, onProgress: (done: number, total: number) => void): Promise<void>;
   today(): string;
-  /** The page in view and the number of pages. */
   pages(): { current: number; total: number };
 }
 
-/** "Contrat.pdf" → "Contrat-watermarked.pdf", in the same folder. */
 export function watermarkedName(source: string, suffix: string): string {
   return source.replace(/(\.pdf)?$/i, `-${suffix}.pdf`);
 }
 
-/**
- * The watermark is saved as a copy: the original stays as it was, and each copy sent out can carry
- * its own code.
- */
 export function setUpWatermark(d: WatermarkDeps): () => Promise<void> {
   const { msg, errText } = d.messages;
   let input: Promise<string> | null = null;

@@ -412,7 +412,6 @@ body.tab-dragging, body.tab-dragging * { cursor: grabbing !important; }
   border-top: 1px solid var(--border);
 }
 
-/* No document yet: the toolbar keeps its place, dimmed; only the sidebar button and the theme switch stay live. */
 #context-toolbar.tb-idle .tb-tools { display: none; }
 #context-toolbar.tb-idle [inert] { opacity: .38; }
 #context-toolbar.tb-idle [inert] .active { background: transparent; color: inherit; box-shadow: none; }
@@ -424,7 +423,6 @@ body.tab-dragging, body.tab-dragging * { cursor: grabbing !important; }
   padding: 0 10px;
 }
 
-/* One row only: when room runs out, fitMainRow folds and hides buttons instead of wrapping. */
 .tb-main { min-height: 50px; flex-wrap: nowrap; }
 
 .tb-tools {
@@ -524,7 +522,6 @@ body.tab-dragging, body.tab-dragging * { cursor: grabbing !important; }
 .mode-btn { display: inline-flex; align-items: center; gap: 6px; }
 .mode-icon { display: none; }
 .mode-icon svg { width: 16px; height: 16px; display: block; }
-/* Zoom: the level, a small up/down pair beside it, and 1:1 while there is room. */
 .zoom-stack { display: flex; flex-direction: column; width: 18px; height: 28px; }
 .zoom-stack-btn {
   flex: 1;
@@ -550,14 +547,11 @@ body.tab-dragging, body.tab-dragging * { cursor: grabbing !important; }
 .tb-compact-4 .tb-real { display: none; }
 .tb-compact-5 .tb-actions .brightness-wrap { display: none; }
 
-/* Export, compress, protect, info and present sit on the bar; they fold
-   into the "…" menu only when the row runs out of room. */
 .tb-main:not(.tb-fold) .tb-more-wrap { display: none; }
 .tb-fold .tb-actions > :not(.brightness-wrap):not(.tb-pages) { display: none; }
 .tb-actions .icon-btn.tb-lock.on { color: #16a34a; }
 :root[data-theme="dark"] .tb-actions .icon-btn.tb-lock.on { color: #4ade80; }
 
-/* Hand / select: one toggle, the chosen tool filled, the other dimmed. */
 .pointer-seg .icon-btn { opacity: 0.55; transition: background-color 160ms ease, color 160ms ease, opacity 160ms ease; }
 .pointer-seg .icon-btn:hover { opacity: 0.85; }
 .pointer-seg .icon-btn.active {
@@ -567,7 +561,6 @@ body.tab-dragging, body.tab-dragging * { cursor: grabbing !important; }
   box-shadow: none;
 }
 
-/* Light / dark pill switch. */
 .theme-switch {
   margin-left: 2px;
   position: relative;
@@ -838,7 +831,6 @@ body.tab-dragging, body.tab-dragging * { cursor: grabbing !important; }
 .cp-dropper.on,
 .cp-dropper.on:hover { background: var(--primary); border-color: var(--primary); color: var(--primary-foreground); }
 .cp-dropper svg { width: 14px; height: 14px; }
-/* While the dropper is armed: an eyedropper cursor (tip = hotspot), outlined so it reads on light and dark. */
 html.eyedropping, html.eyedropping * { cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke-linecap='round' stroke-linejoin='round'%3E%3Cg stroke='%23fff' stroke-width='4'%3E%3Cpath d='m2 22 1-1h3l9-9'/%3E%3Cpath d='M3 21v-3l9-9'/%3E%3Cpath d='m15 6 3.4-3.4a2.1 2.1 0 1 1 3 3L18 9l.4.4a2.1 2.1 0 1 1-3 3l-3.8-3.8a2.1 2.1 0 1 1 3-3l.4.4Z'/%3E%3C/g%3E%3Cg stroke='%2309090b' stroke-width='2'%3E%3Cpath d='m2 22 1-1h3l9-9'/%3E%3Cpath d='M3 21v-3l9-9'/%3E%3Cpath d='m15 6 3.4-3.4a2.1 2.1 0 1 1 3 3L18 9l.4.4a2.1 2.1 0 1 1-3 3l-3.8-3.8a2.1 2.1 0 1 1 3-3l.4.4Z'/%3E%3C/g%3E%3C/svg%3E") 2 22, crosshair !important; }
 .cp-hue {
   -webkit-appearance: none;
@@ -1167,7 +1159,6 @@ input[type="color"].color-picker.is-off::-webkit-color-swatch {
 
 #viewer-area > #viewer-scroll { min-width: 0; }
 
-/* The opening screen fills the reading area; the sidebar keeps only its file list. */
 #app:has(#welcome-screen:not(.hidden)) #page-sidebar > :not(.side-tabs) { display: none; }
 
 .page-sidebar {
@@ -1183,7 +1174,6 @@ input[type="color"].color-picker.is-off::-webkit-color-swatch {
 
 .page-sidebar.collapsed { display: none; }
 
-/* Panels slide in when opened; their toggle icons show the panel strip filling or emptying. */
 @keyframes panel-in-left  { from { opacity: 0; transform: translateX(-10px); } to { opacity: 1; transform: none; } }
 @keyframes panel-in-right { from { opacity: 0; transform: translateX(10px); }  to { opacity: 1; transform: none; } }
 .page-sidebar.opening  { animation: panel-in-left 180ms cubic-bezier(0.2, 0.8, 0.2, 1); }
@@ -1197,7 +1187,6 @@ input[type="color"].color-picker.is-off::-webkit-color-swatch {
 .pnl-fill.pnl-right { transform-origin: 21px 12px; }
 .panel-toggle:not(.active) .pnl-fill { opacity: 0; transform: scaleX(0); }
 .panel-toggle:not(.active) .pnl-edge { transform: translateX(-3px); }
-/* The right panel's two buttons swap on collapse: each plays its change when it appears. */
 @keyframes pnl-fill-out { from { opacity: 0.35; transform: scaleX(1); } to { opacity: 0; transform: scaleX(0); } }
 @keyframes pnl-fill-in  { from { opacity: 0; transform: scaleX(0); } to { opacity: 0.35; transform: scaleX(1); } }
 @keyframes pnl-edge-out { from { transform: none; } to { transform: translateX(3px); } }
@@ -1505,9 +1494,6 @@ input[type="color"].color-picker.is-off::-webkit-color-swatch {
   align-items: center;
   gap: 6px;
   user-select: none;
-  /* Cards off screen are not laid out or painted (their size comes from contain-intrinsic-size,
-     set from the page's shape). The bleed keeps the frame's outline and shadow inside the card,
-     which clips its painting, without moving anything: CARD_BLEED in page-sidebar.ts. */
   content-visibility: auto;
   flex-shrink: 0;
   padding: 6px;
@@ -1822,7 +1808,6 @@ input[type="color"].color-picker.is-off::-webkit-color-swatch {
   display: none;
 }
 
-/* Opacity as well: a child with `visibility: visible` (a tab's close cross) would show through. */
 #app.booting {
   visibility: hidden;
   opacity: 0;
@@ -1989,7 +1974,6 @@ kbd,
   color: var(--muted-foreground);
 }
 
-/* Quick look: a keyboard seen from above, up close on the blank Space bar (brand red); three rows stay clear, the fourth and the edges fade out. */
 .kb-mini {
   flex-shrink: 0;
   position: relative;
@@ -2032,7 +2016,6 @@ kbd,
   background: var(--selection);
 }
 
-/* ══ Status bar ══ default reader, version and language, always at the bottom of the window. */
 #status-bar { flex-shrink: 0; }
 
 .welcome-footer {
@@ -2541,7 +2524,6 @@ label.settings-row { cursor: pointer; }
 
 .toast.hidden { display: none; }
 
-/* The "update ready" note: stays until Restart or Later. */
 .update-toast { pointer-events: auto; max-width: min(560px, calc(100vw - 40px)); padding: 8px 8px 8px 16px; }
 .update-toast-text { flex: 1; }
 .update-toast .btn { flex-shrink: 0; }
@@ -3179,7 +3161,6 @@ body.read-only .page-form-layer { pointer-events: none; }
 .ez-progress { display: flex; flex-direction: column; gap: 6px; }
 .compress-box.running .ez-list, .compress-box.running .ez-compare, .compress-box.running .ez-warn { opacity: 0.5; pointer-events: none; }.ez-warn.hidden, .ez-progress.hidden { display: none; }
 
-/* ══ Watermark ══ */
 .watermark-box { width: 640px; }
 .wm-layout { display: grid; grid-template-columns: minmax(0, 1fr) 290px; gap: 20px; align-items: stretch; }
 .wm-form { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
@@ -3223,9 +3204,6 @@ body.read-only .page-form-layer { pointer-events: none; }
 .wm-progress[hidden] { display: none; }
 @media (prefers-reduced-motion: reduce) { .wm-loupe { transition: none; } }
 
-/* Brightness. In the dark theme only the pages are dimmed: the chrome is
-   already dark. In the light theme the whole window dims with them, so the
-   white bars around a dimmed page don't glare. */
 .dim-pages[data-theme="dark"] .page-wrapper,
 .dim-pages[data-theme="dark"] .page-sidebar-frame canvas,
 .dim-pages[data-theme="dark"] .adj-page,
@@ -3535,9 +3513,6 @@ body.fullscreen .window-controls { display: none; }
 .studio-ann:hover .studio-ann-del, .studio-ann.on .studio-ann-del, .studio-ann:focus-within .studio-ann-del { visibility: visible; }
 .studio-ann-del:hover { color: var(--destructive, #dc2626); background: color-mix(in srgb, var(--destructive, #dc2626) 10%, transparent); }
 
-/* ══ Selection pill ══
-   The one floating menu every selected annotation gets: colour, copy or duplicate, delete.
-   It stays dark in both themes so it reads as a tool over any page. */
 .sel-pill {
   position: absolute;
   z-index: 30;
@@ -3625,7 +3600,6 @@ body.fullscreen .window-controls { display: none; }
 .sel-pill-del:hover { color: #f87171; }
 .sel-pill-copy.done { color: #4ade80; }
 
-/* ══ EPUB reader ══ */
 .epub-reader {
   flex: 1;
   min-height: 0;
@@ -3730,7 +3704,6 @@ body.fullscreen .window-controls { display: none; }
   .epub-toc { animation: none; }
 }
 
-/* ══ Side tabs (open documents, on top of the page panel) ══ */
 .side-tabs {
   display: flex;
   flex-direction: column;
@@ -3842,7 +3815,6 @@ body.fullscreen .window-controls { display: none; }
 .side-tabs.drop-target .side-tab-open { border: 1px dashed var(--ring); color: var(--foreground); }
 @media (prefers-reduced-motion: reduce) { .side-tabs { transition: none; } }
 
-/* ══ Edit tools: redact, stamps, panel summary ══ */
 .tb-summary {
   margin-left: auto;
   max-width: 340px;

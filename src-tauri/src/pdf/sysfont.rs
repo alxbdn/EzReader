@@ -389,7 +389,6 @@ fn build_index(dirs: &[PathBuf]) -> HashMap<String, Vec<FaceRef>> {
             let Some(face) = Face::parse(&data, index) else { continue };
             let mut families = face.names(NAME_TYPO_FAMILY);
             families.extend(face.names(NAME_FAMILY));
-            // A face can belong to two listed families ("Calibri Light" is also "Calibri").
             let mut matched: Vec<String> =
                 families.iter().map(|f| f.to_ascii_lowercase()).filter(|f| wanted.contains_key(f)).collect();
             matched.dedup();

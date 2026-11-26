@@ -1,9 +1,5 @@
 name: Bump & Release
 
-# Picks the next version, tags main with it and starts the Release workflow on
-# that tag, which scans, builds, tests and publishes everything. A tag pushed
-# with GITHUB_TOKEN starts no workflow by itself, hence the explicit dispatch.
-
 on:
   workflow_dispatch:
     inputs:
@@ -17,7 +13,6 @@ on:
           - minor
           - major
 
-# Read-only by default: each job asks for the write access it needs.
 permissions:
   contents: read
 

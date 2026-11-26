@@ -57,7 +57,6 @@ fn is_running(pid: u32) -> bool {
     use winapi::um::processthreadsapi::{GetExitCodeProcess, OpenProcess};
     use winapi::um::winnt::PROCESS_QUERY_LIMITED_INFORMATION;
 
-    // SAFETY: plain Win32 calls; the handle is checked and closed.
     unsafe {
         let handle = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
         if handle.is_null() {
@@ -82,7 +81,6 @@ fn is_running(pid: u32) -> bool {
     }
     const EPERM: i32 = 1;
     let Ok(pid) = i32::try_from(pid) else { return false };
-    // SAFETY: signal 0 sends nothing, it only checks the pid.
     let alive = unsafe { kill(pid, 0) == 0 };
     alive || std::io::Error::last_os_error().raw_os_error() == Some(EPERM)
 }
