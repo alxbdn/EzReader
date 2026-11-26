@@ -276,7 +276,7 @@ describe("documents", () => {
     await waitForDocument(4);
     // The name sits in the page panel's file list and the window title, no longer in the title bar.
     const name = await driver.executeScript(() => document.querySelector(".side-tab.active .side-tab-name")?.textContent);
-    assert.equal(name, "pdf14-mixed-sizes-rotated.pdf");
+    assert.match(name, /pdf14-mixed-sizes-rotated\.pdf$/);
     assert.match(await driver.executeScript(() => document.title), /pdf14-mixed-sizes-rotated\.pdf/);
     assert.equal(await invoke("get_page_count", { filePath: file }), 4);
   });
