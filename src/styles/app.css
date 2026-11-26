@@ -524,9 +524,9 @@ body.tab-dragging, body.tab-dragging * { cursor: grabbing !important; }
 .mode-btn { display: inline-flex; align-items: center; gap: 6px; }
 .mode-icon { display: none; }
 .mode-icon svg { width: 16px; height: 16px; display: block; }
-/* Narrow window: − + and 1:1 fold into an up/down pair beside the level, which then opens a menu. */
+/* Zoom: an up/down pair beside the level, which opens a menu with the fits and 1:1. */
 .zoom-seg { position: relative; }
-.zoom-stack { display: none; flex-direction: column; width: 18px; height: 28px; }
+.zoom-stack { display: flex; flex-direction: column; width: 18px; height: 28px; }
 .zoom-stack-btn {
   flex: 1;
   display: inline-flex;
@@ -541,9 +541,7 @@ body.tab-dragging, body.tab-dragging * { cursor: grabbing !important; }
 }
 .zoom-stack-btn svg { width: 11px; height: 11px; }
 .zoom-stack-btn:hover { background: var(--accent); color: var(--foreground); }
-.tb-zoom-stack .zoom-seg .zoom-step, .tb-zoom-stack .zoom-seg .zoom-real { display: none; }
-.tb-zoom-stack .zoom-stack { display: flex; }
-.tb-zoom-stack .zoom-label { width: 46px; }
+.zoom-seg .zoom-label { width: 46px; }
 .zoom-label.open { background: var(--accent); }
 .zoom-menu {
   display: none;
@@ -567,7 +565,6 @@ body.tab-dragging, body.tab-dragging * { cursor: grabbing !important; }
 .tb-compact-2 .tb-left > .toolbar-sep { display: none; }
 .tb-compact-2 .toolbar-group.tb-left { gap: 5px; }
 .tb-compact-3 .tb-actions .tb-pages { display: none; }
-.tb-compact-4 .tb-real { display: none; }
 .tb-compact-5 .tb-actions .brightness-wrap { display: none; }
 
 /* Export, compress, protect, info and present sit on the bar; they fold

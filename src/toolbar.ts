@@ -28,8 +28,6 @@ import {
   ICON_REDO,
   ICON_HAND,
   ICON_POINTER,
-  ICON_MINUS,
-  ICON_PLUS,
   ICON_EXPORT,
   ICON_COMPRESS_LAYERS,
   ICON_LOCK,
@@ -144,7 +142,6 @@ export class Toolbar {
   readonly brightness = new BrightnessButton();
   private zoomInput!: HTMLInputElement;
   private zoomMenu!: HTMLElement;
-  private mainRow!: HTMLElement;
   private pagesBtn!: HTMLButtonElement;
   private shownColumns = 1;
   private shownEvenSpread = false;
@@ -677,7 +674,6 @@ export class Toolbar {
   private buildContextToolbar(): void {
     const main = document.createElement("div");
     main.className = "tb-row tb-main";
-    this.mainRow = main;
     this.contextEl.append(main, this.tools.row);
 
     this.sidebarBtn = this.btn(ICON_SIDEBAR, "Show or hide the page thumbnails", "icon-btn panel-toggle");
@@ -708,18 +704,12 @@ export class Toolbar {
     });
     this.syncPointerBtns();
 
-    const zoomOut = this.btn(ICON_MINUS, "Zoom out (Ctrl+−)", "icon-btn");
-    this.reg(zoomOut, undefined, "ttZoomOut");
-    zoomOut.addEventListener("click", () => this.emit({ type: "zoom-out" }));
-    const zoomIn = this.btn(ICON_PLUS, "Zoom in (Ctrl++)", "icon-btn");
-    this.reg(zoomIn, undefined, "ttZoomIn");
-    zoomIn.addEventListener("click", () => this.emit({ type: "zoom-in" }));
-
-    this.zoomLabel = this.btn("100 %", "Click to type a zoom level (Ctrl+0 resets it)", "zoom-label");
-    this.reg(this.zoomLabel, undefined, "ttZoomLabel");
+    this.zoomLabel = this.btn("100 %", "Zoom options: fit, actual size, type a level (Ctrl+0 resets)", "zoom-label");
+    this.zoomLabel.setAttribute("aria-haspopup", "menu");
+    this.zoomLabel.setAttribute("aria-expanded", "false");
+    this.reg(this.zoomLabel, undefined, "ttZoomMenu");
     this.zoomLabel.addEventListener("click", () => {
-      if (this.mainRow.classList.contains("tb-zoom-stack")) this.toggleZoomMenu();
-      else this.startZoomEdit();
+      this.toggleZoomMenu();
     });
     this.zoomInput = document.createElement("input");
     this.zoomInput.type = "text";
@@ -734,15 +724,8 @@ export class Toolbar {
     });
     this.zoomInput.addEventListener("blur", () => this.endZoomEdit());
 
-    const realSizeBtn = this.btn("1:1", "Real size (1:1)", "icon-btn text-icon-btn tb-real");
-    this.reg(realSizeBtn, undefined, "ttRealSize");
-    realSizeBtn.addEventListener("click", () => this.emit({ type: "zoom-real" }));
-    realSizeBtn.classList.add("zoom-real");
-    zoomOut.classList.add("zoom-step");
-    zoomIn.classList.add("zoom-step");
-
-    // A narrow window folds − + and 1:1 into a small up/down pair beside the level; the level then
-    // opens a menu with the fits and 1:1 (see fitMainRow).
+    // Zoom is a small up/down pair beside the level; the level opens a menu with the fits, 1:1 and
+    // typing a value.
     const stack = document.createElement("span");
     stack.className = "zoom-stack";
     const stackBtn = (icon: string, title: string, key: keyof Translations, e: ToolbarEvent): HTMLButtonElement => {
@@ -891,7 +874,7 @@ export class Toolbar {
       this.sidebarBtn, modeSeg, this.sep(),
       this.saveBtn, this.segment(undo, redo), this.sep(),
       this.pointerSegment(),
-      this.zoomSegment(this.segment(zoomOut, this.zoomLabel, this.zoomInput, zoomIn, realSizeBtn, stack)),
+      this.zoomSegment(this.segment(this.zoomLabel, this.zoomInput, stack)),
       actions,
     );
     main.append(left, right);
@@ -958,8 +941,8 @@ export class Toolbar {
   }
 
   private fitMainRow(main: HTMLElement): void {
-    const levels = ["tb-zoom-stack", "tb-fold", "tb-compact", "tb-compact-2", "tb-compact-3", "tb-compact-4", "tb-compact-5"];
-    const searchOpen = [250, 250, 250, 190, 160, 120, 120, 120];
+    const levels = ["tb-fold", "tb-compact", "tb-compact-2", "tb-compact-3", "tb-compact-4", "tb-compact-5"];
+    const searchOpen = [250, 250, 190, 160, 120, 120, 120];
     const pill = this.search.el;
     const open = pill.classList.contains("open");
     const [left, right] = Array.from(main.children) as HTMLElement[];
@@ -977,7 +960,6 @@ export class Toolbar {
     main.classList.remove(...levels);
     let level = 0;
     while (level < levels.length && overflow(level) > 0) main.classList.add(levels[level++]);
-    if (level === 0) this.closeZoomMenu();
     const w = `${searchOpen[level]}px`;
     if (pill.style.getPropertyValue("--search-open-w") !== w) pill.style.setProperty("--search-open-w", w);
   }
