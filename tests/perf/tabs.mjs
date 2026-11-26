@@ -265,8 +265,10 @@ console.log(`Opening ${docs.length} documents in tabs`);
 const tOpen = performance.now();
 await page.evaluate((paths) => window.__perfEmit("open-files", paths), docs.map((d) => d.path));
 await page.waitForFunction((n) => document.querySelectorAll(".side-tab[data-tab]").length === n, docs.length, { timeout: 120000, polling: 50 });
-await shownReady(docs[docs.length - 1], 120000);
+const openFailed = await shownReady(docs[docs.length - 1], 120000).then(() => false, () => true);
 const openAllMs = performance.now() - tOpen;
+const mismatches = [];
+if (openFailed) mismatches.push(`the last tab opened (${docs[docs.length - 1].name}) was not drawn within 2 minutes`);
 await settle();
 await gc();
 const opened = await sample("all opened");
@@ -283,7 +285,6 @@ const goTo = (n) => page.evaluate((n) => document.querySelector(`.page-wrapper[d
 const switchMs = [];
 const jumpMs = [];
 const added = new Map(docs.map((d) => [d.path, 0]));
-const mismatches = [];
 
 async function drawRect() {
   const annotate = page.locator('.mode-btn[data-mode="annotate"]');
@@ -329,8 +330,9 @@ async function visit(doc, r) {
 
 const order = (start) => docs.map((_, i) => docs[(start + i + 1) % docs.length]);
 const busyStart = treeUsage();
-let afterFirst = null;
-for (let r = 1; r <= rounds; r++) {
+let afterFirst = opened;
+const ranRounds = openFailed ? 0 : rounds;
+for (let r = 1; r <= ranRounds; r++) {
   for (const doc of order(docs.length - 1)) await visit(doc, r);
   await gc();
   const m = await sample(`after round ${r}`);
@@ -341,7 +343,7 @@ const busyEnd = treeUsage();
 const before = await shown();
 const lostDirty = docs.filter((d) => added.get(d.path) > 0 && !before.dirty.includes(d.name)).map((d) => d.name);
 
-for (const doc of order(docs.length - 1)) {
+for (const doc of openFailed ? [] : order(docs.length - 1)) {
   await page.keyboard.press("Control+Tab");
   await waitForDoc(doc, 30000).catch(() => {});
   await page.keyboard.press("Control+s");
@@ -352,7 +354,7 @@ let lost = 0;
 const perDoc = docs.map((d) => {
   const want = d.expected + added.get(d.path);
   const got = saved[d.path] ?? 0;
-  lost += Math.max(0, want - got);
+  if (!openFailed) lost += Math.max(0, want - got);
   return { name: d.name, pages: d.pages, annotations_expected: want, annotations_saved: got, drawn: added.get(d.path) };
 });
 const drawn = [...added.values()].reduce((a, b) => a + b, 0);
@@ -367,14 +369,14 @@ const unknown = await page.evaluate(() => [...window.__perfUnknown]);
 await browser.close();
 server.close();
 
-const pct = (arr, p) => { const s = [...arr].sort((a, b) => a - b); return s[Math.min(s.length - 1, Math.floor((p / 100) * s.length))]; };
+const pct = (arr, p) => { const s = [...arr].sort((a, b) => a - b); return s.length ? s[Math.min(s.length - 1, Math.floor((p / 100) * s.length))] : 0; };
 const totalPages = docs.reduce((a, d) => a + d.pages, 0);
 const totalAnnotations = docs.reduce((a, d) => a + d.expected, 0);
 const results = {
   tabs: docs.length,
   pages: totalPages,
   annotations: totalAnnotations,
-  rounds,
+  rounds: ranRounds,
   open_all_ms: openAllMs,
   switch_p95_ms: pct(switchMs, 95),
   switch_median_ms: pct(switchMs, 50),
@@ -383,10 +385,10 @@ const results = {
   memory_opened_mb: opened.mb,
   memory_peak_mb: Math.max(...samples.map((s) => s.mb)),
   memory_end_mb: end.mb,
-  memory_leak_per_round_mb: rounds > 1 ? (end.mb - afterFirst.mb) / (rounds - 1) : 0,
+  memory_leak_per_round_mb: ranRounds > 1 ? (end.mb - afterFirst.mb) / (ranRounds - 1) : 0,
   heap_opened_mb: opened.heapMb,
   heap_end_mb: end.heapMb,
-  heap_leak_per_round_mb: rounds > 1 ? (end.heapMb - afterFirst.heapMb) / (rounds - 1) : 0,
+  heap_leak_per_round_mb: ranRounds > 1 ? (end.heapMb - afterFirst.heapMb) / (ranRounds - 1) : 0,
   dom_nodes_end: end.nodes,
   dom_nodes_growth_after_round_1: end.nodes - afterFirst.nodes,
   pdf_worker_heap_end_mb: workerHeapMb,
@@ -400,7 +402,7 @@ const results = {
   page_errors: errors.length,
   test_seconds: (busyEnd.at - busyStart.at) / 1000,
 };
-if (drawn === 0) mismatches.push("no annotation could be drawn");
+if (drawn === 0 && !openFailed) mismatches.push("no annotation could be drawn");
 results.wrong_document_shown = mismatches.length;
 
 const rows = [];

@@ -928,10 +928,9 @@ export class PdfViewer {
     this._updateRenderActivity();
     for (const view of this.pageViews) view.clear();
     this._forgetActiveRenders();
-    if (this.pdfDoc) {
-      await this.pdfDoc.loadingTask.destroy();
-      this.pdfDoc = null;
-    }
+    const previous = this.pdfDoc;
+    this.pdfDoc = null;
+    if (previous) await previous.loadingTask.destroy();
     this.observer?.disconnect();
     this._visiblePages.clear();
     this._pageOffsets = null;
@@ -1586,10 +1585,9 @@ export class PdfViewer {
     this.scrollEl.innerHTML = "";
     this.pageViews = [];
     this._forgetActiveRenders();
-    if (this.pdfDoc) {
-      await this.pdfDoc.loadingTask.destroy();
-      this.pdfDoc = null;
-    }
+    const previous = this.pdfDoc;
+    this.pdfDoc = null;
+    if (previous) await previous.loadingTask.destroy();
     this._pageCount   = 0;
     this._currentPage = 1;
     this.pageDimensions = [];
