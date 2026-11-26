@@ -25,7 +25,7 @@ Everything runs on your computer: no account, no subscription, no AI, no telemet
 
 <br>
 
-<img src=".github/readme/launcher.jpg" alt="EzReader home screen: one shortcut per task (annotate, sign, redact, manage pages, convert, compress, protect, resize scans, merge)" width="860">
+<img src=".github/readme/launcher.jpg" alt="EzReader: one tool for all your daily tasks. The home screen with Annotate &amp; sign, Arrange pages, Protect &amp; redact, Convert &amp; compress, and Quick look" width="860">
 
 </div>
 
@@ -110,12 +110,14 @@ gh attestation verify <downloaded file> --repo alxbdn/EzReader
 
 ## Features
 
-EzReader opens on a home screen with a shortcut to each task: annotate, sign, redact, manage pages, convert, compress, protect, straighten scans and merge. Once a file is open, it has three modes, picked from the toolbar: **Read**, **Annotate** and **Edit**. The pages side panel and the File, Edit, View and Pages menus are available in all of them.
+EzReader opens on a home screen that sums up what it does: annotate and sign, arrange pages, protect and redact, convert and compress, and preview PDFs with Quick look. Once a file is open, it has three modes, picked from the toolbar: **Read**, **Annotate** and **Edit**. The side panel (open files and page thumbnails) and the File, Edit, View and Tools menus are available in all of them.
+
+A right click offers what fits where you click: on a file in the side panel (rename, close, close the others), on page thumbnails (rotate, insert a blank page, save as a new PDF, delete), on a page (copy the selected text, hand or select tool, zoom, print) or on the zoom level (fits, actual size, common levels).
 
 ### Read
 
 - Sharp rendering at any zoom, powered by PDF.js
-- Zoom in and out (Ctrl+wheel zooms around the mouse), fit to width or height, actual size (1:1, calibrated to your screen), or type any percentage
+- Zoom with the small up and down arrows beside the zoom level, or Ctrl+wheel around the mouse. Click the level to type any percentage; right-click it for fit to width or height, actual size and common levels. Actual size (1:1, calibrated to your screen) also has its own button while the window is wide enough
 - **Page brightness**: dim glaring white pages from the toolbar, 1 % at a time down to 40 %. Only the screen changes, never the file
 - Full screen (F11)
 - One, two or three pages per row, with vertical or horizontal scrolling
@@ -123,7 +125,7 @@ EzReader opens on a home screen with a shortcut to each task: annotate, sign, re
 - Search the whole document (Ctrl+F) and jump between matches
 - Fill in interactive forms: text fields, checkboxes and radio buttons
 - Document info: page size, PDF version, author, producer, dates and keywords
-- Rename the open file by clicking its name in the toolbar
+- Open several PDFs at once: they are listed at the top of the side panel. Double-click the current one (or press F2) to rename it
 - Open files by dropping them onto the window
 - **Books and comics**: read DRM-free `.epub` books, `.cbz` comics (one page at a time, a click turns the page), `.txt` and `.html` files chapter by chapter, with their table of contents, adjustable text size and the light or dark theme. Your place in each book is remembered. Save a book as PDF (Windows and Linux): A5 pages, with its table of contents as bookmarks
 
@@ -144,7 +146,7 @@ EzReader opens on a home screen with a shortcut to each task: annotate, sign, re
 - **Edit text**: click existing text in the PDF to replace it
 - **Images**: browse for a picture or drop one on a page to place it
 - **Redact** selected text or an area. Redactions are permanent once saved: the content under the black boxes is removed, not just hidden
-- **Stamps**: check marks and crosses
+- **Stamps**: hand-drawn check marks and crosses, in the color of your choice
 - **Crop** pages, with handles and automatic content margins
 - **Straighten** scanned pages by placing each corner with a magnifying loupe. A preview shows the straightened page as you go
 - Flip pages vertically or horizontally
