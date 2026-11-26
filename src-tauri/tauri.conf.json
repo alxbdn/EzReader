@@ -13,8 +13,8 @@
     "windows": [
       {
         "title": "EzReader",
-        "width": 1100,
-        "height": 840,
+        "width": 910,
+        "height": 1075,
         "center": true,
         "resizable": true,
         "fullscreen": false,

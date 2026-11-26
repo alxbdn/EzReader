@@ -807,7 +807,7 @@ export class Toolbar {
     });
     this.zoomInput.addEventListener("blur", () => this.endZoomEdit());
 
-    const realSizeBtn = this.btn("1:1", "Real size (1:1)", "icon-btn text-icon-btn");
+    const realSizeBtn = this.btn("1:1", "Real size (1:1)", "icon-btn text-icon-btn tb-real");
     this.reg(realSizeBtn, undefined, "ttRealSize");
     realSizeBtn.addEventListener("click", () => this.emit({ type: "zoom-real" }));
 
@@ -1012,8 +1012,8 @@ export class Toolbar {
   }
 
   private fitMainRow(main: HTMLElement): void {
-    const levels = ["tb-fold", "tb-compact", "tb-compact-2", "tb-compact-3"];
-    const searchOpen = [250, 250, 190, 160, 120];
+    const levels = ["tb-fold", "tb-compact", "tb-compact-2", "tb-compact-3", "tb-compact-4", "tb-compact-5"];
+    const searchOpen = [250, 250, 190, 160, 120, 120, 120];
     const pill = this.search.el;
     const open = pill.classList.contains("open");
     const [left, right] = Array.from(main.children) as HTMLElement[];
@@ -1028,11 +1028,9 @@ export class Toolbar {
       const rightW = held(right) - pill.offsetWidth + (open ? searchOpen[level] : 34);
       return held(left) + rightW + gapOf(main) - room;
     };
-    main.style.flexWrap = "nowrap";
     main.classList.remove(...levels);
     let level = 0;
     while (level < levels.length && overflow(level) > 0) main.classList.add(levels[level++]);
-    main.style.flexWrap = "";
     const w = `${searchOpen[level]}px`;
     if (pill.style.getPropertyValue("--search-open-w") !== w) pill.style.setProperty("--search-open-w", w);
   }

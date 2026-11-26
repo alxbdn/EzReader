@@ -146,7 +146,6 @@ export interface Translations {
   welcomeDropHint?: string;
   welcomeDefaultReader?: string;
   welcomeDefaultReaderHint?: string;
-  welcomeQuickLook?: string;
   updateUpToDateHint?: string;
   updateAvailable?: string;
   updateAvailableHint?: string;
@@ -162,15 +161,17 @@ export interface Translations {
   updateOtherWindows?: string;
   updateFailed?: string;
   welcomeFeatHeading?: string;
-  welcomeFeatAnnotate?: string;
-  welcomeFeatSign?: string;
-  welcomeFeatRedact?: string;
-  welcomeFeatPages?: string;
-  welcomeFeatToImage?: string;
-  welcomeFeatCompress?: string;
-  welcomeFeatProtect?: string;
-  welcomeFeatResize?: string;
-  welcomeFeatMerge?: string;
+  welcomeCardAnnotate?: string;
+  welcomeCardAnnotateDesc?: string;
+  welcomeCardPages?: string;
+  welcomeCardPagesDesc?: string;
+  welcomeCardProtect?: string;
+  welcomeCardProtectDesc?: string;
+  welcomeCardConvert?: string;
+  welcomeCardConvertDesc?: string;
+  welcomeCardQuickLook?: string;
+  welcomeCardQuickLookDesc?: string;
+  welcomeSpaceKey?: string;
   msgUnsavedTitle?: string;
   msgSaveBeforeClose?: string;
   msgSaveBeforeOpen?: string;
@@ -759,7 +760,6 @@ const EN: Translations = {
   welcomeDropHint:          "Drop a file to begin",
   welcomeDefaultReader:     "Default PDF reader",
   welcomeDefaultReaderHint: "Open PDF files with EzReader",
-  welcomeQuickLook:         "Quick look with Space",
   updateUpToDateHint:  "Up to date: {v} is the latest version",
   updateAvailable:     "Update to {v}",
   updateAvailableHint: "Version {v} is out (you have {cur}). Click to install it.",
@@ -775,15 +775,17 @@ const EN: Translations = {
   updateOtherWindows:  "Close your other EzReader windows first, then update",
   updateFailed:        "Couldn't update: {err}",
   welcomeFeatHeading:       "What you can do with EzReader",
-  welcomeFeatAnnotate:      "Annotate Files",
-  welcomeFeatSign:          "Sign Documents",
-  welcomeFeatRedact:        "Redact Content",
-  welcomeFeatPages:         "Manage Pages",
-  welcomeFeatToImage:       "Convert Files",
-  welcomeFeatCompress:      "Compress Files",
-  welcomeFeatProtect:       "Protect Files",
-  welcomeFeatResize:        "Resize Scans",
-  welcomeFeatMerge:         "Merge Files",
+  welcomeCardAnnotate:      "Annotate & sign",
+  welcomeCardAnnotateDesc:  "Highlight, draw, add notes and sign with your own hand.",
+  welcomeCardPages:         "Arrange pages",
+  welcomeCardPagesDesc:     "Reorder, rotate, delete, merge or split by dragging thumbnails.",
+  welcomeCardProtect:       "Protect & redact",
+  welcomeCardProtectDesc:   "Black out private text for good, then lock with a password.",
+  welcomeCardConvert:       "Convert & compress",
+  welcomeCardConvertDesc:   "Pages to pictures, pictures to PDF, and big files made light.",
+  welcomeCardQuickLook:     "Quick look",
+  welcomeCardQuickLookDesc: "Select a PDF in File Explorer and press Space to preview it, without opening anything.",
+  welcomeSpaceKey:          "Space",
   msgUnsavedTitle:        "Unsaved changes",
   msgSaveBeforeClose:     "Save the changes to \u201c{name}\u201d before closing?",
   msgSaveBeforeOpen:      "Save the changes to \u201c{name}\u201d before opening another document?",
@@ -1372,7 +1374,6 @@ const FR: Translations = {
   welcomeDropHint:          "D\u00e9posez un fichier pour commencer",
   welcomeDefaultReader:     "Lecteur PDF par d\u00e9faut",
   welcomeDefaultReaderHint: "Ouvrir les fichiers PDF avec EzReader",
-  welcomeQuickLook:         "Aper\u00e7u avec Espace",
   updateUpToDateHint:  "\u00c0 jour : {v} est la derni\u00e8re version",
   updateAvailable:     "Mettre \u00e0 jour vers {v}",
   updateAvailableHint: "La version {v} est sortie (vous avez {cur}). Cliquez pour l'installer.",
@@ -1388,15 +1389,17 @@ const FR: Translations = {
   updateOtherWindows:  "Fermez d'abord vos autres fen\u00eatres EzReader, puis mettez \u00e0 jour",
   updateFailed:        "Impossible de mettre \u00e0 jour : {err}",
   welcomeFeatHeading:       "Ce que vous pouvez faire avec EzReader",
-  welcomeFeatAnnotate:      "Annoter des fichiers",
-  welcomeFeatSign:          "Signer des documents",
-  welcomeFeatRedact:        "Caviarder du contenu",
-  welcomeFeatPages:         "G\u00e9rer les pages",
-  welcomeFeatToImage:       "Convertir des fichiers",
-  welcomeFeatCompress:      "Compresser des fichiers",
-  welcomeFeatProtect:       "Prot\u00e9ger des fichiers",
-  welcomeFeatResize:        "Redresser des scans",
-  welcomeFeatMerge:         "Fusionner des fichiers",
+  welcomeCardAnnotate:      "Annoter et signer",
+  welcomeCardAnnotateDesc:  "Surlignez, dessinez, ajoutez des notes et signez de votre main.",
+  welcomeCardPages:         "Organiser les pages",
+  welcomeCardPagesDesc:     "R\u00e9ordonnez, pivotez, supprimez, fusionnez ou s\u00e9parez en glissant les miniatures.",
+  welcomeCardProtect:       "Prot\u00e9ger et caviarder",
+  welcomeCardProtectDesc:   "Masquez d\u00e9finitivement le texte priv\u00e9, puis verrouillez avec un mot de passe.",
+  welcomeCardConvert:       "Convertir et compresser",
+  welcomeCardConvertDesc:   "Des pages en images, des images en PDF, et des fichiers lourds all\u00e9g\u00e9s.",
+  welcomeCardQuickLook:     "Aper\u00e7u rapide",
+  welcomeCardQuickLookDesc: "S\u00e9lectionnez un PDF dans l\u2019Explorateur de fichiers et appuyez sur Espace pour l\u2019afficher, sans rien ouvrir.",
+  welcomeSpaceKey:          "Espace",
   msgUnsavedTitle:        "Modifications non enregistrées",
   msgSaveBeforeClose:     "Enregistrer les modifications apportées à « {name} » avant de fermer ?",
   msgSaveBeforeOpen:      "Enregistrer les modifications apportées à « {name} » avant d'ouvrir un autre document ?",
