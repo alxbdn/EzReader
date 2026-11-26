@@ -2158,35 +2158,56 @@ kbd,
   color: var(--muted-foreground);
 }
 
-/* Quick look: a tiny keyboard, blank keys, only Space named in brand red. */
+/* Quick look: a keyboard seen up close, framed on the Space bar (brand red); the rest fades out. */
 .kb-mini {
   flex-shrink: 0;
-  width: 150px;
+  position: relative;
+  width: 176px;
+  height: 76px;
+  overflow: hidden;
+  border-radius: var(--radius-md);
+  background: var(--muted);
+  -webkit-mask-image: linear-gradient(90deg, transparent, #000 22%, #000 78%, transparent),
+    linear-gradient(180deg, transparent, #000 45%);
+  -webkit-mask-composite: source-in;
+  mask-image: linear-gradient(90deg, transparent, #000 22%, #000 78%, transparent),
+    linear-gradient(180deg, transparent, #000 45%);
+  mask-composite: intersect;
+}
+.kb-board {
+  position: absolute;
+  left: 50%;
+  bottom: 6px;
+  width: 290px;
+  transform: translateX(-50%);
   display: flex;
   flex-direction: column;
-  gap: 2px;
-  padding: 5px;
-  background: var(--muted);
-  border-radius: var(--radius-md);
+  gap: 3px;
+  padding: 4px;
+  border: 2px solid color-mix(in srgb, var(--muted-foreground) 55%, transparent);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--muted-foreground) 22%, var(--background));
 }
-.kb-row { display: flex; gap: 2px; }
+.kb-row { display: flex; gap: 3px; }
 .kb-key {
   flex: 1 1 0;
-  height: 9px;
-  border: 1px solid color-mix(in srgb, var(--muted-foreground) 35%, transparent);
-  border-radius: 2px;
+  height: 14px;
+  border: 1px solid color-mix(in srgb, var(--muted-foreground) 45%, transparent);
+  border-bottom-width: 3px;
+  border-radius: 4px;
   background: var(--background);
 }
 .kb-key.kb-space {
   flex-grow: 6.5;
-  height: 12px;
+  height: 18px;
   display: flex;
   align-items: center;
   justify-content: center;
-  border-color: var(--selection);
+  border-color: #B71C1C;
   background: var(--selection);
-  font-size: 8px;
+  font-size: 9px;
   font-weight: 600;
+  letter-spacing: 0.02em;
   line-height: 1;
   color: #fff;
 }
