@@ -2158,37 +2158,37 @@ kbd,
   color: var(--muted-foreground);
 }
 
-/* Quick look: a tiny keyboard with blank keys, only Space is named. */
+/* Quick look: a tiny keyboard, blank keys, only Space named in brand red. */
 .kb-mini {
   flex-shrink: 0;
+  width: 150px;
   display: flex;
   flex-direction: column;
-  gap: 3px;
+  gap: 2px;
   padding: 5px;
   background: var(--muted);
   border-radius: var(--radius-md);
 }
-.kb-row { display: flex; gap: 3px; }
-.kb-row-offset { padding-left: 5px; }
+.kb-row { display: flex; gap: 2px; }
 .kb-key {
-  width: 8px;
-  height: 8px;
-  border: 1px solid var(--border);
-  border-bottom-width: 2px;
+  flex: 1 1 0;
+  height: 9px;
+  border: 1px solid color-mix(in srgb, var(--muted-foreground) 35%, transparent);
   border-radius: 2px;
   background: var(--background);
 }
 .kb-key.kb-space {
-  flex: 1;
-  height: 14px;
+  flex-grow: 6.5;
+  height: 12px;
   display: flex;
   align-items: center;
   justify-content: center;
-  border-color: var(--ring);
-  font-size: 9px;
+  border-color: var(--selection);
+  background: var(--selection);
+  font-size: 8px;
   font-weight: 600;
   line-height: 1;
-  color: var(--foreground);
+  color: #fff;
 }
 
 /* ══ Status bar ══ default reader, version and language, always at the bottom of the window. */
