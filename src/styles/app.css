@@ -1799,7 +1799,7 @@ input[type="color"].color-picker.is-off::-webkit-color-swatch {
   display: flex;
   align-items: safe center;
   justify-content: center;
-  overflow: auto;
+  overflow: hidden;
   position: relative;
   min-width: 0;
   background: var(--background);
