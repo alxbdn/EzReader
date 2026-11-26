@@ -67,6 +67,14 @@ describe("stamp maker", () => {
     expect(at(px, 0, 0)[3]).toBe(0);
   });
 
+  it("keeps the drawing of a picture when recolouring it", () => {
+    // An orange tile with a white sign in it: the tile takes the colour, the sign fades out.
+    const px = picture(10, 10, [230, 80, 30, 255], { color: [255, 255, 255, 255], inside: (x, y) => x >= 4 && x < 6 && y >= 4 && y < 6 });
+    recolor(px, { r: 30, g: 60, b: 140 });
+    expect(at(px, 0, 0)).toEqual([30, 60, 140, 255]);
+    expect(at(px, 5, 5)[3]).toBe(0);
+  });
+
   it("finds the box around what shows", () => {
     expect(visibleBounds(picture(20, 20, [0, 0, 0, 0], { color: [0, 0, 0, 255], inside: square }))).toEqual({ x: 8, y: 8, w: 4, h: 4 });
     expect(visibleBounds(picture(4, 4, [0, 0, 0, 0]))).toBeNull();
