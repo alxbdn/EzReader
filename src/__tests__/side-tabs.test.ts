@@ -7,7 +7,7 @@ const tab = (id: number, title: string, dirty = false) => ({ id, title, dirty, p
 
 describe("SideTabs", () => {
   it("lists every document with the current one marked, and opens files", () => {
-    const on = { activate: vi.fn(), close: vi.fn(), move: vi.fn(), detach: vi.fn(), open: vi.fn() };
+    const on = { activate: vi.fn(), close: vi.fn(), move: vi.fn(), detach: vi.fn(), open: vi.fn(), rename: vi.fn() };
     const tabs = new SideTabs(on);
     tabs.render([tab(1, "a.pdf"), tab(2, "b.pdf", true)], 1);
     const items = [...tabs.el.querySelectorAll<HTMLElement>(".side-tab[data-tab]")];
@@ -26,12 +26,48 @@ describe("SideTabs", () => {
   });
 
   it("shows no close cross on a tab that is still loading and has no name", () => {
-    const on = { activate: vi.fn(), close: vi.fn(), move: vi.fn(), detach: vi.fn(), open: vi.fn() };
+    const on = { activate: vi.fn(), close: vi.fn(), move: vi.fn(), detach: vi.fn(), open: vi.fn(), rename: vi.fn() };
     const tabs = new SideTabs(on);
     tabs.render([tab(1, "a.pdf"), tab(2, "")], 2);
     const items = [...tabs.el.querySelectorAll<HTMLElement>(".side-tab[data-tab]")];
     expect(items[0]!.querySelector(".side-tab-close")).not.toBeNull();
     expect(items[1]!.querySelector(".side-tab-close")).toBeNull();
+  });
+
+  it("renames the current document in place: double-click, type, Enter", () => {
+    const on = { activate: vi.fn(), close: vi.fn(), move: vi.fn(), detach: vi.fn(), open: vi.fn(), rename: vi.fn() };
+    const tabs = new SideTabs(on);
+    document.body.append(tabs.el);
+    tabs.render([tab(1, "a.pdf"), tab(2, "b.pdf")], 1);
+    const other = tabs.el.querySelector<HTMLElement>('.side-tab[data-tab="2"]')!;
+    other.dispatchEvent(new MouseEvent("dblclick", { bubbles: true }));
+    expect(tabs.el.querySelector(".side-tab-input")).toBeNull();
+    const current = tabs.el.querySelector<HTMLElement>('.side-tab[data-tab="1"]')!;
+    current.dispatchEvent(new MouseEvent("dblclick", { bubbles: true }));
+    const input = tabs.el.querySelector<HTMLInputElement>(".side-tab-input")!;
+    expect(input.value).toBe("a");
+    expect(tabs.el.querySelector(".side-tab-ext")!.textContent).toBe(".pdf");
+    tabs.render([tab(1, "a.pdf"), tab(2, "b.pdf")], 1);
+    expect(tabs.el.querySelector(".side-tab-input")).toBe(input);
+    input.value = "report";
+    input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter" }));
+    expect(on.rename).toHaveBeenCalledWith(1, "report");
+    expect(tabs.el.querySelector(".side-tab-input")).toBeNull();
+    tabs.el.remove();
+  });
+
+  it("drops the new name on Escape, and offers no rename for a book", () => {
+    const on = { activate: vi.fn(), close: vi.fn(), move: vi.fn(), detach: vi.fn(), open: vi.fn(), rename: vi.fn() };
+    const tabs = new SideTabs(on);
+    tabs.render([tab(1, "a.pdf")], 1);
+    tabs.startRename(1);
+    const input = tabs.el.querySelector<HTMLInputElement>(".side-tab-input")!;
+    input.value = "x";
+    input.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
+    expect(on.rename).not.toHaveBeenCalled();
+    tabs.setRenamable(false);
+    tabs.startRename(1);
+    expect(tabs.el.querySelector(".side-tab-input")).toBeNull();
   });
 });
 

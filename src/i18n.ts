@@ -390,6 +390,14 @@ export interface Translations {
   ttReorderAnnotation?: string;
   tabsOpen?: string;
   tabsOpenHint?: string;
+  tabsRenameHint?: string;
+  ctxRename?: string;
+  ctxCloseTab?: string;
+  ctxCloseOthers?: string;
+  ctxRotateRight?: string;
+  ctxExtractPages?: string;
+  ctxSelectText?: string;
+  ctxHandTool?: string;
   optThickness?: string;
   optFontsStandard?: string;
   optFontsInstalled?: string;
@@ -1004,6 +1012,14 @@ const EN: Translations = {
   ttReorderAnnotation: "Drag to bring forward or send backward (Alt+↑/↓)",
   tabsOpen: "Open a PDF",
   tabsOpenHint: "Open PDFs in new tabs, or drop them here (Ctrl+O)",
+  tabsRenameHint: "Double-click to rename (F2)",
+  ctxRename: "Rename…",
+  ctxCloseTab: "Close",
+  ctxCloseOthers: "Close the others",
+  ctxRotateRight: "Rotate right",
+  ctxExtractPages: "Save as a new PDF…",
+  ctxSelectText: "Select text",
+  ctxHandTool: "Hand tool",
   optThickness: "Thickness",
   optFontsStandard: "Standard",
   optFontsInstalled: "On this computer",
@@ -1618,6 +1634,14 @@ const FR: Translations = {
   ttReorderAnnotation: "Glissez pour avancer ou reculer (Alt+↑/↓)",
   tabsOpen: "Ouvrir un PDF",
   tabsOpenHint: "Ouvrez des PDF dans de nouveaux onglets, ou déposez-les ici (Ctrl+O)",
+  tabsRenameHint: "Double-cliquez pour renommer (F2)",
+  ctxRename: "Renommer…",
+  ctxCloseTab: "Fermer",
+  ctxCloseOthers: "Fermer les autres",
+  ctxRotateRight: "Pivoter à droite",
+  ctxExtractPages: "Enregistrer dans un nouveau PDF…",
+  ctxSelectText: "Sélectionner du texte",
+  ctxHandTool: "Outil main",
   optThickness: "Épaisseur",
   optFontsStandard: "Standard",
   optFontsInstalled: "Sur cet ordinateur",

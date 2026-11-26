@@ -1,3 +1,4 @@
+import { slideIn } from "./motion";
 import type { Annotation } from "./models";
 import type { Translations } from "./i18n";
 import {
@@ -185,7 +186,9 @@ export class StudioPanel {
   }
 
   private setCollapsed(c: boolean): void {
+    const opening = this.collapsed && !c;
     this.collapsed = c;
+    if (opening) slideIn(this.el);
     try { localStorage.setItem(COLLAPSED_KEY, c ? "1" : "0"); } catch {}
     this.sync();
   }

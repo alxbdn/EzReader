@@ -1,3 +1,4 @@
+import { STAMP_OUTLINES } from "./stamp-marks";
 import { OverlayEvents } from "./overlay-events";
 import {
   canvasToPdf,
@@ -1003,23 +1004,17 @@ export class CanvasOverlay implements SelectionOwner {
 
   private drawStamp(ann: StampAnnotation): void {
     const ctx = this.ctx;
-    const at = (u: number, v: number) => this.toCanvas(ann.x + u * ann.width, ann.y + v * ann.height);
-    const strokes: [number, number][][] = ann.mark === "check"
-      ? [[[0.12, 0.52], [0.4, 0.22], [0.9, 0.82]]]
-      : [[[0.15, 0.85], [0.85, 0.15]], [[0.85, 0.85], [0.15, 0.15]]];
     ctx.save();
-    ctx.strokeStyle = rgbToCss(ann.color);
-    ctx.lineWidth = Math.max(0.5, Math.min(ann.width, ann.height) * 0.14) * this.scale;
-    ctx.lineCap = "round";
-    ctx.lineJoin = "round";
-    for (const stroke of strokes) {
-      ctx.beginPath();
-      stroke.forEach(([u, v], i) => {
-        const [x, y] = at(u, v);
+    ctx.fillStyle = rgbToCss(ann.color);
+    ctx.beginPath();
+    for (const outline of STAMP_OUTLINES[ann.mark]) {
+      outline.forEach(([u, v], i) => {
+        const [x, y] = this.toCanvas(ann.x + u * ann.width, ann.y + v * ann.height);
         if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
       });
-      ctx.stroke();
+      ctx.closePath();
     }
+    ctx.fill();
     ctx.restore();
   }
 
@@ -1796,10 +1791,13 @@ export class CanvasOverlay implements SelectionOwner {
    */
   private onContextMenu = (e: MouseEvent): void => {
     e.preventDefault();
-    e.stopPropagation();
-    if (this.activeTool !== "select") return;
+    // A right click on an annotation shows its pill; anywhere else on the page it goes on to the
+    // page's own menu, except while a drawing tool is in hand.
+    if (this.activeTool !== "select") { e.stopPropagation(); return; }
     const hit = this.hitTest(e.offsetX, e.offsetY) ?? this.hitHighlight(e.offsetX, e.offsetY);
-    if (hit && hit !== this.selected) this.select(hit);
+    if (!hit) return;
+    e.stopPropagation();
+    if (hit !== this.selected) this.select(hit);
   };
 
   reorderAnnotation(ann: Annotation, dir: "up" | "down"): void {

@@ -90,7 +90,6 @@ import {
   unregisterPdfHandler,
   openDefaultAppsSettings,
   quickLookState,
-  tabDragHover,
   tabDragEnd,
   moveTab,
   type StartupArgs,
@@ -99,8 +98,8 @@ import { DocWorkspace } from "./doc-workspace";
 import { AnnotationEditor } from "./annotation-editor";
 import { AnnotationClipboard, copyable } from "./annotation-clipboard";
 import { isLinux, isMac, macShortcuts } from "./platform";
-import { TabStrip } from "./tab-strip";
 import { SideTabs } from "./side-tabs";
+import { ContextMenu, type ContextItem } from "./context-menu";
 import type { SessionSnapshot } from "./document-session";
 import type { AnnotationSnapshot } from "./annotation-session";
 import type { DocState } from "./page-history";
@@ -156,22 +155,14 @@ const docs = new DocWorkspace<ParkedDoc>({
   settleUnsaved: () => settleUnsaved("msgSaveBeforeClose"),
 }, {
   render: (tabs, activeId) => {
-    // The title bar keeps only the current document's name; the list lives in the page panel.
-    const active = tabs.find((t) => t.id === activeId);
-    tabStrip.render(active ? [active] : [], activeId);
     sideTabs.render(tabs, activeId);
   },
   dirtyChanged: () => setDirty(session.isDirty),
 }, samePath);
 
-const tabStrip = new TabStrip(document.getElementById("menubar-row")!, toolbar.titleElement, {
-  activate: (id) => void docs.switchTo(id),
-  close: (id) => void docs.close(id),
-  move: (id, index) => docs.move(id, index),
-  hover: (x, y) => tabDragHover(x, y),
-  hoverEnd: () => void tabDragEnd().catch(() => {}),
-  detach: (id, x, y) => void detachTab(id, x, y),
-});
+/** Lights the title bar while a tab dragged from another window, or pages from the panel, hover it. */
+const menubarRow = document.getElementById("menubar-row")!;
+const setTitleBarDropTarget = (on: boolean): void => { menubarRow.classList.toggle("tab-drop-target", on); };
 
 const sideTabs = new SideTabs({
   activate: (id) => void docs.switchTo(id),
@@ -179,6 +170,7 @@ const sideTabs = new SideTabs({
   move: (id, index) => docs.move(id, index),
   detach: (id, x, y) => void detachTab(id, x, y),
   open: () => void openFiles(),
+  rename: (_id, stem) => toolbar.dispatch({ type: "rename", stem }),
 });
 
 const annotations: AnnotationSession = new AnnotationSession({
@@ -613,8 +605,9 @@ setInflateFallback(inflateRaw);
 const epubReader = new EpubReader(document.getElementById("epub-reader")!, {
   openUrl: (url) => void openExternalUrl(url).catch(() => {}),
   titleChanged: (title) => {
+    sideTabs.setRenamable(!title);
     if (title) {
-      toolbar.setDocTitle(title, false, false);
+      toolbar.setDocTitle(title, false);
       document.title = `${title} – EzReader`;
     } else {
       setDirty(session.isDirty);
@@ -722,8 +715,7 @@ function applyLanguage(language: string): void {
   printModal.applyTranslations(t);
   splitModal.applyTranslations(t);
   adjustView.applyTranslations(t);
-  tabStrip.applyTranslations({ close: tabCloseLabel(t), dragNew: t.sbDragOut, dragMerge: t.tabDragMerge });
-  sideTabs.applyTranslations({ close: tabCloseLabel(t), open: t.tabsOpen, openHint: t.tabsOpenHint });
+  sideTabs.applyTranslations({ close: tabCloseLabel(t), open: t.tabsOpen, openHint: t.tabsOpenHint, rename: t.tabsRenameHint });
   setSelectionPillLabels({
     color: t.selColor ?? "Color",
     copyText: t.selCopyText ?? "Copy text",
@@ -1260,10 +1252,10 @@ async function openTransferred(t: StartupArgs): Promise<void> {
 void (async () => {
   try {
     await appWindow.listen<StartupArgs>("tab-received", ({ payload }) => {
-      tabStrip.setDropTarget(false);
+      setTitleBarDropTarget(false);
       void openTransferred(payload);
     });
-    await appWindow.listen<boolean>("tab-drag-hover", ({ payload }) => tabStrip.setDropTarget(payload));
+    await appWindow.listen<boolean>("tab-drag-hover", ({ payload }) => setTitleBarDropTarget(payload));
   } catch {
   }
 })();
@@ -1548,7 +1540,7 @@ pageSidebar.onDragOut(async (pages, x, y) => {
   }
 });
 
-pageSidebar.onTabZone((over) => tabStrip.setDropTarget(over));
+pageSidebar.onTabZone((over) => setTitleBarDropTarget(over));
 
 pageSidebar.onDragToTab(async (pages) => {
   if (!session.isOpen || !viewer.isLoaded() || refuseIfProtected()) return;
@@ -2105,32 +2097,109 @@ document.getElementById("viewer-scroll")!.addEventListener("click", (e: MouseEve
   if (toolState.tool !== "select") toolbar.clearActiveTool();
 });
 
-const ctxMenu    = document.getElementById("ctx-menu")!;
-const ctxCopyBtn = document.getElementById("ctx-copy") as HTMLButtonElement;
+const ctxMenu = new ContextMenu();
 
-document.addEventListener("contextmenu", (e: MouseEvent) => {
-  e.preventDefault();
-  // The menu only holds Copy, so it opens only over selected text: anywhere else it would be
-  // empty. Annotations have their own pill, which a right click on them shows.
-  const sel = window.getSelection()?.toString() ?? "";
-  if (sel.trim().length === 0 || typingInField()) {
-    ctxMenu.classList.add("hidden");
-    return;
+function editableTarget(el: Element | null): boolean {
+  return !!el?.closest("input, textarea, select, [contenteditable=''], [contenteditable='true']");
+}
+
+/** True when the click lands on the text that is selected, so Copy means that text. */
+function onSelectedText(x: number, y: number): boolean {
+  const sel = window.getSelection();
+  if (!sel || sel.isCollapsed || sel.toString().trim().length === 0) return false;
+  for (let i = 0; i < sel.rangeCount; i++) {
+    for (const r of Array.from(sel.getRangeAt(i).getClientRects())) {
+      if (x >= r.left - 2 && x <= r.right + 2 && y >= r.top - 2 && y <= r.bottom + 2) return true;
+    }
   }
-  ctxCopyBtn.disabled = false;
-  ctxMenu.style.left = `${e.clientX}px`;
-  ctxMenu.style.top  = `${e.clientY}px`;
-  ctxMenu.classList.remove("hidden");
-});
+  return false;
+}
 
-ctxCopyBtn.addEventListener("click", async () => {
+function tabMenu(id: number): ContextItem[] {
+  const t = getTranslations(settingsModal.getSettings().language);
+  const active = docs.active?.id === id;
+  const others = docs.list.filter((tab) => tab.id !== id).map((tab) => tab.id);
+  return [
+    { label: t.ctxRename ?? "Rename…", shortcut: "F2", disabled: !active || !session.isOpen || !sideTabs.canRename,
+      run: () => sideTabs.startRename(id) },
+    "sep",
+    { label: t.ctxCloseTab ?? "Close", shortcut: active ? "Ctrl+W" : undefined, run: () => void docs.close(id) },
+    { label: t.ctxCloseOthers ?? "Close the others", disabled: others.length === 0,
+      run: () => void (async () => { for (const o of others) await docs.close(o); })() },
+  ];
+}
+
+function thumbMenu(page: number): ContextItem[] {
+  const t = getTranslations(settingsModal.getSettings().language);
+  const pages = pageSidebar.contextPages(page);
+  const many = pages.length > 1;
+  return [
+    { label: t.sbRotateLeft ?? "Rotate left", run: () => pageSidebar.requestRotate(pages, -1) },
+    { label: t.ctxRotateRight ?? "Rotate right", run: () => pageSidebar.requestRotate(pages, 1) },
+    "sep",
+    { label: t.menuInsertBlank ?? "Insert blank page", run: () => pageSidebar.requestInsertBlankAfter(pages[pages.length - 1]!) },
+    { label: t.ctxExtractPages ?? "Save as a new PDF…", run: () => pageSidebar.requestExport(pages) },
+    "sep",
+    { label: many ? fmt(t.sbDeleteCount ?? "Delete ({n})", { n: pages.length }) : (t.sbDelete ?? "Delete"), shortcut: "Del",
+      danger: true, disabled: pages.length >= pageSidebar.pageCount, run: () => pageSidebar.requestDelete(pages) },
+  ];
+}
+
+function pageMenu(withCopy: boolean): ContextItem[] {
+  const t = getTranslations(settingsModal.getSettings().language);
+  const hand = toolbar.pointerMode === "hand";
+  return [
+    ...(withCopy ? [{ label: t.ctxCopy ?? "Copy", shortcut: "Ctrl+C", run: () => void copySelectedText() }, "sep" as const] : []),
+    { label: hand ? (t.ctxSelectText ?? "Select text") : (t.ctxHandTool ?? "Hand tool"),
+      run: () => toolbar.setPointerMode(hand ? "select" : "hand") },
+    "sep",
+    { label: t.menuZoomIn ?? "Zoom in", shortcut: "Ctrl++", run: () => toolbar.dispatch({ type: "zoom-in" }) },
+    { label: t.menuZoomOut ?? "Zoom out", shortcut: "Ctrl+-", run: () => toolbar.dispatch({ type: "zoom-out" }) },
+    { label: t.menuFitWidth ?? "Fit to width", run: () => toolbar.dispatch({ type: "fit-width" }) },
+    "sep",
+    { label: t.menuPrintDialog ?? "Print…", shortcut: "Ctrl+P", run: () => toolbar.dispatch({ type: "print" }) },
+  ];
+}
+
+function zoomMenu(): ContextItem[] {
+  const t = getTranslations(settingsModal.getSettings().language);
+  const level = (pct: number): ContextItem => ({
+    label: `${pct} %`, run: () => toolbar.dispatch({ type: "zoom-set", scale: pct / 100 * CSS_UNITS }),
+  });
+  return [
+    { label: t.menuFitWidth ?? "Fit to width", run: () => toolbar.dispatch({ type: "fit-width" }) },
+    { label: t.menuFitHeight ?? "Fit to height", run: () => toolbar.dispatch({ type: "fit-height" }) },
+    { label: t.ttRealSize ?? "Actual size (1:1)", run: () => toolbar.dispatch({ type: "zoom-real" }) },
+    "sep",
+    ...[50, 75, 100, 125, 150, 200, 300].map(level),
+  ];
+}
+
+async function copySelectedText(): Promise<void> {
   const text = window.getSelection()?.toString() ?? "";
-  if (text) await navigator.clipboard.writeText(text);
-  ctxMenu.classList.add("hidden");
-});
+  if (text) await navigator.clipboard.writeText(text).catch(() => {});
+}
 
-document.addEventListener("mousedown", (e: MouseEvent) => {
-  if (!ctxMenu.contains(e.target as Node)) ctxMenu.classList.add("hidden");
+// One right-click menu, built for what is under the pointer: the zoom level, the files in the
+// panel, the page thumbnails, or the pages themselves. Everywhere else (bars, empty space) none opens. Fields keep
+// the system's own menu (cut, copy, paste).
+document.addEventListener("contextmenu", (e: MouseEvent) => {
+  const target = e.target as Element | null;
+  if (editableTarget(target)) { ctxMenu.hide(); return; }
+  e.preventDefault();
+  let items: ContextItem[] = [];
+  const tab = target?.closest<HTMLElement>(".side-tab[data-tab]");
+  const thumb = target?.closest<HTMLElement>(".page-sidebar-thumb");
+  if (target?.closest(".zoom-label, .zoom-stack") && viewer.isLoaded()) {
+    items = zoomMenu();
+  } else if (tab) {
+    items = tabMenu(Number(tab.dataset["tab"]));
+  } else if (thumb && viewer.isLoaded() && !pageEditor.busy) {
+    items = thumbMenu(Number(thumb.dataset["page"]));
+  } else if (target?.closest("#viewer-scroll .page-wrapper") && viewer.isLoaded()) {
+    items = pageMenu(onSelectedText(e.clientX, e.clientY));
+  }
+  ctxMenu.show(e.clientX, e.clientY, items);
 });
 
 window.addEventListener("keydown", async (e: KeyboardEvent) => {

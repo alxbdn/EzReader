@@ -1,7 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi } from "vitest";
 import { DocTabs } from "../doc-tabs";
-import { TabStrip } from "../tab-strip";
 import { DocumentSession } from "../document-session";
 import { AnnotationSession } from "../annotation-session";
 import { PageHistory } from "../page-history";
@@ -115,76 +114,5 @@ describe("parking a document", () => {
     expect(h.canUndo).toBe(false);
     h.restore(parked);
     expect(h.undo({ path: "/tmp/2.pdf", page: 2, dirty: true })?.path).toBe("/tmp/1.pdf");
-  });
-});
-
-describe("TabStrip", () => {
-  function setUp() {
-    document.body.innerHTML = `<div id="bar"><div class="doc-title"><button class="doc-title-name">a.pdf</button></div></div>`;
-    const bar = document.getElementById("bar")!;
-    const title = bar.querySelector<HTMLElement>(".doc-title")!;
-    const on = { activate: vi.fn(), close: vi.fn(), move: vi.fn(), hover: vi.fn(async () => false), hoverEnd: vi.fn(), detach: vi.fn() };
-    const strip = new TabStrip(bar, title, on);
-    return { bar, title, strip, on };
-  }
-
-  it("shows only the file name for one document", () => {
-    const { strip, title } = setUp();
-    const tabs = new DocTabs<null>();
-    const a = tabs.add("a.pdf");
-    strip.render(tabs.tabs, a.id);
-    expect(strip.el.classList.contains("single")).toBe(true);
-    expect(strip.el.querySelector(".doc-tab-close")).toBeNull();
-    expect(title.parentElement?.classList.contains("active")).toBe(true);
-  });
-
-  it("puts the file name in the active chip and closes others with ×", () => {
-    const { strip, title, on } = setUp();
-    const tabs = new DocTabs<null>();
-    const a = tabs.add("a.pdf");
-    const b = tabs.add("b.pdf");
-    b.dirty = true;
-    strip.render(tabs.tabs, a.id);
-    const chips = strip.el.querySelectorAll(".doc-tab");
-    expect(strip.el.classList.contains("single")).toBe(false);
-    expect(chips).toHaveLength(2);
-    expect(chips[0].contains(title)).toBe(true);
-    expect(chips[1].textContent).toContain("b.pdf");
-    expect(chips[1].classList.contains("dirty")).toBe(true);
-    chips[1].querySelector<HTMLButtonElement>(".doc-tab-close")!.click();
-    expect(on.close).toHaveBeenCalledWith(b.id);
-  });
-
-  it("activates a tab when it is pressed", () => {
-    const { strip, on } = setUp();
-    const tabs = new DocTabs<null>();
-    const a = tabs.add("a.pdf");
-    const b = tabs.add("b.pdf");
-    strip.render(tabs.tabs, b.id);
-    const chip = strip.el.querySelector<HTMLElement>(`[data-tab="${a.id}"]`)!;
-    const down = new MouseEvent("pointerdown", { button: 0, clientX: 10, clientY: 10, bubbles: true });
-    Object.defineProperty(down, "pointerId", { value: 1 });
-    chip.dispatchEvent(down);
-    expect(on.activate).toHaveBeenCalledWith(a.id);
-  });
-
-  it("captures the pointer only once a tab is dragged, so the title still takes clicks", () => {
-    const { strip } = setUp();
-    const tabs = new DocTabs<null>();
-    const a = tabs.add("a.pdf");
-    strip.render(tabs.tabs, a.id);
-    const chip = strip.el.querySelector<HTMLElement>(`[data-tab="${a.id}"]`)!;
-    const capture = vi.fn();
-    chip.setPointerCapture = capture;
-    const pointer = (type: string, x: number) => {
-      const ev = new MouseEvent(type, { button: 0, clientX: x, clientY: 10, bubbles: true });
-      Object.defineProperty(ev, "pointerId", { value: 1 });
-      return ev;
-    };
-    chip.dispatchEvent(pointer("pointerdown", 10));
-    expect(capture).not.toHaveBeenCalled();
-    window.dispatchEvent(pointer("pointermove", 40));
-    expect(capture).toHaveBeenCalledWith(1);
-    window.dispatchEvent(pointer("pointerup", 40));
   });
 });

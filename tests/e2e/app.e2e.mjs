@@ -274,8 +274,10 @@ describe("documents", () => {
     const file = copyOf("pdf14-mixed-sizes-rotated.pdf");
     await launch(file);
     await waitForDocument(4);
-    const title = await driver.executeScript(() => document.getElementById("menubar-row").textContent);
-    assert.match(title, /pdf14-mixed-sizes-rotated\.pdf/);
+    // The name sits in the page panel's file list and the window title, no longer in the title bar.
+    const name = await driver.executeScript(() => document.querySelector(".side-tab.active .side-tab-name")?.textContent);
+    assert.match(name, /pdf14-mixed-sizes-rotated\.pdf$/);
+    assert.match(await driver.executeScript(() => document.title), /pdf14-mixed-sizes-rotated\.pdf/);
     assert.equal(await invoke("get_page_count", { filePath: file }), 4);
   });
 
@@ -418,7 +420,7 @@ describe("books", () => {
     assert.equal(await driver.executeScript(() => document.querySelector(".epub-position").textContent), "1 / 3");
     await click(".epub-nav .page-nav-step:last-child");
     await waitFor("chapter 2", () => document.querySelector(".epub-frame").contentDocument?.querySelector("h1")?.textContent === "La forêt");
-    assert.match(await driver.executeScript(() => document.getElementById("menubar-row").textContent), /Le Petit Voyageur/);
+    assert.match(await driver.executeScript(() => document.title), /Le Petit Voyageur/);
   });
 
   test("prints chapters to PDF and puts them together with bookmarks", async (t) => {
