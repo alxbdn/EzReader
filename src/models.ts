@@ -251,9 +251,7 @@ export interface ActiveToolState {
   redactShape: RedactShape;
   stampMark: StampMark;
   stampColor: RgbColor;
-  /** A stamp made from a picture (PNG base64 and height / width), placed instead of the mark. */
   stampImage: { data: string; ratio: number } | null;
-  /** The longest side of a picture stamp, in millimetres. */
   stampSize: number;
   /** The side of a check or cross mark, in millimetres. */
   markSize: number;

@@ -141,8 +141,6 @@ fn column_name(mut i: usize) -> String {
     String::from_utf8(s).unwrap()
 }
 
-/// A cell that holds an amount: currency signs and thousands separators
-/// dropped, accounting brackets "(12.00)" and "−" read as negative.
 fn as_number(s: &str) -> Option<f64> {
     let t: String = s
         .trim()
@@ -185,8 +183,6 @@ fn plain_number(t: &str) -> Option<f64> {
     normalized.parse::<f64>().ok().filter(|v| v.is_finite())
 }
 
-/// Writes every page into a single sheet, one row per non-empty line, so a
-/// table that runs over several pages stays in one place.
 pub fn xlsx(doc: &TextDoc) -> Vec<u8> {
     let mut rows = String::new();
     let mut widths: Vec<usize> = Vec::new();
@@ -309,7 +305,6 @@ mod tests {
         let s1 = part(&z, "xl/worksheets/sheet1.xml");
         assert!(s1.contains("<row r=\"5\"><c r=\"A5\" t=\"inlineStr\"><is><t xml:space=\"preserve\">Name</t></is></c><c r=\"C5\" t=\"inlineStr\">"));
         assert!(s1.contains("<c r=\"B6\"><v>12</v></c><c r=\"C6\"><v>42.5</v></c>"));
-        // Page 2 continues straight after page 1's last row.
         assert!(s1.contains("<row r=\"7\"><c r=\"A7\" t=\"inlineStr\"><is><t xml:space=\"preserve\">Été €</t>"));
         assert!(part(&z, "[Content_Types].xml").contains("/xl/worksheets/sheet1.xml"));
     }

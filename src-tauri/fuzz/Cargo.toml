@@ -11,7 +11,6 @@ cargo-fuzz = true
 libfuzzer-sys = "0.4"
 ezreader = { path = "..", features = ["fuzzing"] }
 
-# Not part of the app's workspace.
 [workspace]
 
 [[bin]]

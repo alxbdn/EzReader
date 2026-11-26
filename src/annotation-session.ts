@@ -108,7 +108,6 @@ export class AnnotationSession {
     return true;
   }
 
-  /** Moves `ann` to `index` in its page's stacking order (0 = bottom). */
   moveTo(ann: Annotation, index: number): boolean {
     const list = this.pages.get(ann.page);
     const idx = list?.indexOf(ann) ?? -1;

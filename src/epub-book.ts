@@ -1,6 +1,5 @@
 import { ZipArchive, ZipError, resolveHref } from "./epub-zip";
 
-/** Why a book can't be opened: not an EPUB at all, or locked by DRM. */
 export class EpubError extends Error {
   constructor(readonly kind: "invalid" | "drm", detail: string) {
     super(detail);
@@ -9,7 +8,6 @@ export class EpubError extends Error {
 
 export interface TocEntry {
   label: string;
-  /** Archive path of the chapter file. */
   path: string;
   fragment: string;
   depth: number;
@@ -19,14 +17,12 @@ export interface BookInfo {
   title: string;
   author: string;
   language: string;
-  /** Archive paths of the chapter files, in reading order. */
   spine: string[];
   toc: TocEntry[];
 }
 
 interface ManifestItem { href: string; type: string; props: string[] }
 
-/** Font obfuscation (IDPF and Adobe) only hides embedded fonts: the text stays readable. */
 const FONT_OBFUSCATION = new Set([
   "http://www.idpf.org/2008/embedding",
   "http://ns.adobe.com/pdf/enc#RC",
@@ -122,14 +118,13 @@ export class EpubBook implements Book, ContentSource {
     if (info.toc.length === 0) {
       const ncx = manifest.get(spineEl?.getAttribute("toc") ?? "") ?? [...manifest.values()].find((m) => m.type === "application/x-dtbncx+xml");
       if (ncx && zip.has(ncx.href)) {
-        try { info.toc = ncxToc(await zip.text(ncx.href), ncx.href); } catch { /* no table of contents */ }
+        try { info.toc = ncxToc(await zip.text(ncx.href), ncx.href); } catch {}
       }
     }
     info.toc = info.toc.filter((t) => spine.includes(t.path));
     return new EpubBook(zip, info, types);
   }
 
-  /** The chapter's content, cleaned of anything active, with its pictures and styles from the archive. */
   async chapter(index: number, urls: ResourceUrls): Promise<Chapter> {
     const path = this.info.spine[index];
     if (path === undefined) throw new EpubError("invalid", "no such chapter");
@@ -154,23 +149,17 @@ export class EpubBook implements Book, ContentSource {
   }
 }
 
-/** A book of any format: its metadata and reading order, and each chapter ready to show. */
 export interface Book {
   readonly info: BookInfo;
   chapter(index: number, urls: ResourceUrls): Promise<Chapter>;
 }
 
-/** Where a chapter's pictures, stylesheets and links lead, for `prepareChapter`. */
 export interface ContentSource {
-  /** What `href`, written in `from`, points to: a path in the book and a fragment; null for anything outside it. */
   resolve(from: string, href: string): { path: string; fragment: string } | null | Promise<{ path: string; fragment: string } | null>;
-  /** The bytes behind a path `resolve` gave, null when the book has none. */
   resource(path: string): Promise<Blob | null>;
-  /** The text of a stylesheet, null when the book has none. */
   stylesheet(path: string): Promise<string | null>;
 }
 
-/** Cleans a chapter of anything active and points its pictures, styles and links at the book's own content. */
 export async function prepareChapter(doc: Document, path: string, language: string, src: ContentSource, urls: ResourceUrls): Promise<Chapter> {
   sanitize(doc);
   const url = async (from: string, href: string): Promise<string> => {
@@ -255,11 +244,9 @@ export interface Chapter {
   bodyClass: string;
   styles: string[];
   body: Element;
-  /** A page that is one picture (a comic page): shown as large as the window allows. */
   picture?: boolean;
 }
 
-/** Blob URLs for the archive's pictures, made once each and revoked with the book. */
 export class ResourceUrls {
   private readonly made = new Map<string, Promise<string>>();
 
@@ -281,7 +268,6 @@ export class ResourceUrls {
   }
 }
 
-/** The pictures as data: URLs, for pages shown outside this window (printing to PDF). */
 export class DataUrls extends ResourceUrls {
   protected override toUrl(b: Blob): Promise<string> {
     return new Promise((resolve, reject) => {
@@ -300,7 +286,6 @@ export function guessType(path: string): string {
 
 const ACTIVE = "script, iframe, frame, frameset, object, embed, applet, base, meta, form, input, button, textarea, select, audio, video, noscript, template, portal";
 
-/** Removes everything that could run code, load something outside the book or submit data. */
 export function sanitize(doc: Document): void {
   for (const el of Array.from(doc.querySelectorAll(ACTIVE))) el.remove();
   for (const el of Array.from(doc.getElementsByTagNameNS("http://www.w3.org/2000/svg", "script"))) el.remove();
@@ -352,7 +337,6 @@ function ncxToc(text: string, from: string): TocEntry[] {
   return out;
 }
 
-/** Where a chapter falls in the table of contents: its first entry, or the last entry before it. */
 export function tocIndexFor(info: BookInfo, chapter: number): number {
   let best = -1;
   let bestAt = -1;

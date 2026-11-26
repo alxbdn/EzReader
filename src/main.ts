@@ -169,7 +169,6 @@ const docs = new DocWorkspace<ParkedDoc>({
   dirtyChanged: () => setDirty(session.isDirty),
 }, samePath);
 
-/** Lights the title bar while a tab dragged from another window, or pages from the panel, hover it. */
 const menubarRow = document.getElementById("menubar-row")!;
 const setTitleBarDropTarget = (on: boolean): void => { menubarRow.classList.toggle("tab-drop-target", on); };
 
@@ -352,14 +351,12 @@ function typingInField(): boolean {
   return !!el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.tagName === "SELECT" || el.isContentEditable);
 }
 
-/** The selected annotation, when it can be copied and no page text is selected instead. */
 function copyableSelection(): Annotation | null {
   const ann = tools.selected;
   if (!ann || !annotations.has(ann) || !copyable(ann) || typingInField()) return null;
   return window.getSelection()?.isCollapsed === false ? null : ann;
 }
 
-/** Copies the selected annotation; false when there is none, so the key copies as usual. */
 function copyAnnotation(): boolean {
   const ann = copyableSelection();
   if (!ann) return false;
@@ -367,7 +364,6 @@ function copyAnnotation(): boolean {
   return true;
 }
 
-/** Pastes the annotation copied last onto the page in view, and selects it. */
 function pasteAnnotation(): void {
   if (refuseIfProtected() || !toolbar.allowed()) return;
   toolbar.setMode("annotate");
@@ -379,14 +375,12 @@ function pasteAnnotation(): void {
   pv.overlay.placeCopy(next.ann, next.steps);
 }
 
-/** Puts a copy of the selected annotation just below and right of it, and selects the copy. */
 function duplicateAnnotation(): void {
   const ann = copyableSelection();
   const pv = ann && viewer.pageViews.find((p) => p.pageNum === ann.page);
   if (ann && pv) pv.overlay.placeCopy(structuredClone(ann), 1);
 }
 
-// The Edit menu's Copy (macOS) lands here; Ctrl/Cmd+C is taken earlier, in the key handler.
 document.addEventListener("copy", (e) => {
   const ann = copyableSelection();
   if (!ann || !e.clipboardData) return;
@@ -507,7 +501,6 @@ function scrollbarSize(): number {
   return size;
 }
 
-/** At launch, size the window to the screen so the opening screen itself is A4 portrait. */
 async function fitWindowToWelcome(): Promise<void> {
   if (!("__TAURI_INTERNALS__" in window)) return;
   try {
@@ -690,7 +683,6 @@ void canPrintHtmlToPdf().then((can) => epubReader.setCanConvert(can)).catch(() =
 
 let convertingEpub = false;
 
-/** Prints the open book to a PDF the user picks, with its table of contents as bookmarks. */
 async function convertEpubToPdf(): Promise<void> {
   const book = epubReader.current;
   if (!book || convertingEpub) return;
@@ -722,7 +714,6 @@ async function convertEpubToPdf(): Promise<void> {
   }
 }
 
-/** The text of each page of a PDF, to find where a section starts. */
 async function pdfPageTexts(path: string): Promise<string[]> {
   const doc = await (await pdfjsLib()).getDocument({ ...SAFE_PDF, url: convertFileSrc(path) + `?t=${Date.now()}` }).promise;
   try {
@@ -744,7 +735,6 @@ function closeEpub(): void {
   if (!session.isOpen) setWelcomeVisible(true);
 }
 
-/** Opens a book here when the window shows nothing, in a new window otherwise. */
 async function openEpub(path: string): Promise<void> {
   if (session.isOpen || docs.count > 0 || epubReader.isOpen) {
     try {
@@ -765,7 +755,6 @@ async function openEpub(path: string): Promise<void> {
   }
 }
 
-/** Shows every part of the window in `language`. */
 function applyLanguage(language: string): void {
   const t = getTranslations(language);
   epubReader.applyTranslations(t);
@@ -818,7 +807,6 @@ settingsModal.onChange(s => {
     if (!startup.filePath) {
       await fitWindowToWelcome();
       reveal();
-      // Load pdf.js once the welcome screen is up, so the first document opens as fast as before.
       requestAnimationFrame(() => setTimeout(() => void pdfjsLib(), 0));
     } else {
       void pdfjsLib();
@@ -1116,7 +1104,6 @@ async function openFile(): Promise<void> {
   await openPath(path);
 }
 
-/** "Open a PDF" in the tab list: several files at once, each in its own tab. */
 async function openFiles(): Promise<void> {
   const paths = await openDocumentsDialog();
   await openInTabs(paths);
@@ -1131,7 +1118,6 @@ async function openInTabs(paths: string[]): Promise<void> {
 async function openPath(path: string): Promise<void> {
   if (openKind(path) === "epub") { await openEpub(path); return; }
   if (epubReader.isOpen) {
-    // The book keeps this window: the document gets its own.
     try { await openInNewWindow(path); } catch (err) { showToast(msg("msgOpenFailed", { err: errText(err) }), true); }
     return;
   }
@@ -1186,7 +1172,6 @@ function samePath(a: string, b: string): boolean {
     : norm(a) === norm(b);
 }
 
-/** The shown document's state, kept while another tab is shown. */
 function parkShown(): ParkedDoc | null {
   if (!shownPath || !viewer.isLoaded()) return null;
   annotations.apply();
@@ -1536,7 +1521,6 @@ pageSidebar.onInsertPdf(async (after) => {
   await insertFiles(after, paths);
 });
 
-/** PDFs and pictures, in the order picked, in one step: each PDF brings all its pages, each picture one page. */
 async function insertFiles(after: number, paths: string[]): Promise<void> {
   const slots: PageSlot[] = [];
   for (const path of paths) {
@@ -2063,8 +2047,6 @@ document.addEventListener("keydown", async (e) => {
   const ctrl  = e.ctrlKey || e.metaKey;
   const shift = e.shiftKey;
 
-  // Menu shortcuts run their menu command, guards included. Zoom in and out are left to the
-  // window listener below, which also takes them from text fields.
   const command = toolbar.commandForKey(e);
   if (command && command.type !== "zoom-in" && command.type !== "zoom-out") {
     e.preventDefault();
@@ -2182,7 +2164,6 @@ function editableTarget(el: Element | null): boolean {
   return !!el?.closest("input, textarea, select, [contenteditable=''], [contenteditable='true']");
 }
 
-/** True when the click lands on the text that is selected, so Copy means that text. */
 function onSelectedText(x: number, y: number): boolean {
   const sel = window.getSelection();
   if (!sel || sel.isCollapsed || sel.toString().trim().length === 0) return false;
@@ -2259,9 +2240,6 @@ async function copySelectedText(): Promise<void> {
   if (text) await navigator.clipboard.writeText(text).catch(() => {});
 }
 
-// One right-click menu, built for what is under the pointer: the zoom level, the files in the
-// panel, the page thumbnails, or the pages themselves. Everywhere else (bars, empty space) none opens. Fields keep
-// the system's own menu (cut, copy, paste).
 document.addEventListener("contextmenu", (e: MouseEvent) => {
   const target = e.target as Element | null;
   if (editableTarget(target)) { ctxMenu.hide(); return; }
@@ -2283,7 +2261,6 @@ document.addEventListener("contextmenu", (e: MouseEvent) => {
 
 window.addEventListener("keydown", async (e: KeyboardEvent) => {
   if (menuOwnsKey(e)) return;
-  // The one place Ctrl/Cmd + and - zoom, ahead of the typing check so they work from any field.
   const command = toolbar.commandForKey(e);
   if (command?.type === "zoom-in" || command?.type === "zoom-out") {
     if (!viewer.isLoaded()) return;
@@ -2316,7 +2293,6 @@ window.addEventListener("keydown", async (e: KeyboardEvent) => {
   }
 });
 
-/** The colour of the text drawn inside `r` on the page canvas. */
 function inkAround(wrapper: HTMLElement, r: DOMRect, background: RgbColor): RgbColor {
   const canvas = wrapper.querySelector<HTMLCanvasElement>(".page-canvas");
   const ctx = canvas?.getContext("2d", { willReadFrequently: true });
@@ -2333,7 +2309,6 @@ function inkAround(wrapper: HTMLElement, r: DOMRect, background: RgbColor): RgbC
   }
 }
 
-/** The colour behind the text drawn inside `r` on the page canvas. */
 function backgroundAround(wrapper: HTMLElement, r: DOMRect): RgbColor {
   const white = { r: 255, g: 255, b: 255 };
   const canvas = wrapper.querySelector<HTMLCanvasElement>(".page-canvas");

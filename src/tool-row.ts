@@ -74,7 +74,6 @@ const COLOR_KEYS: Record<string, Key> = {
   Black: "colBlack", Red: "colRed", Blue: "colBlue", Green: "colGreen", Yellow: "colYellow",
   White: "colWhite", Pink: "colPink", Orange: "colOrange", "Ink blue": "colInkBlue",
 };
-/** The translated name of a preset colour, named in English in the palettes. */
 export function colorName(t: Partial<Translations>, english: string): string {
   const v = COLOR_KEYS[english] ? t[COLOR_KEYS[english]] : undefined;
   return typeof v === "string" ? v : english;
@@ -175,7 +174,6 @@ export class ToolRow {
   private brushBtns = new Map<string, HTMLButtonElement>();
   private brushWrap!: HTMLElement;
   onSync: ((title: string | null, mode: AppMode) => void) | null = null;
-  /** Opens the options panel again, from the summary shown while it is folded. */
   onExpand: (() => void) | null = null;
 
   constructor(private emit: (e: ToolbarEvent) => void, private canSwitch: () => boolean) {
@@ -450,7 +448,6 @@ export class ToolRow {
     this.changed();
   }
 
-  /** The picked picture stamp, recoloured when asked, as the tool places it. */
   private syncStampImage(): void {
     const chip = this.stamps.find((s) => s.id === this.customStamp);
     if (!chip) {
@@ -590,7 +587,6 @@ export class ToolRow {
       seg.append(b);
     }
 
-    // Shapes can drop their outline (like the background); a pencil stroke always shows.
     const shapes = group === "shapes";
     const outline = this.colorRow(ICON_OPT_OUTLINE, "optOutline", INK_COLORS, shapes ? "optNoOutline" : null, (c) => {
       if (c) {
@@ -818,7 +814,6 @@ export class ToolRow {
     this.syncAll();
   }
 
-  /** Picks a stamp just made, so the next click places it. */
   useStamp(id: string): void {
     if (this.group !== "stamp") this.pickGroup("stamp");
     this.pickStamp(id);
@@ -1007,7 +1002,6 @@ export class ToolRow {
     this.hint.textContent = this.tr(key, fb);
   }
 
-  /** One line on the tool's settings, shown in the tool row while the options panel is folded. */
   private syncSummary(): void {
     const parts = this.panelCollapsed && this.mode !== "read" && this.group ? this.summaryParts(this.group) : [];
     this.summary.hidden = parts.length === 0;
@@ -1128,7 +1122,6 @@ export class ToolRow {
     return b;
   }
 
-  /** `el` under a small label, as a block of the options panel. */
   private labelled(key: Key, fb: string, el: HTMLElement): HTMLElement {
     const f = document.createElement("div");
     f.className = "opt-field";

@@ -10,8 +10,6 @@
   xmlns:rescap="http://schemas.microsoft.com/appx/manifest/foundation/windows10/restrictedcapabilities"
   IgnorableNamespaces="uap uap2 uap3 com desktop desktop2 rescap">
 
-  <!-- Name and Publisher must match the identity reserved for EzReader in
-       Microsoft Partner Center (Product identity page). -->
   <Identity
     Name="alxbdn.EzReader"
     Publisher="CN=84E68D20-6D70-4B7F-B292-A07469E8D5A7"
@@ -55,9 +53,6 @@
             <uap2:SupportedVerbs>
               <uap3:Verb Id="print" Parameters="--print &quot;%1&quot;">Print</uap3:Verb>
             </uap2:SupportedVerbs>
-            <!-- Explorer add-in (shell-ext/): page 1 as the file's icon, and
-                 the pages in the preview pane. Same class ids as
-                 shell-ext/src/lib.rs and windows/installer-hooks.nsh. -->
             <desktop2:ThumbnailHandler Clsid="5AE37068-61BA-478F-9D24-EA58E7C1EBF6" />
             <desktop2:DesktopPreviewHandler Clsid="202348CF-BD0B-4EB3-91B2-C87E74F2FD32" />
           </uap:FileTypeAssociation>

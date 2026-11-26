@@ -27,7 +27,7 @@ What it does:
 | `memory_leak_per_round_mb` | Memory that keeps growing round after round |
 | `heap_leak_per_round_mb`, `pdf_worker_heap_end_mb` | JS objects kept alive (page, pdf.js worker) |
 | `canvas_peak_mb` | Page bitmaps not given back when pages scroll away |
-| `dom_nodes_growth` | Page elements kept after a new layout |
+| `dom_nodes_growth_per_page` | Page elements kept after a new layout, per page of the document: a page keeps its layers once drawn, so the total grows with the pages visited |
 | `cpu_idle_percent` | Work still running when nothing happens |
 | `page_errors` | Uncaught errors in the page |
 

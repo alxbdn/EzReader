@@ -4,7 +4,6 @@ import { StampStore } from "../stamp-store";
 import { pictureKind, stampName } from "../stamp-maker-modal";
 import { defaultScope, scopePages } from "../adjust-view";
 
-/** A `w` × `h` picture filled with `fill`, with `ink` painted where `inside(x, y)`. */
 function picture(w: number, h: number, fill: number[], ink?: { color: number[]; inside: (x: number, y: number) => boolean }): Pixels {
   const data = new Uint8ClampedArray(w * h * 4);
   for (let y = 0; y < h; y++) {

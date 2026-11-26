@@ -49,9 +49,6 @@ fn desktop_entry_exists() -> bool {
         || std::path::Path::new("/usr/share/applications/EzReader.desktop").exists()
 }
 
-/// Runs a probe of the system off the main thread. A command without `async` runs on the main
-/// thread, where a slow registry, WinRT or `xdg-mime` call holds up every other command the window
-/// sends at launch, `get_startup_args` among them, and so the first paint.
 async fn off_main_thread<T: Send + Default + 'static>(probe: fn() -> T) -> T {
     tauri::async_runtime::spawn_blocking(probe).await.unwrap_or_default()
 }
@@ -944,7 +941,6 @@ pub fn open_url(url: String) -> CmdResult<()> {
         use winapi::um::winuser::SW_SHOWNORMAL;
         let wide = |s: &str| s.encode_utf16().chain(std::iter::once(0)).collect::<Vec<u16>>();
         let (verb, target) = (wide("open"), wide(&url));
-        // SAFETY: both strings are NUL-terminated and outlive the call.
         let code = unsafe {
             ShellExecuteW(
                 std::ptr::null_mut(),
@@ -1134,10 +1130,6 @@ mod quick_look {
             .is_ok()
     }
 
-    /// An update stops the helper, and Windows only starts it again at the
-    /// next sign-in. So at launch: start it if quick look is on, and turn it
-    /// on with each new version unless the user turned it off in EzReader.
-    /// A second copy exits at once (single-instance mutex).
     pub fn resume(memo: &std::path::Path, opted_out: bool, version: &str) {
         let Some(helper) = helper() else { return };
         let seen = std::fs::read_to_string(memo).ok();
@@ -1186,16 +1178,11 @@ mod quick_look {
 #[derive(Debug, PartialEq, Eq)]
 #[cfg_attr(not(target_os = "windows"), allow(dead_code))]
 pub enum QuickLookResume {
-    /// On: make sure the helper runs.
     Start,
-    /// Off on a new install or after an update, and never turned off in EzReader: turn it on.
     TurnOn,
     Nothing,
 }
 
-/// `seen` is the version that last launched; `opted_out` is set when the user
-/// unticks quick look in EzReader. Turned off elsewhere (Task Manager › Startup
-/// apps) is respected until the next update.
 #[cfg_attr(not(target_os = "windows"), allow(dead_code))]
 pub fn quick_look_after_launch(enabled: bool, opted_out: bool, seen: Option<&str>, version: &str) -> QuickLookResume {
     match (enabled, opted_out, seen.map(str::trim)) {
@@ -1214,7 +1201,6 @@ fn quick_look_files(app: &tauri::AppHandle) -> Option<(std::path::PathBuf, std::
     Some((dir.join("quick-look-seen"), dir.join("quick-look-off")))
 }
 
-/// Called at launch: quick look with Space is on by default and comes back with each update.
 pub fn resume_quick_look(app: tauri::AppHandle) {
     #[cfg(target_os = "windows")]
     if let Some((seen, off)) = quick_look_files(&app) {

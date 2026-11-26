@@ -28,19 +28,16 @@ const SELECT = "#E53935";
 const ZOOM = 4;
 const MAX_PIXELS = 12e6;
 
-/** Which pages Crop and Straighten work on. */
 export type PageScope = "this" | "selection" | "all";
 
 export interface ScopePages { current: number; selection: number[]; total: number }
 
-/** The pages a scope stands for. An empty selection falls back to the current page. */
 export function scopePages(scope: PageScope, p: ScopePages): number[] {
   if (scope === "all") return Array.from({ length: p.total }, (_, i) => i + 1);
   if (scope === "selection" && p.selection.length > 0) return [...p.selection].sort((a, b) => a - b);
   return [p.current];
 }
 
-/** The scope an opening starts with: the selection when there is one beyond the current page. */
 export function defaultScope(p: ScopePages): PageScope {
   return p.selection.length > 1 || (p.selection.length === 1 && p.selection[0] !== p.current) ? "selection" : "this";
 }
@@ -238,7 +235,6 @@ export class AdjustView {
 
   private get current(): PageSetting { return this.settings[this.index]; }
 
-  /** Works on other pages; the pages already set keep their settings. */
   private setScope(scope: PageScope): void {
     if (scope === this.scope || this.busy || !this.doc) return;
     this.scope = scope;

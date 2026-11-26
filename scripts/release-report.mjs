@@ -181,7 +181,7 @@ const PERF_ROWS = [
   ["memory_peak_mb", "Peak memory", "MB"],
   ["memory_leak_per_round_mb", "Memory growth per round", "MB"],
   ["heap_leak_per_round_mb", "JavaScript heap growth per round", "MB"],
-  ["dom_nodes_growth", "DOM nodes growth", ""],
+  ["dom_nodes_growth_per_page", "DOM nodes growth per page", ""],
   ["pdf_worker_heap_end_mb", "PDF worker heap at the end", "MB"],
   ["canvas_peak_mb", "Canvas memory, peak", "MB"],
   ["cpu_idle_percent", "CPU when idle", "%"],

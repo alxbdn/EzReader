@@ -4,7 +4,6 @@ import { ZipArchive, resolveHref } from "../epub-zip";
 import { EpubBook, EpubError, ResourceUrls, sanitize, tocIndexFor } from "../epub-book";
 import { openKind } from "../pictures";
 
-/** A ZIP built in memory: stored entries, or deflated ones when `deflate` is set. */
 async function deflateRaw(data: Uint8Array): Promise<Uint8Array> {
   const source = new ReadableStream<Uint8Array>({ start(c) { c.enqueue(data); c.close(); } });
   const out = source.pipeThrough(new CompressionStream("deflate-raw") as unknown as ReadableWritablePair<Uint8Array, Uint8Array>);

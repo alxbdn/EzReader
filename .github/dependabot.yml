@@ -5,8 +5,6 @@ updates:
     schedule:
       interval: weekly
     groups:
-      # vitest and its plugins share an exact peer version: bumped one by
-      # one, npm ci fails on the conflict.
       vitest:
         patterns: ['vitest', '@vitest/*']
       npm-minor-and-patch:
@@ -17,8 +15,6 @@ updates:
     schedule:
       interval: weekly
     groups:
-      # windows-collections must use the same windows-core as the windows
-      # crate: bumped alone, the build breaks on mismatched trait impls.
       windows:
         patterns: ['windows', 'windows-*']
       cargo-minor-and-patch:

@@ -1,5 +1,3 @@
-//! The annotation record EzReader keeps inside a PDF, and the drawn layer it points at.
-
 use std::collections::HashMap;
 
 use lopdf::{dictionary, Document, IncrementalDocument, Object, ObjectId, Stream};
@@ -7,15 +5,9 @@ use serde::{Deserialize, Serialize};
 
 use super::models::Annotation;
 
-/// EzReader's record of a document's annotations, kept in the PDF next to their drawn layer.
-///
-/// The annotations are stored as data, so they come back editable, and each page that shows
-/// some also gets one content stream with them drawn in (its "layer"), so other readers see
-/// them. The record says which stream is which page's layer.
 #[derive(Serialize, Deserialize, Clone, Default)]
 pub struct AnnotationMeta {
     pub annotations: Vec<Annotation>,
-    /// Page number to the object number and generation of its layer, as stored in the file.
     stream_ids: HashMap<u32, [u32; 2]>,
 }
 
@@ -27,7 +19,6 @@ impl AnnotationMeta {
         meta
     }
 
-    /// Nothing recorded: no annotations and no layer.
     pub fn is_empty(&self) -> bool {
         self.annotations.is_empty() && self.stream_ids.is_empty()
     }
@@ -36,23 +27,18 @@ impl AnnotationMeta {
         !self.stream_ids.is_empty()
     }
 
-    /// The layer drawn on `page`, if it has one.
     pub fn layer(&self, page: u32) -> Option<ObjectId> {
         self.stream_ids.get(&page).map(|&[num, gen]| (num, gen as u16))
     }
 
-    /// Every page's layer, by page number.
     pub fn layers(&self) -> impl Iterator<Item = (u32, ObjectId)> + '_ {
         self.stream_ids.iter().map(|(&page, &[num, gen])| (page, (num, gen as u16)))
     }
 
-    /// Replaces the layers with `layers`, by page number.
     pub fn set_layers(&mut self, layers: impl IntoIterator<Item = (u32, ObjectId)>) {
         self.stream_ids = layers.into_iter().map(|(page, (num, gen))| (page, [num, gen as u32])).collect();
     }
 
-    /// Follows pages that moved: `renumber` maps an old page number to its new one. Annotations
-    /// and layers of pages that are not in it (deleted pages) are dropped.
     pub fn renumber(&mut self, renumber: &HashMap<u32, u32>) {
         self.annotations.retain(|ann| renumber.contains_key(&ann.page()));
         for ann in &mut self.annotations {
@@ -65,8 +51,6 @@ impl AnnotationMeta {
     }
 }
 
-/// Empties layer streams in the update `inc` writes, so the pages no longer draw those
-/// annotations while the record keeps them.
 pub fn blank_layers(inc: &mut IncrementalDocument, layers: impl IntoIterator<Item = ObjectId>) -> Result<(), String> {
     for sid in layers {
         inc.opt_clone_object_to_new_document(sid).map_err(|e| e.to_string())?;
@@ -85,20 +69,12 @@ pub(crate) fn catalog_id(doc: &Document) -> Result<ObjectId, String> {
         .map_err(|_| "Root is not a reference".to_string())
 }
 
-/// The catalog entry that points at EzReader's annotation record.
 const META_KEY: &[u8] = b"CCAnnot";
 
-/// Whether a file's bytes can hold an EzReader annotation record, found without parsing them.
-///
-/// EzReader writes the catalog as a plain object, never inside an object stream, and an
-/// incremental update keeps every earlier revision byte for byte, so a file EzReader annotated
-/// always contains the entry's name. A file without it needs no parse to know it has no record.
 pub fn may_hold_meta(bytes: &[u8]) -> bool {
     memchr::memmem::find(bytes, b"/CCAnnot").is_some()
 }
 
-/// Removes EzReader's annotation record from the catalog, so a flattened file reopens without
-/// editable annotations.
 pub fn drop_meta(doc: &mut Document) {
     let Ok(cat_id) = catalog_id(doc) else { return };
     if let Ok(dict) = doc.get_object_mut(cat_id).and_then(Object::as_dict_mut) {

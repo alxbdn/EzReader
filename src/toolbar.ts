@@ -156,7 +156,6 @@ export class Toolbar {
   private lockBtn!: HTMLButtonElement;
   private infoBtn!: HTMLButtonElement;
   private themeSwitch!: HTMLButtonElement;
-  /** The parts that need a document: everything but the sidebar button and the theme switch. */
   private idleParts: HTMLElement[] = [];
   private lockTexts = { on: "Remove the password…", off: "Protect with a password…" };
   private lockTitles = { on: "Protected: remove the password", off: "Protect with a password" };
@@ -300,8 +299,6 @@ export class Toolbar {
     this.infoBtn.setAttribute("aria-pressed", String(open));
   }
 
-  /** The document's name goes to the window title (taskbar) and its unsaved state to the save
-   *  button; the name itself is shown, and renamed, in the page panel's file list. */
   setDocTitle(name: string | null, dirty: boolean): void {
     this.saveBtn.classList.toggle("dirty", !!name && dirty);
     document.title = name ? `${dirty ? "• " : ""}${name} – EzReader` : "EzReader";
@@ -320,7 +317,6 @@ export class Toolbar {
     this.lockBtn.title = this.lockEntry.title;
   }
 
-  /** Shows the theme the window is in on the toolbar switch. */
   private syncThemeSwitch(): void {
     const dark = document.documentElement.dataset["theme"] === "dark";
     this.themeSwitch.classList.toggle("on", dark);
@@ -333,7 +329,6 @@ export class Toolbar {
     this.setMark("sidebar", visible);
   }
 
-  /** With no document the toolbar stays in place, dimmed and out of reach, so the window keeps one layout. */
   setLoaded(loaded: boolean): void {
     this.contextEl.classList.toggle("tb-idle", !loaded);
     for (const el of this.idleParts) el.inert = !loaded;
@@ -390,7 +385,6 @@ export class Toolbar {
 
   useStamp(id: string): void { this.tools.useStamp(id); }
 
-  /** Tells the tool row the options panel is folded, so it sums the settings up itself. */
   setPanelCollapsed(collapsed: boolean, expand: () => void): void {
     this.tools.onExpand = expand;
     this.tools.setPanelCollapsed(collapsed);
@@ -501,10 +495,6 @@ export class Toolbar {
     return menus.map((m) => ({ ...m, items: m.items.map((i) => i && { ...i, action: () => this.emit(i.command) }) }));
   }
 
-  /**
-   * The command a key press stands for, from the shortcuts the menus show, so a shortcut does
-   * exactly what its menu item does, through the same guards. Ctrl+Shift+Z is redo too.
-   */
   commandForKey(e: KeyPress): ToolbarEvent | null {
     this.shortcuts ??= this.getMenuDefs().flatMap((m) => m.items)
       .filter((i): i is MenuItemDef & { shortcut: string } => !!i?.shortcut)
@@ -515,7 +505,6 @@ export class Toolbar {
 
   private shortcuts: [string, ToolbarEvent][] | null = null;
 
-  /** Runs a command as if its button or menu item had been used. */
   dispatch(e: ToolbarEvent): void { this.emit(e); }
 
   private buildMenuBar(): void {
@@ -733,7 +722,6 @@ export class Toolbar {
     });
     this.zoomInput.addEventListener("blur", () => this.endZoomEdit());
 
-    // Zoom is the level (click to type one), a small up/down pair, and 1:1 while there is room.
     const stack = document.createElement("span");
     stack.className = "zoom-stack";
     const stackBtn = (icon: string, title: string, key: keyof Translations, e: ToolbarEvent): HTMLButtonElement => {

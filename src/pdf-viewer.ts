@@ -13,11 +13,8 @@ import { openUrl, type RedactedPage, type StraightenedPage } from "./tauri-bridg
 import { moveTextRuns, pageMap, reproject, warpToRect, type Point } from "./page-adjustment";
 import { LiveText, hasRealText, layoutOcr, renderOcrLayer } from "./live-text";
 
-/** pdf.js AnnotationMode.ENABLE_FORMS: widgets are drawn by our form controls, not into the page. */
 const ENABLE_FORMS = 2;
 
-// Keeps each font's real name, so editing a line of text can start in the font it was
-// written with.
 const VIEWER_FONTS = { fontExtraProperties: true } as const;
 
 export function toViewportRect(
@@ -171,9 +168,6 @@ export class PdfPageView {
   rendered = false;
   rendering = false;
 
-  // A page only gets its canvases, layers and annotation overlay when it is first drawn or its
-  // overlay is first used: until then it is one sized box, so laying out a 5,000-page document
-  // creates 5,000 elements instead of 35,000 and no overlay at all.
   private _built = false;
   private _overlay: CanvasOverlay | null = null;
   private canvas!: HTMLCanvasElement;
@@ -204,13 +198,11 @@ export class PdfPageView {
     this.wrapper.dataset.page = String(pageNum);
   }
 
-  /** The page's annotation overlay, built with the page's layers on first use, on the current tool. */
   get overlay(): CanvasOverlay {
     this.build();
     return this._overlay!;
   }
 
-  /** The overlay if the page has one yet: for changes that a page built later picks up anyway. */
   get builtOverlay(): CanvasOverlay | null { return this._overlay; }
 
   private build(): void {
@@ -399,7 +391,6 @@ export class PdfPageView {
     this.rendering = false;
   }
 
-  /** What pdf.js knows about one of the page's fonts, by its id in the text content. */
   fontFacts(id: string): { name: string | null; bold: boolean; italic: boolean } | null {
     const objs = this._page?.commonObjs;
     if (!objs?.has(id)) return null;
@@ -650,7 +641,6 @@ export class PdfPageView {
       }
     }
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const annotations: any[] = await (page as any).getAnnotations();
     if (stale()) return;
     const addedUrls = new Set<string>();
@@ -798,7 +788,6 @@ export class PdfViewer {
     goToPage: (page) => this.goToPage(page),
   };
 
-  /** What the annotation overlays of every page report; listen here once, not per page. */
   readonly overlayEvents = new OverlayEvents();
 
   pageDimensions: Array<{ width: number; height: number }> = [];
@@ -1715,10 +1704,6 @@ export async function renderRedactedPages(
   }
 }
 
-/**
- * Every page as a picture with `draw` painted over it (the watermark), ready to replace the page
- * like a redaction. Annotations already written into `filePath` end up under the watermark.
- */
 export async function renderWatermarkedPages(
   filePath: string,
   draw: (ctx: CanvasRenderingContext2D, width: number, height: number) => void,
@@ -1752,7 +1737,6 @@ export async function renderWatermarkedPages(
   }
 }
 
-/** Page 1 of `filePath`, `widthPx` wide, on white: the watermark dialog's preview. */
 export async function renderPagePreview(filePath: string, widthPx: number, pageNum = 1): Promise<HTMLCanvasElement> {
   const doc = await (await pdfjsLib()).getDocument({ ...SAFE_PDF, url: convertFileSrc(filePath) + `?t=${Date.now()}` }).promise;
   try {

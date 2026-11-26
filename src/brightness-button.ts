@@ -1,6 +1,5 @@
 import { brightnessIcon } from "./icons";
 
-/** Which of the three lit levels the icon shows for a brightness. */
 export function brightnessLevel(v: number): 1 | 2 | 3 {
   return v >= 85 ? 3 : v >= 60 ? 2 : 1;
 }
@@ -40,8 +39,6 @@ export class BrightnessButton {
     this.pop.append(this.range, this.label);
     this.el.append(this.button, this.pop);
 
-    // A mouse click leaves the focus on the button, so no focus ring flashes
-    // around the slider; the keyboard (detail 0) moves it to the slider.
     this.button.addEventListener("click", (e) => this.toggle(e.detail === 0));
     this.range.addEventListener("input", () => {
       this.show(Number(this.range.value));

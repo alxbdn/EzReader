@@ -1,18 +1,8 @@
-//! Removes the original words under replaced text from a page's own content, so editing a
-//! line of text is destructive like a redaction: what the white patch hides is gone from
-//! the file, not just covered.
-//!
-//! Each piece of text the page draws (each string of a `Tj`, `'`, `"` or `TJ`) is placed
-//! from the text and graphics state and measured with its font's widths. A string that lies
-//! mostly inside a patch is replaced by an equal move, so the text after it on the same line
-//! stays exactly where it was.
-
 use std::collections::{BTreeMap, HashSet};
 
 use lopdf::content::{Content, Operation};
 use lopdf::{Dictionary, Document, Object, ObjectId, Stream};
 
-/// An area of the page, in PDF user space.
 #[derive(Debug, Clone, Copy)]
 pub struct Area {
     pub x0: f64,
@@ -27,13 +17,11 @@ impl Area {
     }
 }
 
-/// A page's content larger than this is left alone rather than decoded.
 const MAX_CONTENT: usize = 64 * 1024 * 1024;
 
 type Matrix = [f64; 6];
 const IDENTITY: Matrix = [1.0, 0.0, 0.0, 1.0, 0.0, 0.0];
 
-/// `a` then `b`: the PDF convention, where a point p maps to p × a × b.
 fn mul(a: &Matrix, b: &Matrix) -> Matrix {
     [
         a[0] * b[0] + a[1] * b[2],
@@ -68,7 +56,6 @@ fn nums<const N: usize>(ops: &[Object]) -> Option<[f64; N]> {
     Some(out)
 }
 
-/// Glyph widths of one font, in thousandths of the font size.
 struct Widths {
     two_byte: bool,
     simple: BTreeMap<u32, f64>,
@@ -207,7 +194,6 @@ impl<'a> Walker<'a> {
         &self.widths[&key]
     }
 
-    /// How far a string moves the text position, in unscaled text space.
     fn advance(&mut self, bytes: &[u8]) -> f64 {
         let (size, cs, ws) = (self.ts.size, self.ts.char_space, self.ts.word_space);
         let w = self.widths();
@@ -222,7 +208,6 @@ impl<'a> Walker<'a> {
         self.tm = mul(&[1.0, 0.0, 0.0, 1.0, tx * self.ts.scale, 0.0], &self.tm);
     }
 
-    /// True when most of the string drawn from the current position lies in an area.
     fn hidden(&self, adv: f64) -> bool {
         let m = mul(&self.tm, &self.ctm);
         let (sx, sy) = apply(&m, 0.0, 0.0);
@@ -242,7 +227,6 @@ impl<'a> Walker<'a> {
         })
     }
 
-    /// A string, kept or swapped for the move it would have made. Returns the TJ element.
     fn show(&mut self, bytes: &[u8]) -> Object {
         let adv = self.advance(bytes);
         let hide = self.hidden(adv);
@@ -260,7 +244,6 @@ impl<'a> Walker<'a> {
         self.tm = self.tlm;
     }
 
-    /// The operations to write for `op`.
     fn step(&mut self, op: Operation) -> Vec<Operation> {
         let o = &op.operands;
         match op.operator.as_str() {
@@ -361,9 +344,6 @@ impl<'a> Walker<'a> {
     }
 }
 
-/// Erases the text of `page_id`'s own content that lies in `areas`, leaving the streams in
-/// `keep` (EzReader's annotation layers) untouched. Returns how many strings were removed.
-/// A page whose content can't be read safely (inline images, a parse error) is left as is.
 pub fn erase_text(
     doc: &mut Document,
     page_id: ObjectId,
@@ -480,7 +460,6 @@ mod tests {
 
     #[test]
     fn keeps_the_rest_of_a_line_in_place() {
-        // "Hello " is covered; "world" must keep its position after it.
         let (mut doc, page) = page_with("BT /F1 10 Tf 1 0 0 1 100 500 Tm [(Hello ) -200 (world)] TJ ET");
         erase_text(&mut doc, page, &[Area::new(99.0, 497.0, 31.0, 12.0)], &HashSet::new()).unwrap();
         let s = text_of(&doc, page);

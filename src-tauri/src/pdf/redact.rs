@@ -26,10 +26,6 @@ pub fn redact_pages(doc: &mut Document, pages: &[RedactedPage]) -> Result<(), St
     replace_pages(doc, pages, true)
 }
 
-/// Burns a watermark into the given pages: each one becomes its picture, which already shows the
-/// annotations under the watermark, so nothing is left on top of it to lift it off. The editable
-/// annotation record is dropped too, so the copy can't bring the annotations back over the pages;
-/// on the other pages they stay drawn, as in any saved file.
 pub fn watermark_pages(doc: &mut Document, pages: &[RedactedPage]) -> Result<(), String> {
     if pages.is_empty() {
         return Err("no page to watermark".into());

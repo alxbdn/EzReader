@@ -1,13 +1,5 @@
 name: Performance
 
-# Load test of the viewer: a 1500-page PDF (300 of them scanned, read by the
-# background OCR) is opened, scrolled, jumped through and zoomed in a loop
-# while memory, CPU and response times are measured. The job fails when a
-# figure goes past tests/perf/thresholds.json (see tests/perf/README.md).
-#
-# Pull requests and pushes run the quick test (3 rounds, a few minutes).
-# Mondays, and on demand, a soak test runs 15 rounds on a 3000-page PDF.
-
 on:
   push:
     branches: [main]
@@ -23,7 +15,6 @@ env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
-  # Skips the jobs below on pull requests that change documentation only.
   changes:
     uses: ./.github/workflows/changes.yml
 
@@ -31,7 +22,6 @@ jobs:
     name: Load test (${{ (github.event_name == 'pull_request' || github.event_name == 'push') && 'quick' || 'soak' }})
     runs-on: ubuntu-latest
     needs: changes
-    # A docs-only pull request skips this job; if the check itself fails, it still runs.
     if: ${{ !cancelled() && needs.changes.outputs.code != 'false' }}
     timeout-minutes: 45
     steps:

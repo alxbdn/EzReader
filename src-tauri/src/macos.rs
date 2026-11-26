@@ -33,7 +33,6 @@ struct OwnedCfString(CFStringRef);
 
 impl OwnedCfString {
     fn new(s: &str) -> Option<Self> {
-        // SAFETY: the bytes are valid UTF-8 for the given length.
         let r = unsafe { CFStringCreateWithBytes(std::ptr::null(), s.as_ptr(), s.len() as isize, UTF8, 0) };
         (!r.is_null()).then_some(OwnedCfString(r))
     }
@@ -41,7 +40,6 @@ impl OwnedCfString {
 
 impl Drop for OwnedCfString {
     fn drop(&mut self) {
-        // SAFETY: created by a Create/Copy function, released once.
         unsafe { CFRelease(self.0) }
     }
 }
@@ -51,17 +49,14 @@ fn to_string(s: CFStringRef) -> Option<String> {
         return None;
     }
     let mut buf = vec![0 as c_char; 512];
-    // SAFETY: `buf` holds `buf.len()` bytes; the result is NUL-terminated.
     if unsafe { CFStringGetCString(s, buf.as_mut_ptr(), buf.len() as isize, UTF8) } == 0 {
         return None;
     }
-    // SAFETY: CFStringGetCString wrote a NUL-terminated string.
     let c = unsafe { std::ffi::CStr::from_ptr(buf.as_ptr()) };
     Some(c.to_string_lossy().into_owned())
 }
 
 fn own_bundle_id() -> Option<String> {
-    // SAFETY: Get functions: nothing to release.
     unsafe {
         let bundle = CFBundleGetMainBundle();
         if bundle.is_null() {
@@ -73,7 +68,6 @@ fn own_bundle_id() -> Option<String> {
 
 fn pdf_handler() -> Option<String> {
     let ty = OwnedCfString::new(PDF_TYPE)?;
-    // SAFETY: a Copy function: the result is ours to release.
     let handler = unsafe { LSCopyDefaultRoleHandlerForContentType(ty.0, ROLES_ALL) };
     if handler.is_null() {
         return None;
@@ -85,7 +79,6 @@ fn pdf_handler() -> Option<String> {
 fn set_pdf_handler(bundle_id: &str) -> Result<(), String> {
     let ty = OwnedCfString::new(PDF_TYPE).ok_or("CFString")?;
     let id = OwnedCfString::new(bundle_id).ok_or("CFString")?;
-    // SAFETY: both strings live until the end of the call.
     let status = unsafe { LSSetDefaultRoleHandlerForContentType(ty.0, ROLES_ALL, id.0) };
     if status == 0 {
         Ok(())

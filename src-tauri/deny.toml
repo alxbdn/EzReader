@@ -1,16 +1,9 @@
-# Dependency checks run in CI by `cargo deny check` (see .github/workflows/security.yml).
-
 [graph]
-# The app ships on Windows and Linux: check the crates of both.
 targets = ["x86_64-pc-windows-msvc", "x86_64-unknown-linux-gnu"]
 
 [advisories]
-# Every vulnerability fails the build. Unmaintained crates fail too, except
-# the ones below, each pulled in by Tauri itself with no maintained
-# replacement upstream yet. Review them when Tauri updates.
 unmaintained = "all"
 ignore = [
-    # proc-macro-error: compile-time macro of the GTK 3 bindings (Linux webview).
     { id = "RUSTSEC-2024-0370", reason = "build-time macro of gtk-rs 0.18, used by Tauri on Linux" },
 ]
 
@@ -28,9 +21,6 @@ allow = [
     "0BSD",
 ]
 confidence-threshold = 0.9
-# Build-time only: ONNX Runtime's download of its prebuilt library (Linux OCR)
-# checks it with hmac-sha256 and trusts TLS roots from webpki-root-certs.
-# Neither ends up in the app.
 exceptions = [
     { name = "hmac-sha256", allow = ["ISC"] },
     { name = "webpki-root-certs", allow = ["CDLA-Permissive-2.0"] },

@@ -1,10 +1,7 @@
-//! The fonts a document uses, for the document info panel.
-
 use std::collections::BTreeSet;
 
 use lopdf::{Document, Object};
 
-/// A font's name as people know it: "ABCDEF+Calibri-Bold" → "Calibri Bold".
 pub fn display_name(base_font: &[u8]) -> String {
     let raw = String::from_utf8_lossy(base_font);
     let bare = match raw.split_once('+') {
@@ -14,8 +11,6 @@ pub fn display_name(base_font: &[u8]) -> String {
     bare.replace("#20", " ").replace([',', '-'], " ").split_whitespace().collect::<Vec<_>>().join(" ")
 }
 
-/// Every named font in the document, once each, sorted. Descendant CID fonts repeat their
-/// Type 0 parent's name and Type 3 fonts have none, so neither adds a line.
 pub fn font_names(doc: &Document) -> Vec<String> {
     let mut names = BTreeSet::new();
     for obj in doc.objects.values() {

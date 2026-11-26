@@ -28,9 +28,6 @@ pub fn load_incremental(path: impl AsRef<Path>) -> Result<IncrementalDocument, S
     incremental_from(bytes, doc)
 }
 
-/// An incremental update on top of `doc`, parsed from `bytes`, so a caller that already parsed
-/// the file does not parse it again. A file whose cross-reference data had to be repaired is
-/// rewritten first, so the update does not point back at the broken table.
 pub fn incremental_from(bytes: Vec<u8>, mut doc: Document) -> Result<IncrementalDocument, String> {
     if doc.xref_recovery.is_none() {
         return Ok(IncrementalDocument::create_from(bytes, doc));

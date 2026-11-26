@@ -183,7 +183,6 @@ async function pdfInfo(path) {
   return info;
 }
 
-/** A small EPUB: three chapters, a table of contents with a section, a style sheet. */
 function makeEpub() {
   const para = "Il était une fois, au bord d'une rivière tranquille, un petit voyageur qui rêvait de voir le monde. ".repeat(6);
   const chapter = (title, extra = "") =>
@@ -275,7 +274,6 @@ describe("documents", () => {
     const file = copyOf("pdf14-mixed-sizes-rotated.pdf");
     await launch(file);
     await waitForDocument(4);
-    // The name sits in the page panel's file list and the window title, no longer in the title bar.
     const name = await driver.executeScript(() => document.querySelector(".side-tab.active .side-tab-name")?.textContent);
     assert.match(name, /pdf14-mixed-sizes-rotated\.pdf$/);
     assert.match(await driver.executeScript(() => document.title), /pdf14-mixed-sizes-rotated\.pdf/);

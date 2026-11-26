@@ -189,9 +189,7 @@ test.describe("document", () => {
     await start(page, { doc: true });
     const more = page.locator(".tb-more");
     const menu = page.locator(".tb-more-menu");
-    // With room, the actions sit on the bar and the "…" button is hidden.
     const inline = page.locator(".tb-actions .icon-btn");
-    // Export, Compress, Password, Brightness, Page layout, Present, Info.
     await expect(inline).toHaveCount(7);
     await expect(inline.first()).toBeVisible();
     await expect(more).toBeHidden();
@@ -200,10 +198,8 @@ test.describe("document", () => {
       await settle(page, 300);
       await dismiss(page);
     }
-    // Narrow, they fold into the "…" menu.
     await page.setViewportSize({ width: 760, height: 860 });
     await expect(more).toBeVisible();
-    // Brightness and page layout stay on the bar; the rest moves to the menu.
     await expect(inline.first()).toBeHidden();
     await expect(page.locator(".tb-actions .tb-pages")).toBeVisible();
     await more.click();
@@ -271,7 +267,6 @@ test.describe("document", () => {
         await tryClick(group);
         await settle(page);
         if (await page.locator("#adjust-view").isVisible()) {
-          // Crop and Straighten open over the pages: try each page choice, then leave.
           for (const s of await visible(page, ".adj-scope button")) await tryClick(s);
           await page.keyboard.press("Escape");
           await settle(page);

@@ -6,7 +6,6 @@ license = "MIT"
 edition = "2021"
 publish = false
 
-# Built on its own (a DLL Explorer loads), not part of the app's crate.
 [workspace]
 
 [lib]
@@ -17,8 +16,6 @@ crate-type = ["cdylib", "rlib"]
 name = "ezreader-quicklook"
 path = "src/bin/quicklook.rs"
 
-# Pages are drawn by the PDF engine built into Windows (Windows.Data.Pdf):
-# nothing to bundle, and the same `windows` version the app already builds.
 [target.'cfg(windows)'.dependencies]
 windows = { version = "0.62", features = [
   "Data_Pdf",

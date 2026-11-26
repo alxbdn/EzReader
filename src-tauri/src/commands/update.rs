@@ -43,36 +43,26 @@ pub enum UpdateOutcome {
     OtherWindows,
 }
 
-/// What a background check left ready for when EzReader closes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub enum Prepared {
-    /// Downloaded (or already swapped in): it installs when EzReader closes.
     Ready,
-    /// This kind of install cannot update itself silently: keep the button.
     Manual,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum Pending {
-    /// The downloaded installer, run silently when EzReader closes.
     Installer(PathBuf),
-    /// The portable file already holds the new version: it starts next time.
     Swapped(PathBuf),
-    /// `brew upgrade` runs once EzReader has closed.
     Homebrew,
-    /// The downloaded disk image, copied over the app when EzReader closes.
     Dmg(PathBuf),
-    /// Downloaded by the Microsoft Store, installed when EzReader closes.
     #[cfg_attr(not(target_os = "windows"), allow(dead_code))]
     Store,
 }
 
-/// The update downloaded at launch, shared by every window.
 #[derive(Default)]
 pub struct PendingUpdate {
     slot: Mutex<Option<Pending>>,
-    /// Held while one window downloads, so a second window does not download again.
     busy: Mutex<()>,
     relaunch: AtomicBool,
 }
@@ -278,11 +268,8 @@ pub async fn check_for_update(app: tauri::AppHandle) -> CmdResult<UpdateStatus> 
     .map_err(|e| e.to_string())?
 }
 
-/// Called at launch when a newer version is out: downloads it in the
-/// background so it installs, without a click, when EzReader closes.
 #[tauri::command]
 pub async fn prepare_update(app: tauri::AppHandle) -> CmdResult<Prepared> {
-    // A development build must never replace itself with a release.
     if cfg!(debug_assertions) {
         return Ok(Prepared::Manual);
     }
@@ -305,7 +292,6 @@ pub async fn prepare_update(app: tauri::AppHandle) -> CmdResult<Prepared> {
     .map_err(|e| e.to_string())?
 }
 
-/// Channels that can install an update without asking anything.
 fn installs_silently(channel: Channel) -> bool {
     matches!(channel, Channel::Installer | Channel::Portable | Channel::Homebrew | Channel::Dmg | Channel::Store)
 }
@@ -318,8 +304,6 @@ fn stage(channel: Channel, version: &str) -> Result<Option<Pending>, String> {
         return Ok(Some(Pending::Homebrew));
     }
     if channel == Channel::Store {
-        // Asks the Store for the newest version straight away, without
-        // waiting for the Store's own schedule or for it to be open.
         #[cfg(target_os = "windows")]
         return store::download().map(|ready| ready.then_some(Pending::Store));
         #[cfg(not(target_os = "windows"))]
@@ -341,14 +325,12 @@ fn stage(channel: Channel, version: &str) -> Result<Option<Pending>, String> {
     }
 }
 
-/// Called when EzReader exits: installs what `prepare_update` downloaded.
 pub fn apply_on_exit(app: &tauri::AppHandle) {
     let Some(state) = app.try_state::<PendingUpdate>() else { return };
     let Some(pending) = state.take() else { return };
     let _ = apply(pending, state.relaunch.load(Ordering::SeqCst));
 }
 
-/// Silent, and run as an update of the installed version.
 const SILENT_INSTALLER_ARGS: [&str; 2] = ["/S", "/UPDATE"];
 
 fn apply(pending: Pending, relaunch: bool) -> Result<(), String> {
@@ -392,7 +374,6 @@ pub async fn install_update(app: tauri::AppHandle) -> CmdResult<UpdateOutcome> {
         return Ok(UpdateOutcome::OtherWindows);
     }
     if ready {
-        // Already downloaded: quit, and the exit hook installs it and restarts.
         app.state::<PendingUpdate>().relaunch.store(true, Ordering::SeqCst);
         app.exit(0);
         return Ok(UpdateOutcome::Restarting);
@@ -407,7 +388,6 @@ pub async fn install_update(app: tauri::AppHandle) -> CmdResult<UpdateOutcome> {
     Ok(outcome)
 }
 
-/// Passive, restart EzReader after, and run as an update of the installed version.
 const INSTALLER_ARGS: [&str; 3] = ["/P", "/R", "/UPDATE"];
 
 fn run_update(channel: Channel, version: &str) -> CmdResult<UpdateOutcome> {
@@ -432,8 +412,6 @@ fn run_update(channel: Channel, version: &str) -> CmdResult<UpdateOutcome> {
         Channel::Installer => {
             let dest = std::env::temp_dir().join(&asset.name);
             download(asset, &dest, version)?;
-            // /UPDATE: the old version's uninstaller then knows it is an
-            // update and keeps the user's choices (quick look with Space).
             quiet(&dest).args(INSTALLER_ARGS).spawn().map_err(|e| format!("could not start the installer ({e})"))?;
             Ok(UpdateOutcome::Restarting)
         }
@@ -454,8 +432,6 @@ fn replace_self(asset: &Asset, version: &str) -> CmdResult<UpdateOutcome> {
     Ok(UpdateOutcome::Restarting)
 }
 
-/// Puts the new portable file in place of this one, which keeps running
-/// from its new `.old` name. Returns the path the next launch uses.
 fn swap_self(asset: &Asset, version: &str) -> Result<PathBuf, String> {
     let exe = current_exe().ok_or("could not find EzReader's own file")?;
     let new = with_suffix(&exe, ".new");
@@ -539,12 +515,10 @@ fn find_brew() -> Option<&'static str> {
     ["/opt/homebrew/bin/brew", "/usr/local/bin/brew"].into_iter().find(|p| Path::new(p).exists())
 }
 
-/// Runs `brew upgrade` in the background, after EzReader has closed.
 #[cfg(target_os = "macos")]
 fn brew_upgrade_after_exit(relaunch: bool) -> Result<(), String> {
     let brew = find_brew().ok_or("Homebrew not found")?;
     let bundle = running_bundle().unwrap_or_else(|| PathBuf::from("/Applications/EzReader.app"));
-    // $0 = brew, $1 = cask, $2 = bundle to reopen (empty: do not reopen).
     let script = r#""$0" upgrade --cask "$1" >/dev/null 2>&1; [ -n "$2" ] && /usr/bin/open -n "$2""#;
     let reopen_arg = if relaunch { bundle.into_os_string() } else { Default::default() };
     Command::new("/bin/sh")
@@ -574,16 +548,12 @@ fn reopen(bundle: &Path) -> Result<(), String> {
     Ok(())
 }
 
-/// A bundle that can be swapped in place: not run from the disk image itself
-/// nor from the read-only copy macOS makes of quarantined apps.
 #[cfg_attr(not(any(test, target_os = "macos")), allow(dead_code))]
 fn bundle_is_replaceable(bundle: &Path) -> bool {
     let s = bundle.to_string_lossy();
     !s.starts_with("/Volumes/") && !s.contains("/AppTranslocation/")
 }
 
-/// Copies the app out of the downloaded disk image over the running one.
-/// Called once every window has closed.
 #[cfg(target_os = "macos")]
 fn replace_bundle(dmg: &Path) -> Result<PathBuf, String> {
     let bundle = running_bundle().ok_or("not running from an app bundle")?;
@@ -638,8 +608,6 @@ fn copy_bundle_from(mount: &Path, bundle: &Path) -> Result<(), String> {
     Ok(())
 }
 
-/// Microsoft Store updates through `StoreContext`: silent, so no window is
-/// needed, and always to the newest published version.
 #[cfg(target_os = "windows")]
 mod store {
     use windows::core::Interface;
@@ -651,8 +619,6 @@ mod store {
     }
 
     fn context() -> Result<StoreContext, String> {
-        // SAFETY: joins this thread to the multithreaded apartment; a second
-        // call on the same thread only returns an error we can ignore.
         unsafe {
             let _ = windows::Win32::System::WinRT::RoInitialize(windows::Win32::System::WinRT::RO_INIT_MULTITHREADED);
         }
@@ -667,8 +633,6 @@ mod store {
         list.cast::<IIterable<StorePackageUpdate>>().map(Some).map_err(msg)
     }
 
-    /// Downloads every pending update. False when there is none, or when the
-    /// user turned off automatic updates (metered connection, Store settings).
     pub fn download() -> Result<bool, String> {
         let ctx = context()?;
         if !ctx.CanSilentlyDownloadStorePackageUpdates().map_err(msg)? {
@@ -679,11 +643,9 @@ mod store {
         Ok(result.OverallState().map_err(msg)? == StorePackageUpdateState::Completed)
     }
 
-    /// Installs what `download` fetched. Windows ends this process to do it.
     pub fn install(relaunch: bool) -> Result<(), String> {
         if relaunch {
             use windows::Win32::System::Recovery::{RegisterApplicationRestart, REGISTER_APPLICATION_RESTART_FLAGS};
-            // SAFETY: a null command line means "same arguments as now".
             unsafe {
                 let _ =
                     RegisterApplicationRestart(windows::core::PCWSTR::null(), REGISTER_APPLICATION_RESTART_FLAGS(0));
@@ -708,7 +670,6 @@ fn shell_open(target: &str) -> CmdResult<()> {
         use winapi::um::winuser::SW_SHOWNORMAL;
         let wide = |s: &str| s.encode_utf16().chain(std::iter::once(0)).collect::<Vec<u16>>();
         let (verb, target) = (wide("open"), wide(target));
-        // SAFETY: both strings are NUL-terminated and outlive the call.
         let code = unsafe {
             ShellExecuteW(
                 std::ptr::null_mut(),
@@ -856,10 +817,8 @@ mod tests {
         for c in [Channel::Installer, Channel::Portable, Channel::Homebrew, Channel::Dmg, Channel::Store] {
             assert!(installs_silently(c), "{c:?}");
         }
-        // Outside Windows there is no Store to ask.
         #[cfg(not(target_os = "windows"))]
         assert_eq!(stage(Channel::Store, "1.0.0"), Ok(None));
-        // A .deb needs the user's password.
         for c in [Channel::Deb, Channel::Other] {
             assert!(!installs_silently(c), "{c:?}");
             assert_eq!(stage(c, "1.0.0"), Ok(None));

@@ -41,7 +41,6 @@ import type { SelectionOwner, ToolSelection } from "./tool-selection";
 
 export type ShapeAnnotation = RectAnnotation | CircleAnnotation | InkAnnotation;
 
-/** The words on the selection pill, in the window's language. */
 export interface SelectionPillLabels {
   color: string;
   copyText: string;
@@ -56,13 +55,11 @@ let pillLabels: SelectionPillLabels = {
 };
 let pillLabelsVersion = 0;
 
-/** Sets the pill's words; pills already shown are rebuilt on their next redraw. */
 export function setSelectionPillLabels(labels: SelectionPillLabels): void {
   pillLabels = labels;
   pillLabelsVersion++;
 }
 
-/** The colours the pill offers for each kind; kinds without one keep the colour they were made with. */
 const palettes: Partial<Record<Annotation["kind"], [string, string][]>> = {
   highlight: HIGHLIGHT_PRESETS,
   rect: INK_PRESETS,
@@ -74,7 +71,6 @@ const palettes: Partial<Record<Annotation["kind"], [string, string][]>> = {
   signature: SIGNATURE_PRESETS,
 };
 
-/** The colour the pill shows for `ann`, or null when it has none to change (pictures, scanned signatures, redactions). */
 export function annotationColor(ann: Annotation): RgbColor | null {
   if (ann.kind === "signature") return ann.vector && ann.color ? ann.color : null;
   return "color" in ann ? ann.color : null;
@@ -82,7 +78,6 @@ export function annotationColor(ann: Annotation): RgbColor | null {
 
 const NOTE_W = 150;
 const NOTE_H = 100;
-/** How far, in points, each pasted or duplicated annotation moves from the one before. */
 const COPY_NUDGE_PT = 12;
 const NOTE_FONT = 10;
 const NOTE_PAD = 6;
@@ -298,8 +293,6 @@ export class CanvasOverlay implements SelectionOwner {
     ann.italic    = style.italic;
     ann.underline = style.underline;
     ann.alignment = style.alignment;
-    // Replaced text is one line that grows with its font: kept at its old width,
-    // a bigger size would wrap it over the lines below.
     if (ann.cover) ann.width = Math.max(1, this.fitTextWidth(ann.content, { ...ann, fontFamily: ann.fontFamily ?? "helvetica", fontName: ann.fontName }));
     this.redrawCommitted();
     this.session.edited();
@@ -583,8 +576,6 @@ export class CanvasOverlay implements SelectionOwner {
     }
     for (const ann of this.committed) {
       if (ann === this.editingAnn) {
-        // While replaced text is retyped, keep the patch over the original
-        // words: without it both texts show through the edit box.
         if (ann.kind === "text" && ann.cover) this.drawCover(ann.cover);
         continue;
       }
@@ -631,11 +622,6 @@ export class CanvasOverlay implements SelectionOwner {
     }
   }
 
-  /**
-   * The floating pill under the selected annotation: its colour, then copy (highlights) or
-   * duplicate, then delete. Every kind gets the same pill; a control only shows when it applies.
-   * It is rebuilt when the selection or its colour changes, and only moved otherwise.
-   */
   private syncSelectionPill(): void {
     const ann = this.selected && this.committed.includes(this.selected) && this.selected !== this.editingAnn
       && (this.activeTool === "select" || this.selected.kind === "highlight")
@@ -743,14 +729,12 @@ export class CanvasOverlay implements SelectionOwner {
     const pad = ann.kind === "highlight" ? 2 : 5;
     const pillW = pop.offsetWidth || 128;
     const below = b.bottom + pad + 6;
-    // Under the annotation when it fits on the page, above it otherwise.
     const top = below + 36 <= pageH ? below : Math.max(4, b.top - pad - 6 - 36);
     const right = Math.max(4, Math.min(pageW - pillW - 4, pageW - b.right - pad));
     pop.style.top = `${Math.round(top)}px`;
     pop.style.right = `${Math.round(right)}px`;
   }
 
-  /** Gives `ann` a new colour as one undoable step, and tells the toolbar so its options follow. */
   private recolor(ann: Annotation, color: RgbColor): void {
     if (ann.kind === "highlight") {
       this.style.highlightColor = { ...color };
@@ -1268,7 +1252,6 @@ export class CanvasOverlay implements SelectionOwner {
       }
       const hit = this.hitTest(e.offsetX, e.offsetY);
       this.selected = hit;
-      // Only the main button moves an annotation; a right click just selects it.
       if (hit && e.button === 0) {
         this.changeNotified = false;
         const bounds = this.getAnnBounds(hit);
@@ -1646,7 +1629,6 @@ export class CanvasOverlay implements SelectionOwner {
       x: x0, y: y0, width: w, height: h,
       points: pdf.map(([x, y]) => [round((x - x0) / w), round((y - y0) / h)]),
       color: { ...this.style.shapeColor },
-      // A line or arrow without an outline would be invisible: "No outline" only applies to shapes.
       strokeWidth: Math.max(1, this.style.strokeWidth),
       fillColor: !arrow && this.activeTool === "ink" && this.style.fillColor ? { ...this.style.fillColor } : null,
       opacity: this.style.opacity,
@@ -1793,14 +1775,8 @@ export class CanvasOverlay implements SelectionOwner {
 
   };
 
-  /**
-   * A right click on an annotation selects it and shows its pill, the one menu annotations have;
-   * the page's own menu (Copy) only belongs to selected text, so it doesn't open here.
-   */
   private onContextMenu = (e: MouseEvent): void => {
     e.preventDefault();
-    // A right click on an annotation shows its pill; anywhere else on the page it goes on to the
-    // page's own menu, except while a drawing tool is in hand.
     if (this.activeTool !== "select") { e.stopPropagation(); return; }
     const hit = this.hitTest(e.offsetX, e.offsetY) ?? this.hitHighlight(e.offsetX, e.offsetY);
     if (!hit) return;
@@ -1826,9 +1802,6 @@ export class CanvasOverlay implements SelectionOwner {
     const input = document.createElement("div");
     input.contentEditable = "true";
     input.textContent = ann.content;
-    // The box's 4px padding is taken off its left edge so the typed text sits
-    // exactly where the drawn text was, and replaced text keeps an opaque
-    // background so the original words never show through.
     const bg = ann.cover ? rgbToCss(ann.cover.color) : "transparent";
     input.style.cssText = `
       position: absolute;
@@ -1989,10 +1962,6 @@ export class CanvasOverlay implements SelectionOwner {
     return ann;
   }
 
-  /**
-   * Adds `ann`, a copy made for this page, nudged `steps` times down and right and kept on the
-   * page, then selects it. Returns false when the page is not shown.
-   */
   placeCopy(ann: Annotation, steps: number): boolean {
     if (!this.shown) return false;
     ann.page = this.currentPage;
@@ -2042,9 +2011,6 @@ export class CanvasOverlay implements SelectionOwner {
   editTextAt(clientX: number, clientY: number): boolean {
     const r = this.canvas.getBoundingClientRect();
     const cx = clientX - r.left, cy = clientY - r.top;
-    // A click on the patch of replaced text reopens that replacement, even past
-    // the end of a shorter new text: otherwise it would replace the hidden
-    // original a second time and stack two texts.
     const hit = this.hitTest(cx, cy) ?? [...this.committed].reverse().find((a): a is TextAnnotation => {
       if (a.kind !== "text" || !a.cover) return false;
       const c = this.boxOf(a.cover);

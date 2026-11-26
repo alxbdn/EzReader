@@ -64,7 +64,6 @@ impl PreviewHandler {
         }
     }
 
-    /// The rectangle Explorer asked for, cut to the pane it really has.
     fn pane_rect(&self) -> RECT {
         let r = self.rect.get();
         let mut pane = RECT::default();

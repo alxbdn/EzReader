@@ -14,7 +14,6 @@ export function splitFileName(name: string): [string, string] {
 
 export function isValidFileStem(stem: string): boolean {
   if (!stem.trim() || stem !== stem.trimEnd() || stem.endsWith(".")) return false;
-  // eslint-disable-next-line no-control-regex
   if (/[<>:"/\\|?*\u0000-\u001f]/.test(stem)) return false;
   return !/^(con|prn|aux|nul|com[1-9]|lpt[1-9])$/i.test(stem);
 }

@@ -1,5 +1,3 @@
-/** A small, read-only ZIP reader for EPUB files: stored and deflated entries, no encryption, no ZIP64. */
-
 export class ZipError extends Error {}
 
 interface Entry {
@@ -10,7 +8,6 @@ interface Entry {
   encrypted: boolean;
 }
 
-/** Upper bound for one unpacked entry, so a hostile file can't fill the memory. */
 export const MAX_ENTRY_SIZE = 64 * 1024 * 1024;
 
 export class ZipArchive {
@@ -85,7 +82,6 @@ export class ZipArchive {
 type Inflater = (raw: Uint8Array) => Promise<Uint8Array>;
 let fallback: Inflater | null = null;
 
-/** Unpacks deflated entries where the webview has no `DecompressionStream` (older macOS WebKit). */
 export function setInflateFallback(f: Inflater): void { fallback = f; }
 
 async function inflate(raw: Uint8Array, expected: number): Promise<Uint8Array> {
@@ -112,14 +108,13 @@ async function inflate(raw: Uint8Array, expected: number): Promise<Uint8Array> {
   return out;
 }
 
-/** Resolves `href` (URL-encoded, maybe with a #fragment) against the folder of `from`, inside the archive. */
 export function resolveHref(from: string, href: string): { path: string; fragment: string } {
   const hash = href.indexOf("#");
   const fragment = hash >= 0 ? href.slice(hash + 1) : "";
   let rel = hash >= 0 ? href.slice(0, hash) : href;
   const q = rel.indexOf("?");
   if (q >= 0) rel = rel.slice(0, q);
-  try { rel = decodeURIComponent(rel); } catch { /* keep as written */ }
+  try { rel = decodeURIComponent(rel); } catch {}
   if (rel === "") return { path: from, fragment };
   const parts = rel.startsWith("/") ? [] : from.split("/").slice(0, -1);
   for (const seg of rel.split("/")) {

@@ -3,14 +3,11 @@ import { ICON_COPY, ICON_LOCK, ICON_WATERMARK } from "./icons";
 import { parsePageRange } from "./page-range";
 import { drawWatermark, newCopyCode, WATERMARK_MAX_CHARS, type WatermarkOptions } from "./watermark";
 
-/** What the dialog asks for: the watermark, and the pages it goes on. */
 export type WatermarkRequest = WatermarkOptions & { pages: number[] };
 type ConfirmHandler = (o: WatermarkRequest) => void;
-/** Page `page` of the document, `widthPx` wide, without the watermark. */
 export type PagePreview = (widthPx: number, page: number) => Promise<HTMLCanvasElement>;
 type PageChoice = "all" | "this" | "pick";
 
-/** The pages a choice stands for, or null when the typed pages can't be read. */
 export function watermarkPages(choice: PageChoice, typed: string, current: number, total: number): number[] | null {
   if (choice === "all") return Array.from({ length: total }, (_, i) => i + 1);
   if (choice === "this") return [current];
@@ -20,9 +17,7 @@ export function watermarkPages(choice: PageChoice, typed: string, current: numbe
 const PREVIEW_CSS_WIDTH = 250;
 const LOUPE_ZOOM = 4;
 const LOUPE_RADIUS = 95;
-/** The loupe's picture is drawn this many times sharper than it shows, so the micro-text reads clearly. */
 const LOUPE_SHARPNESS = 2;
-/** The widest loupe picture, in pixels, to keep memory in check. */
 const LOUPE_MAX_WIDTH = 4000;
 
 export class WatermarkModal extends Modal {
@@ -189,7 +184,6 @@ export class WatermarkModal extends Modal {
     this.loadPreview();
   }
 
-  /** The pages to watermark, or null when the typed pages can't be read. */
   pages(): number[] | null {
     return watermarkPages(this.choice, this.pageInput.value, this.current, this.total);
   }
@@ -233,7 +227,6 @@ export class WatermarkModal extends Modal {
     super.close();
   }
 
-  /** Shows the first page to be watermarked. */
   private loadPreview(): void {
     const preview = this.preview;
     const page = this.pages()?.[0] ?? this.current;
@@ -315,12 +308,10 @@ export class WatermarkModal extends Modal {
   }
 }
 
-/** The width of the loupe's picture of a preview `baseWidth` pixels wide. */
 export function loupeWidth(baseWidth: number): number {
   return Math.round(Math.min(LOUPE_MAX_WIDTH, Math.max(baseWidth * LOUPE_ZOOM, 1000) * LOUPE_SHARPNESS));
 }
 
-/** `base` copied onto `target`, with the watermark over it unless `o` is null (already drawn). */
 function paint(target: HTMLCanvasElement, base: HTMLCanvasElement, o: WatermarkOptions | null, copyLabel: string): void {
   target.width = base.width;
   target.height = base.height;

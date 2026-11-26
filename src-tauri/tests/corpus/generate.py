@@ -1,19 +1,4 @@
 #!/usr/bin/env python3
-"""Builds the PDF compatibility corpus in this folder.
-
-The PDFs are committed: CI only reads them, so it needs none of the tools
-below. Run this again only to add a case or to change one:
-
-    pip install reportlab pikepdf pillow
-    sudo apt-get install qpdf ghostscript libtiff-tools
-    python3 src-tauri/tests/corpus/generate.py
-
-Each file stands for a kind of PDF people open in EzReader: what Word,
-scanners, Acrobat, old tools and password tools write. The huge document is
-not here (it would weigh down the repository): corpus_tests.rs builds it.
-Every user password is the one in password.txt (fixture data, not a secret).
-"""
-
 import io
 import os
 import random
@@ -37,17 +22,13 @@ LOREM = (
     "de ce qui suit, article par article, sans réserve ni condition."
 )
 
-
 def out(name):
     return os.path.join(HERE, name)
-
 
 def run(*cmd):
     subprocess.run(cmd, check=True)
 
-
 def text_doc(path, pages=3, sizes=(A4,), rotate=None):
-    """A plain text document, like a word processor's export."""
     c = canvas.Canvas(path, pagesize=sizes[0], invariant=1)
     c.setTitle("Corpus text document")
     for i in range(pages):
@@ -65,25 +46,18 @@ def text_doc(path, pages=3, sizes=(A4,), rotate=None):
         c.showPage()
     c.save()
 
-
 def classic_and_old_versions():
     tmp = out("_text.pdf")
     text_doc(tmp, pages=4, sizes=(A4, letter, landscape(A5)), rotate={2: 90})
-    # Ghostscript rewrites it as PDF 1.3 with a classic xref table.
     run("gs", "-q", "-dNOPAUSE", "-dBATCH", "-dSAFER", "-sDEVICE=pdfwrite",
         "-dCompatibilityLevel=1.3", f"-sOutputFile={out('pdf13-ghostscript.pdf')}", tmp)
     shutil.copy(tmp, out("pdf14-mixed-sizes-rotated.pdf"))
-    # Object streams and a cross-reference stream (Acrobat, iLovePDF).
     run("qpdf", "--object-streams=generate", "--force-version=1.5", tmp, out("pdf15-object-streams.pdf"))
-    # Linearized ("fast web view").
     run("qpdf", "--linearize", tmp, out("linearized.pdf"))
-    # PDF 2.0 header.
     run("qpdf", "--force-version=2.0", tmp, out("pdf20.pdf"))
     os.remove(tmp)
 
-
 def incremental_updates():
-    """Two revisions: the file was edited and saved incrementally once."""
     tmp = out("_inc.pdf")
     text_doc(tmp, pages=2)
     pdf = pikepdf.open(tmp)
@@ -91,8 +65,6 @@ def incremental_updates():
     pdf.save(out("incremental-updates.pdf"), static_id=True)
     pdf.close()
     os.remove(tmp)
-    # Append revision 2 by hand: a new Info object, a new xref section and a
-    # trailer pointing at the previous one.
     with open(out("incremental-updates.pdf"), "rb") as f:
         data = f.read()
     prev = int(data[data.rindex(b"startxref") + 9:].split()[0])
@@ -112,9 +84,7 @@ def incremental_updates():
     with open(out("incremental-updates.pdf"), "wb") as f:
         f.write(data + body + xref)
 
-
 def scan_picture(seed, mode):
-    """A page photographed or scanned: grey paper, text, a little tilt and noise."""
     rnd = random.Random(seed)
     img = Image.new("L", (1240, 1754), 235)
     d = ImageDraw.Draw(img)
@@ -129,9 +99,7 @@ def scan_picture(seed, mode):
     img = img.filter(ImageFilter.GaussianBlur(0.6))
     return img if mode == "L" else img.point(lambda v: 255 if v > 140 else 0).convert("1")
 
-
 def scanned():
-    # JPEG pages, as a phone or a flatbed scanner in colour mode writes them.
     c = canvas.Canvas(out("scanned-jpeg.pdf"), pagesize=A4, invariant=1)
     for page in range(2):
         buf = io.BytesIO()
@@ -141,15 +109,12 @@ def scanned():
         c.drawImage(ImageReader(buf), 0, 0, *A4)
         c.showPage()
     c.save()
-    # Black and white CCITT G4 pages, as office copiers write them.
     with tempfile.TemporaryDirectory() as tmp:
         tif = os.path.join(tmp, "scan.tif")
         scan_picture(7, "1").save(tif, compression="group4", dpi=(150, 150))
         run("tiff2pdf", "-o", out("scanned-ccitt-g4.pdf"), tif)
 
-
 def forms():
-    """An AcroForm: text, check box, radio buttons, list and combo box."""
     c = canvas.Canvas(out("form-acroform.pdf"), pagesize=A4, invariant=1)
     f = c.acroForm
     c.setFont("Helvetica", 12)
@@ -166,9 +131,7 @@ def forms():
     c.showPage()
     c.save()
 
-
 def unicode_links_outlines():
-    """Embedded TrueType (subset, Identity-H), links and bookmarks."""
     pdfmetrics.registerFont(TTFont("DejaVu", FONT))
     c = canvas.Canvas(out("unicode-links-outlines.pdf"), pagesize=A4, invariant=1)
     for i, title in enumerate(["Français — été", "Ελληνικά", "Русский текст"]):
@@ -187,9 +150,7 @@ def unicode_links_outlines():
     c.showOutline()
     c.save()
 
-
 def existing_annotations():
-    """Annotations written by another viewer (a highlight and a sticky note)."""
     tmp = out("_ann.pdf")
     text_doc(tmp, pages=1)
     pdf = pikepdf.open(tmp)
@@ -209,7 +170,6 @@ def existing_annotations():
     pdf.close()
     os.remove(tmp)
 
-
 def encrypted():
     with open(out("password.txt"), "w") as f:
         f.write(PASSWORD + "\n")
@@ -224,7 +184,6 @@ def encrypted():
     ]:
         pdf.save(out(name), encryption=pikepdf.Encryption(user=PASSWORD, owner="owner-" + PASSWORD, **kw),
                  static_id=True)
-    # No password to open, but printing and copying are restricted.
     pdf.save(out("encrypted-owner-only.pdf"),
              encryption=pikepdf.Encryption(user="", owner="owner-" + PASSWORD, R=4, aes=True,
                                            allow=pikepdf.Permissions(extract=False, print_highres=False,
@@ -233,9 +192,7 @@ def encrypted():
     pdf.close()
     os.remove(tmp)
 
-
 def damaged_xref():
-    """Every xref offset is wrong: readers must rebuild the table."""
     src = out("pdf13-ghostscript.pdf")
     data = bytearray(open(src, "rb").read())
     at = data.rindex(b"\nxref") + 1
@@ -249,7 +206,6 @@ def damaged_xref():
         fixed.append(line)
     data[at:] = b"\n".join(fixed)
     open(out("damaged-xref-offsets.pdf"), "wb").write(data)
-
 
 def main():
     for f in os.listdir(HERE):
@@ -266,7 +222,6 @@ def main():
     for f in sorted(os.listdir(HERE)):
         if f.endswith(".pdf"):
             print(f"{os.path.getsize(out(f)):>9}  {f}")
-
 
 if __name__ == "__main__":
     main()

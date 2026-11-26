@@ -5,7 +5,6 @@ const PICTURE = /\.(jpe?g|png|gif|webp|bmp|avif)$/i;
 
 const byName = new Intl.Collator(undefined, { numeric: true, sensitivity: "base" });
 
-/** A comic book archive (.cbz): its pictures, one page each, in name order. */
 export class CbzBook implements Book, ContentSource {
   private constructor(private readonly zip: ZipArchive, readonly info: BookInfo) {}
 
@@ -31,9 +30,8 @@ export class CbzBook implements Book, ContentSource {
         info.title = field("Title") || [series, number && `#${number}`].filter(Boolean).join(" ");
         info.author = field("Writer");
         info.language = field("LanguageISO");
-      } catch { /* the pictures are what matters */ }
+      } catch {}
     }
-    // Pictures sorted in folders: each folder is a chapter.
     const folder = (p: string) => p.slice(0, p.lastIndexOf("/") + 1);
     const folders = new Set(pages.map(folder));
     if (folders.size > 1) {

@@ -1,7 +1,6 @@
 import { DataUrls, type BookInfo, type Chapter, type Book } from "./epub-book";
 import { BASE_CSS } from "./epub-reader";
 
-/** Paper look: black text on white, no reader frame. Page size and margins come from the print settings. */
 export const PRINT_CSS = `
 html { font-size: 11pt !important; background: #fff !important; color: #000 !important; }
 body { margin: 0 !important; padding: 0 !important; max-width: none !important; background: #fff !important; color: #000 !important; }
@@ -12,10 +11,8 @@ p { orphans: 2; widows: 2; }
 a { color: inherit; text-decoration: none; }
 `;
 
-/** Nothing loads or runs in the printed page except its own styles and inlined pictures. */
 const PRINT_CSP = "default-src 'none'; img-src data:; style-src 'unsafe-inline'; font-src data:";
 
-/** A standalone HTML page for one chapter, ready to print. */
 export function printableHtml(chapter: Chapter, title: string): string {
   const doc = document.implementation.createHTMLDocument(title);
   doc.documentElement.lang = chapter.language;
@@ -45,7 +42,6 @@ function squash(s: string): string {
   return s.toLowerCase().normalize("NFKD").replace(/[^\p{L}\p{N}]/gu, "");
 }
 
-/** The first page, from `from` on, whose text holds `label` (ignoring case, spaces and punctuation); -1 if none. */
 export function findPage(texts: string[], label: string, from = 0): number {
   const needle = squash(label);
   if (needle.length < 3) return -1;
@@ -57,10 +53,6 @@ export function findPage(texts: string[], label: string, from = 0): number {
 
 export interface Bookmark { title: string; page: number; depth: number }
 
-/**
- * Bookmarks from the table of contents: each entry points to the first page of its chapter,
- * or, for a section inside a chapter, to the page where its title is printed.
- */
 export async function planBookmarks(
   info: BookInfo,
   starts: number[],
@@ -86,16 +78,13 @@ export async function planBookmarks(
 }
 
 export interface BookPdfDeps {
-  /** Prints each page to a PDF, in order; returns their paths. */
   printPages(html: string[], done: (n: number) => void): Promise<string[]>;
   pageCount(path: string): Promise<number>;
   pageTexts(path: string): Promise<string[]>;
-  /** Puts the chapter PDFs together; returns the path of the whole book. */
   merge(parts: { path: string; pages: number }[]): Promise<string>;
   finish(input: string, bookmarks: Bookmark[], title: string, author: string): Promise<void>;
 }
 
-/** Prints the whole book to one PDF with the table of contents as bookmarks. */
 export async function bookToPdf(book: Book, deps: BookPdfDeps, progress: (done: number, total: number) => void): Promise<void> {
   const { info } = book;
   const urls = new DataUrls();
