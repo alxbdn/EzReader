@@ -291,6 +291,18 @@ pub fn redact_pages(input_path: String, output_path: String, pages: Vec<redact::
 }
 
 #[tauri::command(async)]
+pub fn watermark_pages(input_path: String, output_path: String, pages: Vec<redact::RedactedPage>) -> CmdResult<()> {
+    crate::grants::check_all([&input_path, &output_path])?;
+    let mut doc = Document::load(&input_path).map_err(|e| e.to_string())?;
+    let page_count = doc.get_pages().len();
+    redact::watermark_pages(&mut doc, &pages)?;
+    if doc.get_pages().len() != page_count {
+        return Err(PdfError::new(ErrorCode::PageCountChanged, "Watermark aborted: page count changed"));
+    }
+    fsutil::save_document(&mut doc, &output_path).map_err(PdfError::from)
+}
+
+#[tauri::command(async)]
 pub fn straighten_pages(
     input_path: String,
     output_path: String,

@@ -3179,6 +3179,50 @@ body.read-only .page-form-layer { pointer-events: none; }
 .ez-progress { display: flex; flex-direction: column; gap: 6px; }
 .compress-box.running .ez-list, .compress-box.running .ez-compare, .compress-box.running .ez-warn { opacity: 0.5; pointer-events: none; }.ez-warn.hidden, .ez-progress.hidden { display: none; }
 
+/* ══ Watermark ══ */
+.watermark-box { width: 640px; }
+.wm-layout { display: grid; grid-template-columns: minmax(0, 1fr) 290px; gap: 20px; align-items: stretch; }
+.wm-form { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.wm-text { height: auto; min-height: 76px; padding: 8px 10px; line-height: 1.4; resize: none; user-select: text; }
+.wm-under { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; font-size: 11px; color: var(--muted-foreground); }
+.wm-count, .wm-value { font-variant-numeric: tabular-nums; }
+.wm-value { font-size: 12px; font-weight: 500; color: var(--foreground); }
+.wm-range { width: 100%; margin: 0; }
+.wm-code-wrap { display: flex; flex-direction: column; gap: 6px; }
+.wm-code-line { display: flex; align-items: center; gap: 6px; margin-left: 24px; }
+.wm-code-line.off { opacity: 0.5; }
+.wm-code {
+  font-family: ui-monospace, Consolas, Menlo, monospace; font-weight: 600; letter-spacing: 0.08em;
+  background: var(--muted); border: 1px solid var(--border); border-radius: var(--radius-md); padding: 3px 8px;
+  user-select: text;
+}
+.wm-hint { font-size: 11px; color: var(--muted-foreground); line-height: 1.4; }
+.wm-code-wrap > .wm-hint { margin-left: 24px; }
+.wm-spacer { flex: 1; }
+.wm-note {
+  display: flex; gap: 10px; padding: 10px 12px; border-radius: var(--radius);
+  background: var(--muted); color: var(--muted-foreground); font-size: 12px; line-height: 1.45;
+}
+.wm-note svg { flex: none; margin-top: 1px; color: var(--foreground); width: 14px; height: 14px; }
+.wm-preview {
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px;
+  padding: 14px 12px 10px; border-radius: var(--radius);
+  background: var(--viewer) radial-gradient(circle, var(--viewer-dot) 1px, transparent 1.6px);
+  background-size: 14px 14px;
+}
+.wm-stage { position: relative; line-height: 0; cursor: zoom-in; }
+.wm-page { display: block; width: 250px; background: #fff; box-shadow: var(--page-shadow); }
+.wm-loupe {
+  position: absolute; width: 160px; height: 160px; border-radius: 50%; overflow: hidden; pointer-events: none;
+  border: 3px solid var(--foreground); box-shadow: var(--shadow-lg); background: #fff;
+  opacity: 0; transition: opacity 0.12s ease-out;
+}
+.wm-loupe.on { opacity: 1; }
+.wm-loupe canvas { position: absolute; left: 0; top: 0; transform-origin: 0 0; }
+.watermark-box.running .wm-layout { opacity: 0.5; pointer-events: none; }
+.wm-progress[hidden] { display: none; }
+@media (prefers-reduced-motion: reduce) { .wm-loupe { transition: none; } }
+
 /* Brightness. In the dark theme only the pages are dimmed: the chrome is
    already dark. In the light theme the whole window dims with them, so the
    white bars around a dimmed page don't glare. */

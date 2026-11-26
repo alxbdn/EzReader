@@ -50,6 +50,7 @@ export type ToolbarEvent =
   | { type: "save-as" }
   | { type: "export" }
   | { type: "compress" }
+  | { type: "watermark" }
   | { type: "password" }
   | { type: "ocr" }
   | { type: "rotate" }
@@ -479,6 +480,7 @@ export class Toolbar {
         items: [
           { label: "btnCompress", shortcut: "Ctrl+Shift+E", command: { type: "compress" }, requiresDoc: true },
           { label: "menuProtect", command: { type: "password" }, requiresDoc: true },
+          { label: "menuWatermark", command: { type: "watermark" }, requiresDoc: true },
           null,
           { label: "menuOcr", command: { type: "ocr" } },
         ],

@@ -170,6 +170,7 @@ pub fn run() {
             commands::pdf::straighten_pages,
             commands::pdf::split_pdf,
             commands::pdf::redact_pages,
+            commands::pdf::watermark_pages,
             commands::pdf::adjust_pages,
             commands::shell::list_printers,
             commands::shell::print_pages,

@@ -97,6 +97,15 @@ pub fn may_hold_meta(bytes: &[u8]) -> bool {
     memchr::memmem::find(bytes, b"/CCAnnot").is_some()
 }
 
+/// Removes EzReader's annotation record from the catalog, so a flattened file reopens without
+/// editable annotations.
+pub fn drop_meta(doc: &mut Document) {
+    let Ok(cat_id) = catalog_id(doc) else { return };
+    if let Ok(dict) = doc.get_object_mut(cat_id).and_then(Object::as_dict_mut) {
+        dict.remove(META_KEY);
+    }
+}
+
 pub fn load_meta(doc: &Document) -> AnnotationMeta {
     let Ok(cat_id) = catalog_id(doc) else { return AnnotationMeta::default() };
     let Ok(cat) = doc.get_object(cat_id) else { return AnnotationMeta::default() };

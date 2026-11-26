@@ -478,6 +478,26 @@ test.describe("documents", () => {
     await settle(page, 1500);
   });
 
+  test("watermark a copy", async ({ page }) => {
+    await start(page, { doc: true });
+    await page.click("[data-mode=edit]");
+    await page.locator(".edit-tools .tool-btn", { hasText: "Watermark" }).click();
+    const dialog = page.locator(".watermark-box");
+    await expect(dialog).toBeVisible();
+    await expect(dialog.locator("textarea")).toHaveValue("For the sole purpose of ");
+    await dialog.locator("textarea").pressSequentially("renting a flat");
+    await expect(dialog.locator(".wm-count")).toHaveText("38/100");
+    const preview = dialog.locator(".wm-page");
+    await expect(preview).toHaveAttribute("data-ready", "true", { timeout: 10_000 });
+    const b = (await preview.boundingBox())!;
+    await page.mouse.move(b.x + b.width / 2, b.y + b.height / 3);
+    await page.mouse.move(b.x + b.width / 2 + 5, b.y + b.height / 3 + 5, { steps: 3 });
+    await expect(dialog.locator(".wm-loupe")).toHaveClass(/on/);
+    await dialog.locator(".btn-primary").click();
+    await expect(dialog).toBeHidden({ timeout: 20_000 });
+    expect(await page.evaluate(() => (window as unknown as { __EZ_CALLS__: string[] }).__EZ_CALLS__)).toContain("watermark_pages");
+  });
+
   test("reorder pages by dragging", async ({ page }) => {
     await start(page, { doc: true });
     const frames = await visible(page, ".page-sidebar-frame");

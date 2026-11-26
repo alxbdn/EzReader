@@ -334,6 +334,10 @@ export async function redactPages(
   return call<void>("redact_pages", { inputPath, outputPath, pages });
 }
 
+export async function watermarkPages(inputPath: string, outputPath: string, pages: RedactedPage[]): Promise<void> {
+  return call<void>("watermark_pages", { inputPath, outputPath, pages });
+}
+
 export async function openImageDialog(): Promise<string | null> {
   return call<string | null>("open_image_dialog");
 }
