@@ -171,7 +171,6 @@ export interface Translations {
   welcomeCardConvertDesc?: string;
   welcomeCardQuickLook?: string;
   welcomeCardQuickLookDesc?: string;
-  welcomeSpaceKey?: string;
   msgUnsavedTitle?: string;
   msgSaveBeforeClose?: string;
   msgSaveBeforeOpen?: string;
@@ -793,7 +792,6 @@ const EN: Translations = {
   welcomeCardConvertDesc:   "Pages to pictures, pictures to PDF, and big files made light.",
   welcomeCardQuickLook:     "Quick look",
   welcomeCardQuickLookDesc: "Select a PDF in File Explorer and press Space to preview it, without opening anything.",
-  welcomeSpaceKey:          "Space",
   msgUnsavedTitle:        "Unsaved changes",
   msgSaveBeforeClose:     "Save the changes to \u201c{name}\u201d before closing?",
   msgSaveBeforeOpen:      "Save the changes to \u201c{name}\u201d before opening another document?",
@@ -1415,7 +1413,6 @@ const FR: Translations = {
   welcomeCardConvertDesc:   "Des pages en images, des images en PDF, et des fichiers lourds all\u00e9g\u00e9s.",
   welcomeCardQuickLook:     "Aper\u00e7u rapide",
   welcomeCardQuickLookDesc: "S\u00e9lectionnez un PDF dans l\u2019Explorateur de fichiers et appuyez sur Espace pour l\u2019afficher, sans rien ouvrir.",
-  welcomeSpaceKey:          "Espace",
   msgUnsavedTitle:        "Modifications non enregistrées",
   msgSaveBeforeClose:     "Enregistrer les modifications apportées à « {name} » avant de fermer ?",
   msgSaveBeforeOpen:      "Enregistrer les modifications apportées à « {name} » avant d'ouvrir un autre document ?",
