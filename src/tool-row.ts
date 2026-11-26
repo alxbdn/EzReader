@@ -48,7 +48,7 @@ import {
   ICON_STRAIGHTEN,
   ICON_PLUS,
   ICON_LOCK,
-  ICON_REDACT_BAR,
+  ICON_REDACT_EYE,
   ICON_STAMP,
 } from "./icons";
 import { tintedPng } from "./stamp-maker";
@@ -217,7 +217,7 @@ export class ToolRow {
     contentSeg.append(
       this.groupButton("etext", ICON_EDIT_TEXT, "toolEditText", "Edit text"),
       this.groupButton("image", ICON_IMAGE, "toolImage", "Image"),
-      this.groupButton("redact", ICON_REDACT_BAR, "toolRedact", "Redact", "ttRedact", "Redact: hide text or an area for good"),
+      this.groupButton("redact", ICON_REDACT_EYE, "toolRedact", "Redact", "ttRedact", "Redact: hide text or an area for good"),
       watermark,
       this.groupButton("stamp", ICON_STAMP, "toolStamp", "Stamps", "ttStamp", "Stamps: a check mark, a cross or one of your stamps"),
     );
