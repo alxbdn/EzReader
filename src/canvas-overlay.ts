@@ -93,7 +93,6 @@ function noteMaxScroll(ann: NoteAnnotation): number {
   return Math.max(0, (noteTextHeight.get(ann) ?? 0) - (ann.height - 2 * NOTE_PAD));
 }
 
-const STAMP_SIZE = 22;
 
 const REACHABLE = 24;
 const KEEPS_RATIO = new Set<Annotation["kind"]>(["signature", "image", "stamp"]);
@@ -1369,9 +1368,10 @@ export class CanvasOverlay implements SelectionOwner {
 
     if (this.activeTool === "stamp") {
       const [px, py] = this.toPdf(this.startX, this.startY);
+      const side = (this.style.markSize * 72) / 25.4;
       const ann: StampAnnotation = {
         kind: "stamp", page: this.currentPage,
-        x: px - STAMP_SIZE / 2, y: py - STAMP_SIZE / 2, width: STAMP_SIZE, height: STAMP_SIZE,
+        x: px - side / 2, y: py - side / 2, width: side, height: side,
         mark: this.style.stampMark, color: { ...this.style.stampColor },
       };
       this.addInside(ann);

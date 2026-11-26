@@ -255,6 +255,8 @@ export interface ActiveToolState {
   stampImage: { data: string; ratio: number } | null;
   /** The longest side of a picture stamp, in millimetres. */
   stampSize: number;
+  /** The side of a check or cross mark, in millimetres. */
+  markSize: number;
   signatureColor: RgbColor;
 }
 
@@ -303,6 +305,7 @@ export function defaultToolState(): ActiveToolState {
     stampColor: { r: 0, g: 0, b: 0 },
     stampImage: null,
     stampSize: 35,
+    markSize: 8,
     signatureColor: { r: 24, g: 24, b: 27 },
   };
 }
