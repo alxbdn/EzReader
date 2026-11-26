@@ -48,6 +48,8 @@ import {
   ICON_STRAIGHTEN,
   ICON_PLUS,
   ICON_LOCK,
+  ICON_REDACT_BAR,
+  ICON_STAMP,
 } from "./icons";
 import { tintedPng } from "./stamp-maker";
 import { StampStore } from "./stamp-store";
@@ -197,23 +199,14 @@ export class ToolRow {
     this.editSeg = document.createElement("div");
     this.editSeg.className = "tool-seg edit-tools";
     const contentSeg = this.segment("");
-    contentSeg.append(
-      this.groupButton("etext", ICON_EDIT_TEXT, "toolEditText", "Edit text"),
-      this.groupButton("image", ICON_IMAGE, "toolImage", "Image"),
-      this.groupButton("redact", ICON_REDACT_AREA, "toolRedact", "Redact", "ttRedact", "Redact: hide text or an area for good"),
-      this.groupButton("stamp", ICON_STAMP_CHECK, "toolStamp", "Stamp", "ttStamp", "Stamp: a check mark, a cross or one of your stamps"),
-    );
     const pageSeg = this.segment("");
-    pageSeg.append(
-      this.pageButton("crop", ICON_CROP, "toolCrop", "Crop"),
-      this.pageButton("straighten", ICON_STRAIGHTEN, "toolStraighten", "Straighten"),
-    );
     const watermark = document.createElement("button");
     watermark.type = "button";
     watermark.className = "tool-btn";
+    watermark.dataset["tool"] = "watermark";
     watermark.innerHTML = ICON_WATERMARK;
     const wmLabel = document.createElement("span");
-    this.text(wmLabel, "toolWatermark", "Watermark…");
+    this.text(wmLabel, "toolWatermark", "Watermark");
     watermark.append(wmLabel);
     this.title(watermark, "ttWatermark", "Watermark: burn a text into every page of a copy");
     watermark.addEventListener("click", () => {
@@ -221,7 +214,17 @@ export class ToolRow {
       if (this.group) this.clearTool();
       this.emit({ type: "watermark" });
     });
-    contentSeg.append(watermark);
+    contentSeg.append(
+      this.groupButton("etext", ICON_EDIT_TEXT, "toolEditText", "Edit text"),
+      this.groupButton("image", ICON_IMAGE, "toolImage", "Image"),
+      this.groupButton("redact", ICON_REDACT_BAR, "toolRedact", "Redact", "ttRedact", "Redact: hide text or an area for good"),
+      watermark,
+      this.groupButton("stamp", ICON_STAMP, "toolStamp", "Stamps", "ttStamp", "Stamps: a check mark, a cross or one of your stamps"),
+    );
+    pageSeg.append(
+      this.pageButton("crop", ICON_CROP, "toolCrop", "Crop"),
+      this.pageButton("straighten", ICON_STRAIGHTEN, "toolStraighten", "Straighten"),
+    );
     const sep = document.createElement("span");
     sep.className = "tool-sep";
     this.editSeg.append(contentSeg, sep, pageSeg);

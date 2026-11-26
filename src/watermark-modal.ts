@@ -1,10 +1,21 @@
 import { Modal } from "./modal";
 import { ICON_COPY, ICON_LOCK, ICON_WATERMARK } from "./icons";
+import { parsePageRange } from "./page-range";
 import { drawWatermark, newCopyCode, WATERMARK_MAX_CHARS, type WatermarkOptions } from "./watermark";
 
-type ConfirmHandler = (o: WatermarkOptions) => void;
-/** Page 1 of the document, `widthPx` wide, without the watermark. */
-export type PagePreview = (widthPx: number) => Promise<HTMLCanvasElement>;
+/** What the dialog asks for: the watermark, and the pages it goes on. */
+export type WatermarkRequest = WatermarkOptions & { pages: number[] };
+type ConfirmHandler = (o: WatermarkRequest) => void;
+/** Page `page` of the document, `widthPx` wide, without the watermark. */
+export type PagePreview = (widthPx: number, page: number) => Promise<HTMLCanvasElement>;
+type PageChoice = "all" | "this" | "pick";
+
+/** The pages a choice stands for, or null when the typed pages can't be read. */
+export function watermarkPages(choice: PageChoice, typed: string, current: number, total: number): number[] | null {
+  if (choice === "all") return Array.from({ length: total }, (_, i) => i + 1);
+  if (choice === "this") return [current];
+  return typed.trim() ? parsePageRange(typed, total) : null;
+}
 
 const PREVIEW_CSS_WIDTH = 250;
 const LOUPE_ZOOM = 4;
@@ -31,6 +42,13 @@ export class WatermarkModal extends Modal {
   private loupeCanvas: HTMLCanvasElement;
   private caption: HTMLElement;
   private progress: HTMLElement;
+  private pageField: HTMLElement;
+  private pageBtns = new Map<PageChoice, HTMLButtonElement>();
+  private pageInput: HTMLInputElement;
+  private choice: PageChoice = "all";
+  private current = 1;
+  private total = 1;
+  private shownPage = 0;
 
   private date = "";
   private code = "";
@@ -71,6 +89,25 @@ export class WatermarkModal extends Modal {
     this.opacity.addEventListener("input", () => this.changed());
     opField.append(opHead, this.opacity);
 
+    this.pageField = this.el("div", "ez-field");
+    const pageSeg = this.el("div", "toolbar-segment opt-seg wm-pages");
+    for (const c of ["all", "this", "pick"] as PageChoice[]) {
+      const b = this.el("button", "opt-btn");
+      b.type = "button";
+      b.dataset["pages"] = c;
+      b.addEventListener("click", () => {
+        this.choice = c;
+        this.changed();
+        if (c === "pick") this.pageInput.focus();
+      });
+      this.pageBtns.set(c, b);
+      pageSeg.append(b);
+    }
+    this.pageInput = this.el("input", "ez-input wm-page-input");
+    this.pageInput.placeholder = "1-3, 5";
+    this.pageInput.addEventListener("input", () => this.changed());
+    this.pageField.append(this.el("span", "ez-label", "wmPages", "Pages"), pageSeg, this.pageInput);
+
     const dateRow = this.el("label", "ez-check");
     this.dateBox = this.el("input");
     this.dateBox.type = "checkbox";
@@ -104,7 +141,7 @@ export class WatermarkModal extends Modal {
     this.progress = this.el("div", "wm-hint wm-progress");
     this.progress.hidden = true;
 
-    form.append(textField, opField, dateRow, codeWrap, this.el("div", "wm-spacer"), note, this.progress);
+    form.append(textField, opField, this.pageField, dateRow, codeWrap, this.el("div", "wm-spacer"), note, this.progress);
 
     this.pane = this.el("div", "wm-preview");
     const stage = this.el("div", "wm-stage");
@@ -122,7 +159,7 @@ export class WatermarkModal extends Modal {
     this.body.append(layout);
 
     this.okBtn.addEventListener("click", () => {
-      if (this.running || !this.textArea.value.trim()) return;
+      if (this.running || !this.textArea.value.trim() || !this.pages()) return;
       const o = this.options();
       this.handlers.forEach((h) => h(o));
     });
@@ -130,8 +167,13 @@ export class WatermarkModal extends Modal {
 
   onConfirm(h: ConfirmHandler): void { this.handlers.push(h); }
 
-  open(preview: PagePreview, today: string): void {
+  open(preview: PagePreview, today: string, pages: { current: number; total: number } = { current: 1, total: 1 }): void {
     this.preview = preview;
+    this.current = pages.current;
+    this.total = pages.total;
+    this.choice = "all";
+    this.pageInput.value = "";
+    this.shownPage = 0;
     this.date = today;
     this.code = newCopyCode();
     this.base = this.big = null;
@@ -144,16 +186,17 @@ export class WatermarkModal extends Modal {
     this.changed();
     this.textArea.focus();
     this.textArea.setSelectionRange(this.textArea.value.length, this.textArea.value.length);
-    const dpr = window.devicePixelRatio || 1;
-    void preview(Math.round(PREVIEW_CSS_WIDTH * dpr)).then((c) => {
-      if (this.preview !== preview) return;
-      this.base = c;
-      this.redraw();
-    }).catch((e) => console.error("watermark preview", e));
+    this.loadPreview();
   }
 
-  options(): WatermarkOptions {
+  /** The pages to watermark, or null when the typed pages can't be read. */
+  pages(): number[] | null {
+    return watermarkPages(this.choice, this.pageInput.value, this.current, this.total);
+  }
+
+  options(): WatermarkRequest {
     return {
+      pages: this.pages() ?? [],
       text: this.textArea.value,
       date: this.dateBox.checked ? this.date : null,
       code: this.codeBox.checked ? this.code : null,
@@ -190,7 +233,27 @@ export class WatermarkModal extends Modal {
     super.close();
   }
 
+  /** Shows the first page to be watermarked. */
+  private loadPreview(): void {
+    const preview = this.preview;
+    const page = this.pages()?.[0] ?? this.current;
+    if (!preview || page === this.shownPage) return;
+    this.shownPage = page;
+    this.big = null;
+    this.bigPending = null;
+    const dpr = window.devicePixelRatio || 1;
+    void preview(Math.round(PREVIEW_CSS_WIDTH * dpr), page).then((c) => {
+      if (this.preview !== preview || this.shownPage !== page) return;
+      this.base = c;
+      this.redraw();
+    }).catch((e) => console.error("watermark preview", e));
+  }
+
   protected override refresh(): void {
+    const pick = this.tr("wmPagesPick", "Choose");
+    this.pageBtns.get("all")!.textContent = this.tr("wmPagesAll", "All ({n})").replace("{n}", String(this.total));
+    this.pageBtns.get("this")!.textContent = this.tr("wmPagesThis", "This one ({n})").replace("{n}", String(this.current));
+    this.pageBtns.get("pick")!.textContent = pick;
     this.dateLabel.textContent = this.tr("wmDate", "Add today's date · {date}").replace("{date}", this.date);
     this.redraw();
   }
@@ -200,7 +263,13 @@ export class WatermarkModal extends Modal {
     this.opacityVal.textContent = `${this.opacity.value} %`;
     this.codeChip.textContent = this.code;
     this.codeChip.parentElement!.classList.toggle("off", !this.codeBox.checked);
-    this.okBtn.disabled = this.running || !this.textArea.value.trim();
+    const pages = this.pages();
+    for (const [c, b] of this.pageBtns) b.classList.toggle("active", c === this.choice);
+    this.pageInput.hidden = this.choice !== "pick";
+    this.pageInput.classList.toggle("invalid", this.choice === "pick" && this.pageInput.value.trim() !== "" && !pages);
+    this.pageField.hidden = this.total < 2;
+    this.okBtn.disabled = this.running || !this.textArea.value.trim() || !pages;
+    if (pages && pages[0] !== this.shownPage && this.preview) this.loadPreview();
     this.refresh();
   }
 
@@ -220,8 +289,9 @@ export class WatermarkModal extends Modal {
     if (!this.base || !this.preview) return;
     if (!this.big) {
       const preview = this.preview;
-      this.bigPending ??= preview(loupeWidth(this.base.width)).then((c) => {
-        if (this.preview !== preview) return;
+      const page = this.shownPage;
+      this.bigPending ??= preview(loupeWidth(this.base.width), page).then((c) => {
+        if (this.preview !== preview || this.shownPage !== page) return;
         this.big = c;
         this.redraw();
       }).catch(() => {});

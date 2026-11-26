@@ -102,7 +102,8 @@ export const ICON_OPT_COLOR = lucide(`<circle cx="13.5" cy="6.5" r=".5" fill="cu
 export const ICON_CHECK = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m4 12 5 5L20 6"/></svg>`;
 export const ICON_DISCARD = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" aria-hidden="true"><path d="M5 5l14 14M19 5 5 19"/></svg>`;
 
-export const ICON_EDIT_TEXT = lucide(`<path d="M4 7V4h16v3"/><path d="M9 20h6"/><path d="M12 4v16"/>`);
+export const ICON_EDIT_TEXT = lucide(`<path d="M17 22h-1a4 4 0 0 1-4-4V6a4 4 0 0 1 4-4h1"/><path d="M7 22h1a4 4 0 0 0 4-4v-1"/><path d="M7 2h1a4 4 0 0 1 4 4v1"/>`);
+export const ICON_REDACT_BAR = lucide(`<rect x="3" y="8" width="18" height="8" rx="1.5" fill="currentColor" stroke="none"/>`);
 export const ICON_IMAGE = lucide(`<rect x="3" y="4" width="18" height="16" rx="2"/><path d="m21 15-5-5-9 9"/><circle cx="8.5" cy="9.5" r="1.5"/>`);
 export const ICON_REDACT_TEXT = lucide(`<path d="M4 6h16"/><rect x="4" y="10" width="16" height="5" rx="1" fill="currentColor" stroke="none"/><path d="M4 19h10"/>`);
 export const ICON_REDACT_AREA = lucide(`<rect x="4" y="4" width="16" height="16" rx="2" fill="currentColor" stroke="none"/>`);

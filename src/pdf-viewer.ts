@@ -1724,11 +1724,13 @@ export async function renderWatermarkedPages(
   draw: (ctx: CanvasRenderingContext2D, width: number, height: number) => void,
   dpi = 200,
   onProgress?: (done: number, total: number) => void,
+  pages?: number[],
 ): Promise<RedactedPage[]> {
   const doc = await (await pdfjsLib()).getDocument({ ...SAFE_PDF, url: convertFileSrc(filePath) + `?t=${Date.now()}` }).promise;
   try {
     const out: RedactedPage[] = [];
-    for (let pageNum = 1; pageNum <= doc.numPages; pageNum++) {
+    const list = (pages ?? Array.from({ length: doc.numPages }, (_, i) => i + 1)).filter((n) => n >= 1 && n <= doc.numPages);
+    for (const [i, pageNum] of list.entries()) {
       const page = await doc.getPage(pageNum);
       const canvas = await paintPage(page, dpi);
       draw(canvas.getContext("2d")!, canvas.width, canvas.height);
@@ -1742,7 +1744,7 @@ export async function renderWatermarkedPages(
       });
       canvas.width = canvas.height = 0;
       page.cleanup();
-      onProgress?.(pageNum, doc.numPages);
+      onProgress?.(i + 1, list.length);
     }
     return out;
   } finally {
@@ -1751,10 +1753,10 @@ export async function renderWatermarkedPages(
 }
 
 /** Page 1 of `filePath`, `widthPx` wide, on white: the watermark dialog's preview. */
-export async function renderFirstPage(filePath: string, widthPx: number): Promise<HTMLCanvasElement> {
+export async function renderPagePreview(filePath: string, widthPx: number, pageNum = 1): Promise<HTMLCanvasElement> {
   const doc = await (await pdfjsLib()).getDocument({ ...SAFE_PDF, url: convertFileSrc(filePath) + `?t=${Date.now()}` }).promise;
   try {
-    const page = await doc.getPage(1);
+    const page = await doc.getPage(Math.min(Math.max(1, pageNum), doc.numPages));
     const unit = page.getViewport({ scale: 1, rotation: 0 });
     const canvas = await paintPage(page, (widthPx / unit.width) * 72);
     page.cleanup();

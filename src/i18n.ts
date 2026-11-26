@@ -632,6 +632,10 @@ export interface Translations {
   msgWmFileSuffix?: string;
   msgWatermarked?: string;
   msgWatermarkFailed?: string;
+  wmPages?: string;
+  wmPagesAll?: string;
+  wmPagesThis?: string;
+  wmPagesPick?: string;
   toolRedact?: string;
   ttRedact?: string;
   redactText?: string;
@@ -1281,7 +1285,7 @@ const EN: Translations = {
   ocrCopied: "Text copied to the clipboard.",
   ocrPageOf: "Page {n} / {total}",
   msgErrNoOcrLanguage: "Windows has no text recognition for this language. Add the language in Windows Settings › Time & language › Language & region.",
-  toolWatermark: "Watermark…",
+  toolWatermark: "Watermark",
   ttWatermark: "Watermark: burn a text into every page of a copy",
   menuWatermark: "Add a watermark…",
   wmTitle: "Add a watermark",
@@ -1295,7 +1299,7 @@ const EN: Translations = {
   wmCopyCode: "Copy the code",
   wmCodeHint: "A different code for each copy you send: you will know who passed the document on.",
   wmCopyLabel: "Unique copy",
-  wmNote: "The watermark is burned into the pages, like a redaction: it can't be removed. The pages become pictures, so their text can no longer be selected.",
+  wmNote: "The watermark is burned into the pages, like a redaction: it can't be removed. The watermarked pages become pictures, so their text can no longer be selected.",
   wmHover: "Hover over the preview to zoom in",
   wmLoupe: "Magnifier × 4 · move the mouse",
   wmProgress: "Adding the watermark… {done}/{total}",
@@ -1303,12 +1307,16 @@ const EN: Translations = {
   msgWmFileSuffix: "watermarked",
   msgWatermarked: "Saved as {name}",
   msgWatermarkFailed: "Couldn't add the watermark: {err}",
+  wmPages: "Pages",
+  wmPagesAll: "All ({n})",
+  wmPagesThis: "This one ({n})",
+  wmPagesPick: "Choose",
   toolRedact: "Redact",
   redactText: "Text",
   redactArea: "An area",
   optShape: "Shape",
   redactNote: "Permanent when saved: what is hidden is removed from the file.",
-  toolStamp: "Stamp",
+  toolStamp: "Stamps",
   ttStamp: "Stamp: a check mark, a cross or one of your stamps",
   optType: "Type",
   stampMine: "My stamps",
@@ -1951,7 +1959,7 @@ const FR: Translations = {
   ocrCopied: "Texte copié dans le presse-papiers.",
   ocrPageOf: "Page {n} / {total}",
   msgErrNoOcrLanguage: "Windows n'a pas de reconnaissance de texte pour cette langue. Ajoutez la langue dans Paramètres Windows › Heure et langue › Langue et région.",
-  toolWatermark: "Filigrane…",
+  toolWatermark: "Filigrane",
   ttWatermark: "Filigrane : incruster un texte dans toutes les pages d'une copie",
   menuWatermark: "Ajouter un filigrane…",
   wmTitle: "Ajouter un filigrane",
@@ -1965,7 +1973,7 @@ const FR: Translations = {
   wmCopyCode: "Copier le code",
   wmCodeHint: "Un code différent à chaque envoi : vous saurez qui a fait circuler le document.",
   wmCopyLabel: "Copie unique",
-  wmNote: "Le filigrane est incrusté dans les pages, comme le caviardage : il ne pourra plus être retiré. Les pages deviennent des images et leur texte n'est plus sélectionnable.",
+  wmNote: "Le filigrane est incrusté dans les pages, comme le caviardage : il ne pourra plus être retiré. Les pages filigranées deviennent des images et leur texte n'est plus sélectionnable.",
   wmHover: "Survolez l'aperçu pour zoomer",
   wmLoupe: "Loupe × 4 · déplacez la souris",
   wmProgress: "Ajout du filigrane… {done}/{total}",
@@ -1973,12 +1981,16 @@ const FR: Translations = {
   msgWmFileSuffix: "filigrane",
   msgWatermarked: "Enregistré sous {name}",
   msgWatermarkFailed: "Impossible d'ajouter le filigrane : {err}",
+  wmPages: "Pages",
+  wmPagesAll: "Toutes ({n})",
+  wmPagesThis: "Celle-ci ({n})",
+  wmPagesPick: "Choisir",
   toolRedact: "Caviarder",
   redactText: "Du texte",
   redactArea: "Une zone",
   optShape: "Forme",
   redactNote: "Définitif à l'enregistrement : le contenu caché est supprimé du fichier.",
-  toolStamp: "Tampon",
+  toolStamp: "Tampons",
   ttStamp: "Tampon : une coche, une croix ou l'un de vos tampons",
   optType: "Type",
   stampMine: "Mes tampons",

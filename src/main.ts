@@ -12,7 +12,7 @@ import { pdfjsLib } from "./pdfjs";
 import { WelcomePrefs } from "./welcome-prefs";
 import { UpdateBadge } from "./update-badge";
 import { UpdateToast } from "./update-toast";
-import { PdfViewer, PdfPageView, renderFirstPage, renderRedactedPages, renderStraightenedPages, renderWatermarkedPages } from "./pdf-viewer";
+import { PdfViewer, PdfPageView, renderPagePreview, renderRedactedPages, renderStraightenedPages, renderWatermarkedPages } from "./pdf-viewer";
 import { WatermarkModal } from "./watermark-modal";
 import { setUpWatermark } from "./watermark-flow";
 import { drawWatermark } from "./watermark";
@@ -450,12 +450,13 @@ const openWatermark = setUpWatermark({
   messages,
   ui: feedback,
   backend: tauriBackend,
-  renderPreview: renderFirstPage,
+  renderPreview: renderPagePreview,
   burn: async (input, output, o, copyLabel, onProgress) => {
-    const pages = await renderWatermarkedPages(input, (ctx, w, h) => drawWatermark(ctx, w, h, o, copyLabel), 200, onProgress);
+    const pages = await renderWatermarkedPages(input, (ctx, w, h) => drawWatermark(ctx, w, h, o, copyLabel), 200, onProgress, o.pages);
     await watermarkPages(input, output, pages);
   },
   today: () => new Date().toLocaleDateString(settingsModal.getSettings().language || undefined),
+  pages: () => ({ current: viewer.currentPage, total: viewer.pageCount }),
 });
 
 const exportFlow = setUpExport({

@@ -26,12 +26,18 @@ pub fn redact_pages(doc: &mut Document, pages: &[RedactedPage]) -> Result<(), St
     replace_pages(doc, pages, true)
 }
 
-/// Burns a watermark into every page: each page becomes its picture, which already shows the
-/// annotations under the watermark, so the editable annotation record is dropped too. Nothing is
-/// left on top of the watermark to lift it off.
+/// Burns a watermark into the given pages: each one becomes its picture, which already shows the
+/// annotations under the watermark, so nothing is left on top of it to lift it off. The editable
+/// annotation record is dropped too, so the copy can't bring the annotations back over the pages;
+/// on the other pages they stay drawn, as in any saved file.
 pub fn watermark_pages(doc: &mut Document, pages: &[RedactedPage]) -> Result<(), String> {
-    if pages.len() != doc.get_pages().len() {
-        return Err("every page must be watermarked".into());
+    if pages.is_empty() {
+        return Err("no page to watermark".into());
+    }
+    let count = doc.get_pages().len() as u32;
+    let mut seen = HashSet::new();
+    if pages.iter().any(|p| p.page == 0 || p.page > count || !seen.insert(p.page)) {
+        return Err("invalid page list".into());
     }
     crate::pdf::annotation_layer::drop_meta(doc);
     replace_pages(doc, pages, false)
@@ -326,9 +332,24 @@ mod tests {
     }
 
     #[test]
-    fn watermark_needs_every_page() {
+    fn watermark_checks_the_page_list() {
         let mut doc = Document::load(fixture("objstm-indirect-length.pdf")).unwrap();
-        assert!(watermark_pages(&mut doc, &[page(1)]).is_err());
+        assert!(watermark_pages(&mut doc, &[]).is_err());
+        assert!(watermark_pages(&mut doc, &[page(0)]).is_err());
+        assert!(watermark_pages(&mut doc, &[page(1), page(1)]).is_err());
+        let count = doc.get_pages().len() as u32;
+        assert!(watermark_pages(&mut doc, &[page(count + 1)]).is_err());
+    }
+
+    #[test]
+    fn watermark_can_leave_other_pages_alone() {
+        let mut doc = Document::load(fixture("objstm-indirect-length.pdf")).unwrap();
+        let count = doc.get_pages().len();
+        assert!(count > 1, "the fixture needs several pages");
+        let before = doc.get_page_content(doc.get_pages()[&2]);
+        watermark_pages(&mut doc, &[page(1)]).unwrap();
+        assert_eq!(doc.get_pages().len(), count);
+        assert_eq!(doc.get_page_content(doc.get_pages()[&2]), before);
     }
 
     #[test]

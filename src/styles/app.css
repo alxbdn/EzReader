@@ -3979,3 +3979,6 @@ body.fullscreen .window-controls { display: none; }
 .stm-swatches[hidden] { display: none; }
 .stm-error { color: var(--destructive, #dc2626); }
 .stm-error[hidden] { display: none; }
+.wm-pages { display: grid; grid-template-columns: repeat(3, 1fr); align-self: stretch; }
+.wm-pages .opt-btn { height: 28px; }
+.wm-page-input[hidden], .ez-field[hidden] { display: none; }
