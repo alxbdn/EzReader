@@ -1989,7 +1989,7 @@ kbd,
   color: var(--muted-foreground);
 }
 
-/* Quick look: a keyboard seen from above, up close on the Space bar (brand red); three rows stay clear, the fourth and the edges fade out. */
+/* Quick look: a keyboard seen from above, up close on the blank Space bar (brand red); three rows stay clear, the fourth and the edges fade out. */
 .kb-mini {
   flex-shrink: 0;
   position: relative;
@@ -2028,16 +2028,8 @@ kbd,
 .kb-key.kb-space {
   flex-grow: 6.5;
   height: 14px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
   border-color: var(--selection);
   background: var(--selection);
-  font-size: 9px;
-  font-weight: 600;
-  letter-spacing: 0.02em;
-  line-height: 1;
-  color: #fff;
 }
 
 /* ══ Status bar ══ default reader, version and language, always at the bottom of the window. */
