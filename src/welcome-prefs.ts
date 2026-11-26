@@ -9,8 +9,6 @@ export interface WelcomePrefsDeps {
   t(): Translations;
   isDefault(): Promise<boolean>;
   setDefault(on: boolean): Promise<void>;
-  quickLook?(): Promise<{ available: boolean; enabled: boolean }>;
-  setQuickLook?(on: boolean): Promise<void>;
 }
 
 class PrefToggle {
@@ -78,7 +76,6 @@ export function menuLanguages(): { code: string; native: string }[] {
 export class WelcomePrefs {
   readonly root: HTMLElement;
   private readonly check: PrefToggle;
-  private readonly quick: PrefToggle | null;
   private readonly langBtn: HTMLButtonElement;
   private readonly menu: HTMLElement;
 
@@ -87,14 +84,6 @@ export class WelcomePrefs {
     this.root.className = "welcome-footer";
 
     this.check = new PrefToggle(() => deps.isDefault(), (on) => deps.setDefault(on));
-    const { quickLook, setQuickLook } = deps;
-    this.quick = quickLook && setQuickLook
-      ? new PrefToggle(async () => {
-          const s = await quickLook();
-          return s.available ? s.enabled : null;
-        }, (on) => setQuickLook(on))
-      : null;
-    this.quick?.el.classList.add("welcome-quick-look");
 
     const wrap = document.createElement("div");
     wrap.className = "lang-picker";
@@ -114,7 +103,7 @@ export class WelcomePrefs {
     wrap.append(this.langBtn, this.menu);
     const toggles = document.createElement("div");
     toggles.className = "welcome-toggles";
-    toggles.append(this.check.el, ...(this.quick ? [this.quick.el] : []));
+    toggles.append(this.check.el);
     this.root.append(toggles, wrap);
     host.appendChild(this.root);
 
@@ -131,10 +120,6 @@ export class WelcomePrefs {
     const current = LANGUAGES.find((l) => l.code === lang) ?? LANGUAGES[0]!;
 
     this.check.label(t.welcomeDefaultReader ?? "Default PDF reader", t.welcomeDefaultReaderHint ?? "Open PDF files with EzReader");
-    this.quick?.label(
-      t.welcomeQuickLook ?? "Quick look",
-      t.settingsQuickLookHint ?? "Select a PDF in File Explorer and press Space to preview it.",
-    );
 
     this.langBtn.innerHTML =
       `${flagMarkup(current.code)}<span class="lang-btn-name">${escapeHtml(current.native)}</span>` +
@@ -165,7 +150,7 @@ export class WelcomePrefs {
   }
 
   async refresh(): Promise<void> {
-    await Promise.all([this.check.refresh(), this.quick?.refresh()]);
+    await this.check.refresh();
   }
 
   private toggleMenu(): void {

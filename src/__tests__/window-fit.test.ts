@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { keepCentred, pageFitScale, planWindowFit } from "../window-fit";
+import { a4WelcomeWidth, keepCentred, pageFitScale, planWindowFit } from "../window-fit";
 
 const A4 = { width: 595, height: 842 };
 const A4_LANDSCAPE = { width: 842, height: 595 };
@@ -64,5 +64,20 @@ describe("keepCentred", () => {
   it("stays inside the work area", () => {
     expect(keepCentred({ x: 1500, y: 600 }, { width: 400, height: 400 }, { width: 800, height: 900 }, area))
       .toEqual({ x: 1120, y: 140 });
+  });
+});
+
+describe("a4WelcomeWidth", () => {
+  it("sizes the window so the opening screen is A4 portrait", () => {
+    const w = a4WelcomeWidth({ width: 1100, height: 1000 }, { width: 868, height: 882 }, 2560);
+    expect(w).toBe(1100 + Math.round(882 / Math.SQRT2 - 868));
+  });
+
+  it("never goes under the minimum width", () => {
+    expect(a4WelcomeWidth({ width: 800, height: 500 }, { width: 568, height: 380 }, 2560)).toBe(720);
+  });
+
+  it("never goes wider than the screen", () => {
+    expect(a4WelcomeWidth({ width: 900, height: 2000 }, { width: 668, height: 1880 }, 1000)).toBe(950);
   });
 });

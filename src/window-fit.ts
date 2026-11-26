@@ -60,3 +60,12 @@ export function keepCentred(
     y: place(pos.y, size.height, next.height, area.y, area.height),
   };
 }
+
+/**
+ * Window width that makes the opening screen A4 portrait (height = width × √2) at the current
+ * height, whatever the sidebar and bars take; kept within the minimum and the screen.
+ */
+export function a4WelcomeWidth(window: Size, welcome: Size, areaWidth: number): number {
+  const width = window.width + Math.round(welcome.height / Math.SQRT2 - welcome.width);
+  return Math.max(MIN_WINDOW.width, Math.min(Math.floor(areaWidth * 0.95), width));
+}
