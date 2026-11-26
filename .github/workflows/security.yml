@@ -25,9 +25,16 @@ env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
+  # Skips the jobs below on pull requests that change documentation only.
+  changes:
+    uses: ./.github/workflows/changes.yml
+
   npm-audit:
     name: SCA - npm audit
     runs-on: ubuntu-latest
+    needs: changes
+    # A docs-only pull request skips this job; if the check itself fails, it still runs.
+    if: ${{ !cancelled() && needs.changes.outputs.code != 'false' }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
@@ -39,6 +46,9 @@ jobs:
   cargo-deny:
     name: SCA - cargo deny
     runs-on: ubuntu-latest
+    needs: changes
+    # A docs-only pull request skips this job; if the check itself fails, it still runs.
+    if: ${{ !cancelled() && needs.changes.outputs.code != 'false' }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Advisories, licenses and sources of Rust crates
@@ -57,20 +67,32 @@ jobs:
       fail-fast: false
       matrix:
         language: [javascript-typescript, rust, actions]
+    needs: changes
+    # Its checks are required by name: on a docs-only pull request the job still
+    # runs, so each check reports, and only its steps are skipped.
+    if: ${{ !cancelled() }}
+    env:
+      SCAN: ${{ needs.changes.outputs.code != 'false' }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        if: env.SCAN == 'true'
       - uses: github/codeql-action/init@1bd86f2fdb4b86187fa4059f16f31a3202acc9ea # v4.39.4
+        if: env.SCAN == 'true'
         with:
           languages: ${{ matrix.language }}
           build-mode: none
           queries: security-extended
       - uses: github/codeql-action/analyze@1bd86f2fdb4b86187fa4059f16f31a3202acc9ea # v4.39.4
+        if: env.SCAN == 'true'
         with:
           category: /language:${{ matrix.language }}
 
   fuzz:
     name: Dynamic - fuzz ${{ matrix.target }}
     runs-on: ubuntu-latest
+    needs: changes
+    # A docs-only pull request skips this job; if the check itself fails, it still runs.
+    if: ${{ !cancelled() && needs.changes.outputs.code != 'false' }}
     strategy:
       fail-fast: false
       matrix:
