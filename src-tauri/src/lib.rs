@@ -41,15 +41,17 @@ pub struct StartupArgs {
     pub page: u32,
 }
 
-/// Opens the window in an A4 portrait shape (1 : √2) sized to the screen; it stays freely resizable.
+/// Opens the window so its central area (the opening screen) is A4 portrait (1 : √2), sized to
+/// the screen; it stays freely resizable. The page then trims the width to the real layout.
 fn fit_to_screen(window: &tauri::WebviewWindow) -> tauri::Result<()> {
     let Some(monitor) = window.current_monitor()? else { return Ok(()) };
     let area = monitor.work_area();
     let outer = window.outer_size()?;
     let inner = window.inner_size()?;
     let chrome = (outer.width.saturating_sub(inner.width), outer.height.saturating_sub(inner.height));
-    let min_width = (MIN_WIDTH * monitor.scale_factor()).round() as u32;
-    let (w, h) = a4_window((area.size.width, area.size.height), min_width);
+    let k = monitor.scale_factor();
+    let frame = ((SIDE_WIDTH * k).round() as u32, (BARS_HEIGHT * k).round() as u32);
+    let (w, h) = a4_window((area.size.width, area.size.height), frame, (MIN_WIDTH * k).round() as u32);
     window.set_size(tauri::PhysicalSize::new(w.saturating_sub(chrome.0), h.saturating_sub(chrome.1)))?;
     let x = area.position.x as i64 + (area.size.width as i64 - w as i64) / 2;
     let y = area.position.y as i64 + (area.size.height as i64 - h as i64) / 2;
@@ -57,12 +59,17 @@ fn fit_to_screen(window: &tauri::WebviewWindow) -> tauri::Result<()> {
 }
 
 const MIN_WIDTH: f64 = 720.0;
+/// Thumbnail sidebar beside the opening screen, and the bars above and below it (logical px).
+const SIDE_WIDTH: f64 = 232.0;
+const BARS_HEIGHT: f64 = 118.0;
 
-/// Outer size of an A4 portrait window: 90 % of the screen height, width = height / √2,
-/// never narrower than the minimum width nor wider than the screen.
-fn a4_window(area: (u32, u32), min_width: u32) -> (u32, u32) {
+/// Outer size of the window: 90 % of the screen height, and wide enough for the central area
+/// (window minus `frame` = sidebar width, bars height) to be A4 portrait; never narrower than
+/// the minimum width nor wider than the screen.
+fn a4_window(area: (u32, u32), frame: (u32, u32), min_width: u32) -> (u32, u32) {
     let height = (area.1 as f64 * 0.9).round();
-    let width = (height / std::f64::consts::SQRT_2).round().max(min_width as f64).min(area.0 as f64 * 0.95);
+    let centre = (height - frame.1 as f64).max(0.0) / std::f64::consts::SQRT_2;
+    let width = (centre + frame.0 as f64).round().max(min_width as f64).min(area.0 as f64 * 0.95);
     (width as u32, height as u32)
 }
 
@@ -257,20 +264,21 @@ mod fit_tests {
     use super::a4_window;
 
     #[test]
-    fn the_window_opens_in_a4_portrait() {
-        let (w, h) = a4_window((2560, 1400), 720);
+    fn the_central_area_opens_in_a4_portrait() {
+        let (w, h) = a4_window((2560, 1400), (232, 118), 720);
         assert_eq!(h, 1260);
-        assert_eq!(w, 891);
-        assert!(h > w);
+        assert_eq!(w, 1040);
+        let ratio = (h - 118) as f64 / (w - 232) as f64;
+        assert!((ratio - std::f64::consts::SQRT_2).abs() < 0.01);
     }
 
     #[test]
     fn a_short_screen_keeps_the_minimum_width() {
-        assert_eq!(a4_window((1366, 728), 720), (720, 655));
+        assert_eq!(a4_window((1366, 600), (232, 118), 720), (720, 540));
     }
 
     #[test]
     fn a_narrow_screen_caps_the_width() {
-        assert_eq!(a4_window((600, 1400), 720).0, 570);
+        assert_eq!(a4_window((800, 1400), (232, 118), 720).0, 760);
     }
 }

@@ -105,7 +105,7 @@ import type { AnnotationSnapshot } from "./annotation-session";
 import type { DocState } from "./page-history";
 import { currentMonitor, getCurrentWindow } from "@tauri-apps/api/window";
 import { LogicalSize, PhysicalPosition, PhysicalSize } from "@tauri-apps/api/dpi";
-import { keepCentred, pageFitScale, planWindowFit } from "./window-fit";
+import { a4WelcomeWidth, keepCentred, pageFitScale, planWindowFit } from "./window-fit";
 import { showQuickLookCard } from "./welcome-quick-look";
 import { mountWindowControls } from "./window-controls";
 import { menuOwnsKey } from "./mac-menu";
@@ -454,6 +454,35 @@ function scrollbarSize(): number {
   return size;
 }
 
+/** At launch, widen or narrow the window so the opening screen itself is A4 portrait. */
+async function fitWindowToWelcome(): Promise<void> {
+  if (!("__TAURI_INTERNALS__" in window)) return;
+  try {
+    if (fullscreen || await appWindow.isMaximized()) return;
+    const monitor = await currentMonitor();
+    const welcome = document.getElementById("welcome-screen");
+    if (!monitor || !welcome) return;
+    const sf = monitor.scaleFactor || 1;
+    const width = a4WelcomeWidth(
+      { width: window.innerWidth, height: window.innerHeight },
+      { width: welcome.offsetWidth, height: welcome.offsetHeight },
+      monitor.workArea.size.width / sf,
+    );
+    if (Math.abs(width - window.innerWidth) <= 1) return;
+    const pos = await appWindow.outerPosition();
+    const outer = await appWindow.outerSize();
+    const next = { width: outer.width + Math.round((width - window.innerWidth) * sf), height: outer.height };
+    const at = keepCentred(pos, outer, next, {
+      x: monitor.workArea.position.x, y: monitor.workArea.position.y,
+      width: monitor.workArea.size.width, height: monitor.workArea.size.height,
+    });
+    await appWindow.setSize(new LogicalSize(width, window.innerHeight));
+    await appWindow.setPosition(new PhysicalPosition(at.x, at.y));
+  } catch (err) {
+    console.warn("fit window to welcome:", err);
+  }
+}
+
 async function fitWindowToDocument(): Promise<boolean> {
   if (!("__TAURI_INTERNALS__" in window)) return true;
   const pref = parseFloat(settingsModal.getSettings().defaultZoom);
@@ -721,6 +750,7 @@ settingsModal.onChange(s => {
   try {
     const startup = await getStartupArgs();
     if (!startup.filePath) {
+      await fitWindowToWelcome();
       reveal();
       // Load pdf.js once the welcome screen is up, so the first document opens as fast as before.
       requestAnimationFrame(() => setTimeout(() => void pdfjsLib(), 0));
