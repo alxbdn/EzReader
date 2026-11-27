@@ -4,7 +4,10 @@ function redactionsOf(anns: Annotation[]): string {
   return JSON.stringify(anns.filter((a) => a.kind === "redact"));
 }
 
-type State = string[];
+interface State {
+  refs: Annotation[];
+  pinned: Map<Annotation, string>;
+}
 
 export interface Snapshot {
   annotations: State;
@@ -70,7 +73,7 @@ export class AnnotationSession {
   onContentChange(h: () => void): void { this.contentHandlers.push(h); }
 
   change(fn: () => void): void {
-    if (this.depth === 0) this.begin();
+    if (this.depth === 0) this.begin([]);
     this.depth++;
     try {
       fn();
@@ -123,8 +126,8 @@ export class AnnotationSession {
     return true;
   }
 
-  beginEdit(): void {
-    this.begin();
+  beginEdit(...changing: Annotation[]): void {
+    this.begin(changing.length > 0 ? changing : null);
   }
 
   relocate(ann: Annotation, page: number): void {
@@ -134,6 +137,7 @@ export class AnnotationSession {
     if (!from || idx === -1) return;
     from.splice(idx, 1);
     if (from.length === 0) this.pages.delete(ann.page);
+    this.pin([ann]);
     ann.page = page;
     let to = this.pages.get(page);
     if (!to) this.pages.set(page, (to = []));
@@ -212,17 +216,20 @@ export class AnnotationSession {
     this.load([]);
   }
 
-  private begin(): void {
-    const before = this.encode();
+  private begin(changing: readonly Annotation[] | null): void {
+    const before = this.capture();
     this.pushUndo(before);
     this.redoStack = [];
     this.candidate = null;
-    if (this.draft || this.opts.gateEnabled?.() === false) return;
-    this.candidate = {
-      annotations: before,
-      redactions: redactionsOf(this.all()),
-      dirty: this.opts.isDirty?.() ?? false,
-    };
+    if (!this.draft && this.opts.gateEnabled?.() !== false) {
+      this.candidate = {
+        annotations: before,
+        redactions: redactionsOf(this.all()),
+        dirty: this.opts.isDirty?.() ?? false,
+      };
+    }
+    if (changing) this.pin(changing);
+    else this.pinAll();
   }
 
   private finish(): void {
@@ -230,16 +237,42 @@ export class AnnotationSession {
     this.emitChange();
   }
 
-  private encode(): State {
-    const previous = this.undoStack[this.undoStack.length - 1] ?? this.redoStack[this.redoStack.length - 1];
-    const known = new Map((previous ?? []).map((json) => [json, json]));
-    return this.all().map((ann) => {
-      const json = JSON.stringify(ann);
-      return known.get(json) ?? json;
-    });
+  private capture(): State {
+    return { refs: this.all(), pinned: new Map() };
   }
 
-  private pushUndo(state = this.encode()): void {
+  private heldStates(): Set<State> {
+    const held = new Set([...this.undoStack, ...this.redoStack]);
+    if (this.candidate) held.add(this.candidate.annotations);
+    if (this.draft) held.add(this.draft.annotations);
+    return held;
+  }
+
+  private pin(changing: readonly Annotation[]): void {
+    const held = this.heldStates();
+    for (const ann of changing) {
+      let json: string | null = null;
+      for (const state of held) {
+        if (state.pinned.has(ann) || !state.refs.includes(ann)) continue;
+        json ??= JSON.stringify(ann);
+        state.pinned.set(ann, json);
+      }
+    }
+  }
+
+  private pinAll(): void {
+    const json = new Map<Annotation, string>();
+    for (const state of this.heldStates()) {
+      for (const ann of state.refs) {
+        if (state.pinned.has(ann)) continue;
+        let text = json.get(ann);
+        if (text === undefined) json.set(ann, (text = JSON.stringify(ann)));
+        state.pinned.set(ann, text);
+      }
+    }
+  }
+
+  private pushUndo(state = this.capture()): void {
     this.undoStack.push(state);
     if (this.undoStack.length > AnnotationSession.MAX_HISTORY) this.undoStack.shift();
   }
@@ -247,7 +280,7 @@ export class AnnotationSession {
   private step(from: State[], to: State[]): boolean {
     const state = from.pop();
     if (state === undefined) return false;
-    to.push(this.encode());
+    to.push(this.capture());
     this.restore(state);
     this.candidate = null;
     if (this.draft && redactionsOf(this.all()) === this.draft.redactions) this.apply();
@@ -255,7 +288,10 @@ export class AnnotationSession {
   }
 
   private restore(state: State): void {
-    this.setAll(state.map((json) => JSON.parse(json) as Annotation));
+    this.setAll(state.refs.map((ann) => {
+      const json = state.pinned.get(ann);
+      return json === undefined ? ann : JSON.parse(json) as Annotation;
+    }));
   }
 
   private setAll(anns: Annotation[]): void {
