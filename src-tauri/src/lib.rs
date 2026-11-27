@@ -79,6 +79,24 @@ pub(crate) fn allow_viewing<R: tauri::Runtime, M: Manager<R>>(app: &M, path: &st
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
+const WEBVIEW2_DEFAULT_ARGS: &str = "--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection";
+
+pub(crate) fn with_webdriver_args<'a, R: tauri::Runtime, M: Manager<R>>(
+    builder: tauri::WebviewWindowBuilder<'a, R, M>,
+) -> tauri::WebviewWindowBuilder<'a, R, M> {
+    if !cfg!(all(windows, debug_assertions)) {
+        return builder;
+    }
+    let mut builder = builder;
+    if let Ok(extra) = std::env::var("WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS") {
+        builder = builder.additional_browser_args(&format!("{WEBVIEW2_DEFAULT_ARGS} {extra}"));
+    }
+    if let Some(dir) = std::env::var_os("WEBVIEW2_USER_DATA_FOLDER") {
+        builder = builder.data_directory(dir.into());
+    }
+    builder
+}
+
 pub fn run() {
     let mut args = std::env::args().skip(1);
     let mut startup = StartupArgs::default();
@@ -106,7 +124,9 @@ pub fn run() {
             if let Some(path) = &startup_file {
                 allow_viewing(app, path);
             }
-            if let Some(main) = app.get_webview_window("main") {
+            if let Some(config) = app.config().app.windows.first() {
+                let main =
+                    with_webdriver_args(tauri::WebviewWindowBuilder::from_config(app.handle(), config)?).build()?;
                 let _ = fit_to_screen(&main);
             }
             Ok(())

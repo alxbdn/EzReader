@@ -71,11 +71,12 @@ pub(crate) fn open_window(app: &AppHandle, args: StartupArgs, position: Option<(
     let label = format!("doc-{n}");
     app.state::<AppState>().window_args.lock().unwrap().insert(label.clone(), args);
 
-    let mut builder = WebviewWindowBuilder::new(app, &label, WebviewUrl::App("index.html".into()))
-        .title("EzReader")
-        .inner_size(1100.0, 760.0)
-        .min_inner_size(720.0, 480.0)
-        .resizable(true);
+    let mut builder =
+        crate::with_webdriver_args(WebviewWindowBuilder::new(app, &label, WebviewUrl::App("index.html".into())))
+            .title("EzReader")
+            .inner_size(1100.0, 760.0)
+            .min_inner_size(720.0, 480.0)
+            .resizable(true);
     #[cfg(target_os = "macos")]
     {
         builder = builder

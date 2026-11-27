@@ -4,6 +4,7 @@
   "app": {
     "windows": [
       {
+        "create": false,
         "title": "EzReader",
         "width": 1100,
         "height": 840,
