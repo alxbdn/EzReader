@@ -56,9 +56,10 @@ function answers(png: string) {
   };
 }
 
-export async function start(page: Page, { doc = false, stub: extra = {} }: { doc?: boolean; stub?: object } = {}) {
+export async function start(page: Page, { doc = false, stub: extra = {}, files = {} }: { doc?: boolean; stub?: object; files?: Record<string, Buffer> } = {}) {
   await page.route("**/__fixtures__/*", (route) => {
     const name = decodeURIComponent(new URL(route.request().url()).pathname.split("/").pop() ?? "");
+    if (files[name]) return route.fulfill({ body: files[name], contentType: "application/octet-stream" });
     const file = existsSync(join(CORPUS, name)) ? name : DOC;
     return route.fulfill({ body: readFileSync(join(CORPUS, file)), contentType: "application/pdf" });
   });
