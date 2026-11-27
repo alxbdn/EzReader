@@ -4,8 +4,10 @@ function redactionsOf(anns: Annotation[]): string {
   return JSON.stringify(anns.filter((a) => a.kind === "redact"));
 }
 
+type State = string[];
+
 export interface Snapshot {
-  annotations: string;
+  annotations: State;
   redactions: string;
   dirty: boolean;
 }
@@ -17,8 +19,8 @@ export interface AnnotationSessionOptions {
 
 export interface AnnotationSnapshot {
   pages: Map<number, Annotation[]>;
-  undo: string[];
-  redo: string[];
+  undo: State[];
+  redo: State[];
   draft: Snapshot | null;
 }
 
@@ -26,8 +28,8 @@ export class AnnotationSession {
   private static readonly MAX_HISTORY = 50;
 
   private pages = new Map<number, Annotation[]>();
-  private undoStack: string[] = [];
-  private redoStack: string[] = [];
+  private undoStack: State[] = [];
+  private redoStack: State[] = [];
   private draft: Snapshot | null = null;
   private candidate: Snapshot | null = null;
   private depth = 0;
@@ -211,15 +213,14 @@ export class AnnotationSession {
   }
 
   private begin(): void {
-    const before = JSON.stringify(this.all());
+    const before = this.encode();
     this.pushUndo(before);
     this.redoStack = [];
     this.candidate = null;
     if (this.draft || this.opts.gateEnabled?.() === false) return;
-    const anns = JSON.parse(before) as Annotation[];
     this.candidate = {
       annotations: before,
-      redactions: redactionsOf(anns),
+      redactions: redactionsOf(this.all()),
       dirty: this.opts.isDirty?.() ?? false,
     };
   }
@@ -229,23 +230,32 @@ export class AnnotationSession {
     this.emitChange();
   }
 
-  private pushUndo(state = JSON.stringify(this.all())): void {
+  private encode(): State {
+    const previous = this.undoStack[this.undoStack.length - 1] ?? this.redoStack[this.redoStack.length - 1];
+    const known = new Map((previous ?? []).map((json) => [json, json]));
+    return this.all().map((ann) => {
+      const json = JSON.stringify(ann);
+      return known.get(json) ?? json;
+    });
+  }
+
+  private pushUndo(state = this.encode()): void {
     this.undoStack.push(state);
     if (this.undoStack.length > AnnotationSession.MAX_HISTORY) this.undoStack.shift();
   }
 
-  private step(from: string[], to: string[]): boolean {
+  private step(from: State[], to: State[]): boolean {
     const state = from.pop();
     if (state === undefined) return false;
-    to.push(JSON.stringify(this.all()));
+    to.push(this.encode());
     this.restore(state);
     this.candidate = null;
     if (this.draft && redactionsOf(this.all()) === this.draft.redactions) this.apply();
     return true;
   }
 
-  private restore(json: string): void {
-    this.setAll(JSON.parse(json) as Annotation[]);
+  private restore(state: State): void {
+    this.setAll(state.map((json) => JSON.parse(json) as Annotation));
   }
 
   private setAll(anns: Annotation[]): void {
