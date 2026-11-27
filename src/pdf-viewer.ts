@@ -1,5 +1,6 @@
 import { pdfjsLib } from "./pdfjs";
 import { SAFE_PDF } from "./pdf-options";
+import { renderFilePages, renderFileForPrint, renderPagesForPrint } from "./pdf-file-render";
 import type { PDFDocumentProxy, PDFPageProxy, PageViewport, RenderTask } from "pdfjs-dist";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { CanvasOverlay } from "./canvas-overlay";
@@ -7,10 +8,8 @@ import { OverlayEvents } from "./overlay-events";
 import { createFieldControl, type WidgetData } from "./form-fields";
 import { ToolSelection } from "./tool-selection";
 import { AnnotationSession } from "./annotation-session";
-import { type RedactAnnotation, CSS_UNITS, MIN_SCALE, MAX_SCALE } from "./models";
-import type { TextItem } from "pdfjs-dist/types/src/display/api";
-import { openUrl, type RedactedPage, type StraightenedPage } from "./tauri-bridge";
-import { moveTextRuns, pageMap, reproject, warpToRect, type Point } from "./page-adjustment";
+import { CSS_UNITS, MIN_SCALE, MAX_SCALE } from "./models";
+import { openUrl } from "./tauri-bridge";
 import { LiveText, hasRealText, layoutOcr, renderOcrLayer } from "./live-text";
 
 const ENABLE_FORMS = 2;
@@ -1550,48 +1549,21 @@ export class PdfViewer {
 
   async renderPagesForPrint(pageNumbers: number[], dpi = 200): Promise<string[]> {
     if (!this.pdfDoc) return [];
-    return renderDocPages(this.pdfDoc, pageNumbers, dpi, this._rotation);
+    return renderPagesForPrint(this.pdfDoc, pageNumbers, dpi, this._rotation);
   }
 
-  async renderFileForPrint(filePath: string, pageNumbers: number[], dpi = 200): Promise<string[]> {
-    const doc = await (await pdfjsLib()).getDocument({ ...SAFE_PDF, url: convertFileSrc(filePath) + `?t=${Date.now()}` }).promise;
-    try {
-      return await renderDocPages(doc, pageNumbers, dpi, 0);
-    } finally {
-      await doc.loadingTask.destroy();
-    }
+  renderFileForPrint(filePath: string, pageNumbers: number[], dpi = 200): Promise<string[]> {
+    return renderFileForPrint(filePath, pageNumbers, dpi);
   }
 
-  async renderFilePages(
+  renderFilePages(
     filePath: string,
     pageNumbers: number[],
     dpi: number,
     type: "image/png" | "image/jpeg",
     onPage: (dataUrl: string, page: number) => Promise<void>,
   ): Promise<void> {
-    const doc = await (await pdfjsLib()).getDocument({ ...SAFE_PDF, url: convertFileSrc(filePath) + `?t=${Date.now()}` }).promise;
-    try {
-      for (const n of pageNumbers) {
-        if (n < 1 || n > doc.numPages) continue;
-        const page = await doc.getPage(n);
-        const unit = page.getViewport({ scale: 1, rotation: page.rotate });
-        const scale = Math.min(dpi / 72, Math.sqrt(40e6 / (unit.width * unit.height)));
-        const viewport = page.getViewport({ scale, rotation: page.rotate });
-        const canvas = document.createElement("canvas");
-        canvas.width = Math.ceil(viewport.width);
-        canvas.height = Math.ceil(viewport.height);
-        const ctx = canvas.getContext("2d")!;
-        ctx.fillStyle = "#fff";
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
-        await page.render({ canvas: ctx.canvas, viewport }).promise;
-        const data = canvas.toDataURL(type, 0.9);
-        canvas.width = canvas.height = 0;
-        page.cleanup();
-        await onPage(data, n);
-      }
-    } finally {
-      await doc.loadingTask.destroy();
-    }
+    return renderFilePages(filePath, pageNumbers, dpi, type, onPage);
   }
 
   isLoaded(): boolean { return this.pdfDoc !== null; }
@@ -1629,218 +1601,5 @@ export class PdfViewer {
 
   async getPageLinkAnnotations(): Promise<Array<{ url: string; rect: [number, number, number, number] }>> {
     return [];
-  }
-}
-
-async function renderDocPages(
-  doc: PDFDocumentProxy,
-  pageNumbers: number[],
-  dpi: number,
-  extraRotation: number,
-): Promise<string[]> {
-  const scale   = dpi / 72;
-  const results: string[] = [];
-  for (const i of pageNumbers) {
-    if (i < 1 || i > doc.numPages) continue;
-    const page     = await doc.getPage(i);
-    const viewport = page.getViewport({ scale, rotation: (page.rotate + extraRotation) % 360 });
-    const canvas   = document.createElement("canvas");
-    canvas.width   = viewport.width;
-    canvas.height  = viewport.height;
-    const ctx = canvas.getContext("2d")!;
-    await page.render({ canvas: ctx.canvas, viewport }).promise;
-    results.push(canvas.toDataURL("image/jpeg", 0.92).split(",")[1]);
-    canvas.width = canvas.height = 0;
-    page.cleanup();
-  }
-  return results;
-}
-
-export async function renderRedactedPages(
-  filePath: string,
-  redactions: RedactAnnotation[],
-  dpi = 300,
-): Promise<RedactedPage[]> {
-  const byPage = new Map<number, RedactAnnotation[]>();
-  for (const r of redactions) byPage.set(r.page, [...(byPage.get(r.page) ?? []), r]);
-
-  const doc = await (await pdfjsLib()).getDocument({ ...SAFE_PDF, url: convertFileSrc(filePath) + `?t=${Date.now()}` }).promise;
-  try {
-    const out: RedactedPage[] = [];
-    for (const [pageNum, areas] of [...byPage.entries()].sort((a, b) => a[0] - b[0])) {
-      if (pageNum < 1 || pageNum > doc.numPages) continue;
-      const page = await doc.getPage(pageNum);
-      const unit  = page.getViewport({ scale: 1, rotation: 0 });
-      const scale = Math.min(dpi / 72, Math.sqrt(40e6 / (unit.width * unit.height)));
-      const viewport = page.getViewport({ scale, rotation: 0 });
-      const canvas   = document.createElement("canvas");
-      canvas.width   = Math.ceil(viewport.width);
-      canvas.height  = Math.ceil(viewport.height);
-      const ctx = canvas.getContext("2d")!;
-      ctx.fillStyle = "#fff";
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
-      await page.render({ canvas: ctx.canvas, viewport }).promise;
-
-      ctx.fillStyle = "#000";
-      ctx.strokeStyle = "#000";
-      ctx.lineWidth = 2;
-      for (const a of areas) {
-        const [x1, y1] = viewport.convertToViewportPoint(a.x, a.y);
-        const [x2, y2] = viewport.convertToViewportPoint(a.x + a.width, a.y + a.height);
-        const shape = a.shape ?? "rect";
-        if (shape === "rect" || ((shape === "lasso" || shape === "poly") && (a.points?.length ?? 0) < 3)) {
-          const left = Math.floor(Math.min(x1, x2)) - 1, top = Math.floor(Math.min(y1, y2)) - 1;
-          const right = Math.ceil(Math.max(x1, x2)) + 1, bottom = Math.ceil(Math.max(y1, y2)) + 1;
-          ctx.fillRect(left, top, right - left, bottom - top);
-          continue;
-        }
-        ctx.beginPath();
-        if (shape === "ellipse") {
-          ctx.ellipse((x1 + x2) / 2, (y1 + y2) / 2, Math.abs(x2 - x1) / 2, Math.abs(y2 - y1) / 2, 0, 0, Math.PI * 2);
-        } else {
-          a.points!.forEach(([u, v], i) => {
-            const [x, y] = viewport.convertToViewportPoint(a.x + u * a.width, a.y + v * a.height);
-            if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
-          });
-          ctx.closePath();
-        }
-        ctx.fill();
-        ctx.stroke();
-      }
-
-      const [v0, v1, v2, v3] = page.view;
-      out.push({
-        page: pageNum,
-        jpegBase64: canvas.toDataURL("image/jpeg", 0.9).split(",")[1],
-        widthPx: canvas.width,
-        heightPx: canvas.height,
-        view: [v0, v1, v2, v3],
-      });
-      canvas.width = canvas.height = 0;
-      page.cleanup();
-    }
-    return out;
-  } finally {
-    await doc.loadingTask.destroy();
-  }
-}
-
-export async function renderWatermarkedPages(
-  filePath: string,
-  draw: (ctx: CanvasRenderingContext2D, width: number, height: number) => void,
-  dpi = 300,
-  onProgress?: (done: number, total: number) => void,
-  pages?: number[],
-): Promise<RedactedPage[]> {
-  const doc = await (await pdfjsLib()).getDocument({ ...SAFE_PDF, url: convertFileSrc(filePath) + `?t=${Date.now()}` }).promise;
-  try {
-    const out: RedactedPage[] = [];
-    const list = (pages ?? Array.from({ length: doc.numPages }, (_, i) => i + 1)).filter((n) => n >= 1 && n <= doc.numPages);
-    for (const [i, pageNum] of list.entries()) {
-      const page = await doc.getPage(pageNum);
-      const canvas = await paintPage(page, dpi);
-      draw(canvas.getContext("2d")!, canvas.width, canvas.height);
-      const [v0, v1, v2, v3] = page.view;
-      out.push({
-        page: pageNum,
-        jpegBase64: canvas.toDataURL("image/jpeg", 0.9).split(",")[1],
-        widthPx: canvas.width,
-        heightPx: canvas.height,
-        view: [v0, v1, v2, v3],
-      });
-      canvas.width = canvas.height = 0;
-      page.cleanup();
-      onProgress?.(i + 1, list.length);
-    }
-    return out;
-  } finally {
-    await doc.loadingTask.destroy();
-  }
-}
-
-export async function renderPagePreview(filePath: string, widthPx: number, pageNum = 1): Promise<HTMLCanvasElement> {
-  const doc = await (await pdfjsLib()).getDocument({ ...SAFE_PDF, url: convertFileSrc(filePath) + `?t=${Date.now()}` }).promise;
-  try {
-    const page = await doc.getPage(Math.min(Math.max(1, pageNum), doc.numPages));
-    const unit = page.getViewport({ scale: 1, rotation: 0 });
-    const canvas = await paintPage(page, (widthPx / unit.width) * 72);
-    page.cleanup();
-    return canvas;
-  } finally {
-    await doc.loadingTask.destroy();
-  }
-}
-
-async function paintPage(page: PDFPageProxy, dpi: number): Promise<HTMLCanvasElement> {
-  const unit = page.getViewport({ scale: 1, rotation: 0 });
-  const scale = Math.min(dpi / 72, Math.sqrt(40e6 / (unit.width * unit.height)));
-  const viewport = page.getViewport({ scale, rotation: 0 });
-  const canvas = document.createElement("canvas");
-  canvas.width = Math.ceil(viewport.width);
-  canvas.height = Math.ceil(viewport.height);
-  const ctx = canvas.getContext("2d")!;
-  ctx.fillStyle = "#fff";
-  ctx.fillRect(0, 0, canvas.width, canvas.height);
-  await page.render({ canvas: ctx.canvas, viewport }).promise;
-  return canvas;
-}
-
-export async function renderStraightenedPages(
-  filePath: string,
-  items: { page: number; quad: [Point, Point, Point, Point] }[],
-  dpi = 300,
-): Promise<StraightenedPage[]> {
-  const doc = await (await pdfjsLib()).getDocument({ ...SAFE_PDF, url: convertFileSrc(filePath) + `?t=${Date.now()}` }).promise;
-  try {
-    const out: StraightenedPage[] = [];
-    for (const { page: pageNum, quad } of items) {
-      if (pageNum < 1 || pageNum > doc.numPages) continue;
-      const page = await doc.getPage(pageNum);
-      const unit = page.getViewport({ scale: 1, rotation: 0 });
-      const scale = Math.min(dpi / 72, Math.sqrt(40e6 / (unit.width * unit.height)));
-      const shown = page.getViewport({ scale, rotation: page.rotate });
-      const flat = page.getViewport({ scale, rotation: 0 });
-
-      const src = document.createElement("canvas");
-      src.width = Math.ceil(shown.width);
-      src.height = Math.ceil(shown.height);
-      const sctx = src.getContext("2d", { willReadFrequently: true })!;
-      sctx.fillStyle = "#fff";
-      sctx.fillRect(0, 0, src.width, src.height);
-      await page.render({ canvas: sctx.canvas, viewport: shown }).promise;
-      const pixels = sctx.getImageData(0, 0, src.width, src.height);
-      const px = quad.map(([x, y]) => [x * src.width, y * src.height] as Point) as [Point, Point, Point, Point];
-      const warped = warpToRect(pixels, px, src.width, src.height);
-      sctx.putImageData(new ImageData(warped.data as Uint8ClampedArray<ArrayBuffer>, warped.width, warped.height), 0, 0);
-
-      const dst = document.createElement("canvas");
-      dst.width = Math.ceil(flat.width);
-      dst.height = Math.ceil(flat.height);
-      const dctx = dst.getContext("2d")!;
-      dctx.fillStyle = "#fff";
-      dctx.fillRect(0, 0, dst.width, dst.height);
-      dctx.setTransform(...reproject(shown.transform, flat.transform));
-      dctx.drawImage(src, 0, 0);
-
-      const map = pageMap(shown.transform, quad, src.width, src.height);
-      const content = await page.getTextContent();
-      const text = moveTextRuns(content.items.filter((i): i is TextItem => "str" in i), map);
-
-      const [v0, v1, v2, v3] = page.view;
-      out.push({
-        page: pageNum,
-        jpegBase64: dst.toDataURL("image/jpeg", 0.9).split(",")[1],
-        widthPx: dst.width,
-        heightPx: dst.height,
-        view: [v0, v1, v2, v3],
-        map,
-        text,
-      });
-      src.width = src.height = dst.width = dst.height = 0;
-      page.cleanup();
-    }
-    return out;
-  } finally {
-    await doc.loadingTask.destroy();
   }
 }
