@@ -1,7 +1,7 @@
 import { after, afterEach, before, describe, test } from "node:test";
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
-import { copyFileSync, mkdtempSync, readFileSync, rmSync, writeFileSync, mkdirSync } from "node:fs";
+import { closeSync, copyFileSync, mkdtempSync, openSync, readFileSync, rmSync, writeFileSync, mkdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { deflateRawSync } from "node:zlib";
@@ -40,7 +40,10 @@ async function startDriver() {
     XDG_CACHE_HOME: join(profile, "cache"),
     LOCALAPPDATA: join(profile, "local"),
   };
-  driverProc = spawn("tauri-driver", [], { env, stdio: "ignore", detached: process.platform !== "win32" });
+  for (const dir of [env.XDG_DATA_HOME, env.XDG_CONFIG_HOME, env.XDG_CACHE_HOME, env.LOCALAPPDATA]) mkdirSync(dir, { recursive: true });
+  const log = openSync(join(SHOTS, `driver-${profiles}.log`), "w");
+  driverProc = spawn("tauri-driver", [], { env, stdio: ["ignore", log, log], detached: process.platform !== "win32" });
+  closeSync(log);
   await waitForDriver();
 }
 
