@@ -1,23 +1,18 @@
-import { createServer } from "node:http";
-import { createReadStream, readFileSync, statSync, existsSync, readdirSync, writeFileSync, appendFileSync, mkdirSync } from "node:fs";
+import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { execFileSync } from "node:child_process";
-import { extname, join, resolve, dirname } from "node:path";
+import { join, resolve } from "node:path";
 import { tmpdir } from "node:os";
-import { fileURLToPath } from "node:url";
-import { chromium } from "playwright";
+import { builtApp, checkThresholds, cliOptions, cpuPercent, here, openApp, percentile, readJson, seededRandom, serveApp, summarize, treeUsage } from "./harness.mjs";
 
-const here = dirname(fileURLToPath(import.meta.url));
-const args = process.argv.slice(2);
-const opt = (name, def) => { const i = args.indexOf(name); return i === -1 ? def : args[i + 1]; };
+const { opt } = cliOptions();
 const profileName = opt("--profile", "quick");
 const outPath = opt("--out", "perf-tabs-results.json");
 const workDir = resolve(opt("--dir", join(tmpdir(), "ezreader-perf-tabs")));
-const profile = JSON.parse(readFileSync(join(here, "tabs-profiles.json"), "utf8"))[profileName];
+const profile = readJson("tabs-profiles.json")[profileName];
 if (!profile) throw new Error(`Unknown profile ${profileName}`);
 const rounds = Number(opt("--rounds", profile.rounds));
-const thresholds = JSON.parse(readFileSync(join(here, "tabs-thresholds.json"), "utf8"));
-const dist = resolve(here, "..", "..", "dist");
-if (!existsSync(join(dist, "index.html"))) throw new Error("dist/ is missing: run `npm run build` first");
+const thresholds = readJson("tabs-thresholds.json");
+const dist = builtApp();
 
 mkdirSync(workDir, { recursive: true });
 const docs = profile.docs.map((d, i) => {
@@ -27,28 +22,12 @@ const docs = profile.docs.map((d, i) => {
 });
 const byPath = new Map(docs.map((d) => [d.path, d]));
 
-const TYPES = { ".html": "text/html", ".js": "text/javascript", ".mjs": "text/javascript", ".css": "text/css", ".svg": "image/svg+xml", ".png": "image/png", ".pdf": "application/pdf", ".woff2": "font/woff2" };
-const server = createServer((req, res) => {
-  const url = new URL(req.url, "http://x");
-  const asked = url.pathname.startsWith("/file/") ? decodeURIComponent(url.pathname.slice(6)) : null;
-  const file = asked ?? join(dist, decodeURIComponent(url.pathname === "/" ? "/index.html" : url.pathname));
-  if (asked ? !byPath.has(asked) : !file.startsWith(dist)) { res.writeHead(403).end(); return; }
-  if (!existsSync(file) || statSync(file).isDirectory()) { res.writeHead(404).end(); return; }
-  const size = statSync(file).size;
-  const headers = { "Content-Type": TYPES[extname(file)] ?? "application/octet-stream", "Accept-Ranges": "bytes", "Access-Control-Allow-Origin": "*" };
-  const range = /bytes=(\d+)-(\d*)/.exec(req.headers.range ?? "");
-  if (range) {
-    const start = Number(range[1]);
-    const end = range[2] ? Math.min(Number(range[2]), size - 1) : size - 1;
-    res.writeHead(206, { ...headers, "Content-Range": `bytes ${start}-${end}/${size}`, "Content-Length": end - start + 1 });
-    createReadStream(file, { start, end }).pipe(res);
-  } else {
-    res.writeHead(200, { ...headers, "Content-Length": size });
-    createReadStream(file).pipe(res);
-  }
+const server = await serveApp(dist, (url) => {
+  if (!url.pathname.startsWith("/file/")) return null;
+  const asked = decodeURIComponent(url.pathname.slice(6));
+  return byPath.has(asked) ? asked : false;
 });
-await new Promise((r) => server.listen(0, "127.0.0.1", r));
-const origin = `http://127.0.0.1:${server.address().port}`;
+const { origin } = server;
 
 const tauriStub = ({ origin, specs }) => {
   let next = 1;
@@ -127,99 +106,11 @@ const tauriStub = ({ origin, specs }) => {
   };
 };
 
-const TICK = 100;
 const QUIET_BEFORE_IDLE_MS = 12000;
-function descendants(root) {
-  const kids = new Map();
-  for (const d of readdirSync("/proc")) {
-    if (!/^\d+$/.test(d)) continue;
-    try {
-      const stat = readFileSync(`/proc/${d}/stat`, "utf8");
-      const ppid = Number(stat.slice(stat.lastIndexOf(")") + 2).split(" ")[1]);
-      if (!kids.has(ppid)) kids.set(ppid, []);
-      kids.get(ppid).push(Number(d));
-    } catch {}
-  }
-  const out = [];
-  const walk = (p) => { for (const k of kids.get(p) ?? []) { out.push(k); walk(k); } };
-  walk(root);
-  return out;
-}
-function treeUsage() {
-  let pssKb = 0, ticks = 0;
-  for (const pid of descendants(process.pid)) {
-    try {
-      const stat = readFileSync(`/proc/${pid}/stat`, "utf8").split(") ")[1].split(" ");
-      ticks += Number(stat[11]) + Number(stat[12]);
-      const m = /Pss:\s+(\d+)/.exec(readFileSync(`/proc/${pid}/smaps_rollup`, "utf8"));
-      if (m) pssKb += Number(m[1]);
-    } catch {}
-  }
-  return { mb: pssKb / 1024, cpuSec: ticks / TICK, at: performance.now() };
-}
-const cpuPercent = (a, b) => (100 * (b.cpuSec - a.cpuSec)) / ((b.at - a.at) / 1000);
 
 const specs = Object.fromEntries(docs.filter((d) => d.annotationsPerPage > 0).map((d) => [d.path, { pages: d.pages, annotationsPerPage: d.annotationsPerPage, inkHeavy: !!d.inkHeavy }]));
-const browser = await chromium.launch({ args: ["--js-flags=--expose-gc"] });
-const context = await browser.newContext({ viewport: { width: 1280, height: 800 }, deviceScaleFactor: 1.5 });
-await context.addInitScript(tauriStub, { origin, specs });
-const page = await context.newPage();
-const errors = [];
-page.on("pageerror", (e) => errors.push((e.stack ?? String(e)).split("\n").slice(0, 4).join(" | ")));
-page.on("crash", () => errors.push("renderer crashed"));
-const cdp = await context.newCDPSession(page);
-await cdp.send("Performance.enable");
-
-const metrics = async () => {
-  const { metrics } = await cdp.send("Performance.getMetrics");
-  const m = Object.fromEntries(metrics.map((x) => [x.name, x.value]));
-  const canvasMb = await page.evaluate(() => {
-    let px = 0;
-    for (const c of document.querySelectorAll("#viewer-scroll canvas")) px += c.width * c.height;
-    return (px * 4) / 1048576;
-  });
-  return { heapMb: m.JSHeapUsedSize / 1048576, nodes: m.Nodes, canvasMb, ...treeUsage() };
-};
-async function pdfWorkerHeapMb() {
-  const bcdp = await browser.newBrowserCDPSession();
-  const { targetInfos } = await bcdp.send("Target.getTargets");
-  let total = 0;
-  for (const t of targetInfos.filter((t) => t.type === "worker")) {
-    const { sessionId } = await bcdp.send("Target.attachToTarget", { targetId: t.targetId, flatten: false });
-    const reply = new Promise((res) => bcdp.on("Target.receivedMessageFromTarget", (m) => {
-      if (m.sessionId !== sessionId) return;
-      const j = JSON.parse(m.message);
-      if (j.id === 1) res(j.result);
-    }));
-    await bcdp.send("Target.sendMessageToTarget", { sessionId, message: JSON.stringify({ id: 1, method: "Runtime.getHeapUsage" }) });
-    total += (await reply).usedSize / 1048576;
-  }
-  await bcdp.detach();
-  return total;
-}
-const gc = async () => { await cdp.send("HeapProfiler.collectGarbage"); await page.waitForTimeout(300); await cdp.send("HeapProfiler.collectGarbage"); };
-
-const settle = (quiet = 250, timeout = 15000) => page.evaluate(([quiet, timeout]) => new Promise((done) => {
-  const root = document.getElementById("viewer-scroll");
-  const t0 = performance.now();
-  let last = t0, timer;
-  const finish = () => { obs.disconnect(); clearTimeout(cap); done(last - t0); };
-  const obs = new MutationObserver(() => { last = performance.now(); clearTimeout(timer); timer = setTimeout(finish, quiet); });
-  obs.observe(root, { subtree: true, childList: true, attributes: true });
-  timer = setTimeout(finish, quiet);
-  const cap = setTimeout(() => { obs.disconnect(); done(timeout); }, timeout);
-}), [quiet, timeout]);
-
-const pageReady = (n, timeout = 15000) => page.evaluate(([n, timeout]) => new Promise((done) => {
-  const t0 = performance.now();
-  const check = () => {
-    const c = document.querySelector(`.page-wrapper[data-page="${n}"] .page-canvas`);
-    if (c && c.width > 0) return done(performance.now() - t0);
-    if (performance.now() - t0 > timeout) return done(timeout);
-    requestAnimationFrame(check);
-  };
-  check();
-}), [n, timeout]);
+const app = await openApp(tauriStub, { origin, specs });
+const { page, errors, samples, sample, gc, settle, pageReady, goTo, pdfWorkerHeapMb } = app;
 
 const shown = () => page.evaluate(() => ({
   tab: document.querySelector(".side-tab.active .side-tab-name")?.textContent ?? "",
@@ -227,14 +118,6 @@ const shown = () => page.evaluate(() => ({
   tabs: document.querySelectorAll(".side-tab[data-tab]").length,
   dirty: [...document.querySelectorAll(".side-tab.dirty .side-tab-name")].map((e) => e.textContent),
 }));
-
-const samples = [];
-const sample = async (phase) => {
-  const m = await metrics();
-  samples.push({ phase, t: Math.round(m.at), ...m });
-  console.log(`  [${phase}] ${m.mb.toFixed(0)} MB, heap ${m.heapMb.toFixed(0)} MB, canvases ${m.canvasMb.toFixed(0)} MB, ${m.nodes} nodes`);
-  return m;
-};
 
 const visiblePage = () => page.evaluate(() => {
   const root = document.getElementById("viewer-scroll").getBoundingClientRect();
@@ -280,8 +163,7 @@ const box = await scroller.boundingBox();
 const centre = { x: box.x + box.width / 2, y: box.y + box.height / 2 };
 await page.mouse.move(centre.x, centre.y);
 
-const rnd = (() => { let s = 42; return () => (s = (s * 1103515245 + 12345) % 2 ** 31) / 2 ** 31; })();
-const goTo = (n) => page.evaluate((n) => document.querySelector(`.page-wrapper[data-page="${n}"]`)?.scrollIntoView({ block: "start" }), n);
+const rnd = seededRandom();
 
 const switchMs = [];
 const jumpMs = [];
@@ -368,10 +250,9 @@ const idleA = treeUsage();
 await page.waitForTimeout(5000);
 const idleB = treeUsage();
 const unknown = await page.evaluate(() => [...window.__perfUnknown]);
-await browser.close();
+await app.close();
 server.close();
 
-const pct = (arr, p) => { const s = [...arr].sort((a, b) => a - b); return s.length ? s[Math.min(s.length - 1, Math.floor((p / 100) * s.length))] : 0; };
 const totalPages = docs.reduce((a, d) => a + d.pages, 0);
 const totalAnnotations = docs.reduce((a, d) => a + d.expected, 0);
 const results = {
@@ -380,9 +261,9 @@ const results = {
   annotations: totalAnnotations,
   rounds: ranRounds,
   open_all_ms: openAllMs,
-  switch_p95_ms: pct(switchMs, 95),
-  switch_median_ms: pct(switchMs, 50),
-  jump_p95_ms: pct(jumpMs, 95),
+  switch_p95_ms: percentile(switchMs, 95),
+  switch_median_ms: percentile(switchMs, 50),
+  jump_p95_ms: percentile(jumpMs, 95),
   memory_empty_mb: empty.mb,
   memory_opened_mb: opened.mb,
   memory_peak_mb: Math.max(...samples.map((s) => s.mb)),
@@ -407,16 +288,7 @@ const results = {
 if (drawn === 0 && !openFailed) mismatches.push("no annotation could be drawn");
 results.wrong_document_shown = mismatches.length;
 
-const rows = [];
-let failed = false;
-for (const [key, value] of Object.entries(results)) {
-  const max = thresholds[key];
-  const ok = max === undefined || value <= max;
-  if (!ok) failed = true;
-  rows.push({ key, value, max, ok });
-}
-console.log("\nResult                          Value      Limit");
-for (const r of rows) console.log(`${r.ok ? " " : "✗"} ${r.key.padEnd(30)} ${r.value.toFixed(1).padStart(9)}  ${r.max ?? ""}`);
+const { rows, failed } = checkThresholds(results, thresholds, 30);
 console.log("\nDocuments");
 for (const d of perDoc) console.log(`  ${d.name.padEnd(22)} ${String(d.annotations_saved).padStart(6)} / ${d.annotations_expected} annotations saved`);
 if (mismatches.length) console.log("\nProblems:\n  " + mismatches.join("\n  "));
@@ -425,11 +297,7 @@ if (errors.length) console.log("\nPage errors:\n  " + errors.join("\n  "));
 if (unknown.length) console.log(`\nCommands answered with null: ${unknown.join(", ")}`);
 
 writeFileSync(outPath, JSON.stringify({ profile: profileName, results, thresholds, documents: perDoc, samples, switchMs, jumpMs, mismatches, errors, date: new Date().toISOString() }, null, 2));
-if (process.env.GITHUB_STEP_SUMMARY) {
-  let md = `### Tabs test (${profileName}): ${docs.length} tabs, ${totalPages} pages, ${totalAnnotations} annotations\n\n| | Measure | Value | Limit |\n|---|---|---:|---:|\n`;
-  for (const r of rows) md += `| ${r.ok ? "✅" : "❌"} | ${r.key} | ${r.value.toFixed(1)} | ${r.max ?? "–"} |\n`;
-  md += `\n| Document | Pages | Annotations saved |\n|---|---:|---:|\n`;
-  for (const d of perDoc) md += `| ${d.name} | ${d.pages} | ${d.annotations_saved} / ${d.annotations_expected} |\n`;
-  appendFileSync(process.env.GITHUB_STEP_SUMMARY, md);
-}
+let documentsMd = `\n| Document | Pages | Annotations saved |\n|---|---:|---:|\n`;
+for (const d of perDoc) documentsMd += `| ${d.name} | ${d.pages} | ${d.annotations_saved} / ${d.annotations_expected} |\n`;
+summarize(`Tabs test (${profileName}): ${docs.length} tabs, ${totalPages} pages, ${totalAnnotations} annotations`, rows, documentsMd);
 process.exit(failed ? 1 : 0);
