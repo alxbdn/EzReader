@@ -12,6 +12,7 @@
   "app": {
     "windows": [
       {
+        "create": false,
         "title": "EzReader",
         "width": 910,
         "height": 1075,

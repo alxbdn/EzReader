@@ -1,7 +1,7 @@
 import { after, afterEach, before, describe, test } from "node:test";
 import assert from "node:assert/strict";
-import { spawn } from "node:child_process";
-import { copyFileSync, mkdtempSync, readFileSync, rmSync, writeFileSync, mkdirSync } from "node:fs";
+import { execFileSync, spawn } from "node:child_process";
+import { closeSync, copyFileSync, mkdtempSync, openSync, readFileSync, rmSync, writeFileSync, mkdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { deflateRawSync } from "node:zlib";
@@ -40,7 +40,10 @@ async function startDriver() {
     XDG_CACHE_HOME: join(profile, "cache"),
     LOCALAPPDATA: join(profile, "local"),
   };
-  driverProc = spawn("tauri-driver", [], { env, stdio: "ignore", detached: process.platform !== "win32" });
+  for (const dir of [env.XDG_DATA_HOME, env.XDG_CONFIG_HOME, env.XDG_CACHE_HOME, env.LOCALAPPDATA]) mkdirSync(dir, { recursive: true });
+  const log = openSync(join(SHOTS, `driver-${profiles}.log`), "w");
+  driverProc = spawn("tauri-driver", [], { env, stdio: ["ignore", log, log], detached: process.platform !== "win32" });
+  closeSync(log);
   await waitForDriver();
 }
 
@@ -50,6 +53,12 @@ afterEach(async (t) => {
     try {
       writeFileSync(join(SHOTS, `${t.name.replace(/[^\w-]+/g, "_")}.png`), await driver.takeScreenshot(), "base64");
     } catch {}
+    if (process.platform === "win32") {
+      try {
+        const lines = execFileSync("powershell", ["-NoProfile", "-Command", "Get-CimInstance Win32_Process | Where-Object { $_.Name -like 'ezreader*' } | ForEach-Object { $_.CommandLine }"], { encoding: "utf8" });
+        writeFileSync(join(SHOTS, `${t.name.replace(/[^\w-]+/g, "_")}.cmdline.txt`), lines);
+      } catch {}
+    }
   }
   await driver.quit().catch(() => {});
   driver = undefined;
@@ -153,9 +162,12 @@ async function drawRectangle() {
   await click("[data-group=shapes]");
   await waitForStillPage();
   const page = await driver.findElement(By.css("#viewer-scroll .page-wrapper"));
+  const { width, height } = await page.getRect();
+  const dx = Math.round(width / 5);
+  const dy = Math.round(height / 8);
   await driver.actions({ async: true })
-    .move({ origin: page, x: -100, y: -50 }).press()
-    .move({ origin: page, x: -20, y: 30, duration: 250 })
+    .move({ origin: page, x: -dx, y: -dy }).press()
+    .move({ origin: page, x: Math.round(dx / 4), y: Math.round(dy / 2), duration: 250 })
     .release().perform();
 }
 
@@ -428,7 +440,7 @@ describe("books", () => {
     const page = (title) => `<!doctype html><html><head><meta charset="utf-8"></head><body><h1>${title}</h1>${"<p>Bonjour tout le monde.</p>".repeat(80)}</body></html>`;
     const parts = await driver.executeAsyncScript((pages, done) => {
       const id = window.__TAURI_INTERNALS__.transformCallback(() => {});
-      window.__TAURI_INTERNALS__.invoke("print_html_pages", { pages, progress: `__CHANNEL__:${id}` }).then(done, (e) => done({ error: String(e) }));
+      window.__TAURI_INTERNALS__.invoke("print_html_pages", { pages, progress: `__CHANNEL__:${id}` }).then(done, (e) => done({ error: e && typeof e === "object" ? JSON.stringify(e) : String(e) }));
     }, [page("Un"), page("Deux")]);
     assert.ok(Array.isArray(parts), JSON.stringify(parts));
     assert.equal(parts.length, 2);
