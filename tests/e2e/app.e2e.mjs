@@ -162,9 +162,12 @@ async function drawRectangle() {
   await click("[data-group=shapes]");
   await waitForStillPage();
   const page = await driver.findElement(By.css("#viewer-scroll .page-wrapper"));
+  const { width, height } = await page.getRect();
+  const dx = Math.round(width / 5);
+  const dy = Math.round(height / 8);
   await driver.actions({ async: true })
-    .move({ origin: page, x: -100, y: -50 }).press()
-    .move({ origin: page, x: -20, y: 30, duration: 250 })
+    .move({ origin: page, x: -dx, y: -dy }).press()
+    .move({ origin: page, x: Math.round(dx / 4), y: Math.round(dy / 2), duration: 250 })
     .release().perform();
 }
 
