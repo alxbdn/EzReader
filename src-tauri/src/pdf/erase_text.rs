@@ -492,4 +492,108 @@ mod tests {
         assert_eq!(erase_text(&mut doc, page, &[Area::new(300.0, 100.0, 20.0, 10.0)], &HashSet::new()).unwrap(), 0);
         assert_eq!(doc.get_page_contents(page), before);
     }
+
+    fn page_with_font(content: &str, font: Dictionary) -> (Document, ObjectId) {
+        let (mut doc, page) = page_with(content);
+        let font_id = doc.add_object(font);
+        let page_dict = doc.get_object_mut(page).unwrap().as_dict_mut().unwrap();
+        page_dict.set("Resources", dictionary! { "Font" => dictionary! { "F1" => font_id } });
+        (doc, page)
+    }
+
+    #[test]
+    fn measures_two_byte_fonts_from_their_widths() {
+        let mut doc = Document::with_version("1.7");
+        let widths = doc.add_object(Object::Array(vec![
+            1.into(),
+            Object::Array(vec![600.into(), 700.into()]),
+            10.into(),
+            20.into(),
+            400.into(),
+        ]));
+        let descendant =
+            doc.add_object(dictionary! { "Type" => "Font", "Subtype" => "CIDFontType2", "DW" => 1000, "W" => widths });
+        let font = dictionary! { "Type" => "Font", "Subtype" => "Type0", "BaseFont" => "Noto", "DescendantFonts" => vec![descendant.into()] };
+        let w = Widths::of(&doc, &font);
+        assert!(w.two_byte);
+        assert_eq!(w.codes(&[0, 1, 0, 2, 0, 15, 7]), vec![1, 2, 15, 7]);
+        assert_eq!(w.width(1), 600.0);
+        assert_eq!(w.width(2), 700.0);
+        assert_eq!(w.width(15), 400.0);
+        assert_eq!(w.width(99), 1000.0);
+
+        let content = "BT /F1 10 Tf 100 500 Td <00010002> Tj 0 -20 Td <000A000B> Tj ET";
+        let (mut doc, page) = page_with_font(
+            content,
+            dictionary! { "Type" => "Font", "Subtype" => "Type0", "BaseFont" => "Noto", "DescendantFonts" => vec![Object::Dictionary(dictionary! { "DW" => 500 })] },
+        );
+        let mostly_outside = Area::new(96.0, 497.0, 7.0, 12.0);
+        assert_eq!(erase_text(&mut doc, page, &[mostly_outside], &HashSet::new()).unwrap(), 0);
+        let n = erase_text(&mut doc, page, &[Area::new(99.0, 497.0, 12.0, 12.0)], &HashSet::new()).unwrap();
+        assert_eq!(n, 1);
+        let content = Content::decode(&doc.get_page_content(page)).unwrap();
+        let strings: Vec<Vec<u8>> = content
+            .operations
+            .iter()
+            .flat_map(|op| op.operands.iter())
+            .flat_map(|o| match o {
+                Object::Array(a) => a.clone(),
+                other => vec![other.clone()],
+            })
+            .filter_map(|o| if let Object::String(b, _) = o { Some(b) } else { None })
+            .collect();
+        assert_eq!(strings, vec![vec![0, 10, 0, 11]]);
+    }
+
+    #[test]
+    fn simple_fonts_fall_back_to_the_missing_width() {
+        let mut doc = Document::with_version("1.7");
+        let widths = doc.add_object(Object::Array(vec![250.into(), Object::Real(333.5)]));
+        let descriptor = doc.add_object(dictionary! { "MissingWidth" => 777 });
+        let font = dictionary! { "Subtype" => "TrueType", "FirstChar" => 65, "Widths" => widths, "FontDescriptor" => descriptor };
+        let w = Widths::of(&doc, &font);
+        assert!(!w.two_byte);
+        assert_eq!(w.width(65), 250.0);
+        assert_eq!(w.width(66), 333.5);
+        assert_eq!(w.width(67), 777.0);
+    }
+
+    #[test]
+    fn follows_line_operators_to_find_each_line() {
+        let content = "BT /F1 10 Tf 14 TL 100 500 Td (Keep) Tj T* (Lose) Tj (Gone) ' 2 1 (Also) \" 0 -14 TD (Stay) Tj T* (Last) Tj ET";
+        let (mut doc, page) = page_with(content);
+        let n = erase_text(
+            &mut doc,
+            page,
+            &[
+                Area::new(99.0, 483.0, 30.0, 12.0),
+                Area::new(99.0, 469.0, 30.0, 12.0),
+                Area::new(99.0, 455.0, 30.0, 12.0),
+            ],
+            &HashSet::new(),
+        )
+        .unwrap();
+        assert_eq!(n, 3);
+        let s = text_of(&doc, page);
+        for kept in ["Keep", "Stay", "Last"] {
+            assert!(s.contains(kept), "{kept} missing: {s}");
+        }
+        for gone in ["Lose", "Gone", "Also"] {
+            assert!(!s.contains(gone), "{gone} still there: {s}");
+        }
+        assert!(s.contains("Tw") && s.contains("Tc"), "the \\\" spacing is kept: {s}");
+    }
+
+    #[test]
+    fn leaves_pages_it_cannot_safely_rewrite() {
+        let (mut doc, page) = page_with("BT /F1 10 Tf 100 500 Td (Secret) Tj ET");
+        assert_eq!(erase_text(&mut doc, page, &[], &HashSet::new()).unwrap(), 0);
+        let contents = doc.get_page_contents(page);
+        let keep: HashSet<ObjectId> = contents.iter().copied().collect();
+        assert_eq!(erase_text(&mut doc, page, &[Area::new(0.0, 0.0, 600.0, 800.0)], &keep).unwrap(), 0);
+
+        let (mut doc, page) = page_with("BT /F1 10 Tf 100 500 Td (Secret) Tj ET BI /W 1 /H 1 /CS /G /BPC 8 ID \x00 EI");
+        assert_eq!(erase_text(&mut doc, page, &[Area::new(0.0, 0.0, 600.0, 800.0)], &HashSet::new()).unwrap(), 0);
+        assert!(text_of(&doc, page).contains("Secret"));
+    }
 }

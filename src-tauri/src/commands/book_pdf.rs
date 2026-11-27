@@ -365,4 +365,56 @@ mod tests {
         add_outline(&mut doc, &[mark("Gone", 9, 0)]).unwrap();
         assert!(doc.catalog().unwrap().get(b"Outlines").is_err());
     }
+
+    #[test]
+    fn writes_the_book_title_author_and_contents() {
+        let input = crate::test_util::tmp("book-in.pdf");
+        let output = crate::test_util::tmp("book-out.pdf");
+        pdf_with_pages(3).save(&input).unwrap();
+        crate::grants::allow_file(&input);
+        crate::grants::allow_file(&output);
+        finish_book_pdf(
+            input.clone(),
+            output.clone(),
+            vec![mark("Début", 1, 0), mark("Fin", 3, 0)],
+            "Le Livre".into(),
+            "Alex".into(),
+        )
+        .unwrap();
+        let doc = Document::load(&output).unwrap();
+        let info = doc.get_dictionary(doc.trailer.get(b"Info").unwrap().as_reference().unwrap()).unwrap();
+        assert_eq!(info.get(b"Title").unwrap().as_str().unwrap(), b"Le Livre");
+        assert_eq!(info.get(b"Author").unwrap().as_str().unwrap(), b"Alex");
+        assert_eq!(info.get(b"Creator").unwrap().as_str().unwrap(), b"EzReader");
+        assert_eq!(doc.catalog().unwrap().get(b"PageMode").unwrap().as_name().unwrap(), b"UseOutlines");
+        let _ = std::fs::remove_file(input);
+        let _ = std::fs::remove_file(output);
+    }
+
+    #[test]
+    fn leaves_out_empty_fields_and_encodes_accents() {
+        let mut doc = pdf_with_pages(1);
+        set_info(&mut doc, "", "Zoé");
+        let info = doc.get_dictionary(doc.trailer.get(b"Info").unwrap().as_reference().unwrap()).unwrap();
+        assert!(info.get(b"Title").is_err());
+        let author = info.get(b"Author").unwrap().as_str().unwrap();
+        assert_eq!(&author[..2], &[0xfe, 0xff]);
+        assert_eq!(author.len(), 2 + 2 * "Zoé".encode_utf16().count());
+        assert!(matches!(text_string("plain"), Object::String(_, StringFormat::Literal)));
+    }
+
+    #[test]
+    fn refuses_files_it_was_not_given() {
+        let input = crate::test_util::tmp("book-not-granted.pdf");
+        let output = crate::test_util::tmp("book-not-granted-out.pdf");
+        assert!(finish_book_pdf(input, output, vec![], String::new(), String::new()).is_err());
+    }
+
+    #[test]
+    fn temporary_pages_live_in_the_temp_folder() {
+        let a = temp_path("book-0.html");
+        assert!(a.starts_with(std::env::temp_dir()));
+        assert_eq!(file_url(&a).unwrap().scheme(), "file");
+        assert_eq!(can_print_html_to_pdf(), cfg!(any(windows, target_os = "linux")));
+    }
 }

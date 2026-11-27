@@ -235,3 +235,44 @@ impl Annotation {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn every_kind_reports_and_moves_its_page() {
+        let color = json!({ "r": 1, "g": 2, "b": 3 });
+        let base = json!({ "page": 2, "x": 1.0, "y": 2.0, "width": 3.0, "height": 4.0 });
+        let with = |kind: &str, extra: serde_json::Value| {
+            let mut v = base.clone();
+            v["kind"] = json!(kind);
+            for (k, val) in extra.as_object().unwrap() {
+                v[k] = val.clone();
+            }
+            serde_json::from_value::<Annotation>(v).unwrap()
+        };
+        let shape = json!({ "color": color, "strokeWidth": 1.0 });
+        let picture = json!({ "imageData": "" });
+        let all = [
+            with("rect", shape.clone()),
+            with("circle", shape.clone()),
+            with("ink", json!({ "color": color, "strokeWidth": 1.0, "points": [[0.0, 0.0], [1.0, 1.0]] })),
+            with("highlight", json!({ "color": color, "opacity": 0.5, "rects": [] })),
+            with("note", json!({ "color": color, "content": "n" })),
+            with(
+                "text",
+                json!({ "color": color, "content": "t", "fontSize": 12.0, "bold": false, "italic": false, "underline": false, "alignment": "left" }),
+            ),
+            with("signature", picture.clone()),
+            with("image", picture),
+            with("stamp", json!({ "color": color, "mark": "check" })),
+        ];
+        for mut ann in all {
+            assert_eq!(ann.page(), 2);
+            ann.set_page(5);
+            assert_eq!(ann.page(), 5);
+        }
+    }
+}
