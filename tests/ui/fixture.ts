@@ -51,6 +51,7 @@ function answers(png: string) {
   };
   internals.invoke = async (cmd, args) => {
     (window as unknown as { __EZ_CALLS__: string[] }).__EZ_CALLS__.push(cmd);
+    if (cmd === "save_annotated_pdf") (window as unknown as { __EZ_SAVED__: unknown }).__EZ_SAVED__ = (args as { annotations: unknown }).annotations;
     return cmd in extra ? extra[cmd]!() : base(cmd, args);
   };
 }
