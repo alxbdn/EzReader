@@ -853,4 +853,50 @@ mod tests {
     fn suffix_is_appended_to_the_whole_name() {
         assert_eq!(with_suffix(Path::new("dir/EzReader.exe"), ".old"), PathBuf::from("dir/EzReader.exe.old"));
     }
+
+    #[test]
+    fn a_failed_download_leaves_nothing_behind() {
+        let dest = std::env::temp_dir().join(format!("ezreader-update-{}-failed.bin", std::process::id()));
+        std::fs::write(&dest, b"stale").unwrap();
+        let source = std::env::temp_dir().join(format!("ezreader-update-{}-source.bin", std::process::id()));
+        std::fs::write(&source, b"new build").unwrap();
+        let local = Asset {
+            name: "x".into(),
+            browser_download_url: url::Url::from_file_path(&source).unwrap().to_string(),
+            digest: None,
+        };
+        let err = download(&local, &dest, "1.0.0").unwrap_err();
+        assert!(err.starts_with("download failed"), "{err}");
+        assert!(!dest.exists());
+        let _ = std::fs::remove_file(source);
+    }
+
+    #[test]
+    fn only_some_channels_stage_an_update_in_the_background() {
+        assert!(installs_silently(Channel::Installer));
+        assert!(installs_silently(Channel::Portable));
+        assert!(installs_silently(Channel::Homebrew));
+        assert!(installs_silently(Channel::Dmg));
+        assert!(installs_silently(Channel::Store));
+        assert!(!installs_silently(Channel::Deb));
+        assert!(!installs_silently(Channel::Other));
+        assert_eq!(stage(Channel::Deb, "1.0.0"), Ok(None));
+        assert_eq!(stage(Channel::Other, "1.0.0"), Ok(None));
+        assert_eq!(stage(Channel::Homebrew, "1.0.0"), Ok(Some(Pending::Homebrew)));
+        #[cfg(not(target_os = "windows"))]
+        assert_eq!(stage(Channel::Store, "1.0.0"), Ok(None));
+    }
+
+    #[cfg(not(any(target_os = "windows", target_os = "macos")))]
+    #[test]
+    fn updates_that_belong_to_other_systems_do_nothing_here() {
+        assert_eq!(apply(Pending::Homebrew, true), Ok(()));
+        assert_eq!(apply(Pending::Store, true), Ok(()));
+        assert_eq!(apply(Pending::Dmg(PathBuf::from("/nowhere/EzReader.dmg")), true), Ok(()));
+        assert_eq!(apply(Pending::Swapped(PathBuf::from("/nowhere/ezreader")), false), Ok(()));
+        let err = apply(Pending::Swapped(PathBuf::from("/nowhere/ezreader")), true).unwrap_err();
+        assert!(err.starts_with("could not restart"), "{err}");
+        let err = apply(Pending::Installer(PathBuf::from("/nowhere/setup.exe")), false).unwrap_err();
+        assert!(err.starts_with("could not start the installer"), "{err}");
+    }
 }
