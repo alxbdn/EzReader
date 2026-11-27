@@ -1,6 +1,6 @@
 import { after, afterEach, before, describe, test } from "node:test";
 import assert from "node:assert/strict";
-import { spawn } from "node:child_process";
+import { execFileSync, spawn } from "node:child_process";
 import { closeSync, copyFileSync, mkdtempSync, openSync, readFileSync, rmSync, writeFileSync, mkdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -53,6 +53,12 @@ afterEach(async (t) => {
     try {
       writeFileSync(join(SHOTS, `${t.name.replace(/[^\w-]+/g, "_")}.png`), await driver.takeScreenshot(), "base64");
     } catch {}
+    if (process.platform === "win32") {
+      try {
+        const lines = execFileSync("powershell", ["-NoProfile", "-Command", "Get-CimInstance Win32_Process | Where-Object { $_.Name -like 'ezreader*' } | ForEach-Object { $_.CommandLine }"], { encoding: "utf8" });
+        writeFileSync(join(SHOTS, `${t.name.replace(/[^\w-]+/g, "_")}.cmdline.txt`), lines);
+      } catch {}
+    }
   }
   await driver.quit().catch(() => {});
   driver = undefined;
