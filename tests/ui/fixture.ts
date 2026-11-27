@@ -48,9 +48,16 @@ function answers(png: string) {
     ocr_image: () => ({ lines: [{ text: "Hello", x: 0, y: 0, width: 10, height: 2 }] }),
     convert_text: () => null,
     extract_pages_to_temp: () => "/tmp/doc (page 1).pdf",
+    move_tab: () => "window",
+    split_pdf: () => ["/out/a.pdf", "/out/b.pdf"],
   };
   internals.invoke = async (cmd, args) => {
     (window as unknown as { __EZ_CALLS__: string[] }).__EZ_CALLS__.push(cmd);
+    if (cmd === "plugin:event|listen") {
+      const { event, handler } = args as { event: string; handler: number };
+      const all = ((window as unknown as { __EZ_LISTENERS__?: Record<string, number[]> }).__EZ_LISTENERS__ ??= {});
+      (all[event] ??= []).push(handler);
+    }
     if (cmd === "save_annotated_pdf") (window as unknown as { __EZ_SAVED__: unknown }).__EZ_SAVED__ = (args as { annotations: unknown }).annotations;
     return cmd in extra ? extra[cmd]!() : base(cmd, args);
   };

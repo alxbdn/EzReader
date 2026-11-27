@@ -62,6 +62,24 @@ describe("DocWorkspace", () => {
     expect(during).toBe("a.pdf");
   });
 
+  it("waits for a tab that is still loading before switching away from it", async () => {
+    const { state, ws, open } = setup();
+    await open("a.pdf");
+    let finish = () => {};
+    const loading = ws.inNewTab(async () => {
+      await new Promise<void>((r) => { finish = r; });
+      state.shown = { file: "b.pdf", dirty: false };
+      ws.sync();
+    }, "b.pdf");
+    const switching = ws.switchTo(ws.list[0]!.id);
+    await Promise.resolve();
+    finish();
+    await Promise.all([loading, switching]);
+    expect(ws.list.map((t) => t.title)).toEqual(["a.pdf", "b.pdf"]);
+    expect(state.shown?.file).toBe("a.pdf");
+    expect(ws.list[1]!.parked?.file).toBe("b.pdf");
+  });
+
   it("refuses to switch while the document cannot be left", async () => {
     const { state, ws, open } = setup();
     await open("a.pdf");

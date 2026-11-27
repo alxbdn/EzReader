@@ -86,15 +86,19 @@ export class DocWorkspace<P> {
     const tab = this.tabs.add(title);
     this.doc.clear();
     this.render();
-    try {
-      await open();
-    } finally {
-      if (!this.doc.isOpen()) {
-        this.tabs.remove(tab.id);
-        if (before) await this.show(before);
-        else this.render();
+    const run = (async () => {
+      try {
+        await open();
+      } finally {
+        if (!this.doc.isOpen()) {
+          this.tabs.remove(tab.id);
+          if (before) await this.show(before);
+          else this.render();
+        }
       }
-    }
+    })();
+    this.switching = run;
+    try { await run; } finally { if (this.switching === run) this.switching = null; }
   }
 
   async close(id: number): Promise<void> {
