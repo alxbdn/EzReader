@@ -431,7 +431,7 @@ describe("books", () => {
     const page = (title) => `<!doctype html><html><head><meta charset="utf-8"></head><body><h1>${title}</h1>${"<p>Bonjour tout le monde.</p>".repeat(80)}</body></html>`;
     const parts = await driver.executeAsyncScript((pages, done) => {
       const id = window.__TAURI_INTERNALS__.transformCallback(() => {});
-      window.__TAURI_INTERNALS__.invoke("print_html_pages", { pages, progress: `__CHANNEL__:${id}` }).then(done, (e) => done({ error: String(e) }));
+      window.__TAURI_INTERNALS__.invoke("print_html_pages", { pages, progress: `__CHANNEL__:${id}` }).then(done, (e) => done({ error: e && typeof e === "object" ? JSON.stringify(e) : String(e) }));
     }, [page("Un"), page("Deux")]);
     assert.ok(Array.isArray(parts), JSON.stringify(parts));
     assert.equal(parts.length, 2);

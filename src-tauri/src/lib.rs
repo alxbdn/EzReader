@@ -79,6 +79,10 @@ pub(crate) fn allow_viewing<R: tauri::Runtime, M: Manager<R>>(app: &M, path: &st
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
+fn is_file_argument(arg: &str) -> bool {
+    !arg.starts_with("--") && !arg.starts_with("data:") && !arg.contains("://")
+}
+
 const WEBVIEW2_DEFAULT_ARGS: &str = "--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection";
 
 pub(crate) fn with_webdriver_args<'a, R: tauri::Runtime, M: Manager<R>>(
@@ -107,7 +111,7 @@ pub fn run() {
             if let Some(path) = args.next() {
                 startup.file_path = Some(grants::absolute(&path).to_string_lossy().into_owned());
             }
-        } else if !arg.starts_with("--") {
+        } else if is_file_argument(&arg) && startup.file_path.is_none() {
             startup.file_path = Some(grants::absolute(&arg).to_string_lossy().into_owned());
         }
     }
@@ -297,5 +301,19 @@ mod fit_tests {
     #[test]
     fn a_narrow_screen_caps_the_width() {
         assert_eq!(a4_window((800, 1400), (232, 118), 720).0, 760);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::is_file_argument;
+
+    #[test]
+    fn only_paths_count_as_the_file_to_open() {
+        assert!(is_file_argument("C:\\Users\\a\\doc.pdf"));
+        assert!(is_file_argument("/home/a/doc.pdf"));
+        assert!(!is_file_argument("--remote-debugging-port=0"));
+        assert!(!is_file_argument("data:,"));
+        assert!(!is_file_argument("about://blank"));
     }
 }
