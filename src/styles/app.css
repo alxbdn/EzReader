@@ -3192,6 +3192,7 @@ body.read-only .page-form-layer { pointer-events: none; }
   background-size: 14px 14px;
 }
 .wm-stage { position: relative; line-height: 0; cursor: zoom-in; }
+.wm-stage:has(.wm-loupe.on) { cursor: none; }
 .wm-page { display: block; width: 250px; background: #fff; box-shadow: var(--page-shadow); }
 .wm-loupe {
   position: absolute; width: 190px; height: 190px; border-radius: 50%; overflow: hidden; pointer-events: none;
