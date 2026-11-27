@@ -461,6 +461,7 @@ test.describe("documents", () => {
     await page.mouse.move(b.x + b.width / 2, b.y + b.height / 3);
     await page.mouse.move(b.x + b.width / 2 + 5, b.y + b.height / 3 + 5, { steps: 3 });
     await expect(dialog.locator(".wm-loupe")).toHaveClass(/on/);
+    await expect(dialog.locator(".wm-stage")).toHaveCSS("cursor", "none");
     await page.mouse.move(b.x + b.width - 2, b.y + b.height - 2, { steps: 3 });
     const overflowing = await dialog.evaluate((box) =>
       [box, ...box.querySelectorAll("*")].some((el) => el.scrollWidth > el.clientWidth + 1 && getComputedStyle(el).overflowX !== "hidden" && getComputedStyle(el).overflowX !== "visible"),
