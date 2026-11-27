@@ -296,7 +296,13 @@ export class PdfPageView {
     const generation = this._generation;
     const stale = () => generation !== this._generation;
     try {
-      const page = await pdfDoc.getPage(this.pageNum);
+      let page: PDFPageProxy;
+      try {
+        page = await pdfDoc.getPage(this.pageNum);
+      } catch (err) {
+        if (stale()) return;
+        throw err;
+      }
       this._page = page;
       if (stale()) return;
       const viewport = page.getViewport({ scale, rotation: (page.rotate + rotation) % 360 });
