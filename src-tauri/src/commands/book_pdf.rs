@@ -78,7 +78,7 @@ fn print_window(app: &AppHandle, first: url::Url, loaded: mpsc::Sender<()>) -> C
     if let Some(old) = app.get_webview_window(PRINT_WINDOW) {
         let _ = old.destroy();
     }
-    let builder = WebviewWindowBuilder::new(app, PRINT_WINDOW, WebviewUrl::External(first))
+    let builder = crate::with_webdriver_args(WebviewWindowBuilder::new(app, PRINT_WINDOW, WebviewUrl::External(first)))
         .title("EzReader")
         .inner_size(800.0, 1000.0)
         .position(-20000.0, -20000.0)
