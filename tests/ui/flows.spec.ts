@@ -1,50 +1,14 @@
 import type { Locator, Page } from "@playwright/test";
 import { expect, start, test } from "./fixture";
+import { dismiss, drag, pageBox, settle, tryClick } from "./helpers";
 
 const SKIP = /wc-close|wc-min|wc-max/;
-
-async function settle(page: Page, ms = 250) {
-  await page.waitForTimeout(ms);
-}
-
-async function dismiss(page: Page) {
-  for (let i = 0; i < 3; i++) await page.keyboard.press("Escape");
-  await page.evaluate(() => {
-    for (const m of document.querySelectorAll(".modal-backdrop:not(.hidden)")) {
-      const close = m.querySelector<HTMLButtonElement>("[id$=close-btn], [id$=cancel-btn], .modal-header .icon-btn, .btn:not(.btn-primary)");
-      close?.click();
-    }
-  });
-  await settle(page, 100);
-}
-
-async function tryClick(target: Locator, opts: { button?: "left" | "right" } = {}) {
-  try {
-    await target.click({ timeout: 600, ...opts });
-    return true;
-  } catch {
-    return false;
-  }
-}
 
 async function visible(page: Page, selector: string): Promise<Locator[]> {
   const all = await page.locator(selector).all();
   const out: Locator[] = [];
   for (const l of all) if (await l.isVisible().catch(() => false)) out.push(l);
   return out;
-}
-
-async function pageBox(page: Page, n = 0) {
-  const box = await page.locator("#viewer-scroll .page-wrapper").nth(n).boundingBox({ timeout: 2000 });
-  if (!box) throw new Error("page not visible");
-  return box;
-}
-
-async function drag(page: Page, from: [number, number], to: [number, number]) {
-  await page.mouse.move(...from);
-  await page.mouse.down();
-  for (let i = 1; i <= 5; i++) await page.mouse.move(from[0] + ((to[0] - from[0]) * i) / 5, from[1] + ((to[1] - from[1]) * i) / 5);
-  await page.mouse.up();
 }
 
 async function poke(page: Page, scope: string) {
@@ -646,7 +610,7 @@ test.describe("annotations", () => {
     await page.keyboard.press("Escape");
 
     await tryClick(page.locator("[data-group=highlight]"));
-    const spans = await visible(page, "#viewer-scroll .textLayer span");
+    const spans = await visible(page, "#viewer-scroll .page-text-layer span");
     for (const span of spans.slice(0, 3)) {
       const b = await span.boundingBox({ timeout: 1000 }).catch(() => null);
       if (b) await drag(page, [b.x + 1, b.y + b.height / 2], [b.x + b.width - 1, b.y + b.height / 2]);
