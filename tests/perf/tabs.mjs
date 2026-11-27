@@ -164,7 +164,7 @@ const context = await browser.newContext({ viewport: { width: 1280, height: 800 
 await context.addInitScript(tauriStub, { origin, specs });
 const page = await context.newPage();
 const errors = [];
-page.on("pageerror", (e) => errors.push(String(e)));
+page.on("pageerror", (e) => errors.push((e.stack ?? String(e)).split("\n").slice(0, 4).join(" | ")));
 page.on("crash", () => errors.push("renderer crashed"));
 const cdp = await context.newCDPSession(page);
 await cdp.send("Performance.enable");
@@ -362,6 +362,7 @@ const drawn = [...added.values()].reduce((a, b) => a + b, 0);
 await gc();
 const end = await sample("end");
 const workerHeapMb = await pdfWorkerHeapMb();
+await page.waitForTimeout(4000);
 const idleA = treeUsage();
 await page.waitForTimeout(5000);
 const idleB = treeUsage();
