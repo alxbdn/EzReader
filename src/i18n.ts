@@ -267,6 +267,8 @@ export interface Translations {
   settingsRealSizeHint?: string;
   settingsBrightness?: string;
   settingsOutlineExpanded?: string;
+  settingsSpellcheck?: string;
+  settingsSpellcheckHint?: string;
   wcMinimize?: string;
   wcMaximize?: string;
   wcRestore?: string;
@@ -941,6 +943,8 @@ const EN: Translations = {
   settingsRealSize:     "Actual size calibration",
   settingsBrightness: "Page brightness",
   settingsOutlineExpanded: "Expand chapters in document structure",
+  settingsSpellcheck: "Check spelling as you type",
+  settingsSpellcheckHint: "Underlines typos in notes, text boxes and forms with your computer's own dictionaries. Right-click a word for suggestions.",
   settingsRealSizeHint: "Drag the slider until the card on screen is the size of a real bank card.",
   wcMinimize:           "Minimize",
   wcMaximize:           "Maximize",
@@ -1615,6 +1619,8 @@ const FR: Translations = {
   settingsRealSize:     "Calibrage de la taille réelle",
   settingsBrightness: "Luminosité des pages",
   settingsOutlineExpanded: "Déplier les chapitres de la structure",
+  settingsSpellcheck: "Vérifier l'orthographe pendant la saisie",
+  settingsSpellcheckHint: "Souligne les fautes dans les notes, les zones de texte et les formulaires avec les dictionnaires de votre ordinateur. Faites un clic droit sur un mot pour voir les suggestions.",
   settingsRealSizeHint: "Ajuste le curseur jusqu'à ce que la carte à l'écran ait la taille d'une vraie carte bancaire.",
   wcMinimize:           "Réduire",
   wcMaximize:           "Agrandir",

@@ -1888,7 +1888,6 @@ export class CanvasOverlay implements SelectionOwner {
     const area = document.createElement("textarea");
     area.className = "note-editor";
     area.value = ann.content;
-    area.spellcheck = false;
     area.style.cssText = `
       position: absolute; left: ${b.l}px; top: ${b.t}px; width: ${b.w}px; height: ${b.h}px;
       box-sizing: border-box; padding: ${NOTE_PAD * scale}px; margin: 0; resize: none;

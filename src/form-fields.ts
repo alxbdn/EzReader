@@ -74,6 +74,7 @@ export function createFieldControl(
       const cell = box.width / a.maxLen;
       const glyph = size * 0.6;
       el.classList.add("comb");
+      el.spellcheck = false;
       el.style.letterSpacing = `${Math.max(cell - glyph, 0)}px`;
       el.style.paddingLeft = `${Math.max((cell - glyph) / 2, 0)}px`;
       el.style.paddingRight = "0";
