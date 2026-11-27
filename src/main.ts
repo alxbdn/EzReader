@@ -26,6 +26,7 @@ import { PasswordModal } from "./password-modal";
 import { PrintModal } from "./print-modal";
 import { SignatureModal } from "./signature-modal";
 import { SignatureStore } from "./signature-store";
+import { SignaturePlacement } from "./signature-placement";
 import { SettingsModal, applyPageBrightness } from "./settings";
 import { saveChangesDialog } from "./confirm-dialog";
 import { PageSidebar } from "./page-sidebar";
@@ -45,7 +46,6 @@ import {
   type FormFieldValue,
   type RgbColor,
   CSS_UNITS,
-  type InkVector,
 } from "./models";
 import { StudioPanel } from "./studio-panel";
 import { StampStore } from "./stamp-store";
@@ -137,8 +137,6 @@ let unlistenClose: (() => void) | null = null;
 const formValues = new Map<string, string>();
 
 let guardRegistering = false;
-let pendingSignature: string | null = null;
-let pendingSignatureVector: InkVector | undefined;
 
 const viewer = new PdfViewer();
 viewer.liveText.setRecognizer((data) => ocrImage(data, ocrLanguage()));
@@ -249,6 +247,21 @@ const passwordModal      = new PasswordModal();
 const printModal         = new PrintModal();
 const sigStore           = new SignatureStore();
 const sigModal           = new SignatureModal(sigStore);
+const signaturePlacement = new SignaturePlacement({
+  scrollEl: document.getElementById("viewer-scroll")!,
+  overlayOf: (page) => viewer.pageViews.find((p) => p.pageNum === page)?.overlay ?? null,
+  started: () => {
+    updateHandMode();
+    showToast(msg("msgPlaceSignature"));
+  },
+  ended: () => {
+    toolbar.setActiveSignature(null);
+    updateHandMode();
+  },
+  placed: () => {
+    if (toolState.tool !== "select") toolbar.clearActiveTool();
+  },
+});
 const settingsModal      = new SettingsModal();
 const splitModal         = new SplitModal();
 const pageSidebar        = new PageSidebar(document.getElementById("page-sidebar")!);
@@ -1176,7 +1189,7 @@ function parkShown(): ParkedDoc | null {
   if (!shownPath || !viewer.isLoaded()) return null;
   annotations.apply();
   dropStaleSelection();
-  cancelSignaturePlacement();
+  signaturePlacement.cancel();
   return {
     session: session.snapshot(),
     annotations: annotations.snapshot(),
@@ -1225,7 +1238,7 @@ async function closeDocument(): Promise<void> {
   session.restore(null);
   shownPath = null;
   dropStaleSelection();
-  cancelSignaturePlacement();
+  signaturePlacement.cancel();
   if (infoPanel.isOpen) { infoPanel.close(); toolbar.setInfoOpen(false); }
   searchMatches = [];
   searchIndex = -1;
@@ -1385,7 +1398,7 @@ const viewerScroll = document.getElementById("viewer-scroll")!;
 let panStart: { x: number; y: number; left: number; top: number; id: number } | null = null;
 
 function handActive(): boolean {
-  return toolbar.pointerMode === "hand" && toolState.tool === "select" && !pendingSignature;
+  return toolbar.pointerMode === "hand" && toolState.tool === "select" && !signaturePlacement.active;
 }
 
 function updateHandMode(): void {
@@ -1444,7 +1457,7 @@ async function insertSlots(after: number, inserted: PageSlot[]): Promise<void> {
 function openAdjust(kind: "crop" | "straighten"): void {
   const doc = viewer.document;
   if (!doc || adjustView.isOpen) return;
-  cancelSignaturePlacement();
+  signaturePlacement.cancel();
   toolbar.search.close();
   appEl.classList.add("adjusting");
   adjustView.open(doc, { current: viewer.currentPage, selection: pageSidebar.selection, total: doc.numPages }, kind, viewer.rotation);
@@ -1833,7 +1846,7 @@ toolbar.on(async (e) => {
       updateHandMode();
       for (const pv of viewer.pageViews) pv.builtOverlay?.setTool(e.tool);
       editor.release();
-      if (e.tool !== "signature") cancelSignaturePlacement();
+      if (e.tool !== "signature") signaturePlacement.cancel();
       break;
 
     case "style-change":
@@ -1884,7 +1897,7 @@ toolbar.on(async (e) => {
       const sig = sigStore.getAll().find((x) => x.id === e.id);
       if (sig) {
         sigStore.touch(sig.id);
-        startSignaturePlacement(sig.imageDataUrl.split(",")[1] ?? sig.imageDataUrl, sig.vector);
+        signaturePlacement.start(sig.imageDataUrl.split(",")[1] ?? sig.imageDataUrl, sig.vector);
         refreshSignatures();
         toolbar.setActiveSignature(sig.id);
       }
@@ -2080,53 +2093,6 @@ document.addEventListener("keydown", async (e) => {
   }
 });
 
-const sigPreview = document.createElement("img");
-sigPreview.className = "sig-preview";
-document.body.appendChild(sigPreview);
-
-function showSigPreview(b64: string): void {
-  sigPreview.src = `data:image/png;base64,${b64}`;
-  sigPreview.style.display = "block";
-}
-
-function hideSigPreview(): void {
-  sigPreview.style.display = "none";
-  sigPreview.src = "";
-}
-
-document.addEventListener("mousemove", (e: MouseEvent) => {
-  if (!pendingSignature) return;
-  sigPreview.style.left = `${e.clientX}px`;
-  sigPreview.style.top  = `${e.clientY}px`;
-});
-
-let pendingSignatureRatio = 0;
-
-function startSignaturePlacement(imageData: string, vector?: InkVector): void {
-  pendingSignature = imageData;
-  pendingSignatureVector = vector;
-  pendingSignatureRatio = vector && vector.w > 0 ? vector.h / vector.w : 0;
-  const probe = new Image();
-  probe.onload = () => {
-    if (pendingSignature === imageData && probe.naturalWidth > 0) pendingSignatureRatio = probe.naturalHeight / probe.naturalWidth;
-  };
-  probe.src = `data:image/png;base64,${imageData}`;
-  showSigPreview(imageData);
-  document.getElementById("viewer-scroll")!.style.cursor = "none";
-  updateHandMode();
-  showToast(msg("msgPlaceSignature"));
-}
-
-function cancelSignaturePlacement(): void {
-  if (!pendingSignature) return;
-  pendingSignature = null;
-  pendingSignatureVector = undefined;
-  toolbar.setActiveSignature(null);
-  hideSigPreview();
-  document.getElementById("viewer-scroll")!.style.cursor = "";
-  updateHandMode();
-}
-
 function refreshSignatures(): void {
   toolbar.setSignatures(sigStore.getAll().map((s) => ({ id: s.id, dataUrl: s.imageDataUrl })));
 }
@@ -2134,28 +2100,7 @@ refreshSignatures();
 
 sigModal.onSignatureReady((imageData, vector) => {
   refreshSignatures();
-  startSignaturePlacement(imageData, vector);
-});
-
-document.getElementById("viewer-scroll")!.addEventListener("click", (e: MouseEvent) => {
-  if (!pendingSignature) return;
-  const wrapper = (e.target as HTMLElement).closest(".page-wrapper") as HTMLElement | null;
-  if (!wrapper) return;
-
-  const pageNum = parseInt(wrapper.dataset.page ?? "0");
-  const pv = viewer.pageViews.find(p => p.pageNum === pageNum);
-  if (!pv) return;
-
-  const rect = wrapper.getBoundingClientRect();
-  const x = e.clientX - rect.left;
-  const y = e.clientY - rect.top;
-
-  const ratio = pendingSignatureRatio > 0 ? pendingSignatureRatio : 0.4;
-  const h = Math.min(75, 150 * ratio);
-  const w = h / ratio;
-  pv.overlay.placeSignature(x, y, pendingSignature, w, h, pendingSignatureVector);
-  cancelSignaturePlacement();
-  if (toolState.tool !== "select") toolbar.clearActiveTool();
+  signaturePlacement.start(imageData, vector);
 });
 
 const ctxMenu = new ContextMenu();
@@ -2281,8 +2226,7 @@ window.addEventListener("keydown", async (e: KeyboardEvent) => {
     return;
   }
   if (e.key !== "Escape") return;
-  if (pendingSignature) {
-    cancelSignaturePlacement();
+  if (signaturePlacement.cancel()) {
     showToast(msg("msgSignatureCancelled"));
   } else if (toolbar.isPending) {
     discardDraft();
