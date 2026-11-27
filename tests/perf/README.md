@@ -65,5 +65,10 @@ annotations are handed to the app as if read from the file.
 | `dirty_tabs_lost` | Tabs with a drawn annotation no longer marked as changed |
 | `wrong_document_shown` | A tab showing another document, or the wrong page count |
 
-Limits are in `tabs-thresholds.json`. Run it locally: `npm run test:perf:tabs`, with
+Limits are in `tabs-thresholds.json`.
+
+Idle CPU is measured 12 s after the last save. With 8 heavy tabs, V8 runs one or two
+"reduce memory" collections over the whole heap about 8 s after the work stops; they
+take about 0.6 s of CPU once and are not work the app keeps doing. A window that
+starts earlier catches them and reads 9 to 20 %. Run it locally: `npm run test:perf:tabs`, with
 `--profile soak` for the long one and `--rounds N` to change the number of rounds.
