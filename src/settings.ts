@@ -19,12 +19,13 @@ export interface AppSettings {
   pxPerInch: number;
   pageBrightness: number;
   outlineExpanded: boolean;
+  spellcheck: boolean;
 }
 
 export const ZOOM_CHOICES = ["fit-width", "fit-page", "50", "75", "100", "125", "150", "200"] as const;
 
 const STORAGE_KEY = "pdf-rider-settings";
-const DEFAULTS: AppSettings = { language: "en", theme: "system", defaultZoom: "100", pxPerInch: 96, pageBrightness: 100, outlineExpanded: false };
+const DEFAULTS: AppSettings = { language: "en", theme: "system", defaultZoom: "100", pxPerInch: 96, pageBrightness: 100, outlineExpanded: false, spellcheck: true };
 
 const CARD_W_MM = 85.6;
 const CARD_H_MM = 53.98;
@@ -35,6 +36,11 @@ export function applyPageBrightness(pct: number): void {
   const v = Number.isFinite(pct) ? Math.min(100, Math.max(40, pct)) : 100;
   document.documentElement.style.setProperty("--page-brightness", String(v / 100));
   document.documentElement.classList.toggle("dim-pages", v < 100);
+}
+
+export function applySpellcheck(enabled: boolean): void {
+  const writingArea = document.getElementById("viewer-scroll");
+  if (writingArea) writingArea.spellcheck = enabled !== false;
 }
 
 export function applyTheme(pref: ThemePref): void {
@@ -66,6 +72,7 @@ export class SettingsModal {
     this.settings = loadSettings();
     applyTheme(this.settings.theme);
     applyPageBrightness(this.settings.pageBrightness);
+    applySpellcheck(this.settings.spellcheck);
     darkQuery.addEventListener("change", () => applyTheme(this.settings.theme));
     this.backdrop = document.getElementById("settings-modal")!;
     this.populateLangSelect();
@@ -228,6 +235,15 @@ export class SettingsModal {
     if (outlineBox) {
       outlineBox.checked = this.settings.outlineExpanded;
       outlineBox.addEventListener("change", () => this.set("outlineExpanded", outlineBox.checked));
+    }
+
+    const spellBox = document.getElementById("settings-spellcheck") as HTMLInputElement | null;
+    if (spellBox) {
+      spellBox.checked = this.settings.spellcheck !== false;
+      spellBox.addEventListener("change", () => {
+        applySpellcheck(spellBox.checked);
+        this.set("spellcheck", spellBox.checked);
+      });
     }
 
     const quickLook = document.getElementById("settings-quick-look") as HTMLInputElement | null;
