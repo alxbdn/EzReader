@@ -78,9 +78,18 @@ pub(crate) fn allow_viewing<R: tauri::Runtime, M: Manager<R>>(app: &M, path: &st
     let _ = app.asset_protocol_scope().allow_file(path);
 }
 
-#[cfg_attr(mobile, tauri::mobile_entry_point)]
 fn is_file_argument(arg: &str) -> bool {
     !arg.starts_with("--") && !arg.starts_with("data:") && !arg.contains("://")
+}
+
+fn file_argument(arg: &str) -> Option<&str> {
+    if is_file_argument(arg) {
+        return Some(arg);
+    }
+    if cfg!(all(windows, debug_assertions)) {
+        return arg.strip_prefix("--").filter(|path| std::path::Path::new(path).is_file());
+    }
+    None
 }
 
 const WEBVIEW2_DEFAULT_ARGS: &str = "--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection";
@@ -101,6 +110,7 @@ pub(crate) fn with_webdriver_args<'a, R: tauri::Runtime, M: Manager<R>>(
     builder
 }
 
+#[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let mut args = std::env::args().skip(1);
     let mut startup = StartupArgs::default();
@@ -111,8 +121,10 @@ pub fn run() {
             if let Some(path) = args.next() {
                 startup.file_path = Some(grants::absolute(&path).to_string_lossy().into_owned());
             }
-        } else if is_file_argument(&arg) && startup.file_path.is_none() {
-            startup.file_path = Some(grants::absolute(&arg).to_string_lossy().into_owned());
+        } else if startup.file_path.is_none() {
+            if let Some(path) = file_argument(&arg) {
+                startup.file_path = Some(grants::absolute(path).to_string_lossy().into_owned());
+            }
         }
     }
 
@@ -306,7 +318,7 @@ mod fit_tests {
 
 #[cfg(test)]
 mod tests {
-    use super::is_file_argument;
+    use super::{file_argument, is_file_argument};
 
     #[test]
     fn only_paths_count_as_the_file_to_open() {
@@ -315,5 +327,16 @@ mod tests {
         assert!(!is_file_argument("--remote-debugging-port=0"));
         assert!(!is_file_argument("data:,"));
         assert!(!is_file_argument("about://blank"));
+    }
+
+    #[test]
+    fn a_switch_is_not_a_file_unless_a_debug_windows_driver_wraps_a_real_path() {
+        let real = std::env::temp_dir().join(format!("ezreader-argument-{}.pdf", std::process::id()));
+        std::fs::write(&real, b"%PDF-1.4").unwrap();
+        let wrapped = format!("--{}", real.display());
+        assert_eq!(file_argument(&wrapped).is_some(), cfg!(all(windows, debug_assertions)));
+        assert_eq!(file_argument("--remote-debugging-port=0"), None);
+        assert_eq!(file_argument("/home/a/doc.pdf"), Some("/home/a/doc.pdf"));
+        let _ = std::fs::remove_file(real);
     }
 }
