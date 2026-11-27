@@ -232,3 +232,86 @@ describe("AnnotationSession.relocate", () => {
     expect(s.pending).toBe(true);
   });
 });
+
+describe("AnnotationSession undo memory", () => {
+  it("keeps a copy only of the annotation an edit names", () => {
+    const { s } = setup();
+    const all = Array.from({ length: 100 }, (_, i) => rect(i + 1));
+    s.load(all);
+    s.beginEdit(all[3]!);
+    all[3]!.width = 500;
+    s.edited();
+    const [step] = s.snapshot().undo;
+    expect(step!.refs).toHaveLength(100);
+    expect([...step!.pinned.keys()]).toEqual([all[3]]);
+    s.undo();
+    expect(widths(s)).toEqual(Array.from({ length: 100 }, (_, i) => i + 1));
+    s.redo();
+    expect(s.all()[3]!.width).toBe(500);
+  });
+
+  it("takes back a chain of named edits on several annotations, both ways", () => {
+    const { s } = setup();
+    const a = rect(1), b = rect(2);
+    s.load([a, b]);
+    s.beginEdit(a); a.width = 10; s.edited();
+    s.beginEdit(b); b.width = 20; s.edited();
+    s.beginEdit(a); a.width = 100; s.edited();
+    expect(widths(s)).toEqual([100, 20]);
+    s.undo(); expect(widths(s)).toEqual([10, 20]);
+    s.undo(); expect(widths(s)).toEqual([10, 2]);
+    s.undo(); expect(widths(s)).toEqual([1, 2]);
+    s.redo(); expect(widths(s)).toEqual([10, 2]);
+    s.redo(); expect(widths(s)).toEqual([10, 20]);
+    s.redo(); expect(widths(s)).toEqual([100, 20]);
+  });
+
+  it("an edit made after an undo does not change what redo brings back", () => {
+    const { s } = setup();
+    const a = rect(1);
+    s.load([a]);
+    s.beginEdit(a); a.width = 5; s.edited();
+    s.undo();
+    const shown = s.all()[0]!;
+    s.beginEdit(shown); shown.width = 7; s.edited();
+    expect(s.redo()).toBe(false);
+    s.undo();
+    expect(widths(s)).toEqual([1]);
+  });
+
+  it("an annotation edited after it was undone away leaves the history alone", () => {
+    const { s } = setup();
+    const a = rect(1);
+    s.load([a]);
+    s.beginEdit(a); a.width = 5; s.edited();
+    s.undo();
+    s.beginEdit(a); a.width = 99; s.edited();
+    expect(widths(s)).toEqual([1]);
+    s.undo();
+    expect(widths(s)).toEqual([1]);
+    s.redo();
+    expect(widths(s)).toEqual([1]);
+  });
+
+  it("an edit that names nothing still keeps every step right", () => {
+    const { s } = setup();
+    const a = rect(1), b = rect(2);
+    s.load([a, b]);
+    s.beginEdit(a); a.width = 10; s.edited();
+    s.beginEdit(); a.width = 11; b.width = 22; s.edited();
+    s.undo(); expect(widths(s)).toEqual([10, 2]);
+    s.undo(); expect(widths(s)).toEqual([1, 2]);
+  });
+
+  it("a parked tab brings its history back with it", () => {
+    const { s } = setup();
+    const a = rect(1);
+    s.load([a]);
+    s.beginEdit(a); a.width = 3; s.edited();
+    const parked = s.snapshot();
+    s.load([rect(50)]);
+    s.restoreParked(parked);
+    s.undo();
+    expect(widths(s)).toEqual([1]);
+  });
+});

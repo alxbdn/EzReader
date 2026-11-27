@@ -191,7 +191,7 @@ const editor = new AnnotationEditor({
   overlayOf: (page) => viewer.pageViews.find((p) => p.pageNum === page)?.overlay ?? null,
   redraw: (page) => viewer.pageViews.find((p) => p.pageNum === page)?.builtOverlay?.redrawCommitted(),
   has: (ann) => annotations.has(ann),
-  beginEdit: () => annotations.beginEdit(),
+  beginEdit: (changing) => annotations.beginEdit(changing),
   edited: () => annotations.edited(),
   markDirty: () => setDirty(true),
 }, {

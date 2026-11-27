@@ -227,10 +227,10 @@ export class CanvasOverlay implements SelectionOwner {
     this.applyPointerEvents(this.activeTool);
   }
 
-  private notifyChangeOnce(): void {
+  private notifyChangeOnce(changing: Annotation): void {
     if (this.changeNotified) return;
     this.changeNotified = true;
-    this.session.beginEdit();
+    this.session.beginEdit(changing);
   }
   private emitTextSelected     (a: TextAnnotation | null):      void { this.events.textSelected(a); }
   private emitShapeSelected    (a: ShapeAnnotation | null):     void { this.events.shapeSelected(a); }
@@ -256,7 +256,7 @@ export class CanvasOverlay implements SelectionOwner {
     color: RgbColor,
     opacity: number,
   ): void {
-    this.session.beginEdit();
+    this.session.beginEdit(ann);
     ann.color = { ...color };
     ann.opacity = opacity;
     this.redrawCommitted();
@@ -270,7 +270,7 @@ export class CanvasOverlay implements SelectionOwner {
     fillColor: RgbColor | null,
     opacity: number,
   ): void {
-    this.session.beginEdit();
+    this.session.beginEdit(ann);
     ann.color = { ...color };
     ann.strokeWidth = ann.kind === "ink" ? Math.max(1, strokeWidth) : strokeWidth;
     ann.fillColor = fillColor ? { ...fillColor } : null;
@@ -283,7 +283,7 @@ export class CanvasOverlay implements SelectionOwner {
     ann: TextAnnotation,
     style: Pick<ActiveToolState, "color" | "fontSize" | "bold" | "italic" | "underline" | "alignment" | "fontFamily" | "fontName" | "textBackground">
   ): void {
-    this.session.beginEdit();
+    this.session.beginEdit(ann);
     ann.color     = { ...style.color };
     ann.backgroundColor = style.textBackground ? { ...style.textBackground } : null;
     ann.fontFamily = style.fontFamily;
@@ -743,7 +743,7 @@ export class CanvasOverlay implements SelectionOwner {
       return;
     }
     if (!("color" in ann)) return;
-    this.session.beginEdit();
+    this.session.beginEdit(ann);
     ann.color = { ...color };
     this.redrawCommitted();
     this.session.edited();
@@ -1518,7 +1518,7 @@ export class CanvasOverlay implements SelectionOwner {
 
   private onGestureMove = (e: MouseEvent): void => {
     if (this.vertexDrag) {
-      this.notifyChangeOnce();
+      this.notifyChangeOnce(this.vertexDrag.ann);
       const { ann, index, pts } = this.vertexDrag;
       pts[index] = this.toPdf(...this.clampNearPage(this.canvasPoint(e))) as [number, number];
       this.setOutline(ann, pts);
@@ -1527,14 +1527,14 @@ export class CanvasOverlay implements SelectionOwner {
       return;
     }
     if (this.resizing && this.dragTarget) {
-      this.notifyChangeOnce();
+      this.notifyChangeOnce(this.dragTarget);
       this.applyResize(...this.clampNearPage(this.canvasPoint(e)));
       this.session.settle();
       this.redrawCommitted();
       return;
     }
     if (this.dragging && this.dragTarget) {
-      this.notifyChangeOnce();
+      this.notifyChangeOnce(this.dragTarget);
       const other = CanvasOverlay.overlayAt(e);
       if (other && other !== this && other.shown && CanvasOverlay.canChangePage(this.dragTarget)) {
         other.adoptDrag(this, this.dragTarget, e);
@@ -1834,7 +1834,7 @@ export class CanvasOverlay implements SelectionOwner {
       const content = (input.innerText ?? input.textContent ?? "").trim();
       finish();
       if (content && content !== ann.content) {
-        this.session.beginEdit();
+        this.session.beginEdit(ann);
         ann.content = content;
         const fitted = this.fitTextWidth(content, { ...ann, fontFamily: ann.fontFamily ?? "helvetica", fontName: ann.fontName });
         ann.width = ann.cover ? Math.max(1, fitted) : Math.max(ann.width, fitted);
@@ -1904,7 +1904,7 @@ export class CanvasOverlay implements SelectionOwner {
       area.remove();
       this.editingAnn = null;
       if (keep && area.value !== ann.content) {
-        this.session.beginEdit();
+        this.session.beginEdit(ann);
         ann.content = area.value.replace(/\s+$/, "");
         this.session.edited();
       }

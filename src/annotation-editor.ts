@@ -21,7 +21,7 @@ export interface EditedDocument {
   overlayOf(page: number): CanvasOverlay | null;
   redraw(page: number): void;
   has(ann: Annotation): boolean;
-  beginEdit(): void;
+  beginEdit(changing: Annotation): void;
   edited(): void;
   markDirty(): void;
 }
@@ -91,7 +91,7 @@ export class AnnotationEditor {
     if (!ann || !this.doc.has(ann)) return;
     const c = style.signatureColor;
     if (ann.color && ann.color.r === c.r && ann.color.g === c.g && ann.color.b === c.b) return;
-    this.doc.beginEdit();
+    this.doc.beginEdit(ann);
     ann.color = { ...c };
     this.doc.redraw(ann.page);
     this.doc.edited();
