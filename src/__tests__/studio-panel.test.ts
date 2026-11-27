@@ -157,6 +157,27 @@ describe("StudioPanel", () => {
     panel.el.remove();
   });
 
+  it("sizes the scroll space from the rows as laid out, not a fixed height", () => {
+    const pitch = 40;
+    const offsetTop = vi.spyOn(HTMLElement.prototype, "offsetTop", "get").mockImplementation(function (this: HTMLElement) {
+      return this.classList.contains("studio-ann") ? [...this.parentElement!.children].indexOf(this) * pitch : 0;
+    });
+    const { session, panel } = mount();
+    document.body.append(panel.el);
+    for (let i = 0; i < 2000; i++) session.add(rect(1 + Math.floor(i / 10)));
+    flush();
+    const list = panel.el.querySelector<HTMLElement>(".studio-list")!;
+    Object.defineProperty(list, "clientHeight", { configurable: true, value: 400 });
+    Object.defineProperty(list, "scrollTop", { configurable: true, value: 100 * pitch });
+    list.dispatchEvent(new Event("scroll"));
+    flush();
+    const spaceAbove = list.firstElementChild as HTMLElement;
+    expect(spaceAbove.classList.contains("studio-ann")).toBe(false);
+    expect(spaceAbove.style.height).toBe(`${80 * pitch - 1}px`);
+    offsetTop.mockRestore();
+    panel.el.remove();
+  });
+
   it("folds away and remembers it", () => {
     const { panel } = mount();
     panel.el.querySelector<HTMLButtonElement>(".studio-collapse")!.click();

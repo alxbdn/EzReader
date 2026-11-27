@@ -23,7 +23,7 @@ import {
 type Key = keyof Translations;
 
 const COLLAPSED_KEY = "ezreader-studio-collapsed";
-const ROW_PITCH = 33;
+const LAID_OUT_ROW_PITCH = 33;
 const ROWS_AROUND = 20;
 const ROWS_WITHOUT_LAYOUT = 60;
 
@@ -96,6 +96,8 @@ export class StudioPanel {
   private items: ListItem[] = [];
   private windowQueued = false;
   private anchor = 0;
+  private rowPitch = LAID_OUT_ROW_PITCH;
+  private pitchMeasured = false;
   private spaceAbove = document.createElement("div");
   private spaceBelow = document.createElement("div");
   private drag: { ann: Annotation; row: HTMLElement; startY: number; moved: boolean; target: number; id: number } | null = null;
@@ -191,7 +193,7 @@ export class StudioPanel {
       const index = this.items.findIndex((i) => i.ann === ann);
       if (index !== -1) {
         this.anchor = index;
-        this.listEl.scrollTop = Math.max(0, index * ROW_PITCH - this.listEl.clientHeight / 2);
+        this.listEl.scrollTop = Math.max(0, index * this.rowPitch - this.listEl.clientHeight / 2);
         this.renderWindow();
       }
     }
@@ -237,6 +239,7 @@ export class StudioPanel {
     this.countEl.textContent = this.items.length ? String(this.items.length) : "";
     this.noneEl.hidden = this.items.length > 0;
     this.rows.clear();
+    this.pitchMeasured = false;
     this.renderWindow();
   }
 
@@ -254,10 +257,10 @@ export class StudioPanel {
     const total = this.items.length;
     const height = this.listEl.clientHeight;
     const first = height > 0
-      ? Math.max(0, Math.floor(this.listEl.scrollTop / ROW_PITCH) - ROWS_AROUND)
+      ? Math.max(0, Math.floor(this.listEl.scrollTop / this.rowPitch) - ROWS_AROUND)
       : Math.max(0, Math.min(this.anchor - ROWS_WITHOUT_LAYOUT / 2, total - ROWS_WITHOUT_LAYOUT));
     const last = height > 0
-      ? Math.min(total, Math.ceil((this.listEl.scrollTop + height) / ROW_PITCH) + ROWS_AROUND)
+      ? Math.min(total, Math.ceil((this.listEl.scrollTop + height) / this.rowPitch) + ROWS_AROUND)
       : Math.min(total, first + ROWS_WITHOUT_LAYOUT);
     const selected = this.hooks.selected();
     const kept = new Map<Annotation, HTMLElement>();
@@ -270,10 +273,25 @@ export class StudioPanel {
       kept.set(item.ann, row);
     });
     this.rows = kept;
-    this.spaceAbove.style.height = `${Math.max(0, first * ROW_PITCH - 1)}px`;
-    this.spaceBelow.style.height = `${Math.max(0, (total - last) * ROW_PITCH - 1)}px`;
+    this.sizeSpacers(first, total - last);
     const wanted = [...(first > 0 ? [this.spaceAbove] : []), ...rows, ...(last < total ? [this.spaceBelow] : [])];
     this.placeChildren(wanted);
+    if (!this.pitchMeasured && this.measurePitch(rows)) this.sizeSpacers(first, total - last);
+  }
+
+  private sizeSpacers(rowsAbove: number, rowsBelow: number): void {
+    this.spaceAbove.style.height = `${Math.max(0, rowsAbove * this.rowPitch - 1)}px`;
+    this.spaceBelow.style.height = `${Math.max(0, rowsBelow * this.rowPitch - 1)}px`;
+  }
+
+  private measurePitch(rows: HTMLElement[]): boolean {
+    if (rows.length < 2) return false;
+    const pitch = rows[1].offsetTop - rows[0].offsetTop;
+    if (pitch <= 0) return false;
+    this.pitchMeasured = true;
+    if (pitch === this.rowPitch) return false;
+    this.rowPitch = pitch;
+    return true;
   }
 
   private placeChildren(wanted: HTMLElement[]): void {
