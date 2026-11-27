@@ -128,6 +128,7 @@ const tauriStub = ({ origin, specs }) => {
 };
 
 const TICK = 100;
+const QUIET_BEFORE_IDLE_MS = 12000;
 function descendants(root) {
   const kids = new Map();
   for (const d of readdirSync("/proc")) {
@@ -362,7 +363,7 @@ const drawn = [...added.values()].reduce((a, b) => a + b, 0);
 await gc();
 const end = await sample("end");
 const workerHeapMb = await pdfWorkerHeapMb();
-await page.waitForTimeout(4000);
+await page.waitForTimeout(QUIET_BEFORE_IDLE_MS);
 const idleA = treeUsage();
 await page.waitForTimeout(5000);
 const idleB = treeUsage();
