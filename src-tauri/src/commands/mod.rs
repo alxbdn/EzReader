@@ -1,10 +1,13 @@
 pub mod book_pdf;
 pub mod compress;
 pub mod convert;
+pub mod default_reader;
 pub mod dialog;
 pub mod files;
 pub mod ocr;
 pub mod pdf;
+pub mod print;
+pub mod quick_look;
 pub mod security;
 pub mod shell;
 pub mod update;

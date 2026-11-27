@@ -102,7 +102,7 @@ pub fn run() {
             std::thread::spawn(tempfiles::sweep_leftovers);
             std::thread::spawn(commands::update::remove_leftover);
             let handle = app.handle().clone();
-            std::thread::spawn(move || commands::shell::resume_quick_look(handle));
+            std::thread::spawn(move || commands::quick_look::resume_quick_look(handle));
             if let Some(path) = &startup_file {
                 allow_viewing(app, path);
             }
@@ -168,18 +168,18 @@ pub fn run() {
             commands::pdf::redact_pages,
             commands::pdf::watermark_pages,
             commands::pdf::adjust_pages,
-            commands::shell::list_printers,
-            commands::shell::print_pages,
+            commands::print::list_printers,
+            commands::print::print_pages,
             commands::shell::get_startup_args,
-            commands::shell::check_pdf_association,
-            commands::shell::is_default_pdf_reader,
-            commands::shell::register_pdf_handler,
-            commands::shell::unregister_pdf_handler,
-            commands::shell::register_print_verb,
-            commands::shell::open_default_apps_settings,
+            commands::default_reader::check_pdf_association,
+            commands::default_reader::is_default_pdf_reader,
+            commands::default_reader::register_pdf_handler,
+            commands::default_reader::unregister_pdf_handler,
+            commands::default_reader::register_print_verb,
+            commands::default_reader::open_default_apps_settings,
             commands::shell::open_url,
-            commands::shell::quick_look_state,
-            commands::shell::set_quick_look,
+            commands::quick_look::quick_look_state,
+            commands::quick_look::set_quick_look,
             commands::update::check_for_update,
             commands::update::install_update,
             commands::update::prepare_update,
