@@ -1,0 +1,16 @@
+{
+  "open_all_ms": 20000,
+  "switch_p95_ms": 2500,
+  "jump_p95_ms": 1500,
+  "memory_peak_mb": 5000,
+  "memory_leak_per_round_mb": 300,
+  "heap_leak_per_round_mb": 20,
+  "dom_nodes_growth_after_round_1": 5000,
+  "pdf_worker_heap_end_mb": 200,
+  "canvas_peak_mb": 250,
+  "cpu_idle_percent": 5,
+  "annotations_lost": 0,
+  "dirty_tabs_lost": 0,
+  "wrong_document_shown": 0,
+  "page_errors": 0
+}

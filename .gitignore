@@ -45,6 +45,7 @@ tests/visual/report/
 
 perf-big.pdf
 perf-results.json
+perf-tabs-results.json
 
 # Local clone of the GitHub wiki (separate repository)
 EzReader.wiki/

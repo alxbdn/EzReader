@@ -296,7 +296,13 @@ export class PdfPageView {
     const generation = this._generation;
     const stale = () => generation !== this._generation;
     try {
-      const page = await pdfDoc.getPage(this.pageNum);
+      let page: PDFPageProxy;
+      try {
+        page = await pdfDoc.getPage(this.pageNum);
+      } catch (err) {
+        if (stale()) return;
+        throw err;
+      }
       this._page = page;
       if (stale()) return;
       const viewport = page.getViewport({ scale, rotation: (page.rotate + rotation) % 360 });
@@ -928,10 +934,9 @@ export class PdfViewer {
     this._updateRenderActivity();
     for (const view of this.pageViews) view.clear();
     this._forgetActiveRenders();
-    if (this.pdfDoc) {
-      await this.pdfDoc.loadingTask.destroy();
-      this.pdfDoc = null;
-    }
+    const previous = this.pdfDoc;
+    this.pdfDoc = null;
+    if (previous) await previous.loadingTask.destroy();
     this.observer?.disconnect();
     this._visiblePages.clear();
     this._pageOffsets = null;
@@ -1586,10 +1591,9 @@ export class PdfViewer {
     this.scrollEl.innerHTML = "";
     this.pageViews = [];
     this._forgetActiveRenders();
-    if (this.pdfDoc) {
-      await this.pdfDoc.loadingTask.destroy();
-      this.pdfDoc = null;
-    }
+    const previous = this.pdfDoc;
+    this.pdfDoc = null;
+    if (previous) await previous.loadingTask.destroy();
     this._pageCount   = 0;
     this._currentPage = 1;
     this.pageDimensions = [];

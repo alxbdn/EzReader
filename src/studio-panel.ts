@@ -23,6 +23,11 @@ import {
 type Key = keyof Translations;
 
 const COLLAPSED_KEY = "ezreader-studio-collapsed";
+const ROW_PITCH = 33;
+const ROWS_AROUND = 20;
+const ROWS_WITHOUT_LAYOUT = 60;
+
+type ListItem = { ann: Annotation; layer: number; count: number };
 
 export function describeAnnotation(ann: Annotation): { icon: string; key: Key; fb: string; quote?: string } {
   switch (ann.kind) {
@@ -88,6 +93,11 @@ export class StudioPanel {
   private title: string | null = null;
   private renderQueued = false;
   private rows = new Map<Annotation, HTMLElement>();
+  private items: ListItem[] = [];
+  private windowQueued = false;
+  private anchor = 0;
+  private spaceAbove = document.createElement("div");
+  private spaceBelow = document.createElement("div");
   private drag: { ann: Annotation; row: HTMLElement; startY: number; moved: boolean; target: number; id: number } | null = null;
   private suppressClick = false;
 
@@ -131,6 +141,8 @@ export class StudioPanel {
     const listWrap = document.createElement("div");
     listWrap.className = "studio-list-wrap";
     listWrap.append(listHead, this.listEl, this.noneEl);
+    this.listEl.addEventListener("scroll", () => this.queueWindow(), { passive: true });
+    if (typeof ResizeObserver !== "undefined") new ResizeObserver(() => this.queueWindow()).observe(this.listEl);
 
     this.el.append(head, body, listWrap, this.expandBtn);
 
@@ -175,6 +187,14 @@ export class StudioPanel {
   }
 
   setSelected(ann: Annotation | null): void {
+    if (ann && !this.rows.has(ann)) {
+      const index = this.items.findIndex((i) => i.ann === ann);
+      if (index !== -1) {
+        this.anchor = index;
+        this.listEl.scrollTop = Math.max(0, index * ROW_PITCH - this.listEl.clientHeight / 2);
+        this.renderWindow();
+      }
+    }
     for (const [a, row] of this.rows) {
       const on = a === ann;
       row.classList.toggle("on", on);
@@ -213,64 +233,102 @@ export class StudioPanel {
 
   private render(): void {
     if (!this.shown || this.drag) return;
-    const items = panelOrder(this.hooks.list());
-    const selected = this.hooks.selected();
-    this.countEl.textContent = items.length ? String(items.length) : "";
-    this.noneEl.hidden = items.length > 0;
+    this.items = panelOrder(this.hooks.list());
+    this.countEl.textContent = this.items.length ? String(this.items.length) : "";
+    this.noneEl.hidden = this.items.length > 0;
     this.rows.clear();
+    this.renderWindow();
+  }
+
+  private queueWindow(): void {
+    if (this.windowQueued) return;
+    this.windowQueued = true;
+    requestAnimationFrame(() => {
+      this.windowQueued = false;
+      this.renderWindow();
+    });
+  }
+
+  private renderWindow(): void {
+    if (!this.shown || this.drag) return;
+    const total = this.items.length;
+    const height = this.listEl.clientHeight;
+    const first = height > 0
+      ? Math.max(0, Math.floor(this.listEl.scrollTop / ROW_PITCH) - ROWS_AROUND)
+      : Math.max(0, Math.min(this.anchor - ROWS_WITHOUT_LAYOUT / 2, total - ROWS_WITHOUT_LAYOUT));
+    const last = height > 0
+      ? Math.min(total, Math.ceil((this.listEl.scrollTop + height) / ROW_PITCH) + ROWS_AROUND)
+      : Math.min(total, first + ROWS_WITHOUT_LAYOUT);
+    const selected = this.hooks.selected();
+    const kept = new Map<Annotation, HTMLElement>();
+    const rows = this.items.slice(first, last).map((item) => this.rows.get(item.ann) ?? this.buildRow(item));
+    rows.forEach((row, i) => {
+      const item = this.items[first + i];
+      const on = item.ann === selected;
+      row.classList.toggle("on", on);
+      row.setAttribute("aria-current", String(on));
+      kept.set(item.ann, row);
+    });
+    this.rows = kept;
+    this.spaceAbove.style.height = `${Math.max(0, first * ROW_PITCH - 1)}px`;
+    this.spaceBelow.style.height = `${Math.max(0, (total - last) * ROW_PITCH - 1)}px`;
+    const wanted = [...(first > 0 ? [this.spaceAbove] : []), ...rows, ...(last < total ? [this.spaceBelow] : [])];
+    const current = this.listEl.children;
+    if (current.length !== wanted.length || wanted.some((r, i) => current[i] !== r)) this.listEl.replaceChildren(...wanted);
+  }
+
+  private buildRow({ ann, layer, count }: ListItem): HTMLElement {
     const pageAbbr = this.tr("studioPageAbbr", "p. {n}");
     const moveHint = this.tr("ttReorderAnnotation", "Drag to bring forward or send backward");
-    const rows = items.map(({ ann, layer, count }) => {
-      const d = describeAnnotation(ann);
-      const name = this.tr(d.key, d.fb);
-      const quote = d.quote?.replace(/\s+/g, " ").trim();
-      const row = document.createElement("div");
-      row.className = "studio-ann";
-      row.setAttribute("role", "listitem");
-      row.tabIndex = 0;
-      row.dataset["page"] = String(ann.page);
-      row.dataset["layer"] = String(layer);
-      row.classList.toggle("on", ann === selected);
-      const label = document.createElement("span");
-      label.className = "studio-ann-label";
-      label.textContent = quote ? `${name} « ${quote} »` : name;
-      label.title = count > 1 ? `${label.textContent}\n${moveHint}` : label.textContent;
-      const page = document.createElement("span");
-      page.className = "studio-ann-page";
-      page.textContent = pageAbbr.replace("{n}", String(ann.page));
-      const del = document.createElement("button");
-      del.type = "button";
-      del.className = "studio-ann-del";
-      del.innerHTML = ICON_TRASH;
-      del.title = this.tr("ttDeleteAnnotation", "Delete this annotation");
-      del.setAttribute("aria-label", del.title);
-      del.addEventListener("click", (e) => { e.stopPropagation(); this.hooks.remove(ann); });
-      row.insertAdjacentHTML("afterbegin", d.icon);
-      row.append(label, page, del);
-      row.addEventListener("click", () => {
-        if (this.suppressClick) { this.suppressClick = false; return; }
-        this.hooks.pick(ann);
-      });
-      row.addEventListener("keydown", (e) => {
-        if (e.target !== row) return;
-        if (e.key === "Enter" || e.key === " ") { e.preventDefault(); this.hooks.pick(ann); }
-        if (e.key === "Delete" || e.key === "Backspace") { e.preventDefault(); e.stopPropagation(); this.hooks.remove(ann); }
-        if (e.altKey && (e.key === "ArrowUp" || e.key === "ArrowDown")) {
-          e.preventDefault();
-          e.stopPropagation();
-          this.hooks.reorder(ann, layer + (e.key === "ArrowUp" ? 1 : -1));
-          this.focusAfterRender(ann);
-        }
-      });
-      if (count > 1) this.makeDraggable(row, ann);
-      this.rows.set(ann, row);
-      return row;
+    const d = describeAnnotation(ann);
+    const name = this.tr(d.key, d.fb);
+    const quote = d.quote?.replace(/\s+/g, " ").trim();
+    const row = document.createElement("div");
+    row.className = "studio-ann";
+    row.setAttribute("role", "listitem");
+    row.tabIndex = 0;
+    row.dataset["page"] = String(ann.page);
+    row.dataset["layer"] = String(layer);
+    const label = document.createElement("span");
+    label.className = "studio-ann-label";
+    label.textContent = quote ? `${name} « ${quote} »` : name;
+    label.title = count > 1 ? `${label.textContent}\n${moveHint}` : label.textContent;
+    const page = document.createElement("span");
+    page.className = "studio-ann-page";
+    page.textContent = pageAbbr.replace("{n}", String(ann.page));
+    const del = document.createElement("button");
+    del.type = "button";
+    del.className = "studio-ann-del";
+    del.innerHTML = ICON_TRASH;
+    del.title = this.tr("ttDeleteAnnotation", "Delete this annotation");
+    del.setAttribute("aria-label", del.title);
+    del.addEventListener("click", (e) => { e.stopPropagation(); this.hooks.remove(ann); });
+    row.insertAdjacentHTML("afterbegin", d.icon);
+    row.append(label, page, del);
+    row.addEventListener("click", () => {
+      if (this.suppressClick) { this.suppressClick = false; return; }
+      this.hooks.pick(ann);
     });
-    this.listEl.replaceChildren(...rows);
+    row.addEventListener("keydown", (e) => {
+      if (e.target !== row) return;
+      if (e.key === "Enter" || e.key === " ") { e.preventDefault(); this.hooks.pick(ann); }
+      if (e.key === "Delete" || e.key === "Backspace") { e.preventDefault(); e.stopPropagation(); this.hooks.remove(ann); }
+      if (e.altKey && (e.key === "ArrowUp" || e.key === "ArrowDown")) {
+        e.preventDefault();
+        e.stopPropagation();
+        this.hooks.reorder(ann, layer + (e.key === "ArrowUp" ? 1 : -1));
+        this.focusAfterRender(ann);
+      }
+    });
+    if (count > 1) this.makeDraggable(row, ann);
+    return row;
   }
 
   private focusAfterRender(ann: Annotation): void {
-    requestAnimationFrame(() => requestAnimationFrame(() => this.rows.get(ann)?.focus()));
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      if (!this.rows.has(ann)) this.setSelected(ann);
+      this.rows.get(ann)?.focus();
+    }));
   }
 
   private makeDraggable(row: HTMLElement, ann: Annotation): void {

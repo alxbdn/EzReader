@@ -1,0 +1,24 @@
+{
+  "quick": {
+    "rounds": 3,
+    "docs": [
+      { "pages": 1500, "annotationsPerPage": 0 },
+      { "pages": 800, "annotationsPerPage": 10 },
+      { "pages": 400, "annotationsPerPage": 30, "inkHeavy": true },
+      { "pages": 200, "annotationsPerPage": 5, "scanEvery": 1 }
+    ]
+  },
+  "soak": {
+    "rounds": 10,
+    "docs": [
+      { "pages": 1500, "annotationsPerPage": 0 },
+      { "pages": 1200, "annotationsPerPage": 5 },
+      { "pages": 1000, "annotationsPerPage": 10 },
+      { "pages": 800, "annotationsPerPage": 10 },
+      { "pages": 600, "annotationsPerPage": 15, "inkHeavy": true },
+      { "pages": 400, "annotationsPerPage": 20, "inkHeavy": true },
+      { "pages": 300, "annotationsPerPage": 10, "scanEvery": 1 },
+      { "pages": 200, "annotationsPerPage": 30 }
+    ]
+  }
+}
