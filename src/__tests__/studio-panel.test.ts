@@ -135,6 +135,28 @@ describe("StudioPanel", () => {
     expect(on?.dataset["page"]).toBe(String(far.page));
   });
 
+  it("keeps keyboard focus on a row while the list scrolls around it", () => {
+    const { session, panel } = mount();
+    document.body.append(panel.el);
+    for (let i = 0; i < 2000; i++) session.add(rect(1 + Math.floor(i / 10)));
+    flush();
+    const list = panel.el.querySelector<HTMLElement>(".studio-list")!;
+    Object.defineProperty(list, "clientHeight", { configurable: true, value: 330 });
+    list.dispatchEvent(new Event("scroll"));
+    flush();
+    const rows = [...list.querySelectorAll<HTMLElement>(".studio-ann")];
+    const focused = rows[25]!;
+    focused.focus();
+    expect(document.activeElement).toBe(focused);
+    Object.defineProperty(list, "scrollTop", { configurable: true, value: 30 * 33 });
+    list.dispatchEvent(new Event("scroll"));
+    flush();
+    expect(list.querySelector(".studio-ann")).not.toBe(rows[0]);
+    expect(focused.isConnected).toBe(true);
+    expect(document.activeElement).toBe(focused);
+    panel.el.remove();
+  });
+
   it("folds away and remembers it", () => {
     const { panel } = mount();
     panel.el.querySelector<HTMLButtonElement>(".studio-collapse")!.click();
