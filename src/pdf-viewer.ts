@@ -779,6 +779,7 @@ export class PdfPageView {
 
 export class PdfViewer {
   private pdfDoc: PDFDocumentProxy | null = null;
+  private _openSeq = 0;
   private _currentPage = 1;
   private _focusedPage = 1;
   private _pageCount  = 0;
@@ -929,14 +930,21 @@ export class PdfViewer {
     this._renderVisible();
   }
 
+  private async _releaseDocument(): Promise<void> {
+    const previous = this.pdfDoc;
+    this.pdfDoc = null;
+    if (previous) await previous.loadingTask.destroy();
+  }
+
   private async _openDoc(url: string, password?: string, rotation = 0): Promise<void> {
+    const opening = ++this._openSeq;
+    const superseded = () => opening !== this._openSeq;
     this._renderQueue.clear();
     this._updateRenderActivity();
     for (const view of this.pageViews) view.clear();
     this._forgetActiveRenders();
-    const previous = this.pdfDoc;
-    this.pdfDoc = null;
-    if (previous) await previous.loadingTask.destroy();
+    await this._releaseDocument();
+    if (superseded()) return;
     this.observer?.disconnect();
     this._visiblePages.clear();
     this._pageOffsets = null;
@@ -945,16 +953,26 @@ export class PdfViewer {
 
     this.liveText.reset();
     const loadingTask = (await pdfjsLib()).getDocument(password ? { ...SAFE_PDF, ...VIEWER_FONTS, url, password } : { ...SAFE_PDF, ...VIEWER_FONTS, url });
-    this.pdfDoc = await loadingTask.promise;
-    this._pageCount   = this.pdfDoc.numPages;
+    let doc: PDFDocumentProxy;
+    let initialPages: PDFPageProxy[];
+    try {
+      doc = await loadingTask.promise;
+      if (superseded()) { await loadingTask.destroy(); return; }
+      initialPages = await Promise.all(
+        Array.from({ length: Math.min(doc.numPages, 16) }, (_, i) => doc.getPage(i + 1))
+      );
+    } catch (err) {
+      await loadingTask.destroy().catch(() => {});
+      if (superseded()) return;
+      throw err;
+    }
+    if (superseded()) { await loadingTask.destroy(); return; }
+    this.pdfDoc = doc;
+    this._pageCount   = doc.numPages;
     this._currentPage = 1;
     this._focusedPage = 1;
     this._rotation    = rotation;
 
-    const initialCount = Math.min(this._pageCount, 16);
-    const initialPages = await Promise.all(
-      Array.from({ length: initialCount }, (_, i) => this.pdfDoc!.getPage(i + 1))
-    );
     const initialDims = initialPages.map((p) => {
       const vp = p.getViewport({ scale: 1.0 });
       return { width: vp.width, height: vp.height };
@@ -1591,9 +1609,8 @@ export class PdfViewer {
     this.scrollEl.innerHTML = "";
     this.pageViews = [];
     this._forgetActiveRenders();
-    const previous = this.pdfDoc;
-    this.pdfDoc = null;
-    if (previous) await previous.loadingTask.destroy();
+    this._openSeq++;
+    await this._releaseDocument();
     this._pageCount   = 0;
     this._currentPage = 1;
     this.pageDimensions = [];

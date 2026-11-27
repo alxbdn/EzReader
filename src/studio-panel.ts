@@ -273,8 +273,17 @@ export class StudioPanel {
     this.spaceAbove.style.height = `${Math.max(0, first * ROW_PITCH - 1)}px`;
     this.spaceBelow.style.height = `${Math.max(0, (total - last) * ROW_PITCH - 1)}px`;
     const wanted = [...(first > 0 ? [this.spaceAbove] : []), ...rows, ...(last < total ? [this.spaceBelow] : [])];
-    const current = this.listEl.children;
-    if (current.length !== wanted.length || wanted.some((r, i) => current[i] !== r)) this.listEl.replaceChildren(...wanted);
+    this.placeChildren(wanted);
+  }
+
+  private placeChildren(wanted: HTMLElement[]): void {
+    const keep = new Set<Node>(wanted);
+    for (const child of [...this.listEl.children]) if (!keep.has(child)) child.remove();
+    let cursor = this.listEl.firstChild;
+    for (const node of wanted) {
+      if (cursor === node) cursor = cursor.nextSibling;
+      else this.listEl.insertBefore(node, cursor);
+    }
   }
 
   private buildRow({ ann, layer, count }: ListItem): HTMLElement {
