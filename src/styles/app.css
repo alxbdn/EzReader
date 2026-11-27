@@ -3458,6 +3458,7 @@ body.fullscreen .window-controls { display: none; }
 }
 .studio-count { font-weight: 500; }
 .studio-list { display: flex; flex-direction: column; gap: 1px; margin: 0 -8px; overflow-y: auto; min-height: 0; }
+.studio-list > * { flex-shrink: 0; }
 .studio-ann {
   position: relative;
   display: flex;

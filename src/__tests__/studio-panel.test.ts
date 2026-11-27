@@ -122,6 +122,19 @@ describe("StudioPanel", () => {
     expect(session.forPage(1)).toEqual([b, a, c]);
   });
 
+  it("builds rows only for a window of a long list, and brings a picked one into it", () => {
+    const { session, tools, panel } = mount();
+    const all = Array.from({ length: 2000 }, (_, i) => rect(1 + Math.floor(i / 10)));
+    for (const a of all) session.add(a);
+    flush();
+    expect(panel.el.querySelector(".studio-count")!.textContent).toBe("2000");
+    expect(panel.el.querySelectorAll(".studio-ann").length).toBeLessThanOrEqual(60);
+    const far = all[1789]!;
+    tools.select(far, { selectionLost() {} });
+    const on = panel.el.querySelector<HTMLElement>(".studio-ann.on");
+    expect(on?.dataset["page"]).toBe(String(far.page));
+  });
+
   it("folds away and remembers it", () => {
     const { panel } = mount();
     panel.el.querySelector<HTMLButtonElement>(".studio-collapse")!.click();
